@@ -1,0 +1,6 @@
+# 全ファイルについて指定ユーザーの承認を必須にする
+* @mint1535
+
+# CODEOWNERS自体の変更も保護する
+/.github/CODEOWNERS @mint1535
+
