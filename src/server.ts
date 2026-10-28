@@ -16,6 +16,8 @@ server.use(
   }),
 )
 server.use('/favicon.ico', serveStatic({ path: './dist/client/favicon.ico' }))
+server.use('/favicon.svg', serveStatic({ path: './dist/client/favicon.svg' }))
+server.use('/apple-touch-icon.png', serveStatic({ path: './dist/client/apple-touch-icon.png' }))
 server.route('/', app)
 
 const httpServer = serve({ fetch: server.fetch, port: config.port }, (info) => {
