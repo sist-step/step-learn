@@ -26,7 +26,7 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
 | DB | `better-sqlite3`（WAL モード）＋ Drizzle ORM。DB サーバーは要らない。テーブル定義は `src/lib/schema.ts` で、マイグレーションは drizzle-kit で生成する。生 SQL 用のラッパーはプリペアドステートメントをキャッシュして使い回す |
 | コスト | 必要なのは Node.js が動くサーバー 1 台だけ。R2 を使う場合、ダウンロードは署名付き URL で R2 から直接配信されるので、サーバーの帯域を使わない（R2 は転送料無料） |
 | 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）・`better-sqlite3`・`drizzle-orm` だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる |
-| セキュリティ | PBKDF2（10 万回）、セッショントークンは SHA-256 で保存、CSRF 対策は Origin 検証と SameSite=Lax、ファイルは権限を確認したうえで配信（PDF と画像以外は添付として返す） |
+| セキュリティ | PBKDF2（60 万回、ログイン時に旧設定のハッシュを再計算）、セッショントークンは SHA-256 で保存、CSRF 対策は Origin 検証と SameSite=Lax、ファイルは権限を確認したうえで配信（PDF と画像以外は添付として返す） |
 
 ## 開発
 

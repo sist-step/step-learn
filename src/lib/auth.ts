@@ -9,8 +9,7 @@ const SESSION_TTL = 60 * 60 * 24 * 30 // 30日
 // 残り期限がこれを下回ったときだけ延長する（毎リクエストの書き込みを避ける）
 const SESSION_REFRESH_BELOW = SESSION_TTL / 2
 
-// Workers の PBKDF2 は 100,000 回が上限
-const PBKDF2_ITERATIONS = 100_000
+const PBKDF2_ITERATIONS = 600_000
 
 const enc = new TextEncoder()
 
@@ -43,6 +42,11 @@ export async function verifyPassword(password: string, stored: string) {
   if (scheme !== 'pbkdf2' || !iter || !salt || !hash) return false
   const derived = await pbkdf2(password, fromB64(salt), Number(iter))
   return timingSafeEqual(new Uint8Array(derived), fromB64(hash))
+}
+
+export function needsRehash(stored: string) {
+  const [scheme, iter] = stored.split('$')
+  return scheme !== 'pbkdf2' || Number(iter) < PBKDF2_ITERATIONS
 }
 
 // 存在しないユーザーでもハッシュ計算を行い、応答時間からの列挙を防ぐ

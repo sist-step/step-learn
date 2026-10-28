@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { AuthShell } from '../components/layout'
 import { Field } from '../components/ui'
-import { createSession, destroySession, dummyVerify, hashPassword, safeNext, verifyPassword } from '../lib/auth'
+import { createSession, destroySession, dummyVerify, hashPassword, needsRehash, safeNext, verifyPassword } from '../lib/auth'
 import { field, isEmail, readForm, redirectWith } from '../lib/http'
 import type { AppEnv } from '../lib/types'
 import { db } from '../lib/db'
@@ -106,6 +106,13 @@ app.post('/login', async (c) => {
       <LoginPage email={email} next={next} errors={{ form: 'メールアドレスまたはパスワードが正しくありません。' }} />,
       { title: 'ログイン' },
     )
+  }
+
+  if (needsRehash(user.password_hash)) {
+    // id だけを条件にしないのは、同時に行われたパスワード変更を古いパスワードで上書きしないため
+    await db.prepare('UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?')
+      .bind(await hashPassword(password), user.id, user.password_hash)
+      .run()
   }
 
   await createSession(c, user.id)
