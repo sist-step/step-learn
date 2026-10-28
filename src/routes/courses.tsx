@@ -376,7 +376,7 @@ app.get('/:id', async (c) => {
         <Icon name="layers" size={14} /> {items.length}アイテム
       </span>
       {!access.course.visible && (
-        <span class="chip chip-glass">
+        <span class="chip">
           <Icon name="eyeOff" size={12} /> 非公開
         </span>
       )}
@@ -419,7 +419,7 @@ app.get('/:id', async (c) => {
         progress={isStudent ? { done: done.size, total: items.length } : undefined}
         actions={
           access.canManage && (
-            <a href={edit ? `/courses/${id}` : `/courses/${id}?edit=1`} class={edit ? 'btn btn-on-hero active' : 'btn btn-on-hero'}>
+            <a href={edit ? `/courses/${id}` : `/courses/${id}?edit=1`} class={edit ? 'btn btn-sm btn-primary' : 'btn btn-sm'}>
               <Icon name={edit ? 'check' : 'pencil'} size={16} /> {edit ? '編集を終了' : '編集モード'}
             </a>
           )
