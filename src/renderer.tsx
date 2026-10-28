@@ -20,8 +20,9 @@ export const renderer = jsxRenderer(({ children, title }) => {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content="light dark" />
         <title>{title ? `${title} | StepLearn` : 'StepLearn'}</title>
-        <link rel="icon" href="/favicon.ico" />
-        <ViteClient />
+        <link rel="icon" href="/favicon.ico" sizes="32x32" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />        <ViteClient />
         <Link href="/src/style.css" rel="stylesheet" />
         <Script src="/src/client.ts" />
         <script type="speculationrules" dangerouslySetInnerHTML={{ __html: speculationRules }} />
