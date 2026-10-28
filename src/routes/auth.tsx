@@ -15,7 +15,7 @@ import {
 } from '../lib/auth'
 import { config } from '../lib/config'
 import { clientIp, field, isEmail, readForm, redirectWith } from '../lib/http'
-import { sendMail } from '../lib/mail'
+import { mailer } from '../lib/mail'
 import { checkPassword, PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../lib/password'
 import { rateLimiter } from '../lib/rate-limit'
 import type { AppEnv } from '../lib/types'
@@ -255,7 +255,7 @@ app.post('/register', async (c) => {
         ].join('\n'),
       }
   // 送信を待たないのは、SMTP の応答時間や失敗の有無から登録済みかどうかを推測されないようにするため
-  sendMail({ to: email, ...mail }).catch((err) => console.error('[mail] 送信に失敗しました', err))
+  mailer.send({ to: email, ...mail }).catch((err) => console.error('[mail] 送信に失敗しました', err))
 
   return c.render(<RegisterSentPage email={email} />, { title: '新規登録' })
 })
