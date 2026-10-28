@@ -24,3 +24,21 @@ jobs:
         run: npm run typecheck --if-present
       - name: Build
         run: npm run build
+
+  migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 既定の fetch-depth: 1 ではベースブランチとの merge-base を求められない
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Check migrations
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+        run: npm run db:check -- "$BASE_REF"
