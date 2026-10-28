@@ -1,0 +1,22 @@
+name: step-learn
+
+services:
+  app:
+    build: .
+    image: step-learn:latest
+    restart: unless-stopped
+    env_file:
+      - path: ${ENV_FILE:-.env}
+        required: false
+    # env_file に任せないのは、.env.example を写した値（DATA_DIR=./data など）でボリュームの外に書き込まないようにするため
+    environment:
+      PORT: 3000
+      DATA_DIR: /app/data
+    # 0.0.0.0 で公開しないのは、リバースプロキシを経由させずに直接アクセスされると APP_ORIGIN の CSRF 検証と TLS を通らないため
+    ports:
+      - "127.0.0.1:${HOST_PORT:-3000}:3000"
+    volumes:
+      - data:/app/data
+
+volumes:
+  data:

@@ -25,6 +25,22 @@ jobs:
       - name: Build
         run: npm run build
 
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build image
+        run: docker compose build
+      - name: Smoke test
+        run: docker compose up -d --wait --wait-timeout 60
+      - name: Show logs
+        if: failure()
+        run: docker compose logs
+      - name: Clean up
+        if: always()
+        run: docker compose down -v
+
   migrations:
     runs-on: ubuntu-latest
     timeout-minutes: 10
