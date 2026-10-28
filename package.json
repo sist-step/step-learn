@@ -5,6 +5,7 @@
     "dev": "vite",
     "build": "vite build",
     "start": "node dist/server/index.js",
+    "user:create": "node dist/server/cli.js user:create",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
@@ -15,13 +16,15 @@
     "aws4fetch": "^1.0.20",
     "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.4",
-    "hono": "^4.13.14"
+    "hono": "^4.13.14",
+    "nodemailer": "^10.0.16"
   },
   "devDependencies": {
     "@hono/vite-build": "^1.11.1",
     "@hono/vite-dev-server": "^0.26.1",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.6.5",
+    "@types/nodemailer": "^8.0.2",
     "drizzle-kit": "^0.31.11",
     "typescript": "^7.0.2",
     "vite": "^8.1.4",

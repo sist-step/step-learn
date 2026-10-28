@@ -1,6 +1,8 @@
+import { getConnInfo } from '@hono/node-server/conninfo'
 import type { Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
+import { config } from './config'
 import type { AppEnv, Flash } from './types'
 
 const FLASH_COOKIE = 'flash'
@@ -51,3 +53,12 @@ export const isHttpUrl = (s: string) => {
 }
 
 export const wantsJson = (c: Context) => (c.req.header('accept') ?? '').includes('application/json')
+
+export function clientIp(c: Context) {
+  if (config.trustProxy) {
+    // 先頭はクライアントが自由に書けるので、直前のプロキシが追記した末尾を使う
+    const forwarded = c.req.header('x-forwarded-for')?.split(',').at(-1)?.trim()
+    if (forwarded) return forwarded
+  }
+  return getConnInfo(c).remote.address ?? 'unknown'
+}

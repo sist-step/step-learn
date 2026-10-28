@@ -22,7 +22,10 @@ export default defineConfig({
         outDir: 'dist/server',
         ssr: true,
         copyPublicDir: false,
-        rollupOptions: { input: 'src/server.ts', output: { entryFileNames: 'index.js' } },
+        rollupOptions: {
+          input: { index: 'src/server.ts', cli: 'src/cli.ts' },
+          output: { entryFileNames: '[name].js' },
+        },
       },
     },
   },

@@ -3,6 +3,7 @@ import { AppShell } from '../components/layout'
 import { Avatar, Field, PageHeader } from '../components/ui'
 import { destroyOtherSessions, hashPassword, requireAuth, verifyPassword } from '../lib/auth'
 import { field, readForm, redirectWith } from '../lib/http'
+import { checkPassword, PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../lib/password'
 import { ROLE_LABELS, type AppEnv, type User } from '../lib/types'
 import { db } from '../lib/db'
 
@@ -51,10 +52,10 @@ const AccountPage = ({ user, errors = {}, name }: { user: User; errors?: Errors;
             name="password"
             type="password"
             error={errors.password}
-            hint="8文字以上"
+            hint={PASSWORD_HINT}
             autocomplete="new-password"
             required
-            minlength={8}
+            minlength={PASSWORD_MIN_LENGTH}
           />
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">
@@ -89,7 +90,8 @@ app.post('/password', async (c) => {
   const row = await db.prepare('SELECT password_hash FROM users WHERE id = ?').bind(user.id).first<{ password_hash: string }>()
   const errors: Errors = {}
   if (!row || !(await verifyPassword(current, row.password_hash))) errors.current = '現在のパスワードが正しくありません。'
-  if (password.length < 8) errors.password = 'パスワードは8文字以上にしてください。'
+  const passwordError = checkPassword(password, user)
+  if (passwordError) errors.password = passwordError
   if (Object.keys(errors).length) {
     c.status(422)
     return c.render(<AccountPage user={user} errors={errors} />, { title: 'アカウント' })
