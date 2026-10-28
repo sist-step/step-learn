@@ -360,7 +360,7 @@ app.get('/:id/items/:iid', async (c) => {
     <AppShell wide>
       <div class="reader">
         <article class="reader-main">
-          <nav class="crumbs crumbs-plain" aria-label="パンくず">
+          <nav class="crumbs" aria-label="パンくず">
             <a href={`/courses/${id}`}>{access.course.title}</a>
             <Icon name="chevronRight" size={14} />
             <span>{section?.title}</span>

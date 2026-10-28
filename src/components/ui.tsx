@@ -159,10 +159,11 @@ export const Progress = ({ done, total, label = true }: { done: number; total: n
 export const ProgressRing = ({ done, total }: { done: number; total: number }) => {
   const pct = total ? Math.round((done / total) * 100) : 0
   return (
-    <div class="ring" style={`--p:${pct}`} data-ring>
-      <span>
-        <strong data-progress-pct>{pct}</strong>%
-      </span>
+    <div class="ring-wrap">
+      <span class="ring" style={`--p:${pct}`} data-ring aria-hidden="true" />
+      <strong class="ring-value">
+        <span data-progress-pct>{pct}</span>%
+      </strong>
     </div>
   )
 }
@@ -187,11 +188,11 @@ export const CourseCard = ({ course, showProgress }: { course: CourseCardData; s
     <div class="course-cover">
       <span class="course-mono">{[...(course.code || course.title)].slice(0, 2).join('')}</span>
       <div class="course-cover-badges">
-        {!course.visible && <span class="chip chip-glass">非公開</span>}
-        {course.role === 'teacher' && <span class="chip chip-glass">担当</span>}
-        {course.role === 'student' && !showProgress && <span class="chip chip-glass">受講中</span>}
+        {!course.visible && <span class="chip">非公開</span>}
+        {course.role === 'teacher' && <span class="chip chip-accent">担当</span>}
+        {course.role === 'student' && !showProgress && <span class="chip chip-success">受講中</span>}
         {!!course.has_key && !course.role && (
-          <span class="chip chip-glass">
+          <span class="chip">
             <Icon name="lock" size={12} /> キー
           </span>
         )}
@@ -201,17 +202,17 @@ export const CourseCard = ({ course, showProgress }: { course: CourseCardData; s
       {course.code && <div class="course-code">{course.code}</div>}
       <h3 class="course-title">{course.title}</h3>
       {course.summary ? <p class="course-summary">{course.summary}</p> : <p class="course-summary muted">説明はありません</p>}
-      <div class="course-foot">
-        {showProgress && course.role === 'student' ? (
-          <Progress done={course.done ?? 0} total={course.total ?? 0} />
-        ) : (
-          <span class="meta">
-            <Icon name="users" size={14} /> {course.members ?? 0}人
-            {course.teachers && <span class="meta-sep">·</span>}
-            {course.teachers && <span class="truncate">{course.teachers}</span>}
-          </span>
-        )}
-      </div>
+    </div>
+    <div class="course-foot">
+      {showProgress && course.role === 'student' ? (
+        <Progress done={course.done ?? 0} total={course.total ?? 0} />
+      ) : (
+        <span class="meta">
+          <Icon name="users" size={14} /> {course.members ?? 0}人
+          {course.teachers && <span class="meta-sep">·</span>}
+          {course.teachers && <span class="truncate">{course.teachers}</span>}
+        </span>
+      )}
     </div>
   </a>
 )

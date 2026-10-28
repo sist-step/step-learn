@@ -23,38 +23,45 @@ export const CourseHeader = ({
   const base = `/courses/${course.id}`
   return (
     <>
+      <nav class="crumbs" aria-label="パンくず">
+        <a href="/courses">コース</a>
+        <Icon name="chevronRight" size={14} />
+        <span>{course.code || course.title}</span>
+      </nav>
       <section class={`course-hero tone-${course.color}`}>
+        <span class="course-hero-mono" aria-hidden="true">
+          {[...(course.code || course.title)].slice(0, 2).join('')}
+        </span>
         <div class="course-hero-body">
-          <nav class="crumbs" aria-label="パンくず">
-            <a href="/courses">コース</a>
-            <Icon name="chevronRight" size={14} />
-            <span>{course.code || course.title}</span>
-          </nav>
           <h1>{course.title}</h1>
           {course.summary && <p class="course-hero-summary">{course.summary}</p>}
           {meta && <div class="course-hero-meta">{meta}</div>}
-          {actions && <div class="course-hero-actions">{actions}</div>}
         </div>
-        {progress && progress.total > 0 && (
-          <div class="course-hero-progress">
-            <ProgressRing done={progress.done} total={progress.total} />
-            <span class="small">
-              <span data-progress-done>{progress.done}</span> / {progress.total} 完了
-            </span>
+        {(actions || (progress && progress.total > 0)) && (
+          <div class="course-hero-side">
+            {progress && progress.total > 0 && (
+              <div class="course-hero-progress">
+                <ProgressRing done={progress.done} total={progress.total} />
+                <span class="muted small">
+                  <span data-progress-done>{progress.done}</span> / {progress.total} 完了
+                </span>
+              </div>
+            )}
+            {actions && <div class="course-hero-actions">{actions}</div>}
           </div>
         )}
       </section>
       {canView && tab && (
         <nav class="tabs" aria-label="コースメニュー">
           <a href={base} class={tab === 'content' ? 'tab active' : 'tab'} aria-current={tab === 'content' ? 'page' : undefined}>
-            <Icon name="layers" size={16} /> コンテンツ
+            コンテンツ
           </a>
           <a
             href={`${base}/participants`}
             class={tab === 'participants' ? 'tab active' : 'tab'}
             aria-current={tab === 'participants' ? 'page' : undefined}
           >
-            <Icon name="users" size={16} /> 参加者
+            参加者
           </a>
           {canManage && (
             <a
@@ -62,7 +69,7 @@ export const CourseHeader = ({
               class={tab === 'settings' ? 'tab active' : 'tab'}
               aria-current={tab === 'settings' ? 'page' : undefined}
             >
-              <Icon name="sliders" size={16} /> 設定
+              設定
             </a>
           )}
         </nav>
