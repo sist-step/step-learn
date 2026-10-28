@@ -8,7 +8,7 @@ try {
 } catch {}
 
 const env = process.env
-const dataDir = path.resolve(env.DATA_DIR ?? './data')
+const dataDir = path.resolve('data')
 
 function loadSessionSecret() {
   if (env.SESSION_SECRET) {
@@ -47,9 +47,9 @@ export const config = {
   appOrigin: env.APP_ORIGIN || undefined,
   /** リバースプロキシが付けた X-Forwarded-For をクライアント IP として信頼するか（レート制限に使う） */
   trustProxy: env.TRUST_PROXY === '1' || env.TRUST_PROXY === 'true',
-  /** セッション Cookie の HMAC 署名鍵。未設定なら DATA_DIR/session-secret を生成して使う */
+  /** セッション Cookie の HMAC 署名鍵。未設定なら data/session-secret を生成して使う */
   sessionSecret: loadSessionSecret(),
-  databasePath: path.resolve(env.DATABASE_PATH ?? path.join(dataDir, 'step-learn.db')),
+  databasePath: path.join(dataDir, 'step-learn.db'),
   filesDir: path.join(dataDir, 'files'),
   /** R2 の 4 項目がすべて設定されていれば R2、なければローカルディスクに保存 */
   r2:

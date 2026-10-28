@@ -65,12 +65,12 @@ npm start            # = node dist/server/index.js
 設定は環境変数か `.env` で行います（`.env.example` を参照）。
 
 - `PORT`：待ち受けポート（既定 3000）
-- `DATA_DIR`：SQLite ファイルの置き場所（既定 `./data`）。**このディレクトリをバックアップ対象にしてください**
 - `APP_ORIGIN`：nginx や Caddy などのリバースプロキシの後ろで動かす場合は、公開 URL（例 `https://lms.example.com`）を必ず設定してください
-- `SESSION_SECRET`：セッション Cookie の署名鍵（32 文字以上）。未設定なら `DATA_DIR/session-secret` を自動生成して使います。変更すると全員がログアウトされます
+- `SESSION_SECRET`：セッション Cookie の署名鍵（32 文字以上）。未設定なら `data/session-secret` を自動生成して使います。変更すると全員がログアウトされます
 - `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM`：確認メールの送信に使う SMTP サーバー。`SMTP_HOST` を設定する場合は `MAIL_FROM` と `APP_ORIGIN` も必須です
 - `TRUST_PROXY`：リバースプロキシの後ろで動かす場合は `1` にしてください。`X-Forwarded-For` からクライアントの IP を取ってレート制限に使います（未設定だと全員がプロキシの IP として扱われます）
 - 実行時に必要なのは `dist/`・`migrations/`・`.env` と、`better-sqlite3` を入れた `node_modules` です（`npm ci --omit=dev` で入ります）。起動したディレクトリを基準に読み込みます
+- SQLite・セッション署名鍵・（ローカル保存時の）教材ファイルは、起動したディレクトリの `data/` に保存されます（変更はできません）。**このディレクトリをバックアップ対象にしてください**
 
 ### ユーザーを CLI で作成する
 
