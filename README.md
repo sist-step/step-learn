@@ -90,7 +90,10 @@ docker compose up -d --build   # http://127.0.0.1:3000
 
 - 設定はリポジトリ直下の `.env` を読みます（`ENV_FILE` で別のパスを指定できます）
 - `PORT` と `DATA_DIR` はコンテナ内で固定です。ホスト側のポートは `HOST_PORT`（既定 3000）で変えられます
-- ポートは `127.0.0.1` にだけ公開されます。外部へはリバースプロキシ経由で公開し、`APP_ORIGIN` を設定してください
+- ポートは既定で `127.0.0.1` にだけ公開されます。外部へはリバースプロキシ経由で公開し、`APP_ORIGIN` を設定してください
+- リバースプロキシが別のホストにある場合は、`HOST_BIND` で公開するアドレスを変えます（例 `HOST_BIND=192.168.0.10` や `0.0.0.0`）
+  - Docker の公開ポートは ufw / firewalld の INPUT ルールを通りません。送信元をリバースプロキシに絞るには、iptables の `DOCKER-USER` チェーンかホストの外のファイアウォールで制限してください
+  - 例：`iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 3000 ! -s <リバースプロキシの IP> -j DROP`
 - SQLite とローカル保存の教材ファイルは Docker ボリューム `step-learn_data` に保存されます。**このボリュームをバックアップ対象にしてください**
 
 ### 自動デプロイ（GitHub Actions のセルフホストランナー）
@@ -105,7 +108,7 @@ CI はチェックだけを行い、デプロイはしません。Actions の画
    - Secrets：`SESSION_SECRET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `SMTP_PASS`
    - Variables：`APP_ORIGIN` / `TRUST_PROXY` / `R2_ACCOUNT_ID` / `R2_BUCKET` / `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `MAIL_FROM`
    - 使わない項目は登録しなくてかまいません。値に `'` と改行は使えません
-3. ホスト側のポートを変える場合はリポジトリ変数 `DEPLOY_HOST_PORT` を設定する
+3. ホスト側のポートを変える場合は変数 `DEPLOY_HOST_PORT` を、公開するアドレスを変える場合は変数 `DEPLOY_HOST_BIND` を設定する（リポジトリと Environment `production` のどちらでもかまいません）
 4. 必要に応じて、GitHub の Environment `production` に承認者などの保護ルールを設定する
 
 ### 教材ファイルを Cloudflare R2 に保存する

@@ -24,6 +24,7 @@ jobs:
     timeout-minutes: 20
     env:
       HOST_PORT: ${{ vars.DEPLOY_HOST_PORT || '3000' }}
+      HOST_BIND: ${{ vars.DEPLOY_HOST_BIND || '127.0.0.1' }}
     steps:
       - uses: actions/checkout@v7
         with:
