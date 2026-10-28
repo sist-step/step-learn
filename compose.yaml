@@ -12,9 +12,9 @@ services:
     environment:
       PORT: 3000
       DATA_DIR: /app/data
-    # 0.0.0.0 で公開しないのは、リバースプロキシを経由させずに直接アクセスされると APP_ORIGIN の CSRF 検証と TLS を通らないため
+    # 0.0.0.0 を既定にしないのは、Docker の公開ポートはホストの ufw / firewalld を素通りし、リバースプロキシを経由しない直接アクセスで APP_ORIGIN の CSRF 検証と TLS を迂回されるため
     ports:
-      - "127.0.0.1:${HOST_PORT:-3000}:3000"
+      - "${HOST_BIND:-127.0.0.1}:${HOST_PORT:-3000}:3000"
     volumes:
       - data:/app/data
 
