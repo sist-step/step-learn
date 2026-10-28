@@ -26,6 +26,7 @@ export default defineConfig({
       },
     },
   },
-  // 依存もまとめて 1 ファイルにバンドルし、本番では node_modules を不要にする
-  ssr: { noExternal: true },
+  // 依存もまとめて 1 ファイルにバンドルする。better-sqlite3 だけはネイティブアドオン（.node）を
+  // 実行時に読み込むためバンドルできず、本番でも node_modules に置く
+  ssr: { noExternal: true, external: ['better-sqlite3'] },
 })
