@@ -1,0 +1,49 @@
+name: 不具合報告
+description: 期待どおりに動かない箇所を報告する
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: 何が起きたか
+      description: 起きている問題を簡潔に書いてください
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      placeholder: |
+        1. 学生アカウントでログイン
+        2. コース「〇〇」を開く
+        3. 「完了にする」を押す
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待する動作
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: 操作したユーザーのロール
+      multiple: true
+      options:
+        - 管理者
+        - 教師
+        - 学生
+        - 未ログイン
+  - type: input
+    id: env
+    attributes:
+      label: 環境
+      description: ブラウザ / OS / 端末など
+      placeholder: Chrome 140 / macOS / スマホ幅
+  - type: textarea
+    id: extra
+    attributes:
+      label: スクリーンショット・ログ
+      description: エラーメッセージやサーバーのログがあれば貼ってください
