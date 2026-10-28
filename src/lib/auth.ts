@@ -1,7 +1,8 @@
 import type { Context } from 'hono'
-import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
+import { deleteCookie, getCookie, getSignedCookie, setSignedCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
 import type { AppEnv, NavCourse, Role, User } from './types'
+import { config } from './config'
 import { db } from './db'
 
 const SESSION_COOKIE = 'sid'
@@ -56,7 +57,7 @@ export const dummyVerify = (password: string) => verifyPassword(password, DUMMY_
 const sessionIdFromToken = async (token: string) => toHex(await crypto.subtle.digest('SHA-256', enc.encode(token)))
 
 function setSessionCookie(c: Context, token: string) {
-  setCookie(c, SESSION_COOKIE, token, {
+  return setSignedCookie(c, SESSION_COOKIE, token, config.sessionSecret, {
     httpOnly: true,
     secure: new URL(c.req.url).protocol === 'https:' || c.req.header('x-forwarded-proto') === 'https',
     sameSite: 'Lax',
@@ -65,17 +66,22 @@ function setSessionCookie(c: Context, token: string) {
   })
 }
 
+async function readSessionToken(c: Context) {
+  const token = await getSignedCookie(c, config.sessionSecret, SESSION_COOKIE)
+  return typeof token === 'string' ? token : null
+}
+
 export async function createSession(c: Context<AppEnv>, userId: number) {
   const token = toB64(crypto.getRandomValues(new Uint8Array(32))).replace(/[+/=]/g, (ch) => ({ '+': '-', '/': '_', '=': '' })[ch]!)
   const id = await sessionIdFromToken(token)
   await db.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)')
     .bind(id, userId, now() + SESSION_TTL)
     .run()
-  setSessionCookie(c, token)
+  await setSessionCookie(c, token)
 }
 
 export async function destroySession(c: Context<AppEnv>) {
-  const token = getCookie(c, SESSION_COOKIE)
+  const token = await readSessionToken(c)
   if (token) {
     await db.prepare('DELETE FROM sessions WHERE id = ?').bind(await sessionIdFromToken(token)).run()
   }
@@ -84,7 +90,7 @@ export async function destroySession(c: Context<AppEnv>) {
 
 /** 現在のセッション以外を無効化する（パスワード変更時など） */
 export async function destroyOtherSessions(c: Context<AppEnv>, userId: number) {
-  const token = getCookie(c, SESSION_COOKIE)
+  const token = await readSessionToken(c)
   const current = token ? await sessionIdFromToken(token) : ''
   await db.prepare('DELETE FROM sessions WHERE user_id = ? AND id != ?').bind(userId, current).run()
 }
@@ -97,8 +103,11 @@ export const session = createMiddleware<AppEnv>(async (c, next) => {
   c.set('user', null)
   c.set('navCourses', [])
 
-  const token = getCookie(c, SESSION_COOKIE)
-  if (!token) return next()
+  const token = await readSessionToken(c)
+  if (!token) {
+    if (getCookie(c, SESSION_COOKIE) !== undefined) deleteCookie(c, SESSION_COOKIE, { path: '/' })
+    return next()
+  }
 
   const sid = await sessionIdFromToken(token)
   const t = now()
@@ -139,7 +148,7 @@ export const session = createMiddleware<AppEnv>(async (c, next) => {
 
   if (expires_at - t < SESSION_REFRESH_BELOW) {
     await db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?').bind(t + SESSION_TTL, sid).run()
-    setSessionCookie(c, token)
+    await setSessionCookie(c, token)
   }
 
   await next()
