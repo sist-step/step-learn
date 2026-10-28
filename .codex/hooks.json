@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/.claude/hooks/typecheck-on-stop.sh\"",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}
