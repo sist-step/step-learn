@@ -16,8 +16,12 @@ dist-server/
 node_modules/
 .wrangler
 
+# local data (SQLite / uploaded files)
+data/
+
 # env
 .env
+!.env.example
 .env.production
 .dev.vars
 
