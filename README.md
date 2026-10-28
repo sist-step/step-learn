@@ -23,9 +23,9 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
 | 方針 | 実装 |
 | --- | --- |
 | 速さ | SSR（hono/jsx）。クライアント JS は約 2KB（gzip）の進化的拡張のみで、JS なしでも全操作できる。Speculation Rules による先読みと View Transitions で、ページ遷移も SPA 並みに速い |
-| DB | Node 24 標準の `node:sqlite`（WAL モード）。ネイティブモジュールのビルドが不要で、DB サーバーも要らない。プリペアドステートメントはキャッシュして使い回す |
+| DB | `better-sqlite3`（WAL モード）＋ Drizzle ORM。DB サーバーは要らない。テーブル定義は `src/lib/schema.ts` で、マイグレーションは drizzle-kit で生成する。生 SQL 用のラッパーはプリペアドステートメントをキャッシュして使い回す |
 | コスト | 必要なのは Node.js が動くサーバー 1 台だけ。R2 を使う場合、ダウンロードは署名付き URL で R2 から直接配信されるので、サーバーの帯域を使わない（R2 は転送料無料） |
-| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）だけ。ビルド結果は 1 ファイルにバンドルされ、本番では `node_modules` が要らない |
+| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）・`better-sqlite3`・`drizzle-orm` だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる |
 | セキュリティ | PBKDF2（10 万回）、セッショントークンは SHA-256 で保存、CSRF 対策は Origin 検証と SameSite=Lax、ファイルは権限を確認したうえで配信（PDF と画像以外は添付として返す） |
 
 ## 開発
@@ -58,7 +58,7 @@ npm start            # = node dist/server/index.js
 - `PORT`：待ち受けポート（既定 3000）
 - `DATA_DIR`：SQLite ファイルの置き場所（既定 `./data`）。**このディレクトリをバックアップ対象にしてください**
 - `APP_ORIGIN`：nginx や Caddy などのリバースプロキシの後ろで動かす場合は、公開 URL（例 `https://lms.example.com`）を必ず設定してください
-- 実行時に必要なのは `dist/`・`migrations/`・`.env` だけです。起動したディレクトリを基準に読み込みます
+- 実行時に必要なのは `dist/`・`migrations/`・`.env` と、`better-sqlite3` を入れた `node_modules` です（`npm ci --omit=dev` で入ります）。起動したディレクトリを基準に読み込みます
 
 ### 教材ファイルを Cloudflare R2 に保存する
 
@@ -72,7 +72,7 @@ npm start            # = node dist/server/index.js
 ## ディレクトリ構成
 
 ```
-migrations/          SQLite スキーマ（起動時に未適用のものを自動で適用）
+migrations/          drizzle-kit が生成するマイグレーション（起動時に未適用のものを自動で適用）
 src/index.tsx        Hono アプリ本体（ミドルウェア、ルーティング）
 src/server.ts        本番用 Node.js エントリ（静的ファイル配信、起動）
 src/renderer.tsx     HTML の外枠
