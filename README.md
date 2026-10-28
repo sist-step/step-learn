@@ -7,7 +7,8 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
 ## 機能（現時点）
 
 - **認証**：メール＋パスワードでの登録とログイン、セッション管理、プロフィールとパスワードの変更
-  - 最初に登録したユーザーが自動的に管理者になります
+  - 新規登録はメールアドレスの確認が必要です（届いたリンクから氏名とパスワードを設定）
+  - 管理者は CLI（`npm run user:create`）で作成します。Web からの登録はすべて学生になります
   - ロールは 管理者 / 教師 / 学生。コースを作成できるのは教師と管理者です
 - **コース**
   - コース一覧と検索、ダッシュボード（受講中・担当コース、進捗、「続きから学習」）
@@ -25,8 +26,8 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
 | 速さ | SSR（hono/jsx）。クライアント JS は約 2KB（gzip）の進化的拡張のみで、JS なしでも全操作できる。Speculation Rules による先読みと View Transitions で、ページ遷移も SPA 並みに速い |
 | DB | `better-sqlite3`（WAL モード）＋ Drizzle ORM。DB サーバーは要らない。テーブル定義は `src/lib/schema.ts` で、マイグレーションは drizzle-kit で生成する。生 SQL 用のラッパーはプリペアドステートメントをキャッシュして使い回す |
 | コスト | 必要なのは Node.js が動くサーバー 1 台だけ。R2 を使う場合、ダウンロードは署名付き URL で R2 から直接配信されるので、サーバーの帯域を使わない（R2 は転送料無料） |
-| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）・`better-sqlite3`・`drizzle-orm` だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる |
-| セキュリティ | PBKDF2（60 万回、ログイン時に旧設定のハッシュを再計算）、セッション Cookie は HMAC-SHA256 で署名しトークンは SHA-256 で保存、CSRF 対策は Origin 検証と SameSite=Lax、ファイルは権限を確認したうえで配信（PDF と画像以外は添付として返す） |
+| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）・`nodemailer`（確認メールの SMTP 送信）・`better-sqlite3`・`drizzle-orm` だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる |
+| セキュリティ | PBKDF2（60 万回、ログイン時に旧設定のハッシュを再計算）、推測されやすいパスワードの拒否、ログイン失敗と確認メール送信のレート制限、登録画面からメールアドレスの登録有無がわからない設計、セッション Cookie は HMAC-SHA256 で署名しトークンは SHA-256 で保存、CSRF 対策は Origin 検証と SameSite=Lax、ファイルは権限を確認したうえで配信（PDF と画像以外は添付として返す） |
 
 ## 開発
 
@@ -40,6 +41,14 @@ npm run dev          # http://localhost:5173
 - 初回起動時に `migrations/` のスキーマが自動で適用され、`data/step-learn.db` が作られます
 - アップロードしたファイルは `data/files/` に保存されます
 - データを初期化したいときはサーバーを止めて `data/` を削除してください
+- SMTP を設定していない間は、確認メールは送信されずにサーバーのログに出力されます
+
+最初の管理者は CLI で作成します（CLI は `npm run build` で生成されます）。
+
+```sh
+npm run build
+npm run user:create -- --email admin@example.com --name "管理者"
+```
 
 ```sh
 npm run typecheck
@@ -59,7 +68,19 @@ npm start            # = node dist/server/index.js
 - `DATA_DIR`：SQLite ファイルの置き場所（既定 `./data`）。**このディレクトリをバックアップ対象にしてください**
 - `APP_ORIGIN`：nginx や Caddy などのリバースプロキシの後ろで動かす場合は、公開 URL（例 `https://lms.example.com`）を必ず設定してください
 - `SESSION_SECRET`：セッション Cookie の署名鍵（32 文字以上）。未設定なら `DATA_DIR/session-secret` を自動生成して使います。変更すると全員がログアウトされます
+- `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM`：確認メールの送信に使う SMTP サーバー。`SMTP_HOST` を設定する場合は `MAIL_FROM` と `APP_ORIGIN` も必須です
+- `TRUST_PROXY`：リバースプロキシの後ろで動かす場合は `1` にしてください。`X-Forwarded-For` からクライアントの IP を取ってレート制限に使います（未設定だと全員がプロキシの IP として扱われます）
 - 実行時に必要なのは `dist/`・`migrations/`・`.env` と、`better-sqlite3` を入れた `node_modules` です（`npm ci --omit=dev` で入ります）。起動したディレクトリを基準に読み込みます
+
+### ユーザーを CLI で作成する
+
+```sh
+npm run user:create -- --email admin@example.com --name "管理者" [--role admin|teacher|student]
+```
+
+- `--role` を省略すると管理者になります
+- パスワードは対話的に入力します。パイプで渡した場合は 1 行目を使います（例 `cat password.txt | npm run user:create -- ...`）
+- Web の新規登録と同じパスワードの基準を満たす必要があります
 
 ### 教材ファイルを Cloudflare R2 に保存する
 
