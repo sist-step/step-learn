@@ -101,7 +101,10 @@ CI はチェックだけを行い、デプロイはしません。Actions の画
 サーバー側の準備：
 
 1. Docker（Compose v2.24 以上）を入れ、ラベル `self-hosted` / `linux` のランナーを登録する（ランナーのユーザーが `docker` を実行できること）
-2. `.env` を `/opt/step-learn/.env` に置く（別の場所にする場合はリポジトリ変数 `DEPLOY_ENV_FILE` にパスを設定）
+2. GitHub の Environment `production` に設定値を登録する。デプロイのたびに、ここから `.env` をランナーの一時ディレクトリに書き出してコンテナに渡し、終わったら消します
+   - Secrets：`SESSION_SECRET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `SMTP_PASS`
+   - Variables：`APP_ORIGIN` / `TRUST_PROXY` / `R2_ACCOUNT_ID` / `R2_BUCKET` / `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `MAIL_FROM`
+   - 使わない項目は登録しなくてかまいません。値に `'` と改行は使えません
 3. ホスト側のポートを変える場合はリポジトリ変数 `DEPLOY_HOST_PORT` を設定する
 4. 必要に応じて、GitHub の Environment `production` に承認者などの保護ルールを設定する
 
