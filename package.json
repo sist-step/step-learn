@@ -4,17 +4,23 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "$npm_execpath run build && vite preview",
-    "deploy": "$npm_execpath run build && wrangler deploy",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+    "start": "node dist/server/index.js",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@hono/node-server": "^2.1.5",
+    "aws4fetch": "^1.0.20",
     "hono": "^4.13.14"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.44.0",
+    "@hono/vite-build": "^1.11.1",
+    "@hono/vite-dev-server": "^0.26.1",
+    "@types/node": "^24.19.2",
+    "typescript": "^5.9.3",
     "vite": "^8.1.4",
-    "vite-ssr-components": "^0.8.0",
-    "wrangler": "^4.110.0"
+    "vite-ssr-components": "^0.8.0"
+  },
+  "engines": {
+    "node": ">=24"
   }
 }
