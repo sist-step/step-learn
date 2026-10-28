@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import BetterSqlite3 from 'better-sqlite3'
-import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { type BetterSQLite3Database, drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 import { config } from './config'
 import * as schema from './schema'
@@ -59,8 +59,22 @@ class Statement {
 }
 
 export class Database {
+  readonly sqlite: BetterSqlite3.Database
+  readonly orm: BetterSQLite3Database<typeof schema>
   private cache = new Map<string, { stmt: StatementSync; numbered: boolean }>()
-  constructor(readonly sqlite: BetterSqlite3.Database) {}
+
+  constructor(file: string) {
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    this.sqlite = new BetterSqlite3(file)
+    this.sqlite.exec(`
+      PRAGMA journal_mode = WAL;
+      PRAGMA synchronous = NORMAL;
+      PRAGMA foreign_keys = ON;
+      PRAGMA busy_timeout = 5000;
+    `)
+    this.orm = drizzle(this.sqlite, { schema })
+    migrate(this.orm, { migrationsFolder: path.resolve('migrations') })
+  }
 
   /** 同じ SQL のプリペアドステートメントは使い回す */
   prepare(sql: string) {
@@ -86,20 +100,6 @@ export class Database {
   }
 }
 
-function open() {
-  fs.mkdirSync(path.dirname(config.databasePath), { recursive: true })
-  const sqlite = new BetterSqlite3(config.databasePath)
-  sqlite.exec(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA synchronous = NORMAL;
-    PRAGMA foreign_keys = ON;
-    PRAGMA busy_timeout = 5000;
-  `)
-  const orm = drizzle(sqlite, { schema })
-  migrate(orm, { migrationsFolder: path.resolve('migrations') })
-  return { db: new Database(sqlite), orm }
-}
-
 // 開発中のホットリロードで接続が増えないよう、globalThis に保持する
-const g = globalThis as unknown as { __database?: ReturnType<typeof open> }
-export const { db, orm } = (g.__database ??= open())
+const g = globalThis as unknown as { __db?: Database }
+export const db = (g.__db ??= new Database(config.databasePath))
