@@ -60,6 +60,29 @@ npm start            # = node dist/server/index.js
 - `APP_ORIGIN`：nginx や Caddy などのリバースプロキシの後ろで動かす場合は、公開 URL（例 `https://lms.example.com`）を必ず設定してください
 - 実行時に必要なのは `dist/`・`migrations/`・`.env` と、`better-sqlite3` を入れた `node_modules` です（`npm ci --omit=dev` で入ります）。起動したディレクトリを基準に読み込みます
 
+### Docker で動かす
+
+```sh
+docker compose up -d --build   # http://127.0.0.1:3000
+```
+
+- 設定はリポジトリ直下の `.env` を読みます（`ENV_FILE` で別のパスを指定できます）
+- `PORT` と `DATA_DIR` はコンテナ内で固定です。ホスト側のポートは `HOST_PORT`（既定 3000）で変えられます
+- ポートは `127.0.0.1` にだけ公開されます。外部へはリバースプロキシ経由で公開し、`APP_ORIGIN` を設定してください
+- SQLite とローカル保存の教材ファイルは Docker ボリューム `step-learn_data` に保存されます。**このボリュームをバックアップ対象にしてください**
+
+### 自動デプロイ（GitHub Actions のセルフホストランナー）
+
+`master` への push で CI（`.github/workflows/ci.yml`）が成功すると、`.github/workflows/deploy.yml` がセルフホストランナー上で `docker compose build` → `docker compose up -d` を実行して入れ替えます。
+CI はチェックだけを行い、デプロイはしません。Actions の画面から手動で再デプロイすることもできます（`master` のみ）。
+
+サーバー側の準備：
+
+1. Docker（Compose v2.24 以上）を入れ、ラベル `self-hosted` / `linux` のランナーを登録する（ランナーのユーザーが `docker` を実行できること）
+2. `.env` を `/opt/step-learn/.env` に置く（別の場所にする場合はリポジトリ変数 `DEPLOY_ENV_FILE` にパスを設定）
+3. ホスト側のポートを変える場合はリポジトリ変数 `DEPLOY_HOST_PORT` を設定する
+4. 必要に応じて、GitHub の Environment `production` に承認者などの保護ルールを設定する
+
 ### 教材ファイルを Cloudflare R2 に保存する
 
 1. Cloudflare ダッシュボードで R2 バケットを作成する（例 `step-learn-files`）

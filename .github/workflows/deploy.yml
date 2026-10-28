@@ -1,0 +1,47 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # conclusion だけで判定しないのは、PR の CI 完了でも workflow_run が発火するため
+    if: >-
+      (github.event_name == 'workflow_run'
+        && github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.event == 'push')
+      || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
+    runs-on: [self-hosted, linux]
+    environment: production
+    timeout-minutes: 20
+    env:
+      # チェックアウト先に .env を置かないのは、actions/checkout が毎回 git clean で消してしまうため
+      ENV_FILE: ${{ vars.DEPLOY_ENV_FILE || '/opt/step-learn/.env' }}
+      HOST_PORT: ${{ vars.DEPLOY_HOST_PORT || '3000' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Check env file
+        run: |
+          if [ ! -f "$ENV_FILE" ]; then
+            echo "::error::$ENV_FILE が見つかりません。ランナーのホストに .env を置くか、リポジトリ変数 DEPLOY_ENV_FILE でパスを指定してください"
+            exit 1
+          fi
+      - name: Build image
+        run: docker compose build
+      - name: Start
+        run: docker compose up -d --wait --wait-timeout 60
+      - name: Show logs
+        if: failure()
+        run: docker compose logs --tail 200
+      - name: Prune old images
+        run: docker image prune -f
