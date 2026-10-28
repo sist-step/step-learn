@@ -12,6 +12,8 @@ const SESSION_REFRESH_BELOW = SESSION_TTL / 2
 
 const PBKDF2_ITERATIONS = 600_000
 
+const EMAIL_VERIFICATION_TTL = 60 * 60 * 24 // 24時間
+
 const enc = new TextEncoder()
 
 const toB64 = (buf: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(buf)))
@@ -54,7 +56,10 @@ export function needsRehash(stored: string) {
 const DUMMY_HASH = `pbkdf2$${PBKDF2_ITERATIONS}$${toB64(new Uint8Array(16))}$${toB64(new Uint8Array(32))}`
 export const dummyVerify = (password: string) => verifyPassword(password, DUMMY_HASH)
 
-const sessionIdFromToken = async (token: string) => toHex(await crypto.subtle.digest('SHA-256', enc.encode(token)))
+const randomToken = () =>
+  toB64(crypto.getRandomValues(new Uint8Array(32))).replace(/[+/=]/g, (ch) => ({ '+': '-', '/': '_', '=': '' })[ch]!)
+const hashToken = async (token: string) => toHex(await crypto.subtle.digest('SHA-256', enc.encode(token)))
+const sessionIdFromToken = hashToken
 
 function setSessionCookie(c: Context, token: string) {
   return setSignedCookie(c, SESSION_COOKIE, token, config.sessionSecret, {
@@ -72,7 +77,7 @@ async function readSessionToken(c: Context) {
 }
 
 export async function createSession(c: Context<AppEnv>, userId: number) {
-  const token = toB64(crypto.getRandomValues(new Uint8Array(32))).replace(/[+/=]/g, (ch) => ({ '+': '-', '/': '_', '=': '' })[ch]!)
+  const token = randomToken()
   const id = await sessionIdFromToken(token)
   await db.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)')
     .bind(id, userId, now() + SESSION_TTL)
@@ -86,6 +91,36 @@ export async function destroySession(c: Context<AppEnv>) {
     await db.prepare('DELETE FROM sessions WHERE id = ?').bind(await sessionIdFromToken(token)).run()
   }
   deleteCookie(c, SESSION_COOKIE, { path: '/' })
+}
+
+/** 作成できたらユーザー ID を、メールアドレスが登録済みなら null を返す */
+export async function createUser(user: { email: string; name: string; password: string; role?: Role }) {
+  const [inserted] = await db.batch([
+    // 事前の存在確認だけに頼らないのは、確認と INSERT の間に同じメールで登録されると UNIQUE 制約違反になるため
+    db.prepare('INSERT INTO users (email, name, password_hash, role) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING RETURNING id')
+      .bind(user.email, user.name, await hashPassword(user.password), user.role ?? 'student'),
+    db.prepare('DELETE FROM email_verifications WHERE email = ?').bind(user.email),
+  ])
+  return (inserted.results[0] as { id: number } | undefined)?.id ?? null
+}
+
+/** メール確認用のトークンを発行する。DB にはハッシュだけを保存し、平文はメールのリンクにだけ載せる */
+export async function createEmailVerification(email: string, next: string) {
+  const token = randomToken()
+  const t = now()
+  await db.batch([
+    db.prepare('DELETE FROM email_verifications WHERE expires_at <= ?').bind(t),
+    db.prepare('INSERT INTO email_verifications (token_hash, email, next, expires_at) VALUES (?, ?, ?, ?)')
+      .bind(await hashToken(token), email, next, t + EMAIL_VERIFICATION_TTL),
+  ])
+  return token
+}
+
+export async function findEmailVerification(token: string) {
+  if (!token) return null
+  return db.prepare('SELECT email, next FROM email_verifications WHERE token_hash = ? AND expires_at > ?')
+    .bind(await hashToken(token), now())
+    .first<{ email: string; next: string }>()
 }
 
 /** 現在のセッション以外を無効化する（パスワード変更時など） */

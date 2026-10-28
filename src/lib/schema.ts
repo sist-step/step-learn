@@ -32,6 +32,18 @@ export const sessions = sqliteTable(
   (t) => [index('sessions_user').on(t.userId)],
 )
 
+export const emailVerifications = sqliteTable(
+  'email_verifications',
+  {
+    tokenHash: text('token_hash').primaryKey(),
+    email: textNocase('email').notNull(),
+    next: text('next').notNull().default(''),
+    expiresAt: integer('expires_at').notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [index('email_verifications_email').on(t.email)],
+)
+
 export const courses = sqliteTable('courses', {
   id: integer('id').primaryKey(),
   code: text('code').notNull().default(''),
