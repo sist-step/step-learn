@@ -23,19 +23,44 @@ jobs:
     environment: production
     timeout-minutes: 20
     env:
-      # チェックアウト先に .env を置かないのは、actions/checkout が毎回 git clean で消してしまうため
-      ENV_FILE: ${{ vars.DEPLOY_ENV_FILE || '/opt/step-learn/.env' }}
       HOST_PORT: ${{ vars.DEPLOY_HOST_PORT || '3000' }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - name: Check env file
+      - name: Write env file
+        env:
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          APP_ORIGIN: ${{ vars.APP_ORIGIN }}
+          TRUST_PROXY: ${{ vars.TRUST_PROXY }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          SMTP_HOST: ${{ vars.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          SMTP_USER: ${{ vars.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
         run: |
-          if [ ! -f "$ENV_FILE" ]; then
-            echo "::error::$ENV_FILE が見つかりません。ランナーのホストに .env を置くか、リポジトリ変数 DEPLOY_ENV_FILE でパスを指定してください"
-            exit 1
-          fi
+          ENV_FILE="$RUNNER_TEMP/step-learn.env"
+          echo "ENV_FILE=$ENV_FILE" >> "$GITHUB_ENV"
+          umask 077
+          : > "$ENV_FILE"
+          for name in SESSION_SECRET APP_ORIGIN TRUST_PROXY \
+            R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET \
+            SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS MAIL_FROM; do
+            value="${!name}"
+            [ -z "$value" ] && continue
+            # 引用符なしやダブルクォートで書かないのは、Compose が値の中の $ を変数として展開してしまうため
+            case "$value" in
+              *"'"* | *$'\n'*)
+                echo "::error::$name に ' や改行は使えません"
+                exit 1
+                ;;
+            esac
+            printf "%s='%s'\n" "$name" "$value" >> "$ENV_FILE"
+          done
       - name: Build image
         run: docker compose build
       - name: Start
@@ -45,3 +70,6 @@ jobs:
         run: docker compose logs --tail 200
       - name: Prune old images
         run: docker image prune -f
+      - name: Remove env file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/step-learn.env"
