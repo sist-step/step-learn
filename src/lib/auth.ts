@@ -133,7 +133,7 @@ export async function destroyOtherSessions(c: Context<AppEnv>, userId: number) {
 
 /**
  * セッションからユーザーを復元する。
- * GET のときはサイドバー用の受講コース一覧も同じ batch でまとめて取得する。
+ * GET のときはナビ用の受講コース一覧も同じ batch でまとめて取得する。
  */
 export const session = createMiddleware<AppEnv>(async (c, next) => {
   c.set('user', null)

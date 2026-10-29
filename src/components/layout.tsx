@@ -1,6 +1,5 @@
 import type { Child } from 'hono/jsx'
 import { useRequestContext } from 'hono/jsx-renderer'
-import { isSidebarCollapsed } from '../lib/http'
 import { ROLE_LABELS, type AppEnv } from '../lib/types'
 import { Icon, type IconName } from './icons'
 import { Avatar } from './ui'
@@ -25,18 +24,24 @@ const Toast = () => {
 
 type NavItem = { href: string; icon: IconName; label: string; active: boolean }
 
-const NavLink = ({ href, icon, label, active }: NavItem) => (
-  <a href={href} class={active ? 'nav-link active' : 'nav-link'} aria-current={active ? 'page' : undefined} title={label}>
-    <Icon name={icon} size={18} />
-    <span class="sidebar-label">{label}</span>
-  </a>
-)
-
 export const Brand = () => (
   <a href="/" class="brand">
     <img src="/favicon.png" alt="" class="brand-mark" width={32} height={32} />
     <span class="brand-name">StepLearn</span>
   </a>
+)
+
+const ThemeToggle = ({ class: cls }: { class: string }) => (
+  <button type="button" class={cls} data-theme-toggle aria-label="テーマを切り替え" title="テーマを切り替え">
+    <span class="theme-to-dark">
+      <Icon name="moon" size={18} />
+      <span class="rail-label">ダークモード</span>
+    </span>
+    <span class="theme-to-light">
+      <Icon name="sun" size={18} />
+      <span class="rail-label">ライトモード</span>
+    </span>
+  </button>
 )
 
 export const AppShell = ({ children, wide, editable }: { children: Child; wide?: boolean; editable?: boolean }) => {
@@ -53,116 +58,89 @@ export const AppShell = ({ children, wide, editable }: { children: Child; wide?:
       user.role === 'admin' && { href: '/admin', icon: 'shield', label: '管理', active: path.startsWith('/admin') },
     ] satisfies (NavItem | false)[]
   ).filter((l) => l !== false)
-  const collapsed = isSidebarCollapsed(c)
-  const toggleLabel = collapsed ? 'サイドバーを開く' : 'サイドバーを畳む'
 
   return (
-    <div class={collapsed ? 'app is-collapsed' : 'app'}>
-      <aside class="sidebar" id="sidebar">
-        <div class="sidebar-head">
-          <a href="/" class="brand" title="StepLearn">
-            <img src="/favicon.png" alt="" class="brand-mark" width={32} height={32} />
-            <span class="brand-name sidebar-label">StepLearn</span>
-          </a>
-          <button
-            type="button"
-            class="icon-btn sidebar-toggle"
-            data-sidebar-toggle
-            aria-expanded={collapsed ? 'false' : 'true'}
-            aria-controls="sidebar"
-            aria-label={toggleLabel}
-            title={toggleLabel}
-          >
-            <Icon name="chevronDoubleLeft" size={18} />
+    <div class="app">
+      <header class="topbar">
+        <div class="topbar-start">
+          <button type="button" class="icon-btn nav-open-btn" data-nav-toggle aria-label="メニューを開く" aria-controls="rail">
+            <Icon name="menu" />
           </button>
-          <button type="button" class="icon-btn nav-close" data-nav-toggle aria-label="メニューを閉じる">
+          <Brand />
+        </div>
+        <nav class="pill-nav" aria-label="メイン">
+          {links.map((l) => (
+            <a href={l.href} class={l.active ? 'pill active' : 'pill'} aria-current={l.active ? 'page' : undefined}>
+              {l.label}
+            </a>
+          ))}
+        </nav>
+        <div class="topbar-end">
+          {editable && (
+            <button type="button" class="switch" role="switch" aria-checked="false" data-edit-mode-toggle>
+              <span class="switch-track" />
+              <span>編集モード</span>
+            </button>
+          )}
+          <ThemeToggle class="icon-btn round-btn topbar-theme" />
+          <a href="/account" class="topbar-avatar" aria-label="アカウント" title={`${user.name}（${ROLE_LABELS[user.role]}）`}>
+            <Avatar name={user.name} size={40} />
+          </a>
+        </div>
+      </header>
+
+      <aside class="rail" id="rail">
+        <div class="rail-head">
+          <Brand />
+          <button type="button" class="icon-btn" data-nav-toggle aria-label="メニューを閉じる">
             <Icon name="x" />
           </button>
         </div>
 
-        <nav class="nav" aria-label="メイン">
+        <nav class="rail-nav" aria-label="メイン">
           {links.map((l) => (
-            <NavLink {...l} />
+            <a
+              href={l.href}
+              class={l.active ? 'rail-link active' : 'rail-link'}
+              aria-current={l.active ? 'page' : undefined}
+              title={l.label}
+            >
+              <Icon name={l.icon} size={20} />
+              <span class="rail-label">{l.label}</span>
+            </a>
           ))}
         </nav>
 
         {navCourses.length > 0 && (
-          <div class="nav-section">
-            <div class="nav-heading sidebar-label">
-              <span>マイコース</span>
-              <span class="nav-heading-count">{navCourses.length}</span>
-            </div>
-            <nav class="nav" aria-label="マイコース">
-              {navCourses.map((nc) => (
-                <a
-                  href={`/courses/${nc.id}`}
-                  class={currentCourse === nc.id ? 'nav-link nav-course active' : 'nav-link nav-course'}
-                  aria-current={currentCourse === nc.id ? 'page' : undefined}
-                  title={nc.title}
-                >
-                  <span class={`dot tone-${nc.color}`}>{[...nc.title][0]}</span>
-                  <span class="truncate sidebar-label">{nc.title}</span>
-                </a>
-              ))}
-            </nav>
-          </div>
+          <nav class="rail-nav" aria-label="マイコース">
+            <span class="rail-heading rail-label">マイコース</span>
+            {navCourses.map((nc) => (
+              <a
+                href={`/courses/${nc.id}`}
+                class={currentCourse === nc.id ? 'rail-link active' : 'rail-link'}
+                aria-current={currentCourse === nc.id ? 'page' : undefined}
+                title={nc.title}
+              >
+                <span class={`dot tone-${nc.color}`}>{[...nc.title][0]}</span>
+                <span class="rail-label truncate">{nc.title}</span>
+              </a>
+            ))}
+          </nav>
         )}
 
-        <div class="sidebar-foot">
-          <a
-            href="/account"
-            class={path === '/account' ? 'nav-link sidebar-user active' : 'nav-link sidebar-user'}
-            aria-current={path === '/account' ? 'page' : undefined}
-            title={`${user.name}（${ROLE_LABELS[user.role]}）`}
-          >
-            <Avatar name={user.name} size={28} />
-            <span class="person-meta sidebar-label">
-              <span class="strong truncate">{user.name}</span>
-              <span class="muted small">{ROLE_LABELS[user.role]}</span>
-            </span>
-          </a>
-          <button type="button" class="nav-link sidebar-theme" data-theme-toggle title="テーマを切り替え">
-            <span class="theme-to-dark">
-              <Icon name="moon" size={18} />
-              <span class="sidebar-label">ダークモード</span>
-            </span>
-            <span class="theme-to-light">
-              <Icon name="sun" size={18} />
-              <span class="sidebar-label">ライトモード</span>
-            </span>
-          </button>
+        <div class="rail-foot">
+          <ThemeToggle class="rail-link rail-theme" />
           <form method="post" action="/logout">
-            <button type="submit" class="nav-link sidebar-logout" title="ログアウト">
-              <Icon name="logout" size={18} />
-              <span class="sidebar-label">ログアウト</span>
+            <button type="submit" class="rail-link" title="ログアウト">
+              <Icon name="logout" size={20} />
+              <span class="rail-label">ログアウト</span>
             </button>
           </form>
         </div>
       </aside>
       <div class="backdrop" data-nav-toggle />
 
-      <div class="main">
-        <header class="topbar">
-          <div class="topbar-start">
-            <button type="button" class="icon-btn" data-nav-toggle aria-label="メニューを開く" aria-controls="sidebar">
-              <Icon name="menu" />
-            </button>
-            <Brand />
-          </div>
-          <div class="topbar-end">
-            {editable && (
-              <button type="button" class="switch" role="switch" aria-checked="false" data-edit-mode-toggle>
-                <span class="switch-track" />
-                <span>編集モード</span>
-              </button>
-            )}
-            <a href="/account" class="topbar-avatar" aria-label="アカウント" title={user.name}>
-              <Avatar name={user.name} size={30} />
-            </a>
-          </div>
-        </header>
-        <main class={wide ? 'content content-wide' : 'content'}>{children}</main>
-      </div>
+      <main class={wide ? 'content content-wide' : 'content'}>{children}</main>
       <Toast />
     </div>
   )
