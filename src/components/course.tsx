@@ -1,11 +1,10 @@
 import type { Child } from 'hono/jsx'
 import type { CourseAccess } from '../lib/courses'
-import { isSharing } from '../lib/screen-share'
-import { COURSE_COLORS, type Course } from '../lib/types'
-import { Icon } from './icons'
+import { COURSE_COLORS, type Course, type ItemType } from '../lib/types'
+import { Icon, type IconName } from './icons'
 import { Field, ProgressRing, TextArea } from './ui'
 
-type Tab = 'content' | 'participants' | 'screen' | 'settings'
+type Tab = 'content' | 'participants' | 'settings'
 
 export const CourseHeader = ({
   access,
@@ -63,14 +62,6 @@ export const CourseHeader = ({
             aria-current={tab === 'participants' ? 'page' : undefined}
           >
             参加者
-          </a>
-          <a href={`${base}/screen`} class={tab === 'screen' ? 'tab active' : 'tab'} aria-current={tab === 'screen' ? 'page' : undefined}>
-            画面共有
-            {isSharing(course.id) && (
-              <span class="live-dot">
-                <span class="sr-only">配信中</span>
-              </span>
-            )}
           </a>
           {canManage && (
             <a
@@ -159,8 +150,10 @@ export const CourseForm = ({
   </form>
 )
 
-export const ItemIcon = ({ type }: { type: string }) => (
+const ITEM_ICONS: Record<ItemType, IconName> = { page: 'page', link: 'link', file: 'file', screen: 'monitor' }
+
+export const ItemIcon = ({ type }: { type: ItemType }) => (
   <span class={`item-icon kind-${type}`}>
-    <Icon name={type === 'link' ? 'link' : type === 'file' ? 'file' : 'page'} size={16} />
+    <Icon name={ITEM_ICONS[type]} size={16} />
   </span>
 )

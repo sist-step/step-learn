@@ -26,6 +26,7 @@
   --warning-soft: #fff6e0;
   --info: #0ea5e9;
   --media-bg: #0b0b0f;
+  --media-text: #a6a6b0;
   --ring: 0 0 0 3px color-mix(in srgb, var(--primary) 24%, transparent);
   --shadow-sm: 0 1px 2px rgb(20 20 30 / 0.05);
   --shadow: 0 1px 2px rgb(20 20 30 / 0.04), 0 6px 16px rgb(20 20 30 / 0.06);
@@ -66,6 +67,7 @@
     --warning-soft: rgb(255 190 60 / 0.12);
     --info: #2cb1ee;
     --media-bg: #000000;
+    --media-text: #8e8e99;
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
     --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 16px rgb(0 0 0 / 0.25);
     --shadow-lg: 0 12px 40px rgb(0 0 0 / 0.5);
@@ -563,7 +565,7 @@ input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--mute
 .switch input:focus-visible + .switch-track { box-shadow: var(--ring); }
 
 /* セグメント */
-.segmented { display: inline-flex; padding: 3px; gap: 2px; background: var(--surface-3); border-radius: 9px; align-self: flex-start; }
+.segmented { display: inline-flex; flex-wrap: wrap; padding: 3px; gap: 2px; background: var(--surface-3); border-radius: 9px; align-self: flex-start; }
 .segmented label { cursor: pointer; }
 .segmented input { position: absolute; opacity: 0; }
 .segmented span {
@@ -575,6 +577,7 @@ input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--mute
   font-size: 13px;
   font-weight: 600;
   color: var(--muted);
+  white-space: nowrap;
   transition: background 0.15s, color 0.15s;
 }
 .segmented input:checked + span { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
@@ -584,8 +587,8 @@ input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--mute
 .item-form .when-link, .item-form .when-file, .item-form .when-other-inline { display: none; }
 .item-form:has(input[value='link']:checked) .when-link,
 .item-form:has(input[value='file']:checked) .when-file { display: flex; }
-.item-form:has(input[value='link']:checked, input[value='file']:checked) .when-other-inline { display: inline; }
-.item-form:has(input[value='link']:checked, input[value='file']:checked) .when-page-inline { display: none; }
+.item-form:not(:has(input[value='page']:checked)) .when-other-inline { display: inline; }
+.item-form:not(:has(input[value='page']:checked)) .when-page-inline { display: none; }
 
 /* ==========================================================================
    カード・チップ・アバター
@@ -879,7 +882,6 @@ input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--mute
 }
 .tab:hover { color: var(--text); text-decoration: none; }
 .tab.active { color: var(--text); font-weight: 600; border-bottom-color: var(--text); }
-.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--danger); animation: pulse 1.6s ease-in-out infinite; }
 
 .edit-banner {
   display: flex;
@@ -949,6 +951,7 @@ input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--mute
 .kind-page { background: var(--primary); }
 .kind-link { background: var(--info); }
 .kind-file { background: var(--warning); }
+.kind-screen { background: var(--success); }
 .item-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
 .item-title { font-weight: 500; font-size: 13.5px; }
 .item-meta { font-size: 12.5px; color: var(--muted); }
@@ -1192,23 +1195,33 @@ a.link-card:hover { text-decoration: none; border-color: var(--primary); }
    画面共有
    ========================================================================== */
 
-.screen-share [hidden] { display: none; }
-.screen-share {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: clip;
+.screen-page [hidden] { display: none; }
+.screen-page {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100dvh;
+  background: var(--media-bg);
 }
+.screen-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.screen-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.screen-title-text { display: flex; flex-direction: column; min-width: 0; }
+.screen-title h1 { font-size: 15px; font-weight: 650; }
+.screen-stats { flex: 1; min-width: 0; font-variant-numeric: tabular-nums; }
+.screen-actions { display: flex; gap: 8px; flex: none; margin-left: auto; }
 .screen-stage {
   position: relative;
   display: grid;
   place-items: center;
-  aspect-ratio: 16 / 9;
-  background: var(--surface-2);
+  background: var(--media-bg);
 }
-.screen-stage:has(.screen-media:not([hidden])) { background: var(--media-bg); }
-.screen-stage:fullscreen { aspect-ratio: auto; width: 100vw; height: 100vh; }
-.screen-media { width: 100%; height: 100%; object-fit: contain; }
+.screen-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .screen-placeholder {
   display: flex;
   flex-direction: column;
@@ -1216,26 +1229,28 @@ a.link-card:hover { text-decoration: none; border-color: var(--primary); }
   gap: 10px;
   max-width: 420px;
   padding: 24px;
-  color: var(--muted);
+  color: var(--media-text);
   font-size: 13.5px;
   text-align: center;
   line-height: 1.6;
 }
-.screen-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--border);
+.screen-error {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  max-width: calc(100% - 32px);
+  padding: 8px 14px;
+  transform: translateX(-50%);
+  border-radius: var(--radius);
+  background: var(--danger);
+  color: var(--on-primary);
+  font-size: 13.5px;
+  box-shadow: var(--shadow-lg);
 }
-.screen-bar .muted { flex: 1; min-width: 0; font-variant-numeric: tabular-nums; }
-.screen-actions { display: flex; gap: 8px; flex: none; }
-.screen-error { margin-top: 12px; color: var(--danger); font-size: 13.5px; }
-.screen-note { margin-top: 12px; }
 @media (max-width: 640px) {
-  .screen-bar { flex-wrap: wrap; }
-  .screen-bar .muted { order: 3; flex-basis: 100%; }
-  .screen-actions { margin-left: auto; }
+  .screen-head { flex-wrap: wrap; padding: 10px 12px; }
+  .screen-title { flex-basis: 100%; }
+  .screen-stats { order: 3; flex-basis: 100%; }
 }
 
 /* ==========================================================================

@@ -11,14 +11,13 @@ export type StreamConfig = { codec: string; width: number; height: number }
 
 export type FrameMeta = { key: boolean; timestamp: number }
 
-export type ShareAuth = { courseId: number; mode: ShareMode }
+export type ShareAuth = { courseId: number; itemId: number; mode: ShareMode }
 
 export type ServerToClientEvents = {
   stream: (info: { presenter: string; config: StreamConfig }) => void
   idle: () => void
   frame: (meta: FrameMeta, data: ArrayBuffer | Uint8Array, ack: () => void) => void
   keyframe: () => void
-  viewers: (count: number) => void
 }
 
 export type ClientToServerEvents = {

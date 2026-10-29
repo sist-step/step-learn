@@ -37,7 +37,8 @@ const root = document.querySelector<HTMLElement>('[data-screen-share]')
 if (root) setup(root)
 
 function setup(root: HTMLElement) {
-  const courseId = Number(root.dataset.screenShare)
+  const courseId = Number(root.dataset.course)
+  const itemId = Number(root.dataset.screenShare)
   const canPresent = root.dataset.canPresent === '1'
   const $ = <T extends Element>(sel: string) => document.querySelector<T>(sel)!
   const stage = $<HTMLElement>('[data-screen-stage]')
@@ -46,7 +47,7 @@ function setup(root: HTMLElement) {
   const placeholder = $<HTMLElement>('[data-screen-placeholder]')
   const message = $<HTMLElement>('[data-screen-message]')
   const stateChip = $<HTMLElement>('[data-screen-state]')
-  const statsText = $<HTMLElement>('[data-screen-stats]')
+  const statsText = root.querySelector<HTMLElement>('[data-screen-stats]')
   const errorText = $<HTMLElement>('[data-screen-error]')
   const fullscreenBtn = $<HTMLButtonElement>('[data-screen-fullscreen]')
   const startBtn = root.querySelector<HTMLButtonElement>('[data-screen-start]')
@@ -84,16 +85,18 @@ function setup(root: HTMLElement) {
   }
 
   const connect = (mode: ShareMode): ShareSocket =>
-    io({ auth: { courseId, mode } satisfies ShareAuth, forceNew: true })
+    io({ auth: { courseId, itemId, mode } satisfies ShareAuth, forceNew: true })
 
-  const stats = { frames: 0, bytes: 0, width: 0, height: 0, viewers: 0 }
-  setInterval(() => {
-    const parts = stats.width ? [`${stats.width}×${stats.height}`, `${stats.frames} fps`, `${Math.round((stats.bytes * 8) / 1000)} kbps`] : []
-    if (presentation) parts.push(`視聴者 ${stats.viewers} 人`)
-    statsText.textContent = parts.join(' · ')
-    stats.frames = 0
-    stats.bytes = 0
-  }, 1000)
+  const stats = { frames: 0, bytes: 0, width: 0, height: 0 }
+  if (statsText) {
+    setInterval(() => {
+      statsText.textContent = stats.width
+        ? `${stats.width}×${stats.height} · ${stats.frames} fps · ${Math.round((stats.bytes * 8) / 1000)} kbps`
+        : ''
+      stats.frames = 0
+      stats.bytes = 0
+    }, 1000)
+  }
 
   // --- 視聴
   let viewer: ShareSocket | null = null
@@ -334,9 +337,6 @@ function setup(root: HTMLElement) {
       sendKeyframeSoon()
     })
     socket.on('keyframe', sendKeyframeSoon)
-    socket.on('viewers', (count) => {
-      stats.viewers = count
-    })
     socket.on('connect_error', (err) => {
       if (socket.active) return
       showError(err.message === 'busy' ? 'ほかの人が画面を共有しているため、共有を開始できませんでした。' : '画面共有を開始できませんでした。')
@@ -382,9 +382,13 @@ function setup(root: HTMLElement) {
     if (!presentation) startPresenting()
   })
   stopBtn?.addEventListener('click', () => presentation?.stop())
-  fullscreenBtn.addEventListener('click', () => {
+  const toggleFullscreen = () => {
     if (document.fullscreenElement) document.exitFullscreen()
     else stage.requestFullscreen?.().catch(() => {})
+  }
+  fullscreenBtn.addEventListener('click', toggleFullscreen)
+  stage.addEventListener('dblclick', () => {
+    if (!fullscreenBtn.hidden) toggleFullscreen()
   })
 
   if (!supported) {

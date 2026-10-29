@@ -55,12 +55,13 @@ export type Item = {
   position: number
 }
 
-export type ItemType = 'page' | 'link' | 'file'
+export type ItemType = 'page' | 'link' | 'file' | 'screen'
 
 export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   page: 'ページ',
   link: 'リンク',
   file: 'ファイル',
+  screen: '画面共有',
 }
 
 export const COURSE_COLORS = ['indigo', 'sky', 'emerald', 'amber', 'rose', 'violet', 'teal', 'slate'] as const

@@ -1,13 +1,14 @@
 import { Hono } from 'hono'
 import { CourseForm, CourseHeader, ItemIcon, type CourseFormErrors, type CourseFormValues } from '../components/course'
-import { Icon } from '../components/icons'
+import { Icon, type IconName } from '../components/icons'
 import { AppShell } from '../components/layout'
 import { CourseCard, EmptyState, PageHeader, Progress, type CourseCardData } from '../components/ui'
 import { canCreateCourse, requireAuth } from '../lib/auth'
 import { getCourseAccess, type CourseAccess } from '../lib/courses'
 import { field, intParam, readForm, redirectWith, type Form } from '../lib/http'
+import { isSharing } from '../lib/screen-share'
 import { deleteCourseFiles, formatBytes, inBackground } from '../lib/storage'
-import { COURSE_COLORS, ITEM_TYPE_LABELS, type AppEnv, type Item, type Section } from '../lib/types'
+import { COURSE_COLORS, ITEM_TYPE_LABELS, type AppEnv, type Item, type ItemType, type Section } from '../lib/types'
 import { db } from '../lib/db'
 
 const app = new Hono<AppEnv>()
@@ -169,21 +170,28 @@ const ItemRow = ({
 }) => {
   const base = `/courses/${courseId}/items/${item.id}`
   const external = item.type === 'link' && !edit
+  const newTab = (item.type === 'link' || item.type === 'screen') && !edit
+  const href = edit ? `${base}/edit` : item.type === 'link' ? item.url : item.type === 'screen' ? `${base}/screen` : base
   const meta =
-    item.type === 'link' ? hostOf(item.url) : item.type === 'file' ? `${item.file_name ?? ''} · ${formatBytes(item.file_size ?? 0)}` : ITEM_TYPE_LABELS.page
+    item.type === 'link'
+      ? hostOf(item.url)
+      : item.type === 'file'
+        ? `${item.file_name ?? ''} · ${formatBytes(item.file_size ?? 0)}`
+        : ITEM_TYPE_LABELS[item.type]
   return (
     <li class={done ? 'item-row is-done' : 'item-row'} data-item={item.id}>
       <a
-        href={external ? item.url : edit ? `${base}/edit` : base}
+        href={href}
         class="item-link"
-        {...(external ? { target: '_blank', rel: 'noopener noreferrer', 'data-no-prefetch': '' } : {})}
+        {...(newTab ? { target: '_blank', rel: external ? 'noopener noreferrer' : 'noopener', 'data-no-prefetch': '' } : {})}
       >
         <ItemIcon type={item.type} />
         <span class="item-text">
           <span class="item-title">{item.title}</span>
           <span class="item-meta truncate">{meta}</span>
         </span>
-        {external && <Icon name="external" size={14} class="item-ext" />}
+        {item.type === 'screen' && isSharing(item.id) && <span class="chip chip-live">配信中</span>}
+        {newTab && <Icon name="external" size={14} class="item-ext" />}
       </a>
       {edit ? (
         <div class="row-actions">
@@ -221,6 +229,8 @@ const ItemRow = ({
   )
 }
 
+const ADD_ITEM_ICONS: Record<ItemType, IconName> = { page: 'page', link: 'link', file: 'upload', screen: 'monitor' }
+
 const AddItemForm = ({ courseId, sectionId }: { courseId: number; sectionId: number }) => (
   <details class="add-item" data-autofocus-details>
     <summary>
@@ -229,11 +239,11 @@ const AddItemForm = ({ courseId, sectionId }: { courseId: number; sectionId: num
     <form method="post" action={`/courses/${courseId}/items`} enctype="multipart/form-data" class="stack item-form" data-loading-form>
       <input type="hidden" name="section_id" value={String(sectionId)} />
       <div class="segmented" role="radiogroup" aria-label="種類">
-        {(['page', 'link', 'file'] as const).map((t, i) => (
+        {(['page', 'link', 'file', 'screen'] as const).map((t, i) => (
           <label>
             <input type="radio" name="type" value={t} checked={i === 0} />
             <span>
-              <Icon name={t === 'link' ? 'link' : t === 'file' ? 'upload' : 'page'} size={15} /> {ITEM_TYPE_LABELS[t]}
+              <Icon name={ADD_ITEM_ICONS[t]} size={15} /> {ITEM_TYPE_LABELS[t]}
             </span>
           </label>
         ))}

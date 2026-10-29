@@ -3,6 +3,7 @@ import { Server, type Socket } from 'socket.io'
 import { userFromCookieHeader } from './auth'
 import { config } from './config'
 import { getCourseAccessFor } from './courses'
+import { db } from './db'
 import {
   MAX_FRAME_BYTES,
   MAX_HEIGHT,
@@ -16,7 +17,7 @@ import {
 } from './screen-share-protocol'
 import type { User } from './types'
 
-type SocketData = { user: User; courseId: number; mode: ShareMode }
+type SocketData = { user: User; itemId: number; mode: ShareMode }
 type ShareServer = Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>
 type ShareSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>
 
@@ -37,21 +38,21 @@ const KEYFRAME_INTERVAL = 1_000
 
 const rooms = new Map<number, Room>()
 
-export const isSharing = (courseId: number) => !!rooms.get(courseId)?.presenter
+export const isSharing = (itemId: number) => !!rooms.get(itemId)?.presenter
 
-function roomOf(courseId: number) {
-  let room = rooms.get(courseId)
+function roomOf(itemId: number) {
+  let room = rooms.get(itemId)
   if (!room) {
     room = { presenter: null, stream: null, viewers: new Map(), keyframeRequestedAt: 0, keyframeTimer: null }
-    rooms.set(courseId, room)
+    rooms.set(itemId, room)
   }
   return room
 }
 
-function releaseRoom(courseId: number, room: Room) {
+function releaseRoom(itemId: number, room: Room) {
   if (room.presenter || room.viewers.size > 0) return
   if (room.keyframeTimer) clearTimeout(room.keyframeTimer)
-  rooms.delete(courseId)
+  rooms.delete(itemId)
 }
 
 // 要求をすぐ送らずにまとめるのは、視聴者が続けて入室したときにキーフレームが連発されて帯域を食うのを避けるため
@@ -66,6 +67,11 @@ function requestKeyframe(room: Room) {
 }
 
 const isMode = (m: unknown): m is ShareMode => m === 'present' || m === 'view'
+
+const isId = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n > 0
+
+const isScreenItem = async (courseId: number, itemId: number) =>
+  !!(await db.prepare('SELECT 1 FROM items WHERE id = ? AND course_id = ? AND type = ?').bind(itemId, courseId, 'screen').first())
 
 const isDimension = (n: unknown, max: number): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0 && n <= max
 
@@ -114,13 +120,12 @@ function forwardFrame(room: Room, meta: FrameMeta, data: Uint8Array) {
   }
 }
 
-function present(socket: ShareSocket, courseId: number, room: Room) {
+function present(socket: ShareSocket, itemId: number, room: Room) {
   const previous = room.presenter
   room.presenter = socket
   room.stream = null
   // 同じ人が別のタブや再接続で共有し直したときは、古い接続を閉じて引き継ぐ
   previous?.disconnect(true)
-  socket.emit('viewers', room.viewers.size)
 
   socket.on('config', (raw) => {
     const stream = parseStreamConfig(raw)
@@ -145,14 +150,13 @@ function present(socket: ShareSocket, courseId: number, room: Room) {
     room.presenter = null
     room.stream = null
     for (const viewer of room.viewers.values()) viewer.socket.emit('idle')
-    releaseRoom(courseId, room)
+    releaseRoom(itemId, room)
   })
 }
 
-function view(socket: ShareSocket, courseId: number, room: Room) {
+function view(socket: ShareSocket, itemId: number, room: Room) {
   const viewer: Viewer = { socket, inFlight: 0, needsKeyframe: true }
   room.viewers.set(socket.id, viewer)
-  room.presenter?.emit('viewers', room.viewers.size)
   if (room.presenter && room.stream) {
     socket.emit('stream', { presenter: room.presenter.data.user.name, config: room.stream })
     requestKeyframe(room)
@@ -167,8 +171,7 @@ function view(socket: ShareSocket, courseId: number, room: Room) {
 
   socket.on('disconnect', () => {
     room.viewers.delete(socket.id)
-    room.presenter?.emit('viewers', room.viewers.size)
-    releaseRoom(courseId, room)
+    releaseRoom(itemId, room)
   })
 }
 
@@ -183,16 +186,15 @@ export function attachScreenShare(httpServer: HttpServer) {
 
   io.use(async (socket, next) => {
     try {
-      const { courseId, mode } = socket.handshake.auth as Partial<Record<string, unknown>>
+      const { courseId, itemId, mode } = socket.handshake.auth as Partial<Record<string, unknown>>
       const user = await userFromCookieHeader(socket.handshake.headers.cookie)
-      if (!user || typeof courseId !== 'number' || !Number.isSafeInteger(courseId) || !isMode(mode)) {
-        return next(shareError('not_found'))
-      }
+      if (!user || !isId(courseId) || !isId(itemId) || !isMode(mode)) return next(shareError('not_found'))
       const access = await getCourseAccessFor(user, courseId)
       if (!access || !(mode === 'present' ? access.canManage : access.canView)) return next(shareError('not_found'))
-      const presenter = rooms.get(courseId)?.presenter
+      if (!(await isScreenItem(courseId, itemId))) return next(shareError('not_found'))
+      const presenter = rooms.get(itemId)?.presenter
       if (mode === 'present' && presenter && presenter.data.user.id !== user.id) return next(shareError('busy'))
-      socket.data = { user, courseId, mode }
+      socket.data = { user, itemId, mode }
       next()
     } catch (err) {
       next(err instanceof Error ? err : new Error(String(err)))
@@ -200,10 +202,10 @@ export function attachScreenShare(httpServer: HttpServer) {
   })
 
   io.on('connection', (socket) => {
-    const { courseId, mode } = socket.data
-    const room = roomOf(courseId)
-    if (mode === 'present') present(socket, courseId, room)
-    else view(socket, courseId, room)
+    const { itemId, mode } = socket.data
+    const room = roomOf(itemId)
+    if (mode === 'present') present(socket, itemId, room)
+    else view(socket, itemId, room)
   })
 
   return io

@@ -100,7 +100,7 @@ export const items = sqliteTable(
     sectionId: integer('section_id')
       .notNull()
       .references(() => sections.id, { onDelete: 'cascade' }),
-    type: text('type', { enum: ['page', 'link', 'file'] }).notNull(),
+    type: text('type', { enum: ['page', 'link', 'file', 'screen'] }).notNull(),
     title: text('title').notNull(),
     body: text('body').notNull().default(''),
     url: text('url').notNull().default(''),
@@ -115,7 +115,7 @@ export const items = sqliteTable(
   (t) => [
     index('items_section').on(t.sectionId, t.position),
     index('items_course').on(t.courseId),
-    check('items_type', sql`${t.type} IN ('page', 'link', 'file')`),
+    check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen')`),
   ],
 )
 
