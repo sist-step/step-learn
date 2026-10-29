@@ -1,6 +1,7 @@
 import type { Child } from 'hono/jsx'
 import { useRequestContext } from 'hono/jsx-renderer'
 import { canCreateCourse } from '../lib/auth'
+import { isSidebarCollapsed } from '../lib/http'
 import { ROLE_LABELS, type AppEnv } from '../lib/types'
 import { Icon, type IconName } from './icons'
 import { Avatar } from './ui'
@@ -25,17 +26,10 @@ const Toast = () => {
 
 type NavItem = { href: string; icon: IconName; label: string; active: boolean }
 
-const RailLink = ({ href, icon, label, active }: NavItem) => (
-  <a href={href} class={active ? 'rail-link active' : 'rail-link'} aria-current={active ? 'page' : undefined} title={label}>
-    <Icon name={icon} size={20} />
-    <span class="sr-only">{label}</span>
-  </a>
-)
-
 const NavLink = ({ href, icon, label, active }: NavItem) => (
-  <a href={href} class={active ? 'nav-link active' : 'nav-link'} aria-current={active ? 'page' : undefined}>
-    <Icon name={icon} size={16} />
-    <span>{label}</span>
+  <a href={href} class={active ? 'nav-link active' : 'nav-link'} aria-current={active ? 'page' : undefined} title={label}>
+    <Icon name={icon} size={18} />
+    <span class="sidebar-label">{label}</span>
   </a>
 )
 
@@ -56,86 +50,101 @@ export const AppShell = ({ children, wide }: { children: Child; wide?: boolean }
   const links = (
     [
       { href: '/dashboard', icon: 'home', label: 'ダッシュボード', active: path === '/dashboard' },
-      { href: '/courses', icon: 'compass', label: 'コースを探す', active: path === '/courses' },
+      { href: '/courses', icon: 'globe', label: 'コースを探す', active: path === '/courses' },
       canCreateCourse(user) && { href: '/courses/new', icon: 'plus', label: 'コースを作成', active: path === '/courses/new' },
       user.role === 'admin' && { href: '/admin/users', icon: 'shield', label: 'ユーザー管理', active: path.startsWith('/admin') },
     ] satisfies (NavItem | false)[]
   ).filter((l) => l !== false)
+  const collapsed = isSidebarCollapsed(c)
+  const toggleLabel = collapsed ? 'サイドバーを開く' : 'サイドバーを畳む'
 
   return (
-    <div class="app">
+    <div class={collapsed ? 'app is-collapsed' : 'app'}>
       <aside class="sidebar" id="sidebar">
-        <div class="rail">
-          <a href="/" aria-label="StepLearn">
+        <div class="sidebar-head">
+          <a href="/" class="brand" title="StepLearn">
             <img src="/favicon.png" alt="" class="brand-mark" width={32} height={32} />
+            <span class="brand-name sidebar-label">StepLearn</span>
           </a>
-          <nav class="rail-nav" aria-label="メイン">
-            {links.map((l) => (
-              <RailLink {...l} />
-            ))}
-          </nav>
-          <div class="rail-foot">
-            {canCreateCourse(user) && (
-              <a href="/courses/new" class="rail-add" aria-label="コースを作成" title="コースを作成">
-                <Icon name="plus" size={18} />
-              </a>
-            )}
-            <form method="post" action="/logout">
-              <button type="submit" class="rail-link" aria-label="ログアウト" title="ログアウト">
-                <Icon name="logout" size={20} />
-              </button>
-            </form>
-            <a href="/account" class={path === '/account' ? 'rail-avatar active' : 'rail-avatar'} title={`${user.name}（${ROLE_LABELS[user.role]}）`}>
-              <Avatar name={user.name} size={32} />
-              <span class="sr-only">アカウント</span>
-            </a>
-          </div>
+          <form method="post" action="/account/sidebar" class="sidebar-toggle-form">
+            <input type="hidden" name="next" value={path + new URL(c.req.url).search} />
+            <button
+              type="submit"
+              name="collapsed"
+              value={collapsed ? '0' : '1'}
+              class="icon-btn"
+              data-sidebar-toggle
+              aria-expanded={collapsed ? 'false' : 'true'}
+              aria-controls="sidebar"
+              aria-label={toggleLabel}
+              title={toggleLabel}
+            >
+              <Icon name="chevronDoubleLeft" size={18} />
+            </button>
+          </form>
+          <button type="button" class="icon-btn nav-close" data-nav-toggle aria-label="メニューを閉じる">
+            <Icon name="x" />
+          </button>
         </div>
 
-        <div class="panel">
-          <div class="panel-top">
-            <span class="panel-title">StepLearn</span>
-            <button type="button" class="icon-btn nav-close" data-nav-toggle aria-label="メニューを閉じる">
-              <Icon name="x" />
-            </button>
-          </div>
+        <nav class="nav" aria-label="メイン">
+          {links.map((l) => (
+            <NavLink {...l} />
+          ))}
+        </nav>
 
-          <nav class="nav" aria-label="メニュー">
-            {links.map((l) => (
-              <NavLink {...l} />
-            ))}
-          </nav>
-
-          {navCourses.length > 0 && (
-            <div class="nav-section">
-              <div class="nav-heading">
-                <span>マイコース</span>
-                <span class="nav-heading-count">{navCourses.length}</span>
-              </div>
-              <nav class="nav" aria-label="マイコース">
-                {navCourses.map((nc) => (
-                  <a
-                    href={`/courses/${nc.id}`}
-                    class={currentCourse === nc.id ? 'nav-link nav-course active' : 'nav-link nav-course'}
-                  >
-                    <span class={`dot tone-${nc.color}`}>{[...nc.title][0]}</span>
-                    <span class="truncate">{nc.title}</span>
-                  </a>
-                ))}
-              </nav>
+        {navCourses.length > 0 && (
+          <div class="nav-section">
+            <div class="nav-heading sidebar-label">
+              <span>マイコース</span>
+              <span class="nav-heading-count">{navCourses.length}</span>
             </div>
-          )}
+            <nav class="nav" aria-label="マイコース">
+              {navCourses.map((nc) => (
+                <a
+                  href={`/courses/${nc.id}`}
+                  class={currentCourse === nc.id ? 'nav-link nav-course active' : 'nav-link nav-course'}
+                  aria-current={currentCourse === nc.id ? 'page' : undefined}
+                  title={nc.title}
+                >
+                  <span class={`dot tone-${nc.color}`}>{[...nc.title][0]}</span>
+                  <span class="truncate sidebar-label">{nc.title}</span>
+                </a>
+              ))}
+            </nav>
+          </div>
+        )}
 
-          <a href="/courses" class="panel-promo">
-            <span class="panel-promo-icon">
-              <Icon name="sparkle" size={18} />
-            </span>
-            <strong>新しいコースを探す</strong>
-            <span class="muted small">公開中のコースから、次に学ぶことを見つけましょう。</span>
-            <span class="panel-promo-cta">
-              コース一覧へ <Icon name="chevronRight" size={14} />
+        <a href="/courses" class="panel-promo">
+          <span class="panel-promo-icon">
+            <Icon name="sparkle" size={18} />
+          </span>
+          <strong>新しいコースを探す</strong>
+          <span class="muted small">公開中のコースから、次に学ぶことを見つけましょう。</span>
+          <span class="panel-promo-cta">
+            コース一覧へ <Icon name="chevronRight" size={14} />
+          </span>
+        </a>
+
+        <div class="sidebar-foot">
+          <a
+            href="/account"
+            class={path === '/account' ? 'nav-link sidebar-user active' : 'nav-link sidebar-user'}
+            aria-current={path === '/account' ? 'page' : undefined}
+            title={`${user.name}（${ROLE_LABELS[user.role]}）`}
+          >
+            <Avatar name={user.name} size={28} />
+            <span class="person-meta sidebar-label">
+              <span class="strong truncate">{user.name}</span>
+              <span class="muted small">{ROLE_LABELS[user.role]}</span>
             </span>
           </a>
+          <form method="post" action="/logout">
+            <button type="submit" class="nav-link sidebar-logout" title="ログアウト">
+              <Icon name="logout" size={18} />
+              <span class="sidebar-label">ログアウト</span>
+            </button>
+          </form>
         </div>
       </aside>
       <div class="backdrop" data-nav-toggle />

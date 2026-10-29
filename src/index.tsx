@@ -38,7 +38,7 @@ app.route('/admin', admin)
 const NotFound = () => (
   <div class="empty empty-page">
     <div class="empty-icon">
-      <Icon name="compass" size={24} />
+      <Icon name="globe" size={24} />
     </div>
     <h3>ページが見つかりません</h3>
     <p class="muted">URL が間違っているか、閲覧する権限がありません。</p>

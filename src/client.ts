@@ -2,6 +2,8 @@
 /// <reference lib="dom.iterable" />
 // 全ページ共通の小さな進化的拡張。JS がなくてもすべての操作はフォーム送信で動く。
 
+import checkSvg from 'heroicons/24/outline/check.svg?raw'
+
 const $$ = <T extends Element>(sel: string, root: ParentNode = document) => [...root.querySelectorAll<T>(sel)]
 
 // --- モバイルのサイドバー
@@ -11,6 +13,21 @@ document.addEventListener('click', (e) => {
 })
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') document.body.classList.remove('nav-open')
+})
+
+// --- サイドバーを畳む（送信せずに切り替え、同じクッキーでサーバーにも伝える）
+document.addEventListener('click', (e) => {
+  const t = (e.target as Element).closest<HTMLButtonElement>('[data-sidebar-toggle]')
+  const app = t?.closest('.app')
+  if (!t || !app) return
+  e.preventDefault()
+  const collapsed = app.classList.toggle('is-collapsed')
+  document.cookie = `sidebar=${collapsed ? 'collapsed' : 'expanded'}; path=/; max-age=31536000; samesite=lax`
+  const label = collapsed ? 'サイドバーを開く' : 'サイドバーを畳む'
+  t.value = collapsed ? '0' : '1'
+  t.setAttribute('aria-expanded', String(!collapsed))
+  t.setAttribute('aria-label', label)
+  t.title = label
 })
 
 // --- トースト
@@ -133,7 +150,7 @@ function setCompleteUI(form: HTMLFormElement, done: boolean) {
   if (dot) {
     dot.classList.toggle('done', done)
     dot.innerHTML = done
-      ? '<svg class="icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
+      ? checkSvg.replace('<svg ', '<svg class="icon" width="10" height="10" ')
       : ''
   }
 }

@@ -19,7 +19,7 @@ function parseCourseForm(form: Form) {
     title: field(form, 'title', 120),
     code: field(form, 'code', 30),
     summary: field(form, 'summary', 2000),
-    color: (COURSE_COLORS as readonly string[]).includes(color) ? color : 'indigo',
+    color: (COURSE_COLORS as readonly string[]).includes(color) ? color : 'cyan',
     enroll_key: field(form, 'enroll_key', 50) || null,
     visible: field(form, 'visible') === '1',
   } satisfies CourseFormValues
@@ -71,7 +71,7 @@ app.get('/', async (c) => {
       </form>
       {results.length === 0 ? (
         <EmptyState
-          icon="compass"
+          icon="globe"
           title={q ? `「${q}」に一致するコースはありません` : 'まだコースがありません'}
           text={q ? '別のキーワードで検索してみてください。' : canCreateCourse(user) ? '最初のコースを作成しましょう。' : '教師がコースを公開するとここに表示されます。'}
           action={
@@ -717,7 +717,7 @@ dashboard.get('/', async (c) => {
             text="コース一覧から興味のあるコースを見つけて参加しましょう。"
             action={
               <a href="/courses" class="btn btn-primary">
-                <Icon name="compass" /> コースを探す
+                <Icon name="globe" /> コースを探す
               </a>
             }
           />

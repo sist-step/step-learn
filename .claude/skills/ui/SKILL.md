@@ -24,7 +24,7 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 
 `src/components/layout.tsx` の `AppShell`（ログイン後）/ `AuthShell`（ログイン前）で必ず包む。コース配下の画面は `components/course.tsx` の `CourseHeader` でタブを出す。
 
-アイコンは `<Icon name="..." size={16} />`（`components/icons.tsx`）。使える名前は `paths` のキー。足すときは Lucide 風の 24x24・stroke の path を `paths` に追加する。外部のアイコンフォントや画像は使わない。
+アイコンは `<Icon name="..." size={16} />`（`components/icons.tsx`）。使える名前は `svgs` のキー。アイコンは [Heroicons](https://heroicons.com/) の 24px outline だけを使い、足すときは devDependency の `heroicons` から `import foo from 'heroicons/24/outline/<名前>.svg?raw'` で読み込んで `svgs` に加える（ビルド時に文字列として埋め込まれるので、実行時の依存は増えない）。パスを手書きしたり、外部のアイコンフォントや画像を使ったりしない。
 
 ## よく使う CSS クラス
 
