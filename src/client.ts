@@ -47,7 +47,6 @@ function dismissLater(el: Element, ms = 4000) {
     el.addEventListener('animationend', () => el.remove(), { once: true })
   }, ms)
 }
-$$('[data-toast]').forEach((el) => dismissLater(el, 5000))
 document.addEventListener('click', (e) => {
   const btn = (e.target as Element).closest('[data-toast-close]')
   btn?.closest('.toast')?.remove()
@@ -68,7 +67,7 @@ document.addEventListener('click', (e) => {
 // --- 確認ダイアログ（ネイティブ confirm の代わり）
 let dialog: HTMLDialogElement | null = null
 function confirmDialog(message: string): Promise<boolean> {
-  if (!dialog) {
+  if (!dialog?.isConnected) {
     dialog = document.createElement('dialog')
     dialog.className = 'dialog'
     dialog.innerHTML = `<form method="dialog"><p class="dialog-msg"></p><div class="form-actions">
@@ -215,15 +214,22 @@ const readCollapsed = (): string[] => {
   }
 }
 const collapsed = new Set(readCollapsed())
-$$<HTMLDetailsElement>('details.section-card').forEach((d) => {
-  if (collapsed.has(d.id) && location.hash !== `#${d.id}`) d.open = false
-  d.addEventListener('toggle', () => {
+const restoreCollapsed = () =>
+  $$<HTMLDetailsElement>('details.section-card').forEach((d) => {
+    if (collapsed.has(d.id) && location.hash !== `#${d.id}`) d.open = false
+  })
+document.addEventListener(
+  'toggle',
+  (e) => {
+    const d = e.target as HTMLDetailsElement
+    if (!d.matches?.('details.section-card')) return
     d.open ? collapsed.delete(d.id) : collapsed.add(d.id)
     try {
       localStorage.setItem(KEY, JSON.stringify([...collapsed].slice(-200)))
     } catch {}
-  })
-})
+  },
+  true,
+)
 
 // --- ファイル選択時にタイトルが空なら自動入力
 document.addEventListener('change', (e) => {
@@ -232,5 +238,188 @@ document.addEventListener('change', (e) => {
   const title = input.form?.querySelector<HTMLInputElement>('input[name=title]')
   if (title && !title.value) title.value = input.files[0].name.replace(/\.[^.]+$/, '')
 })
+
+// --- ページ遷移を再読み込みなしで行う（JS がなければ通常のリンク・フォーム送信で遷移する）
+type Page = { url: string; redirected: boolean; isHtml: boolean; html: string }
+type Visit = { method?: 'GET' | 'POST'; body?: FormData | URLSearchParams; pop?: boolean; onFail?: () => void }
+
+const PREFETCH_TTL = 10_000
+const prefetched = new Map<string, { at: number; page: Promise<Page> }>()
+const urlKey = (url: URL) => url.origin + url.pathname + url.search
+let renderedKey = urlKey(new URL(location.href))
+let navController: AbortController | null = null
+
+history.scrollRestoration = 'manual'
+const saveScroll = () => history.replaceState({ ...history.state, scrollY }, '')
+addEventListener('pagehide', saveScroll)
+const navType = (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type
+if (navType && navType !== 'navigate' && history.state?.scrollY) scrollTo(0, history.state.scrollY)
+
+function linkUrl(target: EventTarget | null) {
+  const a = (target as Element | null)?.closest?.<HTMLAnchorElement>('a[href]')
+  if (!a || (a.target && a.target !== '_self') || a.hasAttribute('download') || a.hasAttribute('data-reload')) return null
+  const url = new URL(a.href)
+  if (url.origin !== location.origin) return null
+  // 同じページ内のアンカーはブラウザに任せないとスクロールの挙動が変わる
+  if (url.hash && urlKey(url) === urlKey(new URL(location.href))) return null
+  return { a, url }
+}
+
+async function fetchPage(url: URL, init: RequestInit = {}): Promise<Page> {
+  const res = await fetch(url, { ...init, headers: { Accept: 'text/html' } })
+  const isHtml = (res.headers.get('content-type') ?? '').includes('text/html')
+  if (!isHtml) await res.body?.cancel()
+  return { url: res.url, redirected: res.redirected, isHtml, html: isHtml ? await res.text() : '' }
+}
+
+function takePrefetched(url: URL) {
+  const hit = prefetched.get(urlKey(url))
+  prefetched.delete(urlKey(url))
+  return hit && Date.now() - hit.at < PREFETCH_TTL ? hit.page : null
+}
+
+// 遷移中に先読みしないのは、リダイレクト先で表示するはずのトースト（flash クッキー）を先読みが受け取ってしまうため
+function prefetch(url: URL) {
+  if (navController) return
+  const hit = prefetched.get(urlKey(url))
+  if (hit && Date.now() - hit.at < PREFETCH_TTL) return
+  const page = fetchPage(url)
+  page.catch(() => prefetched.delete(urlKey(url)))
+  prefetched.set(urlKey(url), { at: Date.now(), page })
+}
+
+const assetSignature = (doc: Document) =>
+  $$<HTMLScriptElement | HTMLLinkElement>('script[src], link[rel=stylesheet]', doc.head)
+    .map((el) => el.getAttribute('src') ?? el.getAttribute('href'))
+    .join()
+// 差し替えた body の script は実行されないので、専用スクリプトを持つページや、デプロイで CSS/JS が変わったときは読み込み直す
+const needsFullLoad = (doc: Document) => doc.body.querySelector('script') !== null || assetSignature(doc) !== assetSignature(document)
+
+function render(doc: Document, scroll: () => void) {
+  const swap = () => {
+    document.title = doc.title
+    document.body.replaceWith(doc.body)
+    initPage()
+    document.querySelector<HTMLElement>('[autofocus]')?.focus()
+    scroll()
+  }
+  if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return swap()
+  return document.startViewTransition(swap).updateCallbackDone
+}
+
+function scrollToHash(hash: string) {
+  const el = hash && document.getElementById(decodeURIComponent(hash.slice(1)))
+  el ? el.scrollIntoView() : scrollTo(0, 0)
+}
+
+async function visit(url: URL, { method = 'GET', body, pop = false, onFail }: Visit = {}) {
+  navController?.abort()
+  const controller = (navController = new AbortController())
+  if (!pop) saveScroll()
+  document.documentElement.setAttribute('aria-busy', 'true')
+  try {
+    const page = await ((method === 'GET' && !pop && takePrefetched(url)) || fetchPage(url, { method, body, signal: controller.signal }))
+    if (controller.signal.aborted) return
+    if (!page.isHtml) return location.assign(page.url)
+    const doc = new DOMParser().parseFromString(page.html, 'text/html')
+    if (needsFullLoad(doc)) return location.assign(page.url)
+
+    const next = new URL(page.url)
+    if (!page.redirected) next.hash = url.hash
+    const sameUrl = urlKey(next) === urlKey(new URL(location.href))
+    // POST の結果をそのまま描画したときは URL を変えない。フォームの送信先に GET の画面があるとは限らないため
+    if (!pop && (method === 'GET' || page.redirected)) {
+      if (sameUrl) history.replaceState({ scrollY: 0 }, '', next)
+      else history.pushState({ scrollY: 0 }, '', next)
+    }
+    renderedKey = urlKey(new URL(location.href))
+    const keepScroll = method === 'POST' && sameUrl && !next.hash
+    const y = scrollY
+    await render(doc, () => (pop ? scrollTo(0, history.state?.scrollY ?? 0) : keepScroll ? scrollTo(0, y) : scrollToHash(next.hash)))
+  } catch {
+    if (controller.signal.aborted) return
+    if (method === 'GET') return location.assign(url)
+    onFail?.()
+    toast('送信できませんでした。通信状況を確認してください。', 'error')
+  } finally {
+    if (navController === controller) {
+      navController = null
+      document.documentElement.removeAttribute('aria-busy')
+    }
+  }
+}
+
+document.addEventListener('click', (e) => {
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+  const link = linkUrl(e.target)
+  if (!link) return
+  e.preventDefault()
+  visit(link.url)
+})
+
+document.addEventListener('submit', (e) => {
+  prefetched.clear()
+  if (e.defaultPrevented) return
+  const form = e.target as HTMLFormElement
+  const submitter = e.submitter as HTMLButtonElement | HTMLInputElement | null
+  const method = submitter?.hasAttribute('formmethod') ? submitter.formMethod : form.method
+  const target = (submitter?.getAttribute('formtarget') ?? form.getAttribute('target')) || '_self'
+  if (method === 'dialog' || target !== '_self' || form.hasAttribute('data-reload')) return
+  const url = new URL(submitter?.hasAttribute('formaction') ? submitter.formAction : form.action)
+  if (url.origin !== location.origin) return
+  e.preventDefault()
+
+  const data = new FormData(form, submitter)
+  const params = new URLSearchParams([...data].map(([k, v]) => [k, typeof v === 'string' ? v : v.name]))
+  if (method === 'get') {
+    url.search = params.toString()
+    return visit(url)
+  }
+  const enctype = submitter?.hasAttribute('formenctype') ? submitter.formEnctype : form.enctype
+  visit(url, {
+    method: 'POST',
+    body: enctype === 'multipart/form-data' ? data : params,
+    onFail: () => {
+      delete form.dataset.confirmed
+      $$<HTMLButtonElement>('button.loading', form).forEach((btn) => {
+        btn.disabled = false
+        btn.classList.remove('loading')
+      })
+    },
+  })
+})
+
+addEventListener('popstate', () => {
+  const url = new URL(location.href)
+  if (urlKey(url) !== renderedKey) visit(url, { pop: true })
+})
+
+// --- ホバーしたリンクを先読みして、クリック後すぐに表示する
+let hoverTimer = 0
+const prefetchable = (target: EventTarget | null) => {
+  const link = linkUrl(target)
+  return link && !link.a.hasAttribute('data-no-prefetch') && urlKey(link.url) !== urlKey(new URL(location.href)) ? link.url : null
+}
+document.addEventListener('mouseover', (e) => {
+  const url = prefetchable(e.target)
+  clearTimeout(hoverTimer)
+  if (url) hoverTimer = window.setTimeout(() => prefetch(url), 80)
+})
+document.addEventListener('mouseout', () => clearTimeout(hoverTimer))
+document.addEventListener(
+  'touchstart',
+  (e) => {
+    const url = prefetchable(e.target)
+    if (url) prefetch(url)
+  },
+  { passive: true },
+)
+
+// --- 表示のたびに行う初期化（最初の表示と再読み込みなしの遷移の両方）
+function initPage() {
+  $$('[data-toast]').forEach((el) => dismissLater(el, 5000))
+  restoreCollapsed()
+}
+initPage()
 
 export {}

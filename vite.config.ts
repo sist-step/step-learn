@@ -9,6 +9,8 @@ export default defineConfig(({ command }) => ({
       entry: 'src/index.tsx',
       adapter: nodeAdapter,
       exclude: [...defaultOptions.exclude, /^\/src\/.+/],
+      // 既定の body への差し込みを使わないのは、専用スクリプトを持つページと見なされ、再読み込みなしで遷移できなくなるため（renderer の ViteClient が head で読み込む）
+      injectClientScript: false,
     }),
     ssrPlugin(),
     {

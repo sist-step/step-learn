@@ -90,7 +90,7 @@
 .tone-teal { --c1: #14b8a6; --c2: #2dd4bf; }
 .tone-slate { --c1: #475569; --c2: #64748b; }
 
-/* MPA でもページ遷移をなめらかに */
+/* JS が無効なときの通常の遷移もなめらかに */
 @view-transition {
   navigation: auto;
 }
@@ -1345,6 +1345,17 @@ a.link-card:hover { text-decoration: none; border-color: var(--primary); }
 .dialog::backdrop { background: rgb(0 0 0 / 0.45); backdrop-filter: blur(3px); animation: fade 0.2s; }
 .dialog-msg { font-size: 14px; font-weight: 500; margin-bottom: 20px; line-height: 1.6; }
 
+html[aria-busy='true'] body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 200;
+  height: 2px;
+  background: var(--accent);
+  animation: nav-progress 8s cubic-bezier(0.1, 0.6, 0.2, 1) 0.15s both;
+}
+
 /* ==========================================================================
    アニメーション
    ========================================================================== */
@@ -1356,6 +1367,7 @@ a.link-card:hover { text-decoration: none; border-color: var(--primary); }
 @keyframes pulse { 50% { opacity: 0.35; } }
 @keyframes toast-in { from { opacity: 0; transform: translateY(12px) scale(0.98); } }
 @keyframes toast-out { to { opacity: 0; transform: translateY(8px) scale(0.98); } }
+@keyframes nav-progress { from { width: 0; } to { width: 90%; } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
