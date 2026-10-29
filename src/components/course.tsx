@@ -108,7 +108,7 @@ export const CourseForm = ({
       <div class="swatches">
         {COURSE_COLORS.map((color) => (
           <label class={`swatch tone-${color}`} title={color}>
-            <input type="radio" name="color" value={color} checked={(values.color ?? 'indigo') === color} />
+            <input type="radio" name="color" value={color} checked={(values.color ?? 'cyan') === color} />
             <span class="swatch-dot">
               <Icon name="check" size={14} />
             </span>

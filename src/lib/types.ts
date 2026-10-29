@@ -64,7 +64,7 @@ export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   screen: '画面共有',
 }
 
-export const COURSE_COLORS = ['indigo', 'sky', 'emerald', 'amber', 'rose', 'violet', 'teal', 'slate'] as const
+export const COURSE_COLORS = ['cyan', 'indigo', 'sky', 'emerald', 'amber', 'rose', 'violet', 'teal', 'slate'] as const
 
 export const ROLE_LABELS: Record<Role, string> = {
   admin: '管理者',
