@@ -41,9 +41,7 @@ const NavLink = ({ href, icon, label, active }: NavItem) => (
 
 export const Brand = () => (
   <a href="/" class="brand">
-    <span class="brand-mark">
-      <Icon name="logo" size={18} />
-    </span>
+    <img src="/favicon.png" alt="" class="brand-mark" width={32} height={32} />
     <span class="brand-name">StepLearn</span>
   </a>
 )
@@ -68,8 +66,8 @@ export const AppShell = ({ children, wide }: { children: Child; wide?: boolean }
     <div class="app">
       <aside class="sidebar" id="sidebar">
         <div class="rail">
-          <a href="/" class="brand-mark" aria-label="StepLearn">
-            <Icon name="logo" size={18} />
+          <a href="/" aria-label="StepLearn">
+            <img src="/favicon.png" alt="" class="brand-mark" width={32} height={32} />
           </a>
           <nav class="rail-nav" aria-label="メイン">
             {links.map((l) => (
