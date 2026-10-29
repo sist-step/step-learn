@@ -190,7 +190,7 @@ export function attachScreenShare(httpServer: HttpServer) {
       const user = await userFromCookieHeader(socket.handshake.headers.cookie)
       if (!user || !isId(courseId) || !isId(itemId) || !isMode(mode)) return next(shareError('not_found'))
       const access = await getCourseAccessFor(user, courseId)
-      if (!access || !(mode === 'present' ? access.canManage : access.canView)) return next(shareError('not_found'))
+      if (!access || (mode === 'present' && !access.canManage)) return next(shareError('not_found'))
       if (!(await isScreenItem(courseId, itemId))) return next(shareError('not_found'))
       const presenter = rooms.get(itemId)?.presenter
       if (mode === 'present' && presenter && presenter.data.user.id !== user.id) return next(shareError('busy'))

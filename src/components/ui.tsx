@@ -174,13 +174,11 @@ export type CourseCardData = {
   title: string
   summary: string
   color: string
-  visible: number
   role?: string | null
   total?: number
   done?: number
   members?: number
   teachers?: string | null
-  has_key?: number
 }
 
 export const CourseCard = ({ course, showProgress }: { course: CourseCardData; showProgress?: boolean }) => (
@@ -188,14 +186,8 @@ export const CourseCard = ({ course, showProgress }: { course: CourseCardData; s
     <div class="course-cover">
       <span class="course-mono">{[...(course.code || course.title)].slice(0, 2).join('')}</span>
       <div class="course-cover-badges">
-        {!course.visible && <span class="chip">非公開</span>}
         {course.role === 'teacher' && <span class="chip chip-accent">担当</span>}
         {course.role === 'student' && !showProgress && <span class="chip chip-success">受講中</span>}
-        {!!course.has_key && !course.role && (
-          <span class="chip">
-            <Icon name="lock" size={12} /> キー
-          </span>
-        )}
       </div>
     </div>
     <div class="course-body">

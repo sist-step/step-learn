@@ -17,7 +17,7 @@ const app = new Hono<AppEnv>()
 app.use(requireAuth)
 
 const editUrl = (courseId: number, sectionId?: number) =>
-  `/courses/${courseId}?edit=1${sectionId ? `#section-${sectionId}` : ''}`
+  `/courses/${courseId}${sectionId ? `#section-${sectionId}` : ''}`
 
 async function manageAccess(c: Context<AppEnv>) {
   const id = intParam(c, 'id')
@@ -328,7 +328,7 @@ app.get('/:id/items/:iid', async (c) => {
   const id = intParam(c, 'id')
   const iid = intParam(c, 'iid')
   const access = id && iid && (await getCourseAccess(c, id))
-  if (!access || !access.canView) return c.notFound()
+  if (!access) return c.notFound()
   const userId = c.var.user!.id
 
   const [itemRes, secRes, outRes, doneRes] = await db.batch([
@@ -541,7 +541,7 @@ app.get('/:id/items/:iid/file', async (c) => {
   const id = intParam(c, 'id')
   const iid = intParam(c, 'iid')
   const access = id && iid && (await getCourseAccess(c, id))
-  if (!access || !access.canView) return c.notFound()
+  if (!access) return c.notFound()
   const item = await getItem(c, id!, iid!)
   if (!item || item.type !== 'file' || !item.file_key) return c.notFound()
 

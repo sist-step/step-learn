@@ -26,7 +26,7 @@ const isCourseRole = (r: string): r is CourseRole => r === 'teacher' || r === 's
 app.get('/:id/participants', async (c) => {
   const id = intParam(c, 'id')
   const access = id && (await getCourseAccess(c, id))
-  if (!access || !access.canView) return c.notFound()
+  if (!access) return c.notFound()
   const me = c.var.user!
 
   const [pRes, tRes] = await db.batch([
@@ -76,9 +76,6 @@ app.get('/:id/participants', async (c) => {
                   </option>
                 ))}
               </select>
-              <noscript>
-                <button class="btn btn-sm">変更</button>
-              </noscript>
             </form>
             <form method="post" action={`/courses/${id}/participants/${p.id}/remove`} data-confirm={`${p.name} さんをコースから外しますか？`}>
               <button class="icon-btn danger" aria-label="コースから外す" title="コースから外す">

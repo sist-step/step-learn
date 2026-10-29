@@ -1,11 +1,11 @@
 import { Hono } from 'hono'
-import { CourseForm, CourseHeader, ItemIcon, type CourseFormErrors, type CourseFormValues } from '../components/course'
+import { CourseForm, CourseHeader, CreateCourseButton, ItemIcon, type CourseFormErrors, type CourseFormValues } from '../components/course'
 import { Icon, type IconName } from '../components/icons'
 import { AppShell } from '../components/layout'
 import { CourseCard, EmptyState, PageHeader, Progress, type CourseCardData } from '../components/ui'
 import { canCreateCourse, requireAuth } from '../lib/auth'
 import { getCourseAccess, type CourseAccess } from '../lib/courses'
-import { field, intParam, readForm, redirectWith, type Form } from '../lib/http'
+import { field, intParam, isEditMode, readForm, redirectWith, setEditMode, type Form } from '../lib/http'
 import { isSharing } from '../lib/screen-share'
 import { deleteCourseFiles, formatBytes, inBackground } from '../lib/storage'
 import { COURSE_COLORS, ITEM_TYPE_LABELS, type AppEnv, type Item, type ItemType, type Section } from '../lib/types'
@@ -21,8 +21,6 @@ function parseCourseForm(form: Form) {
     code: field(form, 'code', 30),
     summary: field(form, 'summary', 2000),
     color: (COURSE_COLORS as readonly string[]).includes(color) ? color : 'cyan',
-    enroll_key: field(form, 'enroll_key', 50) || null,
-    visible: field(form, 'visible') === '1',
   } satisfies CourseFormValues
   const errors: CourseFormErrors = {}
   if (!values.title) errors.title = 'コース名を入力してください。'
@@ -33,35 +31,28 @@ function parseCourseForm(form: Form) {
 
 app.get('/', async (c) => {
   const user = c.var.user!
+  const isAdmin = user.role === 'admin'
   const q = (c.req.query('q') ?? '').trim().slice(0, 100)
   const { results } = await db.prepare(
-    `SELECT c.id, c.code, c.title, c.summary, c.color, c.visible, e.role,
-            c.enroll_key IS NOT NULL AS has_key,
+    `SELECT c.id, c.code, c.title, c.summary, c.color, e.role,
             (SELECT COUNT(*) FROM enrollments x WHERE x.course_id = c.id) AS members,
             (SELECT group_concat(u.name, '、') FROM enrollments t JOIN users u ON u.id = t.user_id
               WHERE t.course_id = c.id AND t.role = 'teacher') AS teachers
      FROM courses c
      LEFT JOIN enrollments e ON e.course_id = c.id AND e.user_id = ?1
-     WHERE (c.visible = 1 OR e.role IS NOT NULL OR ?2)
+     WHERE (e.role IS NOT NULL OR ?2)
        AND (?3 = '' OR c.title LIKE ?4 OR c.code LIKE ?4 OR c.summary LIKE ?4)
-     ORDER BY c.created_at DESC
-     LIMIT 60`,
+     ORDER BY c.created_at DESC`,
   )
-    .bind(user.id, user.role === 'admin' ? 1 : 0, q, `%${q}%`)
+    .bind(user.id, isAdmin ? 1 : 0, q, `%${q}%`)
     .all<CourseCardData>()
 
   return c.render(
     <AppShell>
       <PageHeader
-        title="コースを探す"
-        description="興味のあるコースを見つけて参加しましょう。"
-        actions={
-          canCreateCourse(user) && (
-            <a href="/courses/new" class="btn btn-primary">
-              <Icon name="plus" /> コースを作成
-            </a>
-          )
-        }
+        title="コース一覧"
+        description={isAdmin ? 'すべてのコースを表示しています。' : '参加しているコースです。'}
+        actions={canCreateCourse(user) && <CreateCourseButton />}
       />
       <form method="get" class="toolbar">
         <label class="search">
@@ -72,20 +63,16 @@ app.get('/', async (c) => {
       </form>
       {results.length === 0 ? (
         <EmptyState
-          icon="globe"
-          title={q ? `「${q}」に一致するコースはありません` : 'まだコースがありません'}
-          text={q ? '別のキーワードで検索してみてください。' : canCreateCourse(user) ? '最初のコースを作成しましょう。' : '教師がコースを公開するとここに表示されます。'}
+          icon="book"
+          title={q ? `「${q}」に一致するコースはありません` : isAdmin ? 'まだコースがありません' : 'まだ参加しているコースはありません'}
+          text={
+            q ? '別のキーワードで検索してみてください。' : isAdmin ? '「コースを作成」から最初のコースを作りましょう。' : 'コースに追加されると、ここに表示されます。'
+          }
           action={
-            q ? (
+            q && (
               <a href="/courses" class="btn">
                 検索をクリア
               </a>
-            ) : (
-              canCreateCourse(user) && (
-                <a href="/courses/new" class="btn btn-primary">
-                  <Icon name="plus" /> コースを作成
-                </a>
-              )
             )
           }
         />
@@ -97,50 +84,29 @@ app.get('/', async (c) => {
         </div>
       )}
     </AppShell>,
-    { title: 'コースを探す' },
+    { title: 'コース一覧' },
   )
 })
 
 // ---------------------------------------------------------------- 作成
 
-app.get('/new', (c) => {
-  if (!canCreateCourse(c.var.user)) return c.notFound()
-  return c.render(
-    <AppShell>
-      <PageHeader eyebrow="新しいコース" title="コースを作成" description="基本情報はあとからいつでも変更できます。" />
-      <CourseForm action="/courses" values={{}} submitLabel="コースを作成" cancelHref="/dashboard" />
-    </AppShell>,
-    { title: 'コースを作成' },
-  )
-})
-
 app.post('/', async (c) => {
   const user = c.var.user!
   if (!canCreateCourse(user)) return c.notFound()
   const { values, errors, ok } = parseCourseForm(await readForm(c))
-  if (!ok) {
-    c.status(422)
-    return c.render(
-      <AppShell>
-        <PageHeader eyebrow="新しいコース" title="コースを作成" />
-        <CourseForm action="/courses" values={values} errors={errors} submitLabel="コースを作成" cancelHref="/dashboard" />
-      </AppShell>,
-      { title: 'コースを作成' },
-    )
-  }
+  // 入力欄の横にエラーを出さないのは、作成フォームが一覧画面のモーダルにあって描き直せないため
+  if (!ok) return redirectWith(c, '/courses', Object.values(errors)[0], 'error')
 
   const course = await db
     .prepare(
-      `INSERT INTO courses (code, title, summary, color, enroll_key, visible, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      `INSERT INTO courses (code, title, summary, color, created_by)
+       VALUES (?, ?, ?, ?, ?) RETURNING id`,
     )
-    .bind(values.code, values.title, values.summary, values.color, values.enroll_key, values.visible ? 1 : 0, user.id)
+    .bind(values.code, values.title, values.summary, values.color, user.id)
     .first<{ id: number }>()
-  await db.batch([
-    db.prepare(`INSERT INTO enrollments (course_id, user_id, role) VALUES (?, ?, 'teacher')`).bind(course!.id, user.id),
-    db.prepare(`INSERT INTO sections (course_id, title, position) VALUES (?, 'はじめに', 1)`).bind(course!.id),
-  ])
-  return redirectWith(c, `/courses/${course!.id}?edit=1`, 'コースを作成しました。教材を追加しましょう。')
+  await db.prepare(`INSERT INTO sections (course_id, title, position) VALUES (?, 'はじめに', 1)`).bind(course!.id).run()
+  setEditMode(c, true)
+  return redirectWith(c, `/courses/${course!.id}`, 'コースを作成しました。参加者タブから教師と学生を追加しましょう。')
 })
 
 // ---------------------------------------------------------------- コースページ
@@ -322,32 +288,12 @@ const SectionEditBar = ({ courseId, section }: { courseId: number; section: Sect
   )
 }
 
-const EnrollCard = ({ access }: { access: CourseAccess }) => (
-  <div class="card enroll-card">
-    <div class="enroll-icon">
-      <Icon name={access.course.enroll_key ? 'key' : 'sparkle'} size={22} />
-    </div>
-    <h2>このコースに参加</h2>
-    <p class="muted">
-      {access.course.enroll_key ? '教師から共有された登録キーを入力してください。' : '参加すると教材の閲覧と進捗の記録ができます。'}
-    </p>
-    <form method="post" action={`/courses/${access.course.id}/enroll`} class="enroll-form" data-loading-form>
-      {access.course.enroll_key && (
-        <input name="key" placeholder="登録キー" aria-label="登録キー" required autocomplete="off" autofocus />
-      )}
-      <button type="submit" class="btn btn-primary">
-        参加する
-      </button>
-    </form>
-  </div>
-)
-
 app.get('/:id', async (c) => {
   const id = intParam(c, 'id')
   const access = id && (await getCourseAccess(c, id))
   if (!access) return c.notFound()
   const user = c.var.user!
-  const edit = access.canManage && c.req.query('edit') === '1'
+  const edit = access.canManage && isEditMode(c)
 
   const [secRes, itemRes, doneRes, metaRes] = await db.batch([
     db.prepare('SELECT * FROM sections WHERE course_id = ? ORDER BY position, id').bind(id),
@@ -385,40 +331,8 @@ app.get('/:id', async (c) => {
       <span>
         <Icon name="layers" size={14} /> {items.length}アイテム
       </span>
-      {!access.course.visible && (
-        <span class="chip">
-          <Icon name="eyeOff" size={12} /> 非公開
-        </span>
-      )}
     </>
   )
-
-  // 未参加：概要と目次だけ見せて参加を促す
-  if (!access.canView) {
-    return c.render(
-      <AppShell>
-        <CourseHeader access={access} meta={metaLine} />
-        <div class="preview-layout">
-          <EnrollCard access={access} />
-          <section class="card">
-            <div class="card-head">
-              <h2>コース内容</h2>
-              <p class="muted">{sections.length} セクション · {items.length} アイテム</p>
-            </div>
-            <ol class="outline-preview">
-              {sections.map((s) => (
-                <li>
-                  <span class="truncate">{s.title}</span>
-                  <span class="muted small">{bySection.get(s.id)?.length ?? 0}</span>
-                </li>
-              ))}
-            </ol>
-          </section>
-        </div>
-      </AppShell>,
-      { title: access.course.title },
-    )
-  }
 
   return c.render(
     <AppShell>
@@ -429,9 +343,12 @@ app.get('/:id', async (c) => {
         progress={isStudent ? { done: done.size, total: items.length } : undefined}
         actions={
           access.canManage && (
-            <a href={edit ? `/courses/${id}` : `/courses/${id}?edit=1`} class={edit ? 'btn btn-sm btn-primary' : 'btn btn-sm'}>
-              <Icon name={edit ? 'check' : 'pencil'} size={16} /> {edit ? '編集を終了' : '編集モード'}
-            </a>
+            <form method="post" action="/account/edit-mode">
+              <input type="hidden" name="next" value={`/courses/${id}`} />
+              <button type="submit" name="on" value={edit ? '0' : '1'} class={edit ? 'btn btn-sm btn-primary' : 'btn btn-sm'} aria-pressed={edit ? 'true' : 'false'}>
+                <Icon name={edit ? 'check' : 'pencil'} size={16} /> {edit ? '編集を終了' : '編集モード'}
+              </button>
+            </form>
           )
         }
       />
@@ -439,7 +356,7 @@ app.get('/:id', async (c) => {
       {edit && (
         <div class="edit-banner">
           <Icon name="pencil" size={16} />
-          <span>編集モード — セクションやアイテムを追加・並べ替えできます。</span>
+          <span>編集モード — セクションやアイテムを追加・並べ替えできます。終了するまでほかのコースでも続きます。</span>
         </div>
       )}
 
@@ -500,23 +417,7 @@ app.get('/:id', async (c) => {
   )
 })
 
-// ---------------------------------------------------------------- 参加・退出
-
-app.post('/:id/enroll', async (c) => {
-  const id = intParam(c, 'id')
-  const access = id && (await getCourseAccess(c, id))
-  if (!access) return c.notFound()
-  if (access.role) return c.redirect(`/courses/${id}`, 303)
-
-  const key = field(await readForm(c), 'key', 50)
-  if (access.course.enroll_key && key !== access.course.enroll_key) {
-    return redirectWith(c, `/courses/${id}`, '登録キーが正しくありません。', 'error')
-  }
-  await db.prepare(`INSERT OR IGNORE INTO enrollments (course_id, user_id, role) VALUES (?, ?, 'student')`)
-    .bind(id, c.var.user!.id)
-    .run()
-  return redirectWith(c, `/courses/${id}`, `「${access.course.title}」に参加しました！`)
-})
+// ---------------------------------------------------------------- 退出
 
 app.post('/:id/leave', async (c) => {
   const id = intParam(c, 'id')
@@ -544,21 +445,6 @@ const SettingsPage = ({ access, values, errors }: { access: CourseAccess; values
       <CourseHeader access={access} tab="settings" />
       <div class="stack-lg">
         <CourseForm action={`/courses/${id}/settings`} values={values} errors={errors} submitLabel="変更を保存" cancelHref={`/courses/${id}`} />
-
-        {access.course.enroll_key && (
-          <section class="card share-card">
-            <div>
-              <h2>登録キーを共有</h2>
-              <p class="muted">学生にこのキーを伝えると、コースページから参加できます。</p>
-            </div>
-            <div class="copy-field">
-              <code>{access.course.enroll_key}</code>
-              <button type="button" class="btn btn-sm" data-copy={access.course.enroll_key}>
-                <Icon name="copy" size={14} /> コピー
-              </button>
-            </div>
-          </section>
-        )}
 
         <section class="card danger-zone">
           <div class="card-head">
@@ -595,7 +481,7 @@ app.get('/:id/settings', async (c) => {
   const id = intParam(c, 'id')
   const access = id && (await getCourseAccess(c, id))
   if (!access || !access.canManage) return c.notFound()
-  return c.render(<SettingsPage access={access} values={{ ...access.course, visible: !!access.course.visible }} />, {
+  return c.render(<SettingsPage access={access} values={access.course} />, {
     title: `設定 - ${access.course.title}`,
   })
 })
@@ -610,10 +496,10 @@ app.post('/:id/settings', async (c) => {
     return c.render(<SettingsPage access={access} values={values} errors={errors} />, { title: `設定 - ${access.course.title}` })
   }
   await db.prepare(
-    `UPDATE courses SET code = ?, title = ?, summary = ?, color = ?, enroll_key = ?, visible = ?, updated_at = unixepoch()
+    `UPDATE courses SET code = ?, title = ?, summary = ?, color = ?, updated_at = unixepoch()
      WHERE id = ?`,
   )
-    .bind(values.code, values.title, values.summary, values.color, values.enroll_key, values.visible ? 1 : 0, id)
+    .bind(values.code, values.title, values.summary, values.color, id)
     .run()
   return redirectWith(c, `/courses/${id}/settings`, '設定を保存しました。')
 })
@@ -642,7 +528,7 @@ const greeting = () => {
 dashboard.get('/', async (c) => {
   const user = c.var.user!
   const { results } = await db.prepare(
-    `SELECT c.id, c.code, c.title, c.summary, c.color, c.visible, e.role,
+    `SELECT c.id, c.code, c.title, c.summary, c.color, e.role,
             (SELECT COUNT(*) FROM items i WHERE i.course_id = c.id) AS total,
             (SELECT COUNT(*) FROM completions k WHERE k.user_id = ?1 AND k.course_id = c.id) AS done,
             (SELECT COUNT(*) FROM enrollments x WHERE x.course_id = c.id) AS members
@@ -665,13 +551,7 @@ dashboard.get('/', async (c) => {
         eyebrow={new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())}
         title={`${greeting()}、${user.name}さん`}
         description="今日も一歩ずつ進めましょう。"
-        actions={
-          canCreateCourse(user) && (
-            <a href="/courses/new" class="btn btn-primary">
-              <Icon name="plus" /> コースを作成
-            </a>
-          )
-        }
+        actions={canCreateCourse(user) && <CreateCourseButton />}
       />
 
       {learning.length > 0 && (
@@ -724,12 +604,7 @@ dashboard.get('/', async (c) => {
           <EmptyState
             icon="book"
             title="まだ受講中のコースはありません"
-            text="コース一覧から興味のあるコースを見つけて参加しましょう。"
-            action={
-              <a href="/courses" class="btn btn-primary">
-                <Icon name="globe" /> コースを探す
-              </a>
-            }
+            text="コースに追加されると、ここに表示されます。"
           />
         )}
       </section>

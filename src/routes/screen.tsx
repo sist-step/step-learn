@@ -16,7 +16,7 @@ app.get('/:id/items/:iid/screen', async (c) => {
   const id = intParam(c, 'id')
   const iid = intParam(c, 'iid')
   const access = id && iid && (await getCourseAccess(c, id))
-  if (!access || !access.canView) return c.notFound()
+  if (!access) return c.notFound()
   const item = await db
     .prepare('SELECT id, title FROM items WHERE id = ? AND course_id = ? AND type = ?')
     .bind(iid, id, 'screen')
