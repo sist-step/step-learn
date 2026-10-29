@@ -77,6 +77,7 @@
 }
 
 /* コースカラー（アイコンの塗りと進捗の色） */
+.tone-cyan { --c1: #00f0ff; --c2: #5cf6ff; --c-on: #000000; }
 .tone-indigo { --c1: #5b45f0; --c2: #7c6cf5; }
 .tone-sky { --c1: #0ea5e9; --c2: #38bdf8; }
 .tone-emerald { --c1: #10b981; --c2: #34d399; }
@@ -276,7 +277,7 @@ kbd {
   height: 18px;
   border-radius: 5px;
   background: var(--c1);
-  color: #fff;
+  color: var(--c-on, #fff);
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
@@ -535,7 +536,7 @@ input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--mute
   transition: transform 0.15s var(--ease), box-shadow 0.15s;
 }
 .swatch:hover .swatch-dot { transform: scale(1.08); }
-.swatch input:checked + .swatch-dot { color: #fff; box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--c1); }
+.swatch input:checked + .swatch-dot { color: var(--c-on, #fff); box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--c1); }
 .swatch input:focus-visible + .swatch-dot { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--primary); }
 
 /* スイッチ */
@@ -746,7 +747,7 @@ input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--mute
   padding: 0 6px;
   border-radius: 9px;
   background: var(--c1);
-  color: #fff;
+  color: var(--c-on, #fff);
   font-weight: 700;
   font-size: 13px;
   text-transform: uppercase;
@@ -832,7 +833,7 @@ input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--mute
   padding: 0 8px;
   border-radius: 12px;
   background: var(--c1);
-  color: #fff;
+  color: var(--c-on, #fff);
   font-weight: 700;
   font-size: 16px;
   text-transform: uppercase;

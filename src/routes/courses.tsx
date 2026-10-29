@@ -19,7 +19,7 @@ function parseCourseForm(form: Form) {
     title: field(form, 'title', 120),
     code: field(form, 'code', 30),
     summary: field(form, 'summary', 2000),
-    color: (COURSE_COLORS as readonly string[]).includes(color) ? color : 'indigo',
+    color: (COURSE_COLORS as readonly string[]).includes(color) ? color : 'cyan',
     enroll_key: field(form, 'enroll_key', 50) || null,
     visible: field(form, 'visible') === '1',
   } satisfies CourseFormValues
