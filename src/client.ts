@@ -2,6 +2,8 @@
 /// <reference lib="dom.iterable" />
 // 全ページ共通の小さな進化的拡張。JS がなくてもすべての操作はフォーム送信で動く。
 
+import checkSvg from 'heroicons/24/outline/check.svg?raw'
+
 const $$ = <T extends Element>(sel: string, root: ParentNode = document) => [...root.querySelectorAll<T>(sel)]
 
 // --- モバイルのサイドバー
@@ -148,7 +150,7 @@ function setCompleteUI(form: HTMLFormElement, done: boolean) {
   if (dot) {
     dot.classList.toggle('done', done)
     dot.innerHTML = done
-      ? '<svg class="icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
+      ? checkSvg.replace('<svg ', '<svg class="icon" width="10" height="10" ')
       : ''
   }
 }

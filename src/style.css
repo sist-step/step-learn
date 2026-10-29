@@ -293,6 +293,7 @@ kbd {
   .is-collapsed .sidebar { width: var(--sidebar-collapsed-w); padding-inline: 10px; }
   .is-collapsed .main { margin-left: var(--sidebar-collapsed-w); }
   .is-collapsed .sidebar-head { flex-direction: column; gap: 12px; padding: 0 0 12px; }
+  .is-collapsed [data-sidebar-toggle] .icon { rotate: 180deg; }
   .is-collapsed .nav-link { justify-content: center; padding-inline: 0; }
   .is-collapsed .nav-section { margin-top: 10px; padding-top: 10px; }
   .is-collapsed .panel-promo { display: none; }
@@ -448,7 +449,8 @@ textarea { height: auto; padding: 10px 12px; line-height: 1.6; resize: vertical;
 select {
   appearance: none;
   padding-right: 34px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%238f8f8f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  /* heroicons の chevron-down を url() で読まないのは、背景画像では currentColor が効かず色を付けられないため */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%238f8f8f' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m19.5 8.25-7.5 7.5-7.5-7.5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
 }
@@ -1157,6 +1159,7 @@ a.link-card:hover { text-decoration: none; border-color: var(--primary); }
   color: #fff;
 }
 .outline-dot.done { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.outline-dot .icon { stroke-width: 3; }
 
 @media (max-width: 1100px) {
   .reader { grid-template-columns: 1fr; }

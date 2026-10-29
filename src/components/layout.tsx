@@ -50,7 +50,7 @@ export const AppShell = ({ children, wide }: { children: Child; wide?: boolean }
   const links = (
     [
       { href: '/dashboard', icon: 'home', label: 'ダッシュボード', active: path === '/dashboard' },
-      { href: '/courses', icon: 'compass', label: 'コースを探す', active: path === '/courses' },
+      { href: '/courses', icon: 'globe', label: 'コースを探す', active: path === '/courses' },
       canCreateCourse(user) && { href: '/courses/new', icon: 'plus', label: 'コースを作成', active: path === '/courses/new' },
       user.role === 'admin' && { href: '/admin/users', icon: 'shield', label: 'ユーザー管理', active: path.startsWith('/admin') },
     ] satisfies (NavItem | false)[]
@@ -79,7 +79,7 @@ export const AppShell = ({ children, wide }: { children: Child; wide?: boolean }
               aria-label={toggleLabel}
               title={toggleLabel}
             >
-              <Icon name="sidebar" size={18} />
+              <Icon name="chevronDoubleLeft" size={18} />
             </button>
           </form>
           <button type="button" class="icon-btn nav-close" data-nav-toggle aria-label="メニューを閉じる">
