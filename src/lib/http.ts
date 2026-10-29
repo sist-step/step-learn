@@ -6,6 +6,7 @@ import { config } from './config'
 import type { AppEnv, Flash } from './types'
 
 const FLASH_COOKIE = 'flash'
+const SIDEBAR_COOKIE = 'sidebar'
 
 export const flashMiddleware = createMiddleware<AppEnv>(async (c, next) => {
   c.set('flash', null)
@@ -23,6 +24,13 @@ export const flashMiddleware = createMiddleware<AppEnv>(async (c, next) => {
 export function redirectWith(c: Context<AppEnv>, location: string, message: string, type: Flash['type'] = 'success') {
   setCookie(c, FLASH_COOKIE, JSON.stringify({ type, message }), { path: '/', httpOnly: true, sameSite: 'Lax', maxAge: 60 })
   return c.redirect(location, 303)
+}
+
+export const isSidebarCollapsed = (c: Context) => getCookie(c, SIDEBAR_COOKIE) === 'collapsed'
+
+// client.ts も同じクッキーを書き換えるので httpOnly にしない
+export function setSidebarCollapsed(c: Context, collapsed: boolean) {
+  setCookie(c, SIDEBAR_COOKIE, collapsed ? 'collapsed' : 'expanded', { path: '/', sameSite: 'Lax', maxAge: 31_536_000 })
 }
 
 export type Form = Record<string, string | File | (string | File)[]>

@@ -13,6 +13,21 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') document.body.classList.remove('nav-open')
 })
 
+// --- サイドバーを畳む（送信せずに切り替え、同じクッキーでサーバーにも伝える）
+document.addEventListener('click', (e) => {
+  const t = (e.target as Element).closest<HTMLButtonElement>('[data-sidebar-toggle]')
+  const app = t?.closest('.app')
+  if (!t || !app) return
+  e.preventDefault()
+  const collapsed = app.classList.toggle('is-collapsed')
+  document.cookie = `sidebar=${collapsed ? 'collapsed' : 'expanded'}; path=/; max-age=31536000; samesite=lax`
+  const label = collapsed ? 'サイドバーを開く' : 'サイドバーを畳む'
+  t.value = collapsed ? '0' : '1'
+  t.setAttribute('aria-expanded', String(!collapsed))
+  t.setAttribute('aria-label', label)
+  t.title = label
+})
+
 // --- トースト
 function toast(message: string, type: 'success' | 'error' | 'info' = 'success') {
   const host = document.querySelector('.toasts')
