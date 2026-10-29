@@ -5,7 +5,7 @@ import { AppShell } from '../components/layout'
 import { CourseCard, EmptyState, PageHeader, Progress, type CourseCardData } from '../components/ui'
 import { canCreateCourse, requireAuth } from '../lib/auth'
 import { getCourseAccess, type CourseAccess } from '../lib/courses'
-import { field, intParam, isEditMode, readForm, redirectWith, setEditMode, type Form } from '../lib/http'
+import { field, intParam, readForm, redirectWith, type Form } from '../lib/http'
 import { isSharing } from '../lib/screen-share'
 import { deleteCourseFiles, formatBytes, inBackground } from '../lib/storage'
 import { COURSE_COLORS, ITEM_TYPE_LABELS, type AppEnv, type Item, type ItemType, type Section } from '../lib/types'
@@ -105,7 +105,6 @@ app.post('/', async (c) => {
     .bind(values.code, values.title, values.summary, values.color, user.id)
     .first<{ id: number }>()
   await db.prepare(`INSERT INTO sections (course_id, title, position) VALUES (?, 'はじめに', 1)`).bind(course!.id).run()
-  setEditMode(c, true)
   return redirectWith(c, `/courses/${course!.id}`, 'コースを作成しました。参加者タブから教師と学生を追加しましょう。')
 })
 
@@ -126,18 +125,18 @@ const ItemRow = ({
   courseId,
   done,
   showCheck,
-  edit,
+  manage,
 }: {
   item: ItemLite
   courseId: number
   done: boolean
   showCheck: boolean
-  edit: boolean
+  manage: boolean
 }) => {
   const base = `/courses/${courseId}/items/${item.id}`
-  const external = item.type === 'link' && !edit
-  const newTab = (item.type === 'link' || item.type === 'screen') && !edit
-  const href = edit ? `${base}/edit` : item.type === 'link' ? item.url : item.type === 'screen' ? `${base}/screen` : base
+  const external = item.type === 'link'
+  const newTab = item.type === 'link' || item.type === 'screen'
+  const href = item.type === 'link' ? item.url : item.type === 'screen' ? `${base}/screen` : base
   const meta =
     item.type === 'link'
       ? hostOf(item.url)
@@ -159,8 +158,8 @@ const ItemRow = ({
         {item.type === 'screen' && isSharing(item.id) && <span class="chip chip-live">配信中</span>}
         {newTab && <Icon name="external" size={14} class="item-ext" />}
       </a>
-      {edit ? (
-        <div class="row-actions">
+      {manage && (
+        <div class="row-actions edit-only">
           <a href={`${base}/edit`} class="icon-btn" aria-label="編集" title="編集">
             <Icon name="pencil" size={16} />
           </a>
@@ -182,14 +181,13 @@ const ItemRow = ({
             </button>
           </form>
         </div>
-      ) : (
-        showCheck && (
-          <form method="post" action={`${base}/complete`} data-complete>
-            <button type="submit" class="check" aria-pressed={done ? 'true' : 'false'} aria-label={done ? '未完了に戻す' : '完了にする'} title={done ? '完了済み' : '完了にする'}>
-              <Icon name="check" size={14} />
-            </button>
-          </form>
-        )
+      )}
+      {showCheck && (
+        <form method="post" action={`${base}/complete`} class={manage ? 'view-only' : undefined} data-complete>
+          <button type="submit" class="check" aria-pressed={done ? 'true' : 'false'} aria-label={done ? '未完了に戻す' : '完了にする'} title={done ? '完了済み' : '完了にする'}>
+            <Icon name="check" size={14} />
+          </button>
+        </form>
       )}
     </li>
   )
@@ -246,7 +244,7 @@ const AddItemForm = ({ courseId, sectionId }: { courseId: number; sectionId: num
 const SectionEditBar = ({ courseId, section }: { courseId: number; section: Section }) => {
   const base = `/courses/${courseId}/sections/${section.id}`
   return (
-    <div class="row-actions">
+    <div class="row-actions edit-only">
       <details class="popover">
         <summary class="icon-btn" aria-label="セクションを編集" title="編集">
           <Icon name="pencil" size={16} />
@@ -293,7 +291,7 @@ app.get('/:id', async (c) => {
   const access = id && (await getCourseAccess(c, id))
   if (!access) return c.notFound()
   const user = c.var.user!
-  const edit = access.canManage && isEditMode(c)
+  const manage = access.canManage
 
   const [secRes, itemRes, doneRes, metaRes] = await db.batch([
     db.prepare('SELECT * FROM sections WHERE course_id = ? ORDER BY position, id').bind(id),
@@ -335,33 +333,25 @@ app.get('/:id', async (c) => {
   )
 
   return c.render(
-    <AppShell>
+    <AppShell editable={manage}>
       <CourseHeader
         access={access}
         tab="content"
         meta={metaLine}
         progress={isStudent ? { done: done.size, total: items.length } : undefined}
-        actions={
-          access.canManage && (
-            <form method="post" action="/account/edit-mode">
-              <input type="hidden" name="next" value={`/courses/${id}`} />
-              <button type="submit" name="on" value={edit ? '0' : '1'} class={edit ? 'btn btn-sm btn-primary' : 'btn btn-sm'} aria-pressed={edit ? 'true' : 'false'}>
-                <Icon name={edit ? 'check' : 'pencil'} size={16} /> {edit ? '編集を終了' : '編集モード'}
-              </button>
-            </form>
-          )
-        }
       />
 
-      {edit && (
-        <div class="edit-banner">
+      {manage && (
+        <div class="edit-banner edit-only">
           <Icon name="pencil" size={16} />
           <span>編集モード — セクションやアイテムを追加・並べ替えできます。終了するまでほかのコースでも続きます。</span>
         </div>
       )}
 
-      {sections.length === 0 && !edit ? (
-        <EmptyState icon="layers" title="まだ教材がありません" text="教師が教材を追加するとここに表示されます。" />
+      {sections.length === 0 ? (
+        <div class="view-only">
+          <EmptyState icon="layers" title="まだ教材がありません" text="教師が教材を追加するとここに表示されます。" />
+        </div>
       ) : (
         <div class="sections">
           {sections.map((s, idx) => {
@@ -385,26 +375,26 @@ app.get('/:id', async (c) => {
                   )}
                   <Icon name="chevronDown" class="section-caret" />
                 </summary>
-                {edit && <SectionEditBar courseId={id!} section={s} />}
+                {manage && <SectionEditBar courseId={id!} section={s} />}
                 {s.summary && <p class="section-summary">{s.summary}</p>}
                 {list.length > 0 ? (
                   <ul class="items">
                     {list.map((it) => (
-                      <ItemRow item={it} courseId={id!} done={done.has(it.id)} showCheck={isStudent} edit={edit} />
+                      <ItemRow item={it} courseId={id!} done={done.has(it.id)} showCheck={isStudent} manage={manage} />
                     ))}
                   </ul>
                 ) : (
-                  !edit && <p class="muted small section-empty">このセクションにはまだアイテムがありません。</p>
+                  <p class="muted small section-empty view-only">このセクションにはまだアイテムがありません。</p>
                 )}
-                {edit && <AddItemForm courseId={id!} sectionId={s.id} />}
+                {manage && <AddItemForm courseId={id!} sectionId={s.id} />}
               </details>
             )
           })}
         </div>
       )}
 
-      {edit && (
-        <form method="post" action={`/courses/${id}/sections`} class="add-section" data-loading-form>
+      {manage && (
+        <form method="post" action={`/courses/${id}/sections`} class="add-section edit-only" data-loading-form>
           <Icon name="plus" />
           <input name="title" placeholder="新しいセクション名（例：第2週 データの扱い方）" maxlength={120} required aria-label="新しいセクション名" />
           <button type="submit" class="btn btn-primary btn-sm">

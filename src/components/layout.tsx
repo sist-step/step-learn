@@ -39,7 +39,7 @@ export const Brand = () => (
   </a>
 )
 
-export const AppShell = ({ children, wide }: { children: Child; wide?: boolean }) => {
+export const AppShell = ({ children, wide, editable }: { children: Child; wide?: boolean; editable?: boolean }) => {
   const c = useRequestContext<AppEnv>()
   const user = c.var.user!
   const path = c.req.path
@@ -143,13 +143,23 @@ export const AppShell = ({ children, wide }: { children: Child; wide?: boolean }
 
       <div class="main">
         <header class="topbar">
-          <button type="button" class="icon-btn" data-nav-toggle aria-label="メニューを開く" aria-controls="sidebar">
-            <Icon name="menu" />
-          </button>
-          <Brand />
-          <a href="/account" class="topbar-avatar" aria-label="アカウント">
-            <Avatar name={user.name} size={30} />
-          </a>
+          <div class="topbar-start">
+            <button type="button" class="icon-btn" data-nav-toggle aria-label="メニューを開く" aria-controls="sidebar">
+              <Icon name="menu" />
+            </button>
+            <Brand />
+          </div>
+          <div class="topbar-end">
+            {editable && (
+              <button type="button" class="switch" role="switch" aria-checked="false" data-edit-mode-toggle>
+                <span class="switch-track" />
+                <span>編集モード</span>
+              </button>
+            )}
+            <a href="/account" class="topbar-avatar" aria-label="アカウント" title={user.name}>
+              <Avatar name={user.name} size={30} />
+            </a>
+          </div>
         </header>
         <main class={wide ? 'content content-wide' : 'content'}>{children}</main>
       </div>
