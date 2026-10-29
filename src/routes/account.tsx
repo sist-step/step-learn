@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import { AppShell } from '../components/layout'
 import { Avatar, Field, PageHeader } from '../components/ui'
-import { destroyOtherSessions, hashPassword, requireAuth, safeNext, verifyPassword } from '../lib/auth'
-import { field, readForm, redirectWith, setEditMode } from '../lib/http'
+import { destroyOtherSessions, hashPassword, requireAuth, verifyPassword } from '../lib/auth'
+import { field, readForm, redirectWith } from '../lib/http'
 import { checkPassword, PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../lib/password'
 import { ROLE_LABELS, type AppEnv, type User } from '../lib/types'
 import { db } from '../lib/db'
@@ -79,12 +79,6 @@ app.post('/', async (c) => {
   }
   await db.prepare('UPDATE users SET name = ? WHERE id = ?').bind(name, user.id).run()
   return redirectWith(c, '/account', 'プロフィールを更新しました。')
-})
-
-app.post('/edit-mode', async (c) => {
-  const form = await readForm(c)
-  setEditMode(c, field(form, 'on', 1) === '1')
-  return c.redirect(safeNext(field(form, 'next', 2000)), 303)
 })
 
 app.post('/password', async (c) => {

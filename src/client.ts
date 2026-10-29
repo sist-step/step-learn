@@ -40,6 +40,32 @@ document.addEventListener('click', (e) => {
   document.cookie = `theme=${theme}; path=/; max-age=31536000; samesite=lax`
 })
 
+// --- 編集モード（端末ごと）
+// サーバーに伝えないのは、編集用の部品は管理できる人にだけ描いてあり、ここでは見せるかどうかを切り替えるだけで済むため
+const EDIT_MODE_KEY = 'sl:edit-mode'
+const readEditMode = () => {
+  try {
+    return localStorage.getItem(EDIT_MODE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+function applyEditMode(on: boolean) {
+  const switches = $$('[data-edit-mode-toggle]')
+  document.documentElement.toggleAttribute('data-edit-mode', on && switches.length > 0)
+  switches.forEach((el) => el.setAttribute('aria-checked', String(on)))
+}
+document.addEventListener('click', (e) => {
+  const t = (e.target as Element).closest('[data-edit-mode-toggle]')
+  if (!t) return
+  const on = t.getAttribute('aria-checked') !== 'true'
+  applyEditMode(on)
+  try {
+    if (on) localStorage.setItem(EDIT_MODE_KEY, '1')
+    else localStorage.removeItem(EDIT_MODE_KEY)
+  } catch {}
+})
+
 // --- トースト
 function toast(message: string, type: 'success' | 'error' | 'info' = 'success') {
   const host = document.querySelector('.toasts')
@@ -419,6 +445,7 @@ document.addEventListener(
 function initPage() {
   $$('[data-toast]').forEach((el) => dismissLater(el, 5000))
   restoreCollapsed()
+  applyEditMode(readEditMode())
 }
 initPage()
 
