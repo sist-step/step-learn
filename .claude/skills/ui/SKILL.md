@@ -56,6 +56,8 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 - `select` を変えたら即送信するフォームは `data-autosubmit` と、JS なし用の `<noscript><button>` をセットで
 - 開閉は `<details>` / `<summary>` で作る（ポップオーバーは `details.popover`）
 - 先読みさせたくないリンク（ログアウト・ダウンロードなど）は `data-no-prefetch`
+- リンクとフォーム送信は `client.ts` が fetch に置き換え、body を差し替えて再読み込みなしで遷移する。通常の遷移で開かせたいリンク・フォームには `data-reload`（`download` 付きのリンクと `target` 付きは自動で対象外）
+- body を差し替えても `<script>` は実行されないので、専用スクリプトを読み込むページは自動で通常の読み込みになる。毎回の表示で必要な初期化は `client.ts` の `initPage()` に足す
 - 入力欄には `label`、アイコンボタンには `aria-label`、状態は `aria-pressed` / `aria-invalid` で伝える
 - 文言はすべて日本語
 

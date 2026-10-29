@@ -24,7 +24,7 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
 
 | 方針 | 実装 |
 | --- | --- |
-| 速さ | SSR（hono/jsx）。クライアント JS は約 2KB（gzip）の進化的拡張のみで、JS なしでも全操作できる。Speculation Rules による先読みと View Transitions で、ページ遷移も SPA 並みに速い |
+| 速さ | SSR（hono/jsx）。クライアント JS は小さな進化的拡張のみで、JS なしでも全操作できる。JS が有効ならリンクとフォーム送信を fetch に置き換え、ホバー時の先読みと View Transitions で再読み込みなしに遷移する（SPA） |
 | DB | `better-sqlite3`（WAL モード）＋ Drizzle ORM。DB サーバーは要らない。テーブル定義は `src/lib/schema.ts` で、マイグレーションは drizzle-kit で生成する。生 SQL 用のラッパーはプリペアドステートメントをキャッシュして使い回す |
 | コスト | 必要なのは Node.js が動くサーバー 1 台だけ。R2 を使う場合、ダウンロードは署名付き URL で R2 から直接配信されるので、サーバーの帯域を使わない（R2 は転送料無料） |
 | 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）・`nodemailer`（確認メールの SMTP 送信）・`better-sqlite3`・`drizzle-orm`・`socket.io`（画面共有の中継）だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる |
@@ -130,7 +130,7 @@ migrations/          drizzle-kit が生成するマイグレーション（起�
 src/index.tsx        Hono アプリ本体（ミドルウェア、ルーティング）
 src/server.ts        本番用 Node.js エントリ（静的ファイル配信、起動）
 src/renderer.tsx     HTML の外枠
-src/client.ts        クライアント側の小さな拡張（トースト、確認ダイアログ、完了トグルなど）
+src/client.ts        クライアント側の小さな拡張（再読み込みなしの画面遷移、トースト、確認ダイアログ、完了トグルなど）
 src/style.css        デザイントークンと全スタイル（ダークモード対応）
 src/lib/             設定・DB・認証・HTTP ヘルパー・Markdown・ストレージ・コースの権限
 src/components/      レイアウトと UI 部品
