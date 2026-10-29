@@ -12,7 +12,7 @@ StepLearn は MPA。サーバーで HTML を返し、操作はすべて `<form m
 - 既存の機能領域に入るものは、該当する `src/routes/*.tsx` に足す
   - `courses.tsx`（コース本体・設定）、`content.tsx`（セクション・アイテム）、`participants.tsx`（参加者）、`account.tsx`、`admin.tsx`、`auth.tsx`
 - 新しい領域なら `src/routes/<name>.tsx` を作り、`src/index.tsx` で `app.route('/<prefix>', <name>)` する
-- サイドバーに出す画面は `src/components/layout.tsx` の `NavLink` を足す（権限で出し分ける）
+- ナビゲーションに出す画面は `src/components/layout.tsx` の `links` に足す（ヘッダーのピルと左のアイコンレールの両方に出る。権限で出し分ける）
 - 複数の画面で使う部品は `src/components/`、コース関連の部品は `components/course.tsx`
 
 ## ファイルの骨組み

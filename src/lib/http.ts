@@ -6,7 +6,6 @@ import { config } from './config'
 import type { AppEnv, Flash } from './types'
 
 const FLASH_COOKIE = 'flash'
-const SIDEBAR_COOKIE = 'sidebar'
 
 export const flashMiddleware = createMiddleware<AppEnv>(async (c, next) => {
   c.set('flash', null)
@@ -25,8 +24,6 @@ export function redirectWith(c: Context<AppEnv>, location: string, message: stri
   setCookie(c, FLASH_COOKIE, JSON.stringify({ type, message }), { path: '/', httpOnly: true, sameSite: 'Lax', maxAge: 60 })
   return c.redirect(location, 303)
 }
-
-export const isSidebarCollapsed = (c: Context) => getCookie(c, SIDEBAR_COOKIE) === 'collapsed'
 
 export type Theme = 'light' | 'dark'
 

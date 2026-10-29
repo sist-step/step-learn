@@ -41,7 +41,7 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 ## CSS を書くとき
 
 - 色・角丸・影は必ずトークン（`var(--surface)` `var(--border)` `var(--text-2)` `var(--muted)` `var(--primary)` `var(--radius)` `var(--shadow)` など）を使う。色コードを直接書かない
-- トークンを足すときは `:root` と `:root[data-theme='dark']` の両方に定義する。ダークモードは OS の設定ではなく、利用者がサイドバーで選んだときだけ（`theme` クッキー → `<html data-theme>`）。ダーク用の上書きは `[data-theme='dark'] .foo` で書き、`prefers-color-scheme` は使わない。ダークモードで必ず見た目を確認する
+- トークンを足すときは `:root` と `:root[data-theme='dark']` の両方に定義する。ダークモードは OS の設定ではなく、利用者がヘッダーのボタンで選んだときだけ（`theme` クッキー → `<html data-theme>`）。ダーク用の上書きは `[data-theme='dark'] .foo` で書き、`prefers-color-scheme` は使わない。ダークモードで必ず見た目を確認する
 - 薄い色は `color-mix(in srgb, var(--primary) 12%, transparent)` で作る
 - コースの色は `tone-${color}` クラスと `--c1` / `--c2` を使う
 - スマホ対応は既存のブレークポイント（`max-width: 640px` / `900px`）に合わせる
@@ -64,7 +64,7 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 
 ## クライアント JS（src/client.ts）
 
-- データを変える操作はフォーム送信で作り、`client.ts` で画面遷移なしに反映する。サイドバーの開閉やテーマのような表示だけの状態は、`client.ts` がクッキーを書き、サーバーはそれを読んで描く（POST のルートは作らない）
+- データを変える操作はフォーム送信で作り、`client.ts` で画面遷移なしに反映する。テーマのような表示だけの状態は、`client.ts` がクッキーを書き、サーバーはそれを読んで描く（POST のルートは作らない）
 - 要素には `data-*` 属性で目印を付け、`document` へのイベント委譲で拾う（要素ごとに addEventListener しない）
 - 区切りは `// --- 何の処理か` の見出しに合わせる
 - `fetch` するときは `Accept: application/json` を付け、サーバー側は `wantsJson(c)` で分岐する（`add-page` スキル参照）

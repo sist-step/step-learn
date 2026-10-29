@@ -6,27 +6,13 @@ import checkSvg from 'heroicons/24/outline/check.svg?raw'
 
 const $$ = <T extends Element>(sel: string, root: ParentNode = document) => [...root.querySelectorAll<T>(sel)]
 
-// --- モバイルのサイドバー
+// --- モバイルのメニュー
 document.addEventListener('click', (e) => {
   const t = (e.target as Element).closest('[data-nav-toggle]')
   if (t) document.body.classList.toggle('nav-open')
 })
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') document.body.classList.remove('nav-open')
-})
-
-// --- サイドバーを畳む（クッキーでサーバーにも伝え、次の表示から同じ状態で描く）
-document.addEventListener('click', (e) => {
-  const t = (e.target as Element).closest<HTMLButtonElement>('[data-sidebar-toggle]')
-  const app = t?.closest('.app')
-  if (!t || !app) return
-  e.preventDefault()
-  const collapsed = app.classList.toggle('is-collapsed')
-  document.cookie = `sidebar=${collapsed ? 'collapsed' : 'expanded'}; path=/; max-age=31536000; samesite=lax`
-  const label = collapsed ? 'サイドバーを開く' : 'サイドバーを畳む'
-  t.setAttribute('aria-expanded', String(!collapsed))
-  t.setAttribute('aria-label', label)
-  t.title = label
 })
 
 // --- テーマの切り替え（クッキーでサーバーにも伝え、次の表示から同じテーマで描く）
