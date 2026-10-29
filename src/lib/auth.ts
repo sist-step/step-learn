@@ -221,7 +221,7 @@ export const requireRole = (...roles: Role[]) =>
     await next()
   })
 
-export const canCreateCourse = (user: User | null) => user?.role === 'admin' || user?.role === 'teacher'
+export const canCreateCourse = (user: User | null) => user?.role === 'admin'
 
 /** オープンリダイレクトを防ぐため、同一サイト内の相対パスのみ許可 */
 export function safeNext(next: string | undefined) {

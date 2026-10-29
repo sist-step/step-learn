@@ -14,7 +14,7 @@ import {
   verifyPassword,
 } from '../lib/auth'
 import { config } from '../lib/config'
-import { clientIp, field, isEmail, readForm, redirectWith } from '../lib/http'
+import { clientIp, field, isEmail, readForm, redirectWith, setEditMode } from '../lib/http'
 import { mailer } from '../lib/mail'
 import { checkPassword, PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../lib/password'
 import { rateLimiter } from '../lib/rate-limit'
@@ -302,6 +302,7 @@ app.post('/register/complete', async (c) => {
 
 app.post('/logout', async (c) => {
   await destroySession(c)
+  setEditMode(c, false)
   return redirectWith(c, '/login', 'ログアウトしました。', 'info')
 })
 

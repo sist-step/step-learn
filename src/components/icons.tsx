@@ -20,19 +20,17 @@ import copy from 'heroicons/24/outline/document-duplicate.svg?raw'
 import page from 'heroicons/24/outline/document-text.svg?raw'
 import alert from 'heroicons/24/outline/exclamation-circle.svg?raw'
 import eye from 'heroicons/24/outline/eye.svg?raw'
-import eyeOff from 'heroicons/24/outline/eye-slash.svg?raw'
 import globe from 'heroicons/24/outline/globe-alt.svg?raw'
 import home from 'heroicons/24/outline/home.svg?raw'
 import info from 'heroicons/24/outline/information-circle.svg?raw'
-import key from 'heroicons/24/outline/key.svg?raw'
 import link from 'heroicons/24/outline/link.svg?raw'
-import lock from 'heroicons/24/outline/lock-closed.svg?raw'
 import search from 'heroicons/24/outline/magnifying-glass.svg?raw'
+import moon from 'heroicons/24/outline/moon.svg?raw'
 import pencil from 'heroicons/24/outline/pencil.svg?raw'
 import plus from 'heroicons/24/outline/plus.svg?raw'
 import shield from 'heroicons/24/outline/shield-check.svg?raw'
-import sparkle from 'heroicons/24/outline/sparkles.svg?raw'
 import layers from 'heroicons/24/outline/square-3-stack-3d.svg?raw'
+import sun from 'heroicons/24/outline/sun.svg?raw'
 import trash from 'heroicons/24/outline/trash.svg?raw'
 import user from 'heroicons/24/outline/user.svg?raw'
 import users from 'heroicons/24/outline/users.svg?raw'
@@ -58,8 +56,6 @@ const svgs = {
   chevronLeft,
   arrowUp,
   arrowDown,
-  lock,
-  key,
   link,
   external,
   page,
@@ -69,15 +65,15 @@ const svgs = {
   pencil,
   trash,
   eye,
-  eyeOff,
   shield,
   copy,
-  sparkle,
   layers,
   info,
   alert,
   monitor,
   maximize,
+  moon,
+  sun,
 } as const
 
 export type IconName = keyof typeof svgs

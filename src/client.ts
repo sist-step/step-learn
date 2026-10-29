@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 /// <reference lib="dom.iterable" />
-// 全ページ共通の小さな進化的拡張。JS がなくてもすべての操作はフォーム送信で動く。
+// 全ページ共通のクライアント処理。JS が無効な環境では renderer の noscript がアプリを使えなくする。
 
 import checkSvg from 'heroicons/24/outline/check.svg?raw'
 
@@ -15,7 +15,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') document.body.classList.remove('nav-open')
 })
 
-// --- サイドバーを畳む（送信せずに切り替え、同じクッキーでサーバーにも伝える）
+// --- サイドバーを畳む（クッキーでサーバーにも伝え、次の表示から同じ状態で描く）
 document.addEventListener('click', (e) => {
   const t = (e.target as Element).closest<HTMLButtonElement>('[data-sidebar-toggle]')
   const app = t?.closest('.app')
@@ -24,10 +24,20 @@ document.addEventListener('click', (e) => {
   const collapsed = app.classList.toggle('is-collapsed')
   document.cookie = `sidebar=${collapsed ? 'collapsed' : 'expanded'}; path=/; max-age=31536000; samesite=lax`
   const label = collapsed ? 'サイドバーを開く' : 'サイドバーを畳む'
-  t.value = collapsed ? '0' : '1'
   t.setAttribute('aria-expanded', String(!collapsed))
   t.setAttribute('aria-label', label)
   t.title = label
+})
+
+// --- テーマの切り替え（クッキーでサーバーにも伝え、次の表示から同じテーマで描く）
+document.addEventListener('click', (e) => {
+  const t = (e.target as Element).closest<HTMLButtonElement>('[data-theme-toggle]')
+  if (!t) return
+  e.preventDefault()
+  const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'
+  document.documentElement.dataset.theme = theme
+  document.querySelector('meta[name=color-scheme]')?.setAttribute('content', theme)
+  document.cookie = `theme=${theme}; path=/; max-age=31536000; samesite=lax`
 })
 
 // --- トースト
@@ -162,18 +172,6 @@ function updateProgress(done: number, total: number) {
   $$<HTMLElement>('[data-progress] .progress-bar').forEach((el) => (el.style.width = `${pct}%`))
 }
 
-// --- コピー
-document.addEventListener('click', async (e) => {
-  const btn = (e.target as Element).closest<HTMLElement>('[data-copy]')
-  if (!btn) return
-  try {
-    await navigator.clipboard.writeText(btn.dataset.copy!)
-    toast('コピーしました')
-  } catch {
-    toast('コピーできませんでした', 'error')
-  }
-})
-
 // --- "/" で検索にフォーカス
 document.addEventListener('keydown', (e) => {
   if (e.key !== '/' || e.metaKey || e.ctrlKey) return
@@ -296,6 +294,8 @@ const assetSignature = (doc: Document) =>
 const needsFullLoad = (doc: Document) => doc.body.querySelector('script') !== null || assetSignature(doc) !== assetSignature(document)
 
 function render(doc: Document, scroll: () => void) {
+  // DOMParser はスクリプト無効として解析し noscript の中身を要素にするので、そのまま差し込むと表示されるブラウザがある
+  $$('noscript', doc.body).forEach((el) => el.remove())
   const swap = () => {
     document.title = doc.title
     document.body.replaceWith(doc.body)

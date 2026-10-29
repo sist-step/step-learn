@@ -19,7 +19,7 @@ export const CourseHeader = ({
   progress?: { done: number; total: number }
   actions?: Child
 }) => {
-  const { course, canManage, canView } = access
+  const { course, canManage } = access
   const base = `/courses/${course.id}`
   return (
     <>
@@ -51,7 +51,7 @@ export const CourseHeader = ({
           </div>
         )}
       </section>
-      {canView && tab && (
+      {tab && (
         <nav class="tabs" aria-label="コースメニュー">
           <a href={base} class={tab === 'content' ? 'tab active' : 'tab'} aria-current={tab === 'content' ? 'page' : undefined}>
             コンテンツ
@@ -78,25 +78,11 @@ export const CourseHeader = ({
   )
 }
 
-export type CourseFormValues = Partial<Pick<Course, 'title' | 'code' | 'summary' | 'color' | 'enroll_key'>> & {
-  visible?: boolean
-}
-export type CourseFormErrors = Partial<Record<'title' | 'code' | 'summary' | 'enroll_key', string>>
+export type CourseFormValues = Partial<Pick<Course, 'title' | 'code' | 'summary' | 'color'>>
+export type CourseFormErrors = Partial<Record<'title' | 'code' | 'summary', string>>
 
-export const CourseForm = ({
-  action,
-  values,
-  errors = {},
-  submitLabel,
-  cancelHref,
-}: {
-  action: string
-  values: CourseFormValues
-  errors?: CourseFormErrors
-  submitLabel: string
-  cancelHref: string
-}) => (
-  <form method="post" action={action} class="card stack course-form" data-loading-form>
+const CourseFields = ({ values, errors = {} }: { values: CourseFormValues; errors?: CourseFormErrors }) => (
+  <>
     <div class="grid-2">
       <Field label="コース名" name="title" value={values.title} error={errors.title} required maxlength={120} placeholder="例：情報リテラシー入門" autofocus={!values.title} />
       <Field label="コースコード（任意）" name="code" value={values.code} error={errors.code} maxlength={30} placeholder="例：INFO101" hint="一覧やカードに表示される短い識別名" />
@@ -117,28 +103,24 @@ export const CourseForm = ({
         ))}
       </div>
     </fieldset>
+  </>
+)
 
-    <div class="grid-2">
-      <Field
-        label="登録キー（任意）"
-        name="enroll_key"
-        value={values.enroll_key ?? ''}
-        error={errors.enroll_key}
-        maxlength={50}
-        hint="設定すると、キーを知っている人だけが自己登録できます"
-        autocomplete="off"
-      />
-      <div class="field">
-        <span class="label">公開設定</span>
-        <label class="switch">
-          <input type="checkbox" name="visible" value="1" checked={values.visible ?? true} />
-          <span class="switch-track" />
-          <span>コース一覧に公開する</span>
-        </label>
-        <p class="field-hint">オフにすると教師と管理者だけが閲覧できます</p>
-      </div>
-    </div>
-
+export const CourseForm = ({
+  action,
+  values,
+  errors,
+  submitLabel,
+  cancelHref,
+}: {
+  action: string
+  values: CourseFormValues
+  errors?: CourseFormErrors
+  submitLabel: string
+  cancelHref: string
+}) => (
+  <form method="post" action={action} class="card stack course-form" data-loading-form>
+    <CourseFields values={values} errors={errors} />
     <div class="form-actions">
       <a href={cancelHref} class="btn btn-ghost">
         キャンセル
@@ -148,6 +130,39 @@ export const CourseForm = ({
       </button>
     </div>
   </form>
+)
+
+const CREATE_COURSE_MODAL = 'create-course'
+
+// <dialog> を使わないのは、外側のクリックで閉じる処理や開くための showModal() を client.ts に書かずに済ませるため
+export const CreateCourseButton = () => (
+  <>
+    <button type="button" class="btn btn-primary" popovertarget={CREATE_COURSE_MODAL}>
+      <Icon name="plus" /> コースを作成
+    </button>
+    <div id={CREATE_COURSE_MODAL} popover="auto" class="modal" role="dialog" aria-labelledby={`${CREATE_COURSE_MODAL}-title`}>
+      <form method="post" action="/courses" class="stack" data-loading-form>
+        <div class="modal-head">
+          <div>
+            <h2 id={`${CREATE_COURSE_MODAL}-title`}>コースを作成</h2>
+            <p class="muted small">作成後に参加者タブから教師と学生を追加します。基本情報はあとからいつでも変更できます。</p>
+          </div>
+          <button type="button" class="icon-btn" popovertarget={CREATE_COURSE_MODAL} popovertargetaction="hide" aria-label="閉じる" title="閉じる">
+            <Icon name="x" />
+          </button>
+        </div>
+        <CourseFields values={{}} />
+        <div class="form-actions">
+          <button type="button" class="btn btn-ghost" popovertarget={CREATE_COURSE_MODAL} popovertargetaction="hide">
+            キャンセル
+          </button>
+          <button type="submit" class="btn btn-primary">
+            コースを作成
+          </button>
+        </div>
+      </form>
+    </div>
+  </>
 )
 
 const ITEM_ICONS: Record<ItemType, IconName> = { page: 'page', link: 'link', file: 'file', screen: 'monitor' }

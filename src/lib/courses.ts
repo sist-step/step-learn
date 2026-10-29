@@ -8,8 +8,6 @@ export type CourseAccess = {
   role: CourseRole | null
   /** 教師またはサイト管理者 */
   canManage: boolean
-  /** 教材を閲覧できるか（登録済み or 管理可能） */
-  canView: boolean
 }
 
 export const getCourseAccess = (c: Context<AppEnv>, courseId: number) => getCourseAccessFor(c.var.user!, courseId)
@@ -26,9 +24,9 @@ export async function getCourseAccessFor(user: User, courseId: number): Promise<
 
   const { my_role, ...course } = row
   const canManage = user.role === 'admin' || my_role === 'teacher'
-  // 非公開コースは関係者以外には存在しないものとして扱う
-  if (!course.visible && !canManage && !my_role) return null
-  return { course, role: my_role, canManage, canView: canManage || !!my_role }
+  // 参加していないコースは存在しないものとして扱う
+  if (!canManage && !my_role) return null
+  return { course, role: my_role, canManage }
 }
 
 /**

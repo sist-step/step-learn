@@ -1,11 +1,11 @@
 ---
 name: ui
-description: "StepLearn の見た目と UI の作り方（既存の UI 部品・CSS クラス・デザイントークン・アイコン・ダークモード・スマホ対応・クライアント JS の進化的拡張）。画面のマークアップを書く、src/style.css や src/components/ を変更する、src/client.ts に挙動を足す、デザインを調整するときに読み込む。「見た目を整えて」「ボタンを追加」「レイアウトを変えて」「画面遷移なしで反映したい」なども対象。"
+description: "StepLearn の見た目と UI の作り方（既存の UI 部品・CSS クラス・デザイントークン・アイコン・ダークモード・スマホ対応・クライアント JS）。画面のマークアップを書く、src/style.css や src/components/ を変更する、src/client.ts に挙動を足す、デザインを調整するときに読み込む。「見た目を整えて」「ボタンを追加」「レイアウトを変えて」「画面遷移なしで反映したい」なども対象。"
 ---
 
 # UI の作り方
 
-方針は「JS なしで全部動く SSR ＋ 小さな進化的拡張」。CSS は `src/style.css` の 1 ファイル、JS は `src/client.ts` の 1 ファイル。CSS フレームワークや UI ライブラリは入れない。
+方針は「SSR ＋ 小さなクライアント JS」。JavaScript は必須で、無効なときは renderer の noscript が案内だけを出すので、JS なしの代替は作らない。CSS は `src/style.css` の 1 ファイル、JS は `src/client.ts` の 1 ファイル。CSS フレームワークや UI ライブラリは入れない。
 
 ## まず既存の部品を使う
 
@@ -41,7 +41,7 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 ## CSS を書くとき
 
 - 色・角丸・影は必ずトークン（`var(--surface)` `var(--border)` `var(--text-2)` `var(--muted)` `var(--primary)` `var(--radius)` `var(--shadow)` など）を使う。色コードを直接書かない
-- トークンを足すときは `:root` と `@media (prefers-color-scheme: dark)` の両方に定義する。ダークモードで必ず見た目を確認する
+- トークンを足すときは `:root` と `:root[data-theme='dark']` の両方に定義する。ダークモードは OS の設定ではなく、利用者がサイドバーで選んだときだけ（`theme` クッキー → `<html data-theme>`）。ダーク用の上書きは `[data-theme='dark'] .foo` で書き、`prefers-color-scheme` は使わない。ダークモードで必ず見た目を確認する
 - 薄い色は `color-mix(in srgb, var(--primary) 12%, transparent)` で作る
 - コースの色は `tone-${color}` クラスと `--c1` / `--c2` を使う
 - スマホ対応は既存のブレークポイント（`max-width: 640px` / `900px`）に合わせる
@@ -53,8 +53,9 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 - 操作はリンクか `<form method="post">`。フォームを送信しないボタンには `type="button"` を書く
 - 送信に時間がかかるフォームには `data-loading-form`（二重送信防止）
 - 取り消せない操作のフォームには `data-confirm="〜しますか？"`
-- `select` を変えたら即送信するフォームは `data-autosubmit` と、JS なし用の `<noscript><button>` をセットで
+- `select` を変えたら即送信するフォームには `data-autosubmit`
 - 開閉は `<details>` / `<summary>` で作る（ポップオーバーは `details.popover`）
+- モーダルは `<div popover="auto" class="modal">` と `<button type="button" popovertarget="...">` で作る（開閉・Esc・外側クリックをブラウザに任せられる。例は `components/course.tsx` の `CreateCourseButton`）。`popover` は値まで書く（真偽値で書くと hono が `popover="true"` と出力し、manual 扱いになって Esc や外側のクリックで閉じない）。`<dialog>` は開閉の処理を `client.ts` に書くことになるので使わない
 - 先読みさせたくないリンク（ログアウト・ダウンロードなど）は `data-no-prefetch`
 - リンクとフォーム送信は `client.ts` が fetch に置き換え、body を差し替えて再読み込みなしで遷移する。通常の遷移で開かせたいリンク・フォームには `data-reload`（`download` 付きのリンクと `target` 付きは自動で対象外）
 - body を差し替えても `<script>` は実行されないので、専用スクリプトを読み込むページは自動で通常の読み込みになる。毎回の表示で必要な初期化は `client.ts` の `initPage()` に足す
@@ -63,7 +64,7 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 
 ## クライアント JS（src/client.ts）
 
-- 先に JS なしで動くものを作り、そのうえで体験を良くする処理だけを足す
+- データを変える操作はフォーム送信で作り、`client.ts` で画面遷移なしに反映する。サイドバーの開閉やテーマのような表示だけの状態は、`client.ts` がクッキーを書き、サーバーはそれを読んで描く（POST のルートは作らない）
 - 要素には `data-*` 属性で目印を付け、`document` へのイベント委譲で拾う（要素ごとに addEventListener しない）
 - 区切りは `// --- 何の処理か` の見出しに合わせる
 - `fetch` するときは `Accept: application/json` を付け、サーバー側は `wantsJson(c)` で分岐する（`add-page` スキル参照）
@@ -75,5 +76,4 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 
 - ライト / ダークの両方
 - スマホ幅（375px 前後）でレイアウトが崩れない・横スクロールが出ない
-- JS を無効にしても操作できる
 - UI を変えた PR にはスクリーンショット（Before / After）を付ける

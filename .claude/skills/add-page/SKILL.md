@@ -5,7 +5,7 @@ description: "StepLearn に画面・ルート・フォーム処理を追加ま�
 
 # 画面・ルートの追加
 
-StepLearn は MPA。サーバーで HTML を返し、操作はすべて `<form method="post">` の送信と 303 リダイレクト（PRG）で完結させる。JS は後から体験を良くするだけ。
+StepLearn は MPA。サーバーで HTML を返し、操作はすべて `<form method="post">` の送信と 303 リダイレクト（PRG）で完結させる。`client.ts` がこの送信を fetch に置き換えて再読み込みなしで遷移させる（JavaScript は必須）。
 
 ## 置き場所
 
@@ -60,7 +60,7 @@ if (!access || !access.canManage) return c.notFound()
 ```
 
 - ID は必ず `intParam` で取る（正の安全な整数以外は `null`）
-- コースに関わる処理は `getCourseAccess` を通す。`canView`（閲覧）/ `canManage`（教師・管理者）/ `role` で判定する
+- コースに関わる処理は `getCourseAccess` を通す。参加していないコースは（管理者以外）`null` になる。`canManage`（教師・管理者）/ `role` で判定する
 - 権限がないときは 403 ではなく `c.notFound()`。存在を知らせない
 - サイト全体のロールで絞るときは `app.use(requireAuth, requireRole('admin'))`
 - 同じ判定を何度も書くなら `manageAccess(c)` のようにファイル内の関数にまとめる（`participants.tsx` 参照）
@@ -110,7 +110,7 @@ app.post('/:id/notes', async (c) => {
 
 ### JS からの呼び出し
 
-画面遷移なしで反映したい操作も、まずフォーム送信で動くように作る。そのうえで `wantsJson(c)` のときだけ JSON を返す。
+画面遷移なしで反映したい操作もフォーム送信の形で作り、`wantsJson(c)` のときだけ JSON を返す。
 
 ```ts
 if (wantsJson(c)) return c.json({ completed, ...stats })

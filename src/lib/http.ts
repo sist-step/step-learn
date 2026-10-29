@@ -28,12 +28,24 @@ export function redirectWith(c: Context<AppEnv>, location: string, message: stri
 
 export const isSidebarCollapsed = (c: Context) => getCookie(c, SIDEBAR_COOKIE) === 'collapsed'
 
-// client.ts も同じクッキーを書き換えるので httpOnly にしない
-export function setSidebarCollapsed(c: Context, collapsed: boolean) {
-  setCookie(c, SIDEBAR_COOKIE, collapsed ? 'collapsed' : 'expanded', { path: '/', sameSite: 'Lax', maxAge: 31_536_000 })
+export type Theme = 'light' | 'dark'
+
+const THEME_COOKIE = 'theme'
+
+// OS の設定に合わせないのは、利用者が自分で選んだときだけダークにするため
+export const getTheme = (c: Context): Theme => (getCookie(c, THEME_COOKIE) === 'dark' ? 'dark' : 'light')
+
+const EDIT_MODE_COOKIE = 'edit_mode'
+
+export const isEditMode = (c: Context) => getCookie(c, EDIT_MODE_COOKIE) === '1'
+
+// URL のクエリで持たないのは、コースや画面をまたいでも編集モードを保つため
+export function setEditMode(c: Context, on: boolean) {
+  if (on) setCookie(c, EDIT_MODE_COOKIE, '1', { path: '/', httpOnly: true, sameSite: 'Lax' })
+  else deleteCookie(c, EDIT_MODE_COOKIE, { path: '/' })
 }
 
-export type Form = Record<string, string | File | (string | File)[]>
+export type Form =Record<string, string | File | (string | File)[]>
 
 export async function readForm(c: Context): Promise<Form> {
   return (await c.req.parseBody()) as Form

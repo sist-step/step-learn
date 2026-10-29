@@ -1,6 +1,5 @@
 import type { Child } from 'hono/jsx'
 import { useRequestContext } from 'hono/jsx-renderer'
-import { canCreateCourse } from '../lib/auth'
 import { isSidebarCollapsed } from '../lib/http'
 import { ROLE_LABELS, type AppEnv } from '../lib/types'
 import { Icon, type IconName } from './icons'
@@ -50,9 +49,8 @@ export const AppShell = ({ children, wide }: { children: Child; wide?: boolean }
   const links = (
     [
       { href: '/dashboard', icon: 'home', label: 'ダッシュボード', active: path === '/dashboard' },
-      { href: '/courses', icon: 'globe', label: 'コースを探す', active: path === '/courses' },
-      canCreateCourse(user) && { href: '/courses/new', icon: 'plus', label: 'コースを作成', active: path === '/courses/new' },
-      user.role === 'admin' && { href: '/admin/users', icon: 'shield', label: 'ユーザー管理', active: path.startsWith('/admin') },
+      { href: '/courses', icon: 'book', label: 'コース一覧', active: path === '/courses' },
+      user.role === 'admin' && { href: '/admin', icon: 'shield', label: '管理', active: path.startsWith('/admin') },
     ] satisfies (NavItem | false)[]
   ).filter((l) => l !== false)
   const collapsed = isSidebarCollapsed(c)
@@ -66,22 +64,17 @@ export const AppShell = ({ children, wide }: { children: Child; wide?: boolean }
             <img src="/favicon.png" alt="" class="brand-mark" width={32} height={32} />
             <span class="brand-name sidebar-label">StepLearn</span>
           </a>
-          <form method="post" action="/account/sidebar" class="sidebar-toggle-form">
-            <input type="hidden" name="next" value={path + new URL(c.req.url).search} />
-            <button
-              type="submit"
-              name="collapsed"
-              value={collapsed ? '0' : '1'}
-              class="icon-btn"
-              data-sidebar-toggle
-              aria-expanded={collapsed ? 'false' : 'true'}
-              aria-controls="sidebar"
-              aria-label={toggleLabel}
-              title={toggleLabel}
-            >
-              <Icon name="chevronDoubleLeft" size={18} />
-            </button>
-          </form>
+          <button
+            type="button"
+            class="icon-btn sidebar-toggle"
+            data-sidebar-toggle
+            aria-expanded={collapsed ? 'false' : 'true'}
+            aria-controls="sidebar"
+            aria-label={toggleLabel}
+            title={toggleLabel}
+          >
+            <Icon name="chevronDoubleLeft" size={18} />
+          </button>
           <button type="button" class="icon-btn nav-close" data-nav-toggle aria-label="メニューを閉じる">
             <Icon name="x" />
           </button>
@@ -115,17 +108,6 @@ export const AppShell = ({ children, wide }: { children: Child; wide?: boolean }
           </div>
         )}
 
-        <a href="/courses" class="panel-promo">
-          <span class="panel-promo-icon">
-            <Icon name="sparkle" size={18} />
-          </span>
-          <strong>新しいコースを探す</strong>
-          <span class="muted small">公開中のコースから、次に学ぶことを見つけましょう。</span>
-          <span class="panel-promo-cta">
-            コース一覧へ <Icon name="chevronRight" size={14} />
-          </span>
-        </a>
-
         <div class="sidebar-foot">
           <a
             href="/account"
@@ -139,6 +121,16 @@ export const AppShell = ({ children, wide }: { children: Child; wide?: boolean }
               <span class="muted small">{ROLE_LABELS[user.role]}</span>
             </span>
           </a>
+          <button type="button" class="nav-link sidebar-theme" data-theme-toggle title="テーマを切り替え">
+            <span class="theme-to-dark">
+              <Icon name="moon" size={18} />
+              <span class="sidebar-label">ダークモード</span>
+            </span>
+            <span class="theme-to-light">
+              <Icon name="sun" size={18} />
+              <span class="sidebar-label">ライトモード</span>
+            </span>
+          </button>
           <form method="post" action="/logout">
             <button type="submit" class="nav-link sidebar-logout" title="ログアウト">
               <Icon name="logout" size={18} />
@@ -185,7 +177,7 @@ export const AuthShell = ({ children }: { children: Child }) => (
             <Icon name="check" size={16} /> ページ・リンク・ファイルで教材を整理
           </li>
           <li>
-            <Icon name="check" size={16} /> 登録キーでかんたんにコース参加
+            <Icon name="check" size={16} /> 画面共有でライブ授業を配信
           </li>
         </ul>
       </div>
