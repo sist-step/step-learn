@@ -1,6 +1,5 @@
 // 外部アイコンフォントを読み込まず、必要な分だけインライン SVG で持つ
 const paths = {
-  logo: <path d="M4 20h4v-5h4v-5h4V5h4" />,
   home: (
     <>
       <path d="M3 10.5 12 3l9 7.5" />

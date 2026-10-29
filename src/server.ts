@@ -16,7 +16,7 @@ server.use(
   }),
 )
 server.use('/favicon.ico', serveStatic({ path: './dist/client/favicon.ico' }))
-server.use('/favicon.svg', serveStatic({ path: './dist/client/favicon.svg' }))
+server.use('/favicon.png', serveStatic({ path: './dist/client/favicon.png' }))
 server.use('/apple-touch-icon.png', serveStatic({ path: './dist/client/apple-touch-icon.png' }))
 server.route('/', app)
 
