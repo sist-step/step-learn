@@ -69,11 +69,18 @@ export class Database {
     this.sqlite.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;
-      PRAGMA foreign_keys = ON;
       PRAGMA busy_timeout = 5000;
     `)
     this.orm = drizzle(this.sqlite, { schema })
+    // 外部キーを有効にしたまま移行しないのは、テーブルを作り直すマイグレーションの DROP TABLE で、子テーブルの行が
+    // ON DELETE CASCADE で消えるため。移行はトランザクション内で走るので、SQL 側の PRAGMA foreign_keys=OFF は効かない。
+    // better-sqlite3 は既定で外部キーが有効なので、明示的に切る
+    this.sqlite.exec('PRAGMA foreign_keys = OFF')
     migrate(this.orm, { migrationsFolder: path.resolve('migrations') })
+    if ((this.sqlite.pragma('foreign_key_check') as unknown[]).length > 0) {
+      throw new Error('マイグレーション後に外部キーの整合性が崩れています。data/ のバックアップから戻してください')
+    }
+    this.sqlite.exec('PRAGMA foreign_keys = ON')
   }
 
   /** 同じ SQL のプリペアドステートメントは使い回す */

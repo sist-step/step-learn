@@ -15,6 +15,7 @@ import auth from './routes/auth'
 import content from './routes/content'
 import courses, { dashboard } from './routes/courses'
 import participants from './routes/participants'
+import screen from './routes/screen'
 
 const app = new Hono<AppEnv>()
 
@@ -32,6 +33,7 @@ app.route('/dashboard', dashboard)
 app.route('/courses', courses)
 app.route('/courses', content)
 app.route('/courses', participants)
+app.route('/courses', screen)
 app.route('/account', account)
 app.route('/admin', admin)
 

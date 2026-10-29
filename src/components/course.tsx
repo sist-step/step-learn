@@ -1,7 +1,7 @@
 import type { Child } from 'hono/jsx'
 import type { CourseAccess } from '../lib/courses'
-import { COURSE_COLORS, type Course } from '../lib/types'
-import { Icon } from './icons'
+import { COURSE_COLORS, type Course, type ItemType } from '../lib/types'
+import { Icon, type IconName } from './icons'
 import { Field, ProgressRing, TextArea } from './ui'
 
 type Tab = 'content' | 'participants' | 'settings'
@@ -150,8 +150,10 @@ export const CourseForm = ({
   </form>
 )
 
-export const ItemIcon = ({ type }: { type: string }) => (
+const ITEM_ICONS: Record<ItemType, IconName> = { page: 'page', link: 'link', file: 'file', screen: 'monitor' }
+
+export const ItemIcon = ({ type }: { type: ItemType }) => (
   <span class={`item-icon kind-${type}`}>
-    <Icon name={type === 'link' ? 'link' : type === 'file' ? 'file' : 'page'} size={16} />
+    <Icon name={ITEM_ICONS[type]} size={16} />
   </span>
 )

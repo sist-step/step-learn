@@ -1,5 +1,5 @@
 import type { Context } from 'hono'
-import type { AppEnv, Course, CourseRole } from './types'
+import type { AppEnv, Course, CourseRole, User } from './types'
 import { db } from './db'
 
 export type CourseAccess = {
@@ -12,8 +12,9 @@ export type CourseAccess = {
   canView: boolean
 }
 
-export async function getCourseAccess(c: Context<AppEnv>, courseId: number): Promise<CourseAccess | null> {
-  const user = c.var.user!
+export const getCourseAccess = (c: Context<AppEnv>, courseId: number) => getCourseAccessFor(c.var.user!, courseId)
+
+export async function getCourseAccessFor(user: User, courseId: number): Promise<CourseAccess | null> {
   const row = await db.prepare(
     `SELECT c.*, e.role AS my_role
      FROM courses c LEFT JOIN enrollments e ON e.course_id = c.id AND e.user_id = ?

@@ -8,6 +8,7 @@ import { requireAuth } from '../lib/auth'
 import { getCourseAccess, moveRow, type CourseAccess } from '../lib/courses'
 import { field, intParam, isHttpUrl, readForm, redirectWith, wantsJson, type Form } from '../lib/http'
 import { renderMarkdown } from '../lib/markdown'
+import { isSharing } from '../lib/screen-share'
 import { MAX_FILE_SIZE, deleteKeys, formatBytes, inBackground, putCourseFile, storage, type StoredFile } from '../lib/storage'
 import { ITEM_TYPE_LABELS, type AppEnv, type Item, type ItemType, type Section } from '../lib/types'
 import { db } from '../lib/db'
@@ -111,7 +112,7 @@ app.post('/:id/items', async (c) => {
   const form = await readForm(c)
   const sectionId = Number(field(form, 'section_id'))
   const typeRaw = field(form, 'type')
-  const type: ItemType = typeRaw === 'link' || typeRaw === 'file' ? typeRaw : 'page'
+  const type: ItemType = typeRaw === 'link' || typeRaw === 'file' || typeRaw === 'screen' ? typeRaw : 'page'
   const input = readItemInput(form)
 
   if (!(await getSection(c, courseId, sectionId))) return c.notFound()
@@ -385,6 +386,17 @@ app.get('/:id/items/:iid', async (c) => {
             </a>
           )}
 
+          {item.type === 'screen' && (
+            <a href={`${base}/${item.id}/screen`} target="_blank" rel="noopener" class="link-card" data-no-prefetch>
+              <Icon name="monitor" size={20} />
+              <span class="truncate">別のタブで画面共有を開きます</span>
+              {isSharing(item.id) && <span class="chip chip-live">配信中</span>}
+              <span class="btn btn-primary btn-sm">
+                開く <Icon name="external" size={14} />
+              </span>
+            </a>
+          )}
+
           {item.type === 'file' && (
             <>
               <div class="link-card">
@@ -470,9 +482,11 @@ app.get('/:id/items/:iid', async (c) => {
                   .map((o) => (
                     <li>
                       <a
-                        href={o.type === 'link' ? o.url : navHref(o)}
+                        href={o.type === 'link' ? o.url : o.type === 'screen' ? `${navHref(o)}/screen` : navHref(o)}
                         class={o.id === item.id ? 'outline-link active' : 'outline-link'}
-                        {...(o.type === 'link' ? { target: '_blank', rel: 'noopener noreferrer', 'data-no-prefetch': '' } : {})}
+                        {...(o.type === 'link' || o.type === 'screen'
+                          ? { target: '_blank', rel: o.type === 'link' ? 'noopener noreferrer' : 'noopener', 'data-no-prefetch': '' }
+                          : {})}
                         aria-current={o.id === item.id ? 'page' : undefined}
                       >
                         <span class={done.has(o.id) ? 'outline-dot done' : 'outline-dot'} data-outline-dot={o.id}>

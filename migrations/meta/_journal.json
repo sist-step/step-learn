@@ -15,6 +15,13 @@
       "when": 1793172488407,
       "tag": "0001_silly_maddog",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793251329666,
+      "tag": "0002_sparkling_toxin",
+      "breakpoints": true
     }
   ]
 }
