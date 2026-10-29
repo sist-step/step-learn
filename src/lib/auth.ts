@@ -1,6 +1,7 @@
 import type { Context } from 'hono'
 import { deleteCookie, getCookie, getSignedCookie, setSignedCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
+import { parseSigned } from 'hono/utils/cookie'
 import type { AppEnv, NavCourse, Role, User } from './types'
 import { config } from './config'
 import { db } from './db'
@@ -188,6 +189,21 @@ export const session = createMiddleware<AppEnv>(async (c, next) => {
 
   await next()
 })
+
+/** socket.io の接続のように Hono の Context がないところで、Cookie ヘッダーからユーザーを復元する */
+export async function userFromCookieHeader(header: string | undefined) {
+  if (!header) return null
+  const token = (await parseSigned(header, config.sessionSecret, SESSION_COOKIE))[SESSION_COOKIE]
+  if (typeof token !== 'string') return null
+  return db
+    .prepare(
+      `SELECT u.id, u.email, u.name, u.role
+       FROM sessions s JOIN users u ON u.id = s.user_id
+       WHERE s.id = ? AND s.expires_at > ?`,
+    )
+    .bind(await sessionIdFromToken(token), now())
+    .first<User>()
+}
 
 export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {
   if (!c.var.user) {
