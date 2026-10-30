@@ -7,7 +7,7 @@ import { completions, items, sections } from '../../lib/schema'
 import { isSharing } from '../../lib/screen-share'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE, deleteKeys, inBackground, putCourseFile, storage, type StoredFile } from '../../lib/storage'
 import type { AppEnv, ItemType } from '../../lib/types'
-import { ItemEditPage, ItemPage, PREVIEWABLE, editUrl, type ItemInput, type OutlineItem } from './views'
+import { ItemEditPage, ItemPage, TEXT_PREVIEW_MAX, editUrl, previewKind, type ItemInput, type OutlineItem } from './views'
 
 async function manageAccess(c: Context<AppEnv>) {
   const id = intParam(c, 'id')
@@ -260,6 +260,18 @@ export async function removeItem(c: Context<AppEnv>) {
 
 // ---------------------------------------------------------------- 閲覧・完了
 
+async function readTextPreview(key: string) {
+  const bytes = await storage.read(key, TEXT_PREVIEW_MAX)
+  if (!bytes || bytes.includes(0)) return null
+  // stream を付けるのは、上限で切れた末尾の文字の途中を化けた文字として出さないため
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes, { stream: true })
+  } catch {
+    // UTF-8 でないものは、Excel が書き出す CSV などの Shift_JIS とみなす
+    return new TextDecoder('shift_jis').decode(bytes, { stream: true })
+  }
+}
+
 export async function showItem(c: Context<AppEnv>) {
   const id = intParam(c, 'id')
   const iid = intParam(c, 'iid')
@@ -295,6 +307,10 @@ export async function showItem(c: Context<AppEnv>) {
   const prev = ordered[idx - 1]
   const next = ordered[idx + 1]
   const section = sectionList.find((s) => s.id === item.sectionId)
+  const textPreview =
+    item.type === 'file' && item.fileKey && item.fileSize && previewKind(item.fileType ?? '', item.fileName ?? '') === 'text'
+      ? await readTextPreview(item.fileKey)
+      : null
 
   return c.render(
     <ItemPage
@@ -307,6 +323,7 @@ export async function showItem(c: Context<AppEnv>) {
       prev={prev}
       next={next}
       sharing={isSharing(item.id)}
+      textPreview={textPreview}
     />,
     { title: item.title },
   )
@@ -348,11 +365,15 @@ export async function downloadFile(c: Context<AppEnv>) {
   if (!item || item.type !== 'file' || !item.fileKey || (!access.canManage && !isVisibleItem(iid))) return c.notFound()
 
   const type = item.fileType ?? 'application/octet-stream'
-  // インライン表示は PDF とラスタ画像だけ（PDF ビューアは sandbox CSP 下で表示されないため、sandbox は添付時のみ）
+  const filename = item.fileName ?? 'file'
+  const preview = c.req.query('inline') === '1' ? previewKind(type, filename) : null
+  // PDF ビューアは sandbox CSP 下で表示されないため、sandbox は添付時のみ。
+  // テキストをインラインで返さないのは、HTML や SVG として同一オリジンで描かせないため（プレビューはサーバーで読んで埋め込む）
   const res = await storage.serve(item.fileKey, {
-    filename: item.fileName ?? 'file',
+    filename,
     contentType: type,
-    inline: c.req.query('inline') === '1' && PREVIEWABLE.test(type),
+    inline: !!preview && preview !== 'text',
+    range: c.req.header('range'),
   })
   return res ?? c.notFound()
 }
