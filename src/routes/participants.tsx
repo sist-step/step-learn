@@ -1,14 +1,16 @@
 import { Hono, type Context } from 'hono'
+import { RequestContext } from 'hono/jsx-renderer'
 import { CourseHeader } from '../components/course'
 import { Button, IconButton } from '../components/button'
-import { Block, Card, Table } from '../components/card'
-import { Input, Select } from '../components/form'
+import { Block, Table } from '../components/card'
+import { Input, SegmentedControl, Select } from '../components/form'
 import { AppShell } from '../components/layout'
+import { Modal } from '../components/overlay'
 import { Styles } from '../components/style'
 import { Avatar, Chip, Person, Progress, formatDate } from '../components/ui'
 import { requireAuth } from '../lib/auth'
 import { getCourseAccess } from '../lib/courses'
-import { field, intParam, isEmail, readForm, redirectWith } from '../lib/http'
+import { field, intParam, readForm, redirectWith } from '../lib/http'
 import { COURSE_ROLE_LABELS, type AppEnv, type CourseRole } from '../lib/types'
 import { db } from '../lib/db'
 
@@ -26,7 +28,69 @@ type Participant = {
   done: number
 }
 
+type Candidate = {
+  id: number
+  name: string
+  email: string
+  role: CourseRole | null
+}
+
+const CANDIDATE_LIMIT = 20
+const ADD_MODAL = 'add-participant'
+const ADD_RESULTS = 'add-participant-results'
+
 const isCourseRole = (r: string): r is CourseRole => r === 'teacher' || r === 'student'
+
+const Candidates = ({ q, users }: { q: string; users: Candidate[] }) => {
+  if (!q) return <p class="candidates-note muted small">名前またはメールアドレスの一部を入力してください。</p>
+  if (users.length === 0) return <p class="candidates-note muted small">「{q}」に一致するユーザーはいません。</p>
+  return (
+    <>
+      <ul class="candidates">
+        {users.slice(0, CANDIDATE_LIMIT).map((u) => (
+          <li class="candidate">
+            <Person avatar={<Avatar name={u.name} />} name={u.name} meta={u.email} />
+            {u.role ? (
+              <Chip>{COURSE_ROLE_LABELS[u.role]}として参加中</Chip>
+            ) : (
+              <Button type="submit" size="sm" icon="plus" name="user_id" value={String(u.id)} aria-label={`${u.name} さんを追加`}>
+                追加
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {users.length > CANDIDATE_LIMIT && <p class="candidates-note muted small">ほかにも一致するユーザーがいます。さらに絞り込んでください。</p>}
+    </>
+  )
+}
+
+const AddParticipant = ({ courseId }: { courseId: number }) => (
+  <div class="participants-toolbar">
+    <Button variant="primary" icon="plus" popovertarget={ADD_MODAL}>
+      参加者を追加
+    </Button>
+    <Modal id={ADD_MODAL} heading="参加者を追加" description="登録済みのユーザーを検索して、このコースに追加します。">
+      <div class="stack">
+        <Input
+          type="search"
+          placeholder="名前・メールアドレスで検索"
+          aria-label="ユーザーを検索"
+          aria-controls={ADD_RESULTS}
+          autocomplete="off"
+          autofocus
+          data-user-search={`/courses/${courseId}/participants/candidates`}
+        />
+        <form method="post" action={`/courses/${courseId}/participants`} class="stack" data-loading-form>
+          <SegmentedControl name="role" label="追加するロール" options={ROLE_OPTIONS} value="student" />
+          <div id={ADD_RESULTS} class="candidates-box" aria-live="polite">
+            <Candidates q="" users={[]} />
+          </div>
+        </form>
+      </div>
+    </Modal>
+  </div>
+)
 
 app.get('/:id/participants', async (c) => {
   const id = intParam(c, 'id')
@@ -112,21 +176,7 @@ app.get('/:id/participants', async (c) => {
     <AppShell>
       <Styles use={['/src/routes/participants.css']} />
       <CourseHeader access={access} tab="participants" />
-      {manage && (
-        <Card as="form" method="post" action={`/courses/${id}/participants`} class="invite" data-loading-form>
-          <div class="invite-text">
-            <h2>参加者を追加</h2>
-            <p class="muted small">登録済みユーザーのメールアドレスを入力してください。</p>
-          </div>
-          <div class="invite-fields">
-            <Input name="email" type="email" placeholder="name@example.com" required aria-label="メールアドレス" autocomplete="off" />
-            <Select name="role" options={ROLE_OPTIONS} aria-label="ロール" />
-            <Button type="submit" variant="primary" icon="plus">
-              追加
-            </Button>
-          </div>
-        </Card>
-      )}
+      {manage && <AddParticipant courseId={id} />}
       <ParticipantTable title="教師" list={teachers} />
       <ParticipantTable title="学生" list={students} />
     </AppShell>,
@@ -152,18 +202,48 @@ async function isLastTeacher(courseId: number, userId: number) {
   return row?.role === 'teacher' && row.teachers <= 1
 }
 
+app.get('/:id/participants/candidates', async (c) => {
+  const access = await manageAccess(c)
+  if (!access) return c.notFound()
+  const q = (c.req.query('q') ?? '').trim().slice(0, 100)
+  const pattern = `%${q.replace(/[\\%_]/g, '\\$&')}%`
+  const users = q
+    ? (
+        await db
+          .prepare(
+            `SELECT u.id, u.name, u.email, e.role
+             FROM users u LEFT JOIN enrollments e ON e.user_id = u.id AND e.course_id = ?1
+             WHERE u.name LIKE ?2 ESCAPE '\\' OR u.email LIKE ?2 ESCAPE '\\'
+             ORDER BY e.role IS NOT NULL, u.name
+             LIMIT ?3`,
+          )
+          .bind(access.course.id, pattern, CANDIDATE_LIMIT + 1)
+          .all<Candidate>()
+      ).results
+    : []
+  // c.render で返さないのは、モーダルの中身だけを差し替えるのにページ全体のレイアウトは要らないため
+  return c.html(
+    <RequestContext.Provider value={c}>
+      <Candidates q={q} users={users} />
+    </RequestContext.Provider>,
+  )
+})
+
 app.post('/:id/participants', async (c) => {
   const access = await manageAccess(c)
   if (!access) return c.notFound()
   const id = access.course.id
   const back = `/courses/${id}/participants`
   const form = await readForm(c)
-  const email = field(form, 'email', 254).toLowerCase()
+  const userId = Number(field(form, 'user_id', 20))
   const role = field(form, 'role')
-  if (!isEmail(email) || !isCourseRole(role)) return redirectWith(c, back, '有効なメールアドレスを入力してください。', 'error')
+  if (!isCourseRole(role)) return c.notFound()
 
-  const user = await db.prepare('SELECT id, name FROM users WHERE email = ?').bind(email).first<{ id: number; name: string }>()
-  if (!user) return redirectWith(c, back, `${email} のユーザーは見つかりませんでした。先に新規登録してもらってください。`, 'error')
+  const user =
+    Number.isSafeInteger(userId) && userId > 0
+      ? await db.prepare('SELECT id, name FROM users WHERE id = ?').bind(userId).first<{ id: number; name: string }>()
+      : null
+  if (!user) return redirectWith(c, back, 'ユーザーが見つかりませんでした。', 'error')
 
   const res = await db.prepare('INSERT OR IGNORE INTO enrollments (course_id, user_id, role) VALUES (?, ?, ?)')
     .bind(id, user.id, role)
