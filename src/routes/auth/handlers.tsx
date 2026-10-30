@@ -114,9 +114,9 @@ export async function submitRegister(c: Context<AppEnv>) {
   const exists = db.select({ id: users.id }).from(users).where(eq(users.email, email)).get()
   const mail = exists
     ? {
-        subject: '【StepLearn】このメールアドレスは登録済みです',
+        subject: '【STEP Learn】このメールアドレスは登録済みです',
         text: [
-          'StepLearn で、このメールアドレスでの新規登録が試みられました。',
+          'STEP Learn で、このメールアドレスでの新規登録が試みられました。',
           'このメールアドレスのアカウントはすでに登録されています。次の URL からログインしてください。',
           '',
           `${origin}/login`,
@@ -125,9 +125,9 @@ export async function submitRegister(c: Context<AppEnv>) {
         ].join('\n'),
       }
     : {
-        subject: '【StepLearn】登録を完了してください',
+        subject: '【STEP Learn】登録を完了してください',
         text: [
-          'StepLearn への登録ありがとうございます。',
+          'STEP Learn への登録ありがとうございます。',
           '次の URL を開いて、24時間以内に登録を完了してください。',
           '',
           `${origin}/register/complete?token=${await createEmailVerification(email, next)}`,

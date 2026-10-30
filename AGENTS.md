@@ -1,4 +1,4 @@
-# StepLearn
+# STEP Learn
 
 Hono（hono/jsx の SSR）＋ SQLite（better-sqlite3 / Drizzle）で動く軽量 LMS。概要と運用は README.md、開発ルールは CONTRIBUTING.md を参照する。
 

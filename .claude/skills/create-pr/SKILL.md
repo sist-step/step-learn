@@ -1,6 +1,6 @@
 ---
 name: create-pr
-description: "StepLearn のプルリクエストを .github/pull_request_template.md に沿って作成する手順。ユーザーが「PR を作って」「プルリクを出して」「レビューに出して」と言ったとき、または /create-pr（Claude Code）・$create-pr（Codex）で起動。ブランチの確認・プッシュ・gh pr create まで行う。"
+description: "STEP Learn のプルリクエストを .github/pull_request_template.md に沿って作成する手順。ユーザーが「PR を作って」「プルリクを出して」「レビューに出して」と言ったとき、または /create-pr（Claude Code）・$create-pr（Codex）で起動。ブランチの確認・プッシュ・gh pr create まで行う。"
 ---
 
 # PR の作成
