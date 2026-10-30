@@ -11,6 +11,36 @@ export const MAX_FILE_SIZE = 30 * 1024 * 1024 // 30MB
 
 export const FILE_TOO_LARGE = `ファイルサイズは ${formatBytes(MAX_FILE_SIZE)} までです。`
 
+export const EXECUTABLE_NOT_ALLOWED = '実行ファイル（.exe など）はアップロードできません。'
+
+// .js・.sh・.py などのスクリプトを含めないのは、プログラミングの授業で教材として配るため
+const EXECUTABLE_NAME =
+  /\.(exe|dll|com|scr|pif|cpl|msi|msp|msix|msixbundle|appx|appxbundle|bat|cmd|vbs|vbe|jse|wsf|wsh|hta|lnk|reg|apk|dmg|pkg|command)$/i
+
+const startsWith = (bytes: Uint8Array, magic: number[], at = 0) => magic.every((b, i) => bytes[at + i] === b)
+
+// 拡張子だけで判定しないのは、名前を変えた実行ファイルも止めるため
+export async function isExecutable(file: File) {
+  if (EXECUTABLE_NAME.test(file.name)) return true
+  const head = new Uint8Array(await file.slice(0, 4096).arrayBuffer())
+  // 先頭の "MZ" だけで決めないのは、たまたま MZ で始まるテキストまで止めてしまうため
+  if (startsWith(head, [0x4d, 0x5a]) && head.length >= 0x40) {
+    const peOffset = new DataView(head.buffer).getUint32(0x3c, true)
+    if (startsWith(head, [0x50, 0x45, 0, 0], peOffset)) return true
+  }
+  const elf = [0x7f, 0x45, 0x4c, 0x46]
+  const machO = [
+    [0xfe, 0xed, 0xfa, 0xce],
+    [0xfe, 0xed, 0xfa, 0xcf],
+    [0xce, 0xfa, 0xed, 0xfe],
+    [0xcf, 0xfa, 0xed, 0xfe],
+  ]
+  if (startsWith(head, elf) || machO.some((m) => startsWith(head, m))) return true
+  // Java の .class も CAFEBABE で始まるので、続く値（Mach-O は CPU の数、Java は 45 以上のバージョン）で見分ける
+  const universal = startsWith(head, [0xca, 0xfe, 0xba, 0xbe]) || startsWith(head, [0xca, 0xfe, 0xba, 0xbf])
+  return universal && head.length >= 8 && new DataView(head.buffer).getUint32(4) < 45
+}
+
 export type StoredFile = { key: string; name: string; size: number; type: string }
 export type ServeOptions = { filename: string; contentType: string; inline: boolean; range?: string }
 
