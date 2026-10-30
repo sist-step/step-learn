@@ -128,8 +128,12 @@ export async function leave(c: Context<AppEnv>) {
     if (teachers <= 1) return redirectWith(c, `/courses/${id}/settings`, '最後の教師はコースから退出できません。', 'error')
   }
   db.transaction((tx) => {
-    tx.delete(enrollments).where(and(eq(enrollments.courseId, id), eq(enrollments.userId, userId))).run()
-    tx.delete(completions).where(and(eq(completions.courseId, id), eq(completions.userId, userId))).run()
+    tx.delete(enrollments)
+      .where(and(eq(enrollments.courseId, id), eq(enrollments.userId, userId)))
+      .run()
+    tx.delete(completions)
+      .where(and(eq(completions.courseId, id), eq(completions.userId, userId)))
+      .run()
   })
   return redirectWith(c, '/dashboard', `「${access.course.title}」から退出しました。`, 'info')
 }

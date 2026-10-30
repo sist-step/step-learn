@@ -52,7 +52,9 @@ export const Candidates = ({ q, users }: { q: string; users: Candidate[] }) => {
           </li>
         ))}
       </ul>
-      {users.length > CANDIDATE_LIMIT && <p class="candidates-note muted small">ほかにも一致するユーザーがいます。さらに絞り込んでください。</p>}
+      {users.length > CANDIDATE_LIMIT && (
+        <p class="candidates-note muted small">ほかにも一致するユーザーがいます。さらに絞り込んでください。</p>
+      )}
     </>
   )
 }
@@ -101,7 +103,9 @@ const ParticipantRow = ({ p, courseId, meId, manage, totalItems }: TableProps & 
       />
     </td>
     {manage && (
-      <td class="hide-sm progress-cell">{p.role === 'student' ? <Progress done={p.done} total={totalItems} /> : <span class="muted">—</span>}</td>
+      <td class="hide-sm progress-cell">
+        {p.role === 'student' ? <Progress done={p.done} total={totalItems} /> : <span class="muted">—</span>}
+      </td>
     )}
     <td class="hide-sm muted">{formatDate(p.createdAt)}</td>
     <td>
@@ -110,7 +114,11 @@ const ParticipantRow = ({ p, courseId, meId, manage, totalItems }: TableProps & 
           <form method="post" action={`/courses/${courseId}/participants/${p.id}/role`} data-autosubmit>
             <Select name="role" compact options={ROLE_OPTIONS} value={p.role} aria-label={`${p.name} のロール`} />
           </form>
-          <form method="post" action={`/courses/${courseId}/participants/${p.id}/remove`} data-confirm={`${p.name} さんをコースから外しますか？`}>
+          <form
+            method="post"
+            action={`/courses/${courseId}/participants/${p.id}/remove`}
+            data-confirm={`${p.name} さんをコースから外しますか？`}
+          >
             <IconButton type="submit" icon="x" label="コースから外す" danger />
           </form>
         </div>

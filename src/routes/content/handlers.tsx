@@ -29,7 +29,8 @@ const getSection = (courseId: number, sectionId: number) =>
     .where(and(eq(sections.id, sectionId), eq(sections.courseId, courseId)))
     .get()
 
-const listSections = (courseId: number) => db.select().from(sections).where(eq(sections.courseId, courseId)).orderBy(sections.position, sections.id).all()
+const listSections = (courseId: number) =>
+  db.select().from(sections).where(eq(sections.courseId, courseId)).orderBy(sections.position, sections.id).all()
 
 // ---------------------------------------------------------------- セクション
 
@@ -319,10 +320,11 @@ export async function toggleComplete(c: Context<AppEnv>) {
   const userId = c.var.user!.id
 
   // 削除できたら未完了に、なければ完了として挿入（トグル）
-  const removed = db
-    .delete(completions)
-    .where(and(eq(completions.userId, userId), eq(completions.itemId, iid)))
-    .run().changes > 0
+  const removed =
+    db
+      .delete(completions)
+      .where(and(eq(completions.userId, userId), eq(completions.itemId, iid)))
+      .run().changes > 0
   if (!removed) {
     if (!getItem(id, iid)) return c.notFound()
     db.insert(completions).values({ userId, itemId: iid, courseId: id }).run()

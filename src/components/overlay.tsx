@@ -33,7 +33,17 @@ export const Modal = ({
   )
 }
 
-export const Popover = ({ trigger, class: cls, panelClass, children }: { trigger: Child; class?: string; panelClass?: string; children: Child }) => {
+export const Popover = ({
+  trigger,
+  class: cls,
+  panelClass,
+  children,
+}: {
+  trigger: Child
+  class?: string
+  panelClass?: string
+  children: Child
+}) => {
   useStyle('/src/components/overlay.css')
   return (
     <details class={cx('popover', cls)}>
@@ -49,8 +59,7 @@ export const MenuItem = ({
   children,
   ...rest
 }: { icon?: IconName; class?: string; children: Child } & (
-  | ({ href: string } & JSX.IntrinsicElements['a'])
-  | ({ href?: undefined } & JSX.IntrinsicElements['button'])
+  ({ href: string } & JSX.IntrinsicElements['a']) | ({ href?: undefined } & JSX.IntrinsicElements['button'])
 )) => {
   useStyle('/src/components/overlay.css')
   const body = (

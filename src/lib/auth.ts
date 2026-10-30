@@ -82,7 +82,9 @@ async function readSessionToken(c: Context) {
 export async function createSession(c: Context<AppEnv>, userId: number) {
   const token = randomToken()
   const id = await sessionIdFromToken(token)
-  db.insert(sessions).values({ id, userId, expiresAt: now() + SESSION_TTL }).run()
+  db.insert(sessions)
+    .values({ id, userId, expiresAt: now() + SESSION_TTL })
+    .run()
   await setSessionCookie(c, token)
 }
 
@@ -121,7 +123,9 @@ export async function createEmailVerification(email: string, next: string) {
   const tokenHash = await hashToken(token)
   db.transaction((tx) => {
     tx.delete(emailVerifications).where(lte(emailVerifications.expiresAt, t)).run()
-    tx.insert(emailVerifications).values({ tokenHash, email, next, expiresAt: t + EMAIL_VERIFICATION_TTL }).run()
+    tx.insert(emailVerifications)
+      .values({ tokenHash, email, next, expiresAt: t + EMAIL_VERIFICATION_TTL })
+      .run()
   })
   return token
 }
@@ -141,7 +145,9 @@ export async function findEmailVerification(token: string) {
 export async function destroyOtherSessions(c: Context<AppEnv>, userId: number) {
   const token = await readSessionToken(c)
   const current = token ? await sessionIdFromToken(token) : ''
-  db.delete(sessions).where(and(eq(sessions.userId, userId), ne(sessions.id, current))).run()
+  db.delete(sessions)
+    .where(and(eq(sessions.userId, userId), ne(sessions.id, current)))
+    .run()
 }
 
 const userColumns = { id: users.id, email: users.email, name: users.name, username: users.username, role: users.role }
@@ -190,7 +196,10 @@ export const session = createMiddleware<AppEnv>(async (c, next) => {
 
   const t = now()
   if (expiresAt - t < SESSION_REFRESH_BELOW) {
-    db.update(sessions).set({ expiresAt: t + SESSION_TTL }).where(eq(sessions.id, sid)).run()
+    db.update(sessions)
+      .set({ expiresAt: t + SESSION_TTL })
+      .where(eq(sessions.id, sid))
+      .run()
     await setSessionCookie(c, token)
   }
 

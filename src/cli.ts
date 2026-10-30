@@ -89,7 +89,8 @@ async function createUserCommand(args: string[]) {
   if (passwordError) fail(passwordError)
 
   const created = await createUser({ email, name, username, password, role })
-  if ('taken' in created) fail(created.taken === 'email' ? `${email} はすでに登録されています。` : `ユーザー名 ${username} はすでに使われています。`)
+  if ('taken' in created)
+    fail(created.taken === 'email' ? `${email} はすでに登録されています。` : `ユーザー名 ${username} はすでに使われています。`)
   console.log(`${ROLE_LABELS[role]}「${name}」（@${username}、${email}）を作成しました。`)
 }
 

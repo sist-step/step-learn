@@ -132,7 +132,12 @@ class R2Storage implements Storage {
 }
 
 const unescapeXml = (s: string) =>
-  s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&')
+  s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
 
 export const storage: Storage = config.r2 ? new R2Storage(config.r2) : new LocalStorage(path.resolve(config.filesDir))
 
