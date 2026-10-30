@@ -3,7 +3,6 @@ import { useRequestContext } from 'hono/jsx-renderer'
 import { getTheme } from '../lib/http'
 import { ROLE_LABELS, type AppEnv, type Flash } from '../lib/types'
 import { Icon, type IconName } from './icons'
-import { FluidArt } from './art'
 import { IconButton } from './button'
 import { cx } from './cx'
 import { Switch } from './form'
@@ -187,14 +186,7 @@ export const AuthShell = ({ children }: { children: Child }) => {
             {children}
           </div>
         </main>
-        <section class="auth-art" aria-hidden="true">
-          <FluidArt id="auth-art" class="auth-art-svg" />
-          <div class="auth-glass">
-            <strong>学びを、一歩ずつ確かに。</strong>
-            <span>コース・教材・進捗をひとつの場所に。</span>
-            <small>© {new Date().getFullYear()} STEP Learn</small>
-          </div>
-        </section>
+        <section class="auth-art" aria-hidden="true" data-auth-art />
       </div>
       <Toast />
     </div>
