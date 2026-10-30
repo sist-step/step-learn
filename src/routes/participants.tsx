@@ -1,13 +1,18 @@
 import { Hono, type Context } from 'hono'
 import { CourseHeader } from '../components/course'
-import { Icon } from '../components/icons'
+import { Button, IconButton } from '../components/button'
+import { Block, Card, Table } from '../components/card'
+import { Input, Select } from '../components/form'
 import { AppShell } from '../components/layout'
-import { Avatar, Progress, formatDate } from '../components/ui'
+import { Styles } from '../components/style'
+import { Avatar, Chip, Person, Progress, formatDate } from '../components/ui'
 import { requireAuth } from '../lib/auth'
 import { getCourseAccess } from '../lib/courses'
 import { field, intParam, isEmail, readForm, redirectWith } from '../lib/http'
 import { COURSE_ROLE_LABELS, type AppEnv, type CourseRole } from '../lib/types'
 import { db } from '../lib/db'
+
+const ROLE_OPTIONS = (['student', 'teacher'] as CourseRole[]).map((r) => ({ value: r, label: COURSE_ROLE_LABELS[r] }))
 
 const app = new Hono<AppEnv>()
 app.use(requireAuth)
@@ -50,16 +55,16 @@ app.get('/:id/participants', async (c) => {
   const Row = ({ p }: { p: Participant }) => (
     <tr>
       <td>
-        <div class="person">
-          <Avatar name={p.name} />
-          <div class="person-meta">
-            <span class="strong truncate">
+        <Person
+          avatar={<Avatar name={p.name} />}
+          name={
+            <>
               {p.name}
               {p.id === me.id && <span class="muted small">（あなた）</span>}
-            </span>
-            {manage && <span class="muted small truncate">{p.email}</span>}
-          </div>
-        </div>
+            </>
+          }
+          meta={manage && p.email}
+        />
       </td>
       {manage && (
         <td class="hide-sm progress-cell">{p.role === 'student' ? <Progress done={p.done} total={totalItems} /> : <span class="muted">—</span>}</td>
@@ -69,79 +74,61 @@ app.get('/:id/participants', async (c) => {
         {manage ? (
           <div class="row-actions">
             <form method="post" action={`/courses/${id}/participants/${p.id}/role`} data-autosubmit>
-              <select name="role" class="select-sm" aria-label={`${p.name} のロール`}>
-                {(['student', 'teacher'] as CourseRole[]).map((r) => (
-                  <option value={r} selected={p.role === r}>
-                    {COURSE_ROLE_LABELS[r]}
-                  </option>
-                ))}
-              </select>
+              <Select name="role" compact options={ROLE_OPTIONS} value={p.role} aria-label={`${p.name} のロール`} />
             </form>
             <form method="post" action={`/courses/${id}/participants/${p.id}/remove`} data-confirm={`${p.name} さんをコースから外しますか？`}>
-              <button class="icon-btn danger" aria-label="コースから外す" title="コースから外す">
-                <Icon name="x" size={16} />
-              </button>
+              <IconButton type="submit" icon="x" label="コースから外す" danger />
             </form>
           </div>
         ) : (
-          <span class={p.role === 'teacher' ? 'chip chip-accent' : 'chip'}>{COURSE_ROLE_LABELS[p.role]}</span>
+          <Chip tone={p.role === 'teacher' ? 'accent' : 'default'}>{COURSE_ROLE_LABELS[p.role]}</Chip>
         )}
       </td>
     </tr>
   )
 
-  const Table = ({ title, list }: { title: string; list: Participant[] }) => (
-    <section class="block">
-      <h2 class="block-title">
-        {title} <span class="count">{list.length}</span>
-      </h2>
+  const ParticipantTable = ({ title, list }: { title: string; list: Participant[] }) => (
+    <Block heading={title} count={list.length}>
       {list.length === 0 ? (
         <p class="muted small">まだいません。</p>
       ) : (
-        <div class="table-card">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>名前</th>
-                {manage && <th class="hide-sm">進捗</th>}
-                <th class="hide-sm">参加日</th>
-                <th>{manage ? '操作' : 'ロール'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((p) => (
-                <Row p={p} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          columns={[
+            { label: '名前' },
+            manage && { label: '進捗', class: 'hide-sm' },
+            { label: '参加日', class: 'hide-sm' },
+            { label: manage ? '操作' : 'ロール' },
+          ]}
+        >
+          {list.map((p) => (
+            <Row p={p} />
+          ))}
+        </Table>
       )}
-    </section>
+    </Block>
   )
 
   return c.render(
     <AppShell>
+      <Styles use={['/src/routes/participants.css']} />
       <CourseHeader access={access} tab="participants" />
       {manage && (
-        <form method="post" action={`/courses/${id}/participants`} class="card invite" data-loading-form>
+        <Card as="form" method="post" action={`/courses/${id}/participants`} class="invite" data-loading-form>
           <div class="invite-text">
             <h2>参加者を追加</h2>
             <p class="muted small">登録済みユーザーのメールアドレスを入力してください。</p>
           </div>
           <div class="invite-fields">
-            <input name="email" type="email" placeholder="name@example.com" required aria-label="メールアドレス" autocomplete="off" />
-            <select name="role" aria-label="ロール">
-              <option value="student">学生</option>
-              <option value="teacher">教師</option>
-            </select>
-            <button type="submit" class="btn btn-primary">
-              <Icon name="plus" size={16} /> 追加
-            </button>
+            <Input name="email" type="email" placeholder="name@example.com" required aria-label="メールアドレス" autocomplete="off" />
+            <Select name="role" options={ROLE_OPTIONS} aria-label="ロール" />
+            <Button type="submit" variant="primary" icon="plus">
+              追加
+            </Button>
           </div>
-        </form>
+        </Card>
       )}
-      <Table title="教師" list={teachers} />
-      <Table title="学生" list={students} />
+      <ParticipantTable title="教師" list={teachers} />
+      <ParticipantTable title="学生" list={students} />
     </AppShell>,
     { title: `参加者 - ${access.course.title}` },
   )

@@ -1,6 +1,10 @@
 import { Hono } from 'hono'
 import { AppShell } from '../components/layout'
-import { Avatar, Field, PageHeader } from '../components/ui'
+import { Styles } from '../components/style'
+import { Button } from '../components/button'
+import { Card } from '../components/card'
+import { TextField } from '../components/form'
+import { Avatar, PageHeader } from '../components/ui'
 import { destroyOtherSessions, hashPassword, requireAuth, verifyPassword } from '../lib/auth'
 import { field, readForm, redirectWith } from '../lib/http'
 import { checkPassword, PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../lib/password'
@@ -14,13 +18,10 @@ type Errors = Partial<Record<'name' | 'current' | 'password', string>>
 
 const AccountPage = ({ user, errors = {}, name }: { user: User; errors?: Errors; name?: string }) => (
   <AppShell>
+    <Styles use={['/src/routes/account.css']} />
     <PageHeader title="アカウント" description="プロフィールとセキュリティの設定" />
     <div class="settings-grid">
-      <section class="card">
-        <div class="card-head">
-          <h2>プロフィール</h2>
-          <p class="muted">コースの参加者一覧などに表示されます。</p>
-        </div>
+      <Card heading="プロフィール" description="コースの参加者一覧などに表示されます。">
         <div class="profile-row">
           <Avatar name={user.name} size={56} />
           <div>
@@ -31,23 +32,19 @@ const AccountPage = ({ user, errors = {}, name }: { user: User; errors?: Errors;
           </div>
         </div>
         <form method="post" action="/account" class="stack" data-loading-form>
-          <Field label="氏名" name="name" value={name ?? user.name} error={errors.name} required maxlength={60} />
+          <TextField label="氏名" name="name" value={name ?? user.name} error={errors.name} required maxlength={60} />
           <div class="form-actions">
-            <button type="submit" class="btn btn-primary">
+            <Button type="submit" variant="primary">
               保存
-            </button>
+            </Button>
           </div>
         </form>
-      </section>
+      </Card>
 
-      <section class="card">
-        <div class="card-head">
-          <h2>パスワード</h2>
-          <p class="muted">変更すると、ほかの端末のセッションはすべてログアウトされます。</p>
-        </div>
+      <Card heading="パスワード" description="変更すると、ほかの端末のセッションはすべてログアウトされます。">
         <form method="post" action="/account/password" class="stack" data-loading-form>
-          <Field label="現在のパスワード" name="current" type="password" error={errors.current} autocomplete="current-password" required />
-          <Field
+          <TextField label="現在のパスワード" name="current" type="password" error={errors.current} autocomplete="current-password" required />
+          <TextField
             label="新しいパスワード"
             name="password"
             type="password"
@@ -58,12 +55,12 @@ const AccountPage = ({ user, errors = {}, name }: { user: User; errors?: Errors;
             minlength={PASSWORD_MIN_LENGTH}
           />
           <div class="form-actions">
-            <button type="submit" class="btn btn-primary">
+            <Button type="submit" variant="primary">
               パスワードを変更
-            </button>
+            </Button>
           </div>
         </form>
-      </section>
+      </Card>
     </div>
   </AppShell>
 )

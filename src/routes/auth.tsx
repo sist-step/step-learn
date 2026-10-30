@@ -1,6 +1,8 @@
 import { Hono, type Context } from 'hono'
 import { AuthShell } from '../components/layout'
-import { Field } from '../components/ui'
+import { Button } from '../components/button'
+import { TextField } from '../components/form'
+import { Alert, Tabs } from '../components/ui'
 import {
   createEmailVerification,
   createSession,
@@ -37,23 +39,33 @@ function tooManyRequests(c: Context, retryAfter: number) {
   return `試行回数が多すぎます。${Math.ceil(retryAfter / 60)}分ほど待ってから再度お試しください。`
 }
 
-const FormError = ({ message }: { message?: string }) =>
-  message ? (
-    <div class="alert alert-error" role="alert">
-      {message}
-    </div>
-  ) : null
+const FormError = ({ message }: { message?: string }) => (message ? <Alert>{message}</Alert> : null)
+
+const AuthTabs = ({ current, next }: { current: 'login' | 'register'; next: string }) => {
+  const query = next ? `?next=${encodeURIComponent(next)}` : ''
+  return (
+    <Tabs
+      label="ログインと新規登録"
+      block
+      items={[
+        { href: `/login${query}`, label: 'ログイン', active: current === 'login' },
+        { href: `/register${query}`, label: '新規登録', active: current === 'register' },
+      ]}
+    />
+  )
+}
 
 const LoginPage = ({ email = '', next = '', errors = {} }: { email?: string; next?: string; errors?: Errors }) => (
   <AuthShell>
     <div class="auth-card">
       <h1>おかえりなさい</h1>
       <p class="muted">アカウントにログインして学習を続けましょう。</p>
+      <AuthTabs current="login" next={next} />
       <FormError message={errors.form} />
       <form method="post" action="/login" class="stack" data-loading-form>
         <input type="hidden" name="next" value={next} />
-        <Field label="メールアドレス" name="email" type="email" value={email} autocomplete="email" required autofocus={!email} />
-        <Field
+        <TextField label="メールアドレス" name="email" type="email" value={email} autocomplete="email" required autofocus={!email} />
+        <TextField
           label="パスワード"
           name="password"
           type="password"
@@ -61,13 +73,10 @@ const LoginPage = ({ email = '', next = '', errors = {} }: { email?: string; nex
           required
           autofocus={!!email}
         />
-        <button type="submit" class="btn btn-primary btn-lg btn-block">
+        <Button type="submit" variant="primary" size="lg" block>
           ログイン
-        </button>
+        </Button>
       </form>
-      <p class="auth-switch">
-        アカウントをお持ちでない方は <a href={next ? `/register?next=${encodeURIComponent(next)}` : '/register'}>新規登録</a>
-      </p>
     </div>
   </AuthShell>
 )
@@ -77,17 +86,15 @@ const RegisterPage = ({ email = '', next = '', errors = {} }: { email?: string; 
     <div class="auth-card">
       <h1>アカウントを作成</h1>
       <p class="muted">メールアドレスに届くリンクから登録を完了してください。</p>
+      <AuthTabs current="register" next={next} />
       <FormError message={errors.form} />
       <form method="post" action="/register" class="stack" data-loading-form>
         <input type="hidden" name="next" value={next} />
-        <Field label="メールアドレス" name="email" type="email" value={email} error={errors.email} autocomplete="email" required autofocus />
-        <button type="submit" class="btn btn-primary btn-lg btn-block">
+        <TextField label="メールアドレス" name="email" type="email" value={email} error={errors.email} autocomplete="email" required autofocus />
+        <Button type="submit" variant="primary" size="lg" block>
           確認メールを送る
-        </button>
+        </Button>
       </form>
-      <p class="auth-switch">
-        すでにアカウントをお持ちの方は <a href={next ? `/login?next=${encodeURIComponent(next)}` : '/login'}>ログイン</a>
-      </p>
     </div>
   </AuthShell>
 )
@@ -127,8 +134,8 @@ const CompleteRegisterPage = ({
         <input type="hidden" name="token" value={token} />
         {/* パスワードマネージャーがメールアドレスと組にして保存できるようにする */}
         <input type="hidden" name="email" value={email} autocomplete="username" />
-        <Field label="氏名" name="name" value={name} error={errors.name} autocomplete="name" required autofocus maxlength={60} />
-        <Field
+        <TextField label="氏名" name="name" value={name} error={errors.name} autocomplete="name" required autofocus maxlength={60} />
+        <TextField
           label="パスワード"
           name="password"
           type="password"
@@ -138,9 +145,9 @@ const CompleteRegisterPage = ({
           required
           minlength={PASSWORD_MIN_LENGTH}
         />
-        <button type="submit" class="btn btn-primary btn-lg btn-block">
+        <Button type="submit" variant="primary" size="lg" block>
           登録してはじめる
-        </button>
+        </Button>
       </form>
     </div>
   </AuthShell>
@@ -151,9 +158,9 @@ const InvalidLinkPage = () => (
     <div class="auth-card">
       <h1>リンクが無効です</h1>
       <p class="muted">リンクの有効期限が切れているか、すでに使われています。お手数ですが、もう一度登録をやり直してください。</p>
-      <a href="/register" class="btn btn-primary btn-lg btn-block">
+      <Button href="/register" variant="primary" size="lg" block>
         新規登録へ
-      </a>
+      </Button>
     </div>
   </AuthShell>
 )

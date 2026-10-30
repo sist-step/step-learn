@@ -1,7 +1,11 @@
+import fs from 'node:fs'
 import devServer, { defaultOptions } from '@hono/vite-dev-server'
 import nodeAdapter from '@hono/vite-dev-server/node'
 import { defineConfig } from 'vite'
 import ssrPlugin from 'vite-ssr-components/plugin'
+
+// プラグインの自動検出（ソース中の <Link href>）に任せないのは、部品が描画時に必要な CSS を登録する方式（src/components/style.tsx）でソースに <Link> が書かれず、ビルド対象として見つからないため
+const stylesheets = fs.globSync('src/**/*.css').sort()
 
 export default defineConfig(({ command }) => ({
   plugins: [
@@ -28,7 +32,7 @@ export default defineConfig(({ command }) => ({
   environments: {
     // `vite build` でクライアント（CSS/JS）→ サーバーの順にビルドされる
     client: {
-      build: { outDir: 'dist/client' },
+      build: { outDir: 'dist/client', rollupOptions: { input: stylesheets } },
     },
     ssr: {
       build: {

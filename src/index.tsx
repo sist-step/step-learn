@@ -2,8 +2,9 @@ import { Hono } from 'hono'
 import { csrf } from 'hono/csrf'
 import { HTTPException } from 'hono/http-exception'
 import { secureHeaders } from 'hono/secure-headers'
-import { Icon } from './components/icons'
+import { Button } from './components/button'
 import { AppShell, AuthShell } from './components/layout'
+import { EmptyState } from './components/ui'
 import { session } from './lib/auth'
 import { config } from './lib/config'
 import { flashMiddleware } from './lib/http'
@@ -38,18 +39,17 @@ app.route('/account', account)
 app.route('/admin', admin)
 
 const NotFound = () => (
-  <div class="empty empty-page">
-    <div class="empty-icon">
-      <Icon name="globe" size={24} />
-    </div>
-    <h3>ページが見つかりません</h3>
-    <p class="muted">URL が間違っているか、閲覧する権限がありません。</p>
-    <div class="empty-action">
-      <a href="/" class="btn btn-primary">
+  <EmptyState
+    page
+    icon="globe"
+    title="ページが見つかりません"
+    text="URL が間違っているか、閲覧する権限がありません。"
+    action={
+      <Button href="/" variant="primary">
         ホームへ戻る
-      </a>
-    </div>
-  </div>
+      </Button>
+    }
+  />
 )
 
 app.notFound((c) => {
@@ -65,18 +65,17 @@ app.onError((err, c) => {
   c.status(500)
   return c.render(
     <AuthShell>
-      <div class="empty empty-page">
-        <div class="empty-icon">
-          <Icon name="alert" size={24} />
-        </div>
-        <h3>エラーが発生しました</h3>
-        <p class="muted">時間をおいて再度お試しください。</p>
-        <div class="empty-action">
-          <a href="/" class="btn btn-primary">
+      <EmptyState
+        page
+        icon="alert"
+        title="エラーが発生しました"
+        text="時間をおいて再度お試しください。"
+        action={
+          <Button href="/" variant="primary">
             ホームへ戻る
-          </a>
-        </div>
-      </div>
+          </Button>
+        }
+      />
     </AuthShell>,
     { title: 'エラー' },
   )

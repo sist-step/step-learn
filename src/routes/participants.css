@@ -1,0 +1,8 @@
+.progress-cell { width: 200px; }
+
+.invite { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; padding: 16px 20px; margin-bottom: 8px; }
+.invite h2 { font-size: 15px; }
+.invite-fields { display: flex; gap: 8px; flex: 1; max-width: 560px; min-width: min(100%, 320px); }
+.invite-fields input.input { flex: 1; }
+.invite-fields select.input { width: 110px; flex: none; }
+@media (max-width: 560px) { .invite-fields { flex-wrap: wrap; } .invite-fields input.input { flex-basis: 100%; } }

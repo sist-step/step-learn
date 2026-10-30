@@ -1,0 +1,64 @@
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  transition: background 0.15s, color 0.15s;
+  list-style: none;
+}
+.icon-btn::-webkit-details-marker { display: none; }
+.icon-btn:hover { background: var(--surface-2); color: var(--text); }
+.icon-btn.danger:hover { background: var(--danger-soft); color: var(--danger); }
+
+.btn {
+  --btn-bg: var(--surface);
+  --btn-fg: var(--text);
+  --btn-border: var(--border-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--control-h);
+  padding: 0 18px;
+  border: 1px solid var(--btn-border);
+  border-radius: 999px;
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-weight: 600;
+  font-size: 13.5px;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.15s, border-color 0.15s, transform 0.08s, box-shadow 0.15s, opacity 0.15s;
+  position: relative;
+}
+.btn:hover { text-decoration: none; background: var(--surface-2); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: 0.6; cursor: default; }
+.btn-primary { --btn-bg: var(--primary); --btn-fg: var(--on-primary); --btn-border: transparent; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), var(--shadow-sm); }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-success { --btn-bg: var(--success); --btn-fg: #fff; --btn-border: transparent; }
+.btn-success:hover { background: color-mix(in srgb, var(--success) 88%, #000); }
+.btn-danger { --btn-bg: var(--danger); --btn-fg: #fff; --btn-border: transparent; }
+.btn-danger:hover { background: color-mix(in srgb, var(--danger) 88%, #000); }
+.btn-danger-outline { --btn-fg: var(--danger); --btn-border: color-mix(in srgb, var(--danger) 40%, transparent); }
+.btn-danger-outline:hover { background: var(--danger-soft); }
+.btn-ghost { --btn-bg: transparent; --btn-border: transparent; box-shadow: none; }
+.btn-sm { height: var(--control-h-sm); padding: 0 12px; font-size: 13px; }
+.btn-lg { height: var(--control-h-lg); padding: 0 24px; font-size: 14px; }
+.btn-block { width: 100%; }
+.btn.loading { color: transparent !important; }
+.btn.loading::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--btn-fg);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}

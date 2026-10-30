@@ -17,6 +17,8 @@ export type AppEnv = {
     user: User | null
     navCourses: NavCourse[]
     flash: Flash | null
+    /** 描画中に部品が登録したスタイルシート（components/style.tsx） */
+    styles?: Set<string>
   }
 }
 

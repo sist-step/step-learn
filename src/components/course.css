@@ -1,0 +1,60 @@
+/* カラースウォッチ */
+.swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+.swatch { cursor: pointer; }
+.swatch input { position: absolute; opacity: 0; pointer-events: none; }
+.swatch-dot {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: transparent;
+  background: var(--c1);
+  transition: transform 0.15s var(--ease), box-shadow 0.15s;
+}
+.swatch:hover .swatch-dot { transform: scale(1.08); }
+.swatch input:checked + .swatch-dot { color: var(--c-on, #fff); box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--c1); }
+.swatch input:focus-visible + .swatch-dot { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--primary); }
+
+.course-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 12px;
+}
+.course-hero-mono {
+  display: grid;
+  place-items: center;
+  flex: none;
+  min-width: 52px;
+  height: 52px;
+  padding: 0 8px;
+  border-radius: 16px;
+  background: var(--c1);
+  color: var(--c-on, #fff);
+  font-weight: 700;
+  font-size: 16px;
+  text-transform: uppercase;
+}
+.course-hero-body { min-width: 0; flex: 1; }
+.course-hero h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.03em; }
+.course-hero-summary { margin-top: 4px; max-width: 680px; color: var(--muted); font-size: 13.5px; }
+.course-hero-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.course-hero-meta > span { display: inline-flex; align-items: center; gap: 6px; }
+.course-hero-side { display: flex; align-items: center; gap: 20px; flex: none; }
+.course-hero-actions { display: flex; gap: 8px; }
+.course-hero-progress { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding-right: 20px; border-right: 1px solid var(--border); }
+.course-hero-progress:last-child { padding-right: 0; border-right: 0; }
+
+@media (max-width: 760px) {
+  .course-hero { flex-wrap: wrap; }
+  .course-hero-body { flex-basis: calc(100% - 64px); }
+  .course-hero h1 { font-size: 21px; }
+  .course-hero-side { width: 100%; justify-content: space-between; }
+}
+
+.item-icon { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 10px; color: #fff; }
+.kind-page { background: var(--primary); color: var(--on-primary); }
+.kind-link { background: var(--info); }
+.kind-file { background: var(--warning); }
+.kind-screen { background: var(--success); }

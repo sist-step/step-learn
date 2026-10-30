@@ -3,7 +3,11 @@ import { raw } from 'hono/html'
 import { CourseHeader, ItemIcon } from '../components/course'
 import { Icon } from '../components/icons'
 import { AppShell } from '../components/layout'
-import { Field, TextArea } from '../components/ui'
+import { Styles } from '../components/style'
+import { Button } from '../components/button'
+import { FileInput, FormField, SelectField, TextAreaField, TextField } from '../components/form'
+import { Card, LinkCard } from '../components/card'
+import { Alert, Breadcrumbs, Chip } from '../components/ui'
 import { requireAuth } from '../lib/auth'
 import { getCourseAccess, moveRow, type CourseAccess } from '../lib/courses'
 import { field, intParam, isHttpUrl, readForm, redirectWith, wantsJson, type Form } from '../lib/http'
@@ -161,50 +165,43 @@ const ItemEditPage = ({
   const v = { title: item.title, body: item.body, url: item.url, ...values }
   return (
     <AppShell>
+      <Styles use={['/src/routes/content.css']} />
       <CourseHeader access={access} tab="content" />
       <div class="narrow">
         <a href={editUrl(courseId, item.section_id)} class="back-link">
           <Icon name="chevronLeft" size={16} /> コースに戻る
         </a>
-        <form method="post" action={base} enctype="multipart/form-data" class="card stack" data-loading-form>
-          <div class="card-head row">
-            <ItemIcon type={item.type} />
-            <div>
-              <h2>{ITEM_TYPE_LABELS[item.type]}を編集</h2>
-            </div>
-          </div>
-          {error && (
-            <div class="alert alert-error" role="alert">
-              {error}
-            </div>
-          )}
-          <Field label="タイトル" name="title" value={v.title} required maxlength={200} />
-          <div class="field">
-            <label for="f-section">セクション</label>
-            <select id="f-section" name="section_id">
-              {sections.map((s) => (
-                <option value={String(s.id)} selected={s.id === item.section_id}>
-                  {s.title}
-                </option>
-              ))}
-            </select>
-          </div>
-          {item.type === 'link' && <Field label="URL" name="url" type="url" value={v.url} required />}
+        <Card
+          as="form"
+          method="post"
+          action={base}
+          enctype="multipart/form-data"
+          class="stack"
+          data-loading-form
+          leading={<ItemIcon type={item.type} />}
+          heading={`${ITEM_TYPE_LABELS[item.type]}を編集`}
+        >
+          {error && <Alert>{error}</Alert>}
+          <TextField label="タイトル" name="title" value={v.title} required maxlength={200} />
+          <SelectField
+            label="セクション"
+            name="section_id"
+            id="f-section"
+            options={sections.map((s) => ({ value: String(s.id), label: s.title }))}
+            value={String(item.section_id)}
+          />
+          {item.type === 'link' && <TextField label="URL" name="url" type="url" value={v.url} required />}
           {item.type === 'file' && (
-            <div class="field">
-              <span class="label">ファイル</span>
+            <FormField id="f-file" label="ファイル" hint={`差し替える場合は新しいファイルを選択（最大 ${formatBytes(MAX_FILE_SIZE)}）`}>
               <div class="file-current">
                 <Icon name="file" />
                 <span class="truncate">{item.file_name}</span>
                 <span class="muted small">{formatBytes(item.file_size ?? 0)}</span>
               </div>
-              <label for="f-file" class="field-hint">
-                差し替える場合は新しいファイルを選択（最大 {formatBytes(MAX_FILE_SIZE)}）
-              </label>
-              <input id="f-file" name="file" type="file" class="file-input" />
-            </div>
+              <FileInput id="f-file" name="file" aria-describedby="f-file-desc" />
+            </FormField>
           )}
-          <TextArea
+          <TextAreaField
             label={item.type === 'page' ? '本文' : '説明（任意）'}
             name="body"
             value={v.body}
@@ -212,14 +209,14 @@ const ItemEditPage = ({
             hint="Markdown が使えます：# 見出し、**太字**、*斜体*、- 箇条書き、1. 番号付き、> 引用、```コード```、[リンク](https://…)"
           />
           <div class="form-actions">
-            <a href={editUrl(courseId, item.section_id)} class="btn btn-ghost">
+            <Button href={editUrl(courseId, item.section_id)} variant="ghost">
               キャンセル
-            </a>
-            <button type="submit" class="btn btn-primary">
+            </Button>
+            <Button type="submit" variant="primary">
               保存
-            </button>
+            </Button>
           </div>
-        </form>
+        </Card>
       </div>
     </AppShell>
   )
@@ -359,56 +356,50 @@ app.get('/:id/items/:iid', async (c) => {
 
   return c.render(
     <AppShell wide>
+      <Styles use={['/src/routes/content.css']} />
       <div class="reader">
         <article class="reader-main">
-          <nav class="crumbs" aria-label="パンくず">
-            <a href={`/courses/${id}`}>{access.course.title}</a>
-            <Icon name="chevronRight" size={14} />
-            <span>{section?.title}</span>
-          </nav>
+          <Breadcrumbs items={[{ href: `/courses/${id}`, label: access.course.title }, { label: section?.title }]} />
           <header class="reader-head">
             <ItemIcon type={item.type} />
             <h1>{item.title}</h1>
             {access.canManage && (
-              <a href={`${base}/${item.id}/edit`} class="btn btn-sm btn-ghost">
-                <Icon name="pencil" size={14} /> 編集
-              </a>
+              <Button href={`${base}/${item.id}/edit`} variant="ghost" size="sm" icon="pencil">
+                編集
+              </Button>
             )}
           </header>
 
           {item.type === 'link' && (
-            <a href={item.url} target="_blank" rel="noopener noreferrer" class="link-card" data-no-prefetch>
-              <Icon name="link" size={20} />
+            <LinkCard href={item.url} icon="link" target="_blank" rel="noopener noreferrer" data-no-prefetch>
               <span class="truncate">{item.url}</span>
-              <span class="btn btn-primary btn-sm">
-                開く <Icon name="external" size={14} />
-              </span>
-            </a>
+              <Button as="span" variant="primary" size="sm" iconEnd="external">
+                開く
+              </Button>
+            </LinkCard>
           )}
 
           {item.type === 'screen' && (
-            <a href={`${base}/${item.id}/screen`} target="_blank" rel="noopener" class="link-card" data-no-prefetch>
-              <Icon name="monitor" size={20} />
+            <LinkCard href={`${base}/${item.id}/screen`} icon="monitor" target="_blank" rel="noopener" data-no-prefetch>
               <span class="truncate">別のタブで画面共有を開きます</span>
-              {isSharing(item.id) && <span class="chip chip-live">配信中</span>}
-              <span class="btn btn-primary btn-sm">
-                開く <Icon name="external" size={14} />
-              </span>
-            </a>
+              {isSharing(item.id) && <Chip tone="live">配信中</Chip>}
+              <Button as="span" variant="primary" size="sm" iconEnd="external">
+                開く
+              </Button>
+            </LinkCard>
           )}
 
           {item.type === 'file' && (
             <>
-              <div class="link-card">
-                <Icon name="file" size={20} />
+              <LinkCard icon="file">
                 <span class="file-name">
                   <span class="truncate strong">{item.file_name}</span>
                   <span class="muted small">{formatBytes(item.file_size ?? 0)}</span>
                 </span>
-                <a href={fileUrl} class="btn btn-primary btn-sm" data-no-prefetch download>
-                  <Icon name="download" size={14} /> ダウンロード
-                </a>
-              </div>
+                <Button href={fileUrl} variant="primary" size="sm" icon="download" data-no-prefetch download>
+                  ダウンロード
+                </Button>
+              </LinkCard>
               {canPreview &&
                 (item.file_type === 'application/pdf' ? (
                   <iframe class="file-preview" src={`${fileUrl}?inline=1`} title={item.file_name ?? 'プレビュー'} loading="lazy" />
@@ -426,10 +417,9 @@ app.get('/:id/items/:iid', async (c) => {
 
           {isStudent && (
             <form method="post" action={`${base}/${item.id}/complete`} class="complete-bar" data-complete>
-              <button type="submit" class={isDone ? 'btn btn-success btn-lg' : 'btn btn-primary btn-lg'} aria-pressed={isDone ? 'true' : 'false'}>
-                <Icon name="check" />
+              <Button type="submit" variant={isDone ? 'success' : 'primary'} size="lg" icon="check" aria-pressed={isDone ? 'true' : 'false'}>
                 <span data-complete-label>{isDone ? '完了済み' : '完了にする'}</span>
-              </button>
+              </Button>
             </form>
           )}
 
