@@ -3,7 +3,6 @@
 // 全ページ共通のクライアント処理。JS が無効な環境では renderer の noscript がアプリを使えなくする。
 
 import checkSvg from 'heroicons/24/outline/check.svg?raw'
-import { renderMarkdown } from './lib/markdown'
 
 const $$ = <T extends Element>(sel: string, root: ParentNode = document) => [...root.querySelectorAll<T>(sel)]
 
@@ -306,24 +305,15 @@ function updateToc() {
 addEventListener('scroll', updateToc, { passive: true })
 addEventListener('hashchange', updateToc)
 
-// --- Markdown の入力欄の「書く / プレビュー」切り替え
-// プレビューをサーバーに頼まないのは、表示と同じ変換をそのまま手元で使え、通信を待たずに切り替えられるため
-document.addEventListener('click', (e) => {
-  const btn = (e.target as Element).closest<HTMLButtonElement>('[data-md-mode]')
-  const field = btn?.closest('[data-md]')
-  const textarea = field?.querySelector('textarea')
-  const preview = field?.querySelector<HTMLElement>('[data-md-preview]')
-  if (!btn || !field || !textarea || !preview) return
-  const showPreview = btn.dataset.mdMode === 'preview'
-  if (showPreview) {
-    preview.style.minHeight = `${textarea.offsetHeight}px`
-    preview.innerHTML = textarea.value.trim() ? renderMarkdown(textarea.value) : '<p class="muted">まだ何も書かれていません。</p>'
-  }
-  textarea.hidden = showPreview
-  preview.hidden = !showPreview
-  $$('[data-md-mode]', field).forEach((b) => b.setAttribute('aria-pressed', String(b === btn)))
-  if (!showPreview) textarea.focus()
-})
+// --- Markdown エディター（components/markdown.tsx の MarkdownEditor）
+// ここに直接 import しないのは、CodeMirror が大きく、エディターのない画面でも毎回読み込むことになるため
+function initMarkdownEditors() {
+  const fields = $$<HTMLElement>('[data-md-editor]:not([data-md-ready])')
+  if (!fields.length) return
+  import('./markdown-editor')
+    .then(({ mountMarkdownEditor }) => fields.forEach(mountMarkdownEditor))
+    .catch(() => toast('エディターを読み込めませんでした。', 'error'))
+}
 
 // --- ⌘S / Ctrl+S で保存（data-save-shortcut のボタンを押す）
 document.addEventListener('keydown', (e) => {
@@ -652,6 +642,7 @@ function initPage() {
   restoreCollapsed()
   applyEditMode(readEditMode())
   updateToc()
+  initMarkdownEditors()
 }
 initPage()
 

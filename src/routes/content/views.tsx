@@ -1,15 +1,14 @@
-import { raw } from 'hono/html'
 import { ItemIcon } from '../../components/course'
 import { cx } from '../../components/cx'
 import { Icon } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
 import { Button } from '../../components/button'
-import { FileInput, FormField, SegmentedControl, SelectField, TextField, Textarea } from '../../components/form'
+import { FileInput, FormField, SegmentedControl, SelectField, TextField } from '../../components/form'
+import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, DangerRow, LinkCard } from '../../components/card'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import type { CourseAccess } from '../../lib/courses'
-import { renderMarkdown } from '../../lib/markdown'
 import { MAX_FILE_SIZE, formatBytes } from '../../lib/storage'
 import { ITEM_TYPE_LABELS, type Item, type Section } from '../../lib/types'
 
@@ -23,53 +22,6 @@ export const PREVIEWABLE = /^(application\/pdf|image\/(png|jpe?g|gif|webp|avif))
 
 export const editUrl = (courseId: number, sectionId?: number) =>
   `/courses/${courseId}${sectionId ? `#section-${sectionId}` : ''}`
-
-const MARKDOWN_HELP: [string, string][] = [
-  ['# 見出し', '見出し（## で小見出し）'],
-  ['**太字**', '太字'],
-  ['*斜体*', '斜体'],
-  ['- 項目', '箇条書き'],
-  ['1. 項目', '番号付きの箇条書き'],
-  ['> 引用', '引用'],
-  ['`コード`', 'コード（``` で囲むと複数行）'],
-  ['[文字](https://…)', 'リンク'],
-]
-
-const MarkdownField = ({ label, name, value, tall }: { label: string; name: string; value?: string; tall?: boolean }) => {
-  const id = `f-${name}`
-  return (
-    <div class={cx('field md-field', tall && 'is-tall')} data-md>
-      <div class="md-field-head">
-        <label for={id}>{label}</label>
-        <div class="md-modes" role="group" aria-label="表示の切り替え">
-          <button type="button" aria-pressed="true" data-md-mode="write">
-            <Icon name="pencil" size={14} /> 書く
-          </button>
-          <button type="button" aria-pressed="false" data-md-mode="preview">
-            <Icon name="eye" size={14} /> プレビュー
-          </button>
-        </div>
-      </div>
-      <Textarea id={id} name={name} value={value} rows={tall ? 16 : 5} />
-      <div class="md-preview prose" data-md-preview hidden />
-      <details class="md-help">
-        <summary>
-          <Icon name="info" size={14} /> Markdown で書式を付けられます
-        </summary>
-        <dl>
-          {MARKDOWN_HELP.map(([syntax, meaning]) => (
-            <>
-              <dt>
-                <code>{syntax}</code>
-              </dt>
-              <dd>{meaning}</dd>
-            </>
-          ))}
-        </dl>
-      </details>
-    </div>
-  )
-}
 
 export const ItemEditPage = ({
   access,
@@ -121,7 +73,7 @@ export const ItemEditPage = ({
             {error && <Alert>{error}</Alert>}
             <TextField label="タイトル" name="title" value={v.title} required maxlength={200} class="editor-title" />
             {item.type === 'link' && <TextField label="URL" name="url" type="url" value={v.url} required placeholder="https://" />}
-            <MarkdownField label={item.type === 'page' ? '本文' : '説明（任意）'} name="body" value={v.body} tall={item.type === 'page'} />
+            <MarkdownEditor label={item.type === 'page' ? '本文' : '説明（任意）'} name="body" value={v.body} rows={item.type === 'page' ? 18 : 5} />
           </Card>
 
           <aside class="editor-side">
@@ -271,7 +223,7 @@ export const ItemPage = ({
           )}
 
           {item.body ? (
-            <div class="prose">{raw(renderMarkdown(item.body))}</div>
+            <Markdown source={item.body} />
           ) : (
             item.type === 'page' && <p class="muted">本文はまだありません。</p>
           )}

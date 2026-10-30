@@ -9,6 +9,7 @@ export const STYLESHEETS = [
   '/src/styles/base.css',
   '/src/components/button.css',
   '/src/components/form.css',
+  '/src/components/markdown.css',
   '/src/components/overlay.css',
   '/src/components/layout.css',
   '/src/components/toast.css',
