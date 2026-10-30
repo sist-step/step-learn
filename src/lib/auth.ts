@@ -97,6 +97,15 @@ export async function destroySession(c: Context<AppEnv>) {
   deleteCookie(c, SESSION_COOKIE, { path: '/' })
 }
 
+export const USERNAME_TAKEN = 'このユーザー名はすでに使われています。'
+
+export const isUsernameTaken = (username: string, exceptUserId?: number) =>
+  !!db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.username, username), exceptUserId ? ne(users.id, exceptUserId) : undefined))
+    .get()
+
 /** 作成できたらユーザー ID を、メールアドレスかユーザー名が登録済みならどちらが重複したかを返す */
 export async function createUser(user: { email: string; name: string; username: string; password: string; role?: Role }) {
   const passwordHash = await hashPassword(user.password)

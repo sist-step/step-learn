@@ -3,6 +3,7 @@
 // 全ページ共通のクライアント処理。JS が無効な環境では renderer の noscript がアプリを使えなくする。
 
 import checkSvg from 'heroicons/24/outline/check.svg?raw'
+import { isFormName, validate, type FieldErrors, type FormInput } from './lib/forms'
 
 const $$ = <T extends Element>(sel: string, root: ParentNode = document) => [...root.querySelectorAll<T>(sel)]
 
@@ -87,6 +88,68 @@ document.addEventListener('click', (e) => {
   btn.setAttribute('aria-label', show ? 'パスワードを隠す' : 'パスワードを表示')
   btn.classList.toggle('on', show)
 })
+
+// --- 入力の検証（components/form.tsx の validateWith を付けたフォーム）
+function formInput(form: HTMLFormElement) {
+  const input: FormInput = {}
+  for (const [key, value] of new FormData(form)) {
+    const prev = input[key]
+    input[key] = prev === undefined ? value : [...(Array.isArray(prev) ? prev : [prev]), value]
+  }
+  return input
+}
+
+function checkForm(form: HTMLFormElement): FieldErrors | null {
+  const name = form.dataset.validate
+  if (!isFormName(name)) return null
+  const result = validate(name, formInput(form))
+  return result.ok ? {} : result.errors
+}
+
+const fieldNames = (form: HTMLFormElement) => new Set($$<HTMLInputElement>('[name]', form).map((el) => el.name))
+
+function setFieldError(form: HTMLFormElement, name: string, message?: string) {
+  const control = form.elements.namedItem(name)
+  const slot = control instanceof HTMLElement && control.id ? document.getElementById(`${control.id}-error`) : null
+  if (!(control instanceof HTMLElement) || !slot) return false
+  if (message) control.setAttribute('aria-invalid', 'true')
+  else control.removeAttribute('aria-invalid')
+  control.closest('.field')?.classList.toggle('has-error', !!message)
+  slot.querySelector('[data-field-error]')!.textContent = message ?? ''
+  slot.hidden = !message
+  return true
+}
+
+document.addEventListener(
+  'submit',
+  (e) => {
+    const form = e.target as HTMLFormElement
+    const errors = checkForm(form)
+    if (!errors) return
+    form.dataset.validated = ''
+    const unplaced = Object.entries(errors).filter(([name, message]) => !setFieldError(form, name, message))
+    for (const name of fieldNames(form)) if (!errors[name]) setFieldError(form, name)
+    if (Object.keys(errors).length === 0) return
+    // 送信の処理（確認ダイアログ・再読み込みなしの遷移）より先に止めるため、捕捉の段階で伝わるのを止める
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    unplaced.forEach(([, message]) => toast(message!, 'error'))
+    $$<HTMLElement>('[aria-invalid="true"]', form)[0]?.focus()
+  },
+  true,
+)
+
+// 送信しようとする前は、エラーを出している欄しか確かめ直さないのは、入力し始めたばかりの欄にエラーを出してしまうため
+const recheck = (e: Event) => {
+  const control = e.target as HTMLInputElement
+  const form = control.form
+  const errors = form && checkForm(form)
+  if (!form || !errors || !control.name) return
+  if ('validated' in form.dataset) fieldNames(form).forEach((name) => setFieldError(form, name, errors[name]))
+  else if (control.getAttribute('aria-invalid') === 'true') setFieldError(form, control.name, errors[control.name])
+}
+document.addEventListener('input', recheck)
+document.addEventListener('change', recheck)
 
 // --- 確認ダイアログ（ネイティブ confirm の代わり）
 let dialog: HTMLDialogElement | null = null

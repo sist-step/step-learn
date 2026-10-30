@@ -1,18 +1,17 @@
 import { Button } from '../../components/button'
 import { Card } from '../../components/card'
-import { TextField } from '../../components/form'
+import { TextField, validateWith } from '../../components/form'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
 import { Avatar, PageHeader } from '../../components/ui'
-import { PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../../lib/password'
+import type { FieldErrors } from '../../lib/forms'
+import { PASSWORD_HINT } from '../../lib/password'
 import { ROLE_LABELS, type User } from '../../lib/types'
-import { USERNAME_HINT, USERNAME_MAX_LENGTH } from '../../lib/username'
-
-export type Errors = Partial<Record<'name' | 'username' | 'current' | 'password', string>>
+import { USERNAME_HINT } from '../../lib/username'
 
 export type Profile = { name: string; username: string }
 
-export const AccountPage = ({ user, errors = {}, values }: { user: User; errors?: Errors; values?: Profile }) => (
+export const AccountPage = ({ user, errors = {}, values }: { user: User; errors?: FieldErrors; values?: Profile }) => (
   <AppShell>
     <Styles use={['/src/routes/account/account.css']} />
     <PageHeader title="アカウント" description="プロフィールとセキュリティの設定" />
@@ -28,8 +27,8 @@ export const AccountPage = ({ user, errors = {}, values }: { user: User; errors?
             </div>
           </div>
         </div>
-        <form method="post" action="/account" class="stack" data-loading-form>
-          <TextField label="氏名" name="name" value={values?.name ?? user.name} error={errors.name} required maxlength={60} />
+        <form method="post" action="/account" class="stack" data-loading-form {...validateWith('profile')}>
+          <TextField label="氏名" name="name" value={values?.name ?? user.name} error={errors.name} />
           <TextField
             label="ユーザー名"
             name="username"
@@ -39,8 +38,6 @@ export const AccountPage = ({ user, errors = {}, values }: { user: User; errors?
             autocomplete="off"
             autocapitalize="none"
             spellcheck={false}
-            required
-            maxlength={USERNAME_MAX_LENGTH}
           />
           <div class="form-actions">
             <Button type="submit" variant="primary">
@@ -51,15 +48,8 @@ export const AccountPage = ({ user, errors = {}, values }: { user: User; errors?
       </Card>
 
       <Card heading="パスワード" description="変更すると、ほかの端末のセッションはすべてログアウトされます。">
-        <form method="post" action="/account/password" class="stack" data-loading-form>
-          <TextField
-            label="現在のパスワード"
-            name="current"
-            type="password"
-            error={errors.current}
-            autocomplete="current-password"
-            required
-          />
+        <form method="post" action="/account/password" class="stack" data-loading-form {...validateWith('password')}>
+          <TextField label="現在のパスワード" name="current" type="password" error={errors.current} autocomplete="current-password" />
           <TextField
             label="新しいパスワード"
             name="password"
@@ -67,8 +57,6 @@ export const AccountPage = ({ user, errors = {}, values }: { user: User; errors?
             error={errors.password}
             hint={PASSWORD_HINT}
             autocomplete="new-password"
-            required
-            minlength={PASSWORD_MIN_LENGTH}
           />
           <div class="form-actions">
             <Button type="submit" variant="primary">

@@ -3,7 +3,7 @@ import type { Child } from 'hono/jsx'
 import { renderMarkdown } from '../lib/markdown'
 import { IconButton } from './button'
 import { cx } from './cx'
-import { Textarea } from './form'
+import { FieldError, Textarea } from './form'
 import { Icon, type IconName } from './icons'
 import { useStyle } from './style'
 
@@ -58,7 +58,7 @@ export const MarkdownEditor = ({
 }) => {
   useStyle('/src/components/form.css', '/src/components/markdown.css')
   return (
-    <div class={cx('field md-editor', fieldClass)} style={`--md-rows: ${rows}`} data-md-editor>
+    <div class={cx('field md-editor', error && 'has-error', fieldClass)} style={`--md-rows: ${rows}`} data-md-editor>
       <div class="md-editor-head">
         <label for={id} id={`${id}-label`}>
           {label}
@@ -72,7 +72,7 @@ export const MarkdownEditor = ({
           </button>
         </div>
       </div>
-      <div class={cx('md-editor-box', error && 'has-error')}>
+      <div class="md-editor-box">
         <div class="md-toolbar" role="toolbar" aria-label="書式">
           {FORMAT_BUTTONS.map((b) => (
             <IconButton icon={b.icon} label={b.label} iconSize={16} data-md-format={b.format} />
@@ -85,21 +85,16 @@ export const MarkdownEditor = ({
           rows={rows}
           placeholder={placeholder}
           invalid={!!error}
-          aria-describedby={error || hint ? `${id}-desc` : undefined}
+          aria-describedby={hint ? `${id}-error ${id}-desc` : `${id}-error`}
           class="md-editor-source"
         />
         <div class="md-editor-host" data-md-host />
         <div class="md-preview prose" data-md-preview hidden />
       </div>
-      {(error || hint) && (
-        <p id={`${id}-desc`} class={error ? 'field-error' : 'field-hint'}>
-          {error ? (
-            <>
-              <Icon name="alert" size={14} /> {error}
-            </>
-          ) : (
-            hint
-          )}
+      <FieldError id={id} error={error} />
+      {hint && (
+        <p id={`${id}-desc`} class="field-hint">
+          {hint}
         </p>
       )}
       <details class="md-help">

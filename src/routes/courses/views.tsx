@@ -9,7 +9,17 @@ import {
 } from '../../components/course'
 import { Button, IconButton } from '../../components/button'
 import { Card, DangerRow } from '../../components/card'
-import { FileField, ImageField, SearchBox, SegmentedControl, SelectField, TextAreaField, TextField } from '../../components/form'
+import {
+  FieldError,
+  FileField,
+  ImageField,
+  SearchBox,
+  SegmentedControl,
+  SelectField,
+  TextAreaField,
+  TextField,
+  validateWith,
+} from '../../components/form'
 import { cx } from '../../components/cx'
 import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
@@ -173,7 +183,14 @@ const AddItemButton = ({ sectionId }: { sectionId: number }) => (
 
 const AddItemModal = ({ courseId, sections }: { courseId: number; sections: Section[] }) => (
   <Modal id={ADD_ITEM_MODAL} heading="アイテムを追加" description="種類を選んで、最初の設定をしてください。内容はあとから編集できます。">
-    <form method="post" action={`/courses/${courseId}/items`} enctype="multipart/form-data" class="stack item-form" data-loading-form>
+    <form
+      method="post"
+      action={`/courses/${courseId}/items`}
+      enctype="multipart/form-data"
+      class="stack item-form"
+      data-loading-form
+      {...validateWith('item')}
+    >
       <fieldset class="field">
         <legend>種類</legend>
         <div class="kind-options">
@@ -189,7 +206,7 @@ const AddItemModal = ({ courseId, sections }: { courseId: number; sections: Sect
           ))}
         </div>
       </fieldset>
-      <TextField label="タイトル" name="title" id="new-item-title" maxlength={200} placeholder="例：第1回 講義資料" required autofocus />
+      <TextField label="タイトル" name="title" id="new-item-title" placeholder="例：第1回 講義資料" autofocus />
       <TextField label="URL" name="url" id="new-item-url" type="url" placeholder="https://" fieldClass="when-link" />
       <FileField
         label="ファイル"
@@ -259,8 +276,8 @@ const SectionEditBar = ({ courseId, section }: { courseId: number; section: Sect
   return (
     <div class="row-actions edit-only">
       <Popover trigger={<IconButton as="summary" icon="pencil" label="セクションを編集" title="編集" />}>
-        <form method="post" action={base} class="stack">
-          <TextField label="セクション名" name="title" id={`st-${section.id}`} value={section.title} maxlength={120} required />
+        <form method="post" action={base} class="stack" {...validateWith('section')}>
+          <TextField label="セクション名" name="title" id={`st-${section.id}`} value={section.title} />
           <TextAreaField label="説明" name="summary" id={`ss-${section.id}`} value={section.summary ?? undefined} rows={3} />
           <div class="form-actions">
             <Button type="submit" variant="primary" size="sm">
@@ -371,19 +388,28 @@ export const CoursePage = ({
         )}
 
         {manage && (
-          <form method="post" action={`/courses/${id}/sections`} class="add-section edit-only" data-loading-form>
-            <Icon name="plus" />
-            <input
-              class="add-section-input"
-              name="title"
-              placeholder="新しいセクション名（例：第2週 データの扱い方）"
-              maxlength={120}
-              required
-              aria-label="新しいセクション名"
-            />
-            <Button type="submit" variant="primary" size="sm">
-              セクションを追加
-            </Button>
+          <form
+            method="post"
+            action={`/courses/${id}/sections`}
+            class="field add-section-form edit-only"
+            data-loading-form
+            {...validateWith('section')}
+          >
+            <div class="add-section">
+              <Icon name="plus" />
+              <input
+                id="new-section-title"
+                class="add-section-input"
+                name="title"
+                placeholder="新しいセクション名（例：第2週 データの扱い方）"
+                aria-label="新しいセクション名"
+                aria-describedby="new-section-title-error"
+              />
+              <Button type="submit" variant="primary" size="sm">
+                セクションを追加
+              </Button>
+            </div>
+            <FieldError id="new-section-title" />
           </form>
         )}
         {manage && sectionList.length > 0 && <AddItemModal courseId={id} sections={sectionList} />}
@@ -430,7 +456,7 @@ const CourseImageCard = ({ courseId, kind, imageKey }: { courseId: number; kind:
         )
       }
     >
-      <form method="post" action={action} enctype="multipart/form-data" class="stack" data-loading-form>
+      <form method="post" action={action} enctype="multipart/form-data" class="stack" data-loading-form {...validateWith('image')}>
         <ImageField
           label="画像ファイル"
           name="image"
@@ -439,7 +465,6 @@ const CourseImageCard = ({ courseId, kind, imageKey }: { courseId: number; kind:
           aspect={f.aspect}
           width={f.width}
           hint={`${f.hint}PNG・JPEG・WebP・GIF、最大 ${formatBytes(MAX_IMAGE_SIZE)}。`}
-          required
         />
         <div class="form-actions">
           <Button type="submit" variant="primary" icon="upload">

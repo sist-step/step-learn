@@ -2,8 +2,8 @@
 import readline from 'node:readline/promises'
 import { Writable } from 'node:stream'
 import { parseArgs } from 'node:util'
-import { createUser } from './lib/auth'
-import { isEmail } from './lib/http'
+import { USERNAME_TAKEN, createUser, isUsernameTaken } from './lib/auth'
+import { isEmail } from './lib/forms'
 import { checkPassword } from './lib/password'
 import { ROLE_LABELS, type Role } from './lib/types'
 import { checkUsername, normalizeUsername } from './lib/username'
@@ -78,7 +78,7 @@ async function createUserCommand(args: string[]) {
 
   if (!isEmail(email)) fail('--email に有効なメールアドレスを指定してください。')
   if (!name || name.length > 60) fail('--name に 60 文字以内の氏名を指定してください。')
-  const usernameError = checkUsername(username)
+  const usernameError = checkUsername(username) ?? (isUsernameTaken(username) ? USERNAME_TAKEN : null)
   if (usernameError) fail(`--username: ${usernameError}`)
   if (!Object.hasOwn(ROLE_LABELS, role)) fail('--role には admin / teacher / student のいずれかを指定してください。')
 

@@ -56,7 +56,7 @@ npm run dev   # http://localhost:5173
 - [ ] `coding-style` の書式（セミコロンなし・シングルクォート・2 スペース）に合っている
 - [ ] 何をしているかを説明するだけのコメントを書いていない。コメントは Why not だけ
 - [ ] 全ハンドラの先頭で `intParam` と権限チェックをしており、権限がなければ `c.notFound()`
-- [ ] フォームの値は `field(form, key, 最大長)` で取っている
+- [ ] フォームの検証は `lib/forms.ts` のスキーマと `validate` で行い、フォームに `validateWith` を付けている。HTML の `required` / `maxlength` などを書いていない
 - [ ] クエリを Drizzle で書いている。`sql` テンプレートを使う箇所でも値を文字列連結していない
 - [ ] 色を直接書かず CSS トークンを使っている
 - [ ] 既存の `migrations/` を変更していない

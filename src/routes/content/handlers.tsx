@@ -11,7 +11,8 @@ import {
   visibleItemCount,
 } from '../../lib/courses'
 import { db } from '../../lib/db'
-import { field, fileField, intParam, isHttpUrl, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
+import { firstError, isFile, validate, type FieldErrors } from '../../lib/forms'
+import { field, fileField, intParam, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
 import { completions, items, sections } from '../../lib/schema'
 import { isSharing } from '../../lib/screen-share'
 import {
@@ -25,7 +26,7 @@ import {
   storage,
   type StoredFile,
 } from '../../lib/storage'
-import type { AppEnv, ItemType } from '../../lib/types'
+import type { AppEnv } from '../../lib/types'
 import { ItemEditPage, ItemPage, TEXT_PREVIEW_MAX, editUrl, previewKind, type ItemInput, type OutlineItem } from './views'
 
 async function manageAccess(c: Context<AppEnv>) {
@@ -57,11 +58,11 @@ export async function createSection(c: Context<AppEnv>) {
   const access = await manageAccess(c)
   if (!access) return c.notFound()
   const id = access.course.id
-  const title = field(await readForm(c), 'title', 120)
-  if (!title) return redirectWith(c, editUrl(id), 'セクション名を入力してください。', 'error')
+  const result = validate('section', await readForm(c))
+  if (!result.ok) return redirectWith(c, editUrl(id), firstError(result.errors), 'error')
   const row = db
     .insert(sections)
-    .values({ courseId: id, title, position: nextPosition(sections, eq(sections.courseId, id)) })
+    .values({ courseId: id, title: result.values.title, position: nextPosition(sections, eq(sections.courseId, id)) })
     .returning({ id: sections.id })
     .get()
   return redirectWith(c, editUrl(id, row.id), 'セクションを追加しました。')
@@ -71,11 +72,10 @@ export async function updateSection(c: Context<AppEnv>) {
   const access = await manageAccess(c)
   const sid = intParam(c, 'sid')
   if (!access || !sid) return c.notFound()
-  const form = await readForm(c)
-  const title = field(form, 'title', 120)
-  if (!title) return redirectWith(c, editUrl(access.course.id, sid), 'セクション名を入力してください。', 'error')
+  const result = validate('section', await readForm(c))
+  if (!result.ok) return redirectWith(c, editUrl(access.course.id, sid), firstError(result.errors), 'error')
   db.update(sections)
-    .set({ title, summary: field(form, 'summary', 2000) })
+    .set({ title: result.values.title, summary: result.values.summary ?? '' })
     .where(and(eq(sections.id, sid), eq(sections.courseId, access.course.id)))
     .run()
   return redirectWith(c, editUrl(access.course.id, sid), 'セクションを更新しました。')
@@ -140,12 +140,10 @@ function readItemInput(form: Form): ItemInput {
   }
 }
 
-async function validateItem(type: ItemType, input: ItemInput, requireFile: boolean) {
-  if (!input.title) return 'タイトルを入力してください。'
-  if (type === 'link' && !isHttpUrl(input.url)) return 'http:// または https:// で始まる URL を入力してください。'
-  if (type === 'file' && requireFile && !input.file) return 'ファイルを選択してください。'
-  if (input.file && input.file.size > MAX_FILE_SIZE) return FILE_TOO_LARGE
-  if (input.file && (await isExecutable(input.file))) return EXECUTABLE_NOT_ALLOWED
+// lib/forms.ts で確かめないのは、上限の値がストレージの設定にあり、実行ファイルかどうかは中身を読まないと分からないため
+async function checkUpload(file: File | null) {
+  if (file && file.size > MAX_FILE_SIZE) return FILE_TOO_LARGE
+  if (file && (await isExecutable(file))) return EXECUTABLE_NOT_ALLOWED
   return null
 }
 
@@ -155,17 +153,15 @@ export async function createItem(c: Context<AppEnv>) {
   const courseId = access.course.id
   const form = await readForm(c)
   const sectionId = Number(field(form, 'section_id'))
-  const typeRaw = field(form, 'type')
-  const type: ItemType = typeRaw === 'link' || typeRaw === 'file' || typeRaw === 'screen' ? typeRaw : 'page'
-  const input = readItemInput(form)
-  const hidden = field(form, 'hidden', 1) === '1' ? 1 : 0
-
   if (!getSection(courseId, sectionId)) return c.notFound()
-  const error = await validateItem(type, input, true)
-  if (error) return redirectWith(c, editUrl(courseId, sectionId), error, 'error')
+  const result = validate('item', form)
+  if (!result.ok) return redirectWith(c, editUrl(courseId, sectionId), firstError(result.errors), 'error')
+  const { type, hidden, ...input } = result.values
+  const file = type === 'file' && isFile(input.file) ? input.file : null
+  const uploadError = await checkUpload(file)
+  if (uploadError) return redirectWith(c, editUrl(courseId, sectionId), uploadError, 'error')
 
-  let stored: StoredFile | null = null
-  if (type === 'file' && input.file) stored = await putCourseFile(courseId, input.file)
+  const stored = file && (await putCourseFile(courseId, file))
 
   const created = db
     .insert(items)
@@ -206,28 +202,27 @@ export async function updateItem(c: Context<AppEnv>) {
   if (!item) return c.notFound()
 
   const form = await readForm(c)
-  const input = readItemInput(form)
   const requestedSection = Number(field(form, 'section_id'))
   const sectionId = getSection(courseId, requestedSection) ? requestedSection : item.sectionId
-  const hidden = field(form, 'hidden', 1) === '1' ? 1 : 0
-
-  const error = await validateItem(item.type, input, false)
-  if (error) {
+  const result = validate('itemEdit', form)
+  const file = result.ok && item.type === 'file' && isFile(result.values.file) ? result.values.file : null
+  const uploadError = await checkUpload(file)
+  if (!result.ok || uploadError) {
+    const errors: FieldErrors = result.ok ? { file: uploadError! } : result.errors
+    const values = { ...readItemInput(form), hidden: field(form, 'hidden', 1) === '1' ? 1 : 0, sectionId }
     c.status(422)
-    return c.render(
-      <ItemEditPage access={access} item={item} sections={listSections(courseId)} values={{ ...input, hidden, sectionId }} error={error} />,
-      { title: `編集 - ${item.title}` },
-    )
+    return c.render(<ItemEditPage access={access} item={item} sections={listSections(courseId)} values={values} errors={errors} />, {
+      title: `編集 - ${item.title}`,
+    })
   }
-
-  let stored: StoredFile | null = null
-  if (item.type === 'file' && input.file) stored = await putCourseFile(courseId, input.file)
+  const { hidden, ...input } = result.values
+  const stored = file && (await putCourseFile(courseId, file))
 
   db.update(items)
     .set({
       title: input.title,
       body: input.body,
-      url: item.type === 'link' ? input.url : '',
+      url: item.type === 'link' ? (input.url ?? '') : '',
       hidden,
       ...fileColumns(stored),
       ...(sectionId !== item.sectionId && { sectionId, position: nextPosition(items, eq(items.sectionId, sectionId)) }),
