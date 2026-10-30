@@ -3,6 +3,7 @@ import { alias } from 'drizzle-orm/sqlite-core'
 import type { Context } from 'hono'
 import type { AppEnv, Course, CourseRole, User } from './types'
 import { db } from './db'
+import { imageName } from './images'
 import { courses, enrollments, items, sections, users } from './schema'
 
 export type CourseAccess = {
@@ -29,6 +30,13 @@ export async function getCourseAccessFor(user: User, courseId: number): Promise<
   if (!canManage && !row.role) return null
   return { course: row.course, role: row.role, canManage }
 }
+
+export type CourseImageKind = 'hero' | 'icon'
+
+export const courseImageUrl = (courseId: number, kind: CourseImageKind, key: string | null | undefined) =>
+  key ? `/courses/${courseId}/${kind}/${imageName(key)}` : null
+
+export const courseImagePrefix = (courseId: number, kind: CourseImageKind) => `courses/${courseId}/${kind}`
 
 /** courses を FROM に含むクエリで使う、コースの参加者数 */
 export const memberCount = () => db.$count(enrollments, eq(enrollments.courseId, courses.id))

@@ -2,7 +2,7 @@ import { and, eq, isNotNull } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { getCourseAccess, moveRow, nextPosition } from '../../lib/courses'
 import { db } from '../../lib/db'
-import { field, intParam, isHttpUrl, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
+import { field, fileField, intParam, isHttpUrl, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
 import { completions, items, sections } from '../../lib/schema'
 import { isSharing } from '../../lib/screen-share'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE, deleteKeys, inBackground, putCourseFile, storage, type StoredFile } from '../../lib/storage'
@@ -92,12 +92,11 @@ const fileColumns = (stored: StoredFile | null) =>
   stored ? { fileKey: stored.key, fileName: stored.name, fileSize: stored.size, fileType: stored.type } : {}
 
 function readItemInput(form: Form): ItemInput {
-  const f = form.file
   return {
     title: field(form, 'title', 200),
     body: field(form, 'body', 100_000),
     url: field(form, 'url', 2000),
-    file: f instanceof File && f.size > 0 ? f : null,
+    file: fileField(form, 'file'),
   }
 }
 

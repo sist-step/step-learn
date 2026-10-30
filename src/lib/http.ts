@@ -78,6 +78,11 @@ export function field(form: Form, key: string, max = 10_000) {
   return typeof v === 'string' ? v.trim().slice(0, max) : ''
 }
 
+export function fileField(form: Form, key: string) {
+  const v = form[key]
+  return v instanceof File && v.size > 0 ? v : null
+}
+
 export function intParam(c: Context, key: string) {
   const n = Number(c.req.param(key))
   return Number.isSafeInteger(n) && n > 0 ? n : null

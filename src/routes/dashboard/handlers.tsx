@@ -17,6 +17,7 @@ export async function show(c: Context<AppEnv>) {
       title: courses.title,
       summary: courses.summary,
       color: courses.color,
+      iconImage: courses.iconImage,
       role: enrollments.role,
       total: db.$count(items, eq(items.courseId, courses.id)),
       done: db.$count(completions, and(eq(completions.userId, user.id), eq(completions.courseId, courses.id))),

@@ -1,19 +1,18 @@
 import { CourseForm, CourseHeader, CreateCourseButton, ItemIcon, type CourseFormErrors, type CourseFormValues } from '../../components/course'
 import { Button, IconButton } from '../../components/button'
 import { Card, DangerRow } from '../../components/card'
-import { FileField, SearchBox, SegmentedControl, TextAreaField, TextField } from '../../components/form'
+import { FileField, ImageField, SearchBox, SegmentedControl, TextAreaField, TextField } from '../../components/form'
 import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Popover } from '../../components/overlay'
 import { Styles } from '../../components/style'
 import { Chip, CourseCard, EmptyState, PageHeader, type CourseCardData } from '../../components/ui'
-import type { CourseAccess } from '../../lib/courses'
+import { courseImageUrl, type CourseAccess, type CourseImageKind } from '../../lib/courses'
+import { MAX_IMAGE_SIZE } from '../../lib/images'
 import { formatBytes } from '../../lib/storage'
 import { ITEM_TYPE_LABELS, type Item, type ItemType, type Section } from '../../lib/types'
 
 export type ItemLite = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'url' | 'fileName' | 'fileSize'>
-
-export type CourseMeta = { members: number; teachers: string | null }
 
 // ---------------------------------------------------------------- 一覧
 
@@ -206,7 +205,6 @@ export const CoursePage = ({
   itemList,
   done,
   sharing,
-  meta,
 }: {
   access: CourseAccess
   sectionList: Section[]
@@ -214,7 +212,6 @@ export const CoursePage = ({
   done: Set<number>
   /** 画面共有を配信中のアイテムの ID */
   sharing: Set<number>
-  meta: CourseMeta
 }) => {
   const id = access.course.id
   const manage = access.canManage
@@ -223,29 +220,12 @@ export const CoursePage = ({
   const bySection = new Map<number, ItemLite[]>()
   for (const it of itemList) bySection.set(it.sectionId, [...(bySection.get(it.sectionId) ?? []), it])
 
-  const metaLine = (
-    <>
-      {meta.teachers && (
-        <span>
-          <Icon name="user" size={14} /> {meta.teachers}
-        </span>
-      )}
-      <span>
-        <Icon name="users" size={14} /> {meta.members}人
-      </span>
-      <span>
-        <Icon name="layers" size={14} /> {itemList.length}アイテム
-      </span>
-    </>
-  )
-
   return (
-    <AppShell editable={manage}>
+    <AppShell wide editable={manage}>
       <Styles use={['/src/routes/courses/courses.css']} />
       <CourseHeader
         access={access}
         tab="content"
-        meta={metaLine}
         progress={isStudent ? { done: done.size, total: itemList.length } : undefined}
       />
 
@@ -316,32 +296,109 @@ export const CoursePage = ({
 
 // ---------------------------------------------------------------- 設定
 
+const COURSE_IMAGE_FIELDS: Record<CourseImageKind, { heading: string; description: string; hint: string; aspect: string; width?: number }> = {
+  icon: {
+    heading: 'コースアイコン',
+    description: 'コース名の横と、左のメニューに表示されます。未設定のときはコースコード（なければコース名）の頭文字を表示します。',
+    hint: '正方形の画像が向いています（推奨 256×256px 以上）。',
+    aspect: '1 / 1',
+    width: 120,
+  },
+  hero: {
+    heading: 'ヒーロー画像',
+    description: 'コースページの上部と、コース一覧のカードに表示されます。',
+    hint: '横長の画像が向いています（推奨 1600×400px）。',
+    aspect: '4 / 1',
+  },
+}
+
+const CourseImageCard = ({ courseId, kind, imageKey }: { courseId: number; kind: CourseImageKind; imageKey: string | null }) => {
+  const f = COURSE_IMAGE_FIELDS[kind]
+  const action = `/courses/${courseId}/${kind}`
+  return (
+    <Card
+      id={`settings-${kind}`}
+      heading={f.heading}
+      description={f.description}
+      actions={
+        imageKey && (
+          <form method="post" action={`${action}/delete`} data-confirm={`${f.heading}を削除しますか？`}>
+            <Button type="submit" variant="danger-outline" size="sm" icon="trash">
+              削除
+            </Button>
+          </form>
+        )
+      }
+    >
+      <form method="post" action={action} enctype="multipart/form-data" class="stack" data-loading-form>
+        <ImageField
+          label="画像ファイル"
+          name="image"
+          id={`f-${kind}-image`}
+          src={courseImageUrl(courseId, kind, imageKey)}
+          aspect={f.aspect}
+          width={f.width}
+          hint={`${f.hint}PNG・JPEG・WebP・GIF、最大 ${formatBytes(MAX_IMAGE_SIZE)}。`}
+          required
+        />
+        <div class="form-actions">
+          <Button type="submit" variant="primary" icon="upload">
+            {imageKey ? '画像を差し替える' : '画像を設定'}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  )
+}
+
+const SETTINGS_SECTIONS: { id: string; label: string; icon: IconName; danger?: boolean }[] = [
+  { id: 'settings-basic', label: '基本情報', icon: 'pencil' },
+  { id: 'settings-icon', label: 'コースアイコン', icon: 'photo' },
+  { id: 'settings-hero', label: 'ヒーロー画像', icon: 'photo' },
+  { id: 'settings-danger', label: '危険な操作', icon: 'alert', danger: true },
+]
+
 export const SettingsPage = ({ access, values, errors }: { access: CourseAccess; values: CourseFormValues; errors?: CourseFormErrors }) => {
   const id = access.course.id
   return (
-    <AppShell>
+    <AppShell wide>
+      <Styles use={['/src/routes/courses/courses.css']} />
       <CourseHeader access={access} tab="settings" />
-      <div class="stack-lg">
-        <CourseForm action={`/courses/${id}/settings`} values={values} errors={errors} submitLabel="変更を保存" cancelHref={`/courses/${id}`} />
+      <div class="settings-layout">
+        <nav class="settings-toc" aria-label="設定の目次" data-toc>
+          <span class="settings-toc-title">設定の項目</span>
+          {SETTINGS_SECTIONS.map((s) => (
+            <a href={`#${s.id}`} class={s.danger ? 'is-danger' : undefined}>
+              <Icon name={s.icon} size={16} />
+              {s.label}
+            </a>
+          ))}
+        </nav>
+        <div class="stack-lg">
+          <CourseForm id="settings-basic" action={`/courses/${id}/settings`} values={values} errors={errors} submitLabel="変更を保存" cancelHref={`/courses/${id}`} />
 
-        <Card tone="danger" heading="危険な操作" description="これらの操作は取り消せません。">
-          {access.role && (
-            <DangerRow heading="コースから退出" description="自分の登録と進捗を削除します。">
-              <form method="post" action={`/courses/${id}/leave`} data-confirm="このコースから退出しますか？">
-                <Button type="submit" variant="danger-outline">
-                  退出
+          <CourseImageCard courseId={id} kind="icon" imageKey={access.course.iconImage} />
+          <CourseImageCard courseId={id} kind="hero" imageKey={access.course.heroImage} />
+
+          <Card id="settings-danger" tone="danger" heading="危険な操作" description="これらの操作は取り消せません。">
+            {access.role && (
+              <DangerRow heading="コースから退出" description="自分の登録と進捗を削除します。">
+                <form method="post" action={`/courses/${id}/leave`} data-confirm="このコースから退出しますか？">
+                  <Button type="submit" variant="danger-outline">
+                    退出
+                  </Button>
+                </form>
+              </DangerRow>
+            )}
+            <DangerRow heading="コースを削除" description="セクション・教材・ファイル・参加者の登録がすべて削除されます。">
+              <form method="post" action={`/courses/${id}/delete`} data-confirm={`「${access.course.title}」を完全に削除しますか？`}>
+                <Button type="submit" variant="danger">
+                  コースを削除
                 </Button>
               </form>
             </DangerRow>
-          )}
-          <DangerRow heading="コースを削除" description="セクション・教材・ファイル・参加者の登録がすべて削除されます。">
-            <form method="post" action={`/courses/${id}/delete`} data-confirm={`「${access.course.title}」を完全に削除しますか？`}>
-              <Button type="submit" variant="danger">
-                コースを削除
-              </Button>
-            </form>
-          </DangerRow>
-        </Card>
+          </Card>
+        </div>
       </div>
     </AppShell>
   )

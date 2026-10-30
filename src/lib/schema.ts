@@ -52,6 +52,8 @@ export const courses = sqliteTable('courses', {
   title: text('title').notNull(),
   summary: text('summary').notNull().default(''),
   color: text('color').notNull().default('indigo'),
+  heroImage: text('hero_image'),
+  iconImage: text('icon_image'),
   enrollKey: text('enroll_key'),
   visible: integer('visible').notNull().default(1),
   createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),

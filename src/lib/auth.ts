@@ -178,7 +178,7 @@ export const session = createMiddleware<AppEnv>(async (c, next) => {
     c.set(
       'navCourses',
       db
-        .select({ id: courses.id, title: courses.title, color: courses.color })
+        .select({ id: courses.id, title: courses.title, color: courses.color, iconImage: courses.iconImage })
         .from(enrollments)
         .innerJoin(courses, eq(courses.id, enrollments.courseId))
         .where(eq(enrollments.userId, user.id))

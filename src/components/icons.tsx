@@ -28,6 +28,7 @@ import link from 'heroicons/24/outline/link.svg?raw'
 import search from 'heroicons/24/outline/magnifying-glass.svg?raw'
 import moon from 'heroicons/24/outline/moon.svg?raw'
 import pencil from 'heroicons/24/outline/pencil.svg?raw'
+import photo from 'heroicons/24/outline/photo.svg?raw'
 import plus from 'heroicons/24/outline/plus.svg?raw'
 import shield from 'heroicons/24/outline/shield-check.svg?raw'
 import layers from 'heroicons/24/outline/square-3-stack-3d.svg?raw'
@@ -74,6 +75,7 @@ const svgs = {
   monitor,
   maximize,
   moon,
+  photo,
 } as const
 
 export type IconName = keyof typeof svgs

@@ -3,13 +3,14 @@ import type { Context } from 'hono'
 import type { CourseFormErrors, CourseFormValues } from '../../components/course'
 import type { CourseCardData } from '../../components/ui'
 import { canCreateCourse } from '../../lib/auth'
-import { getCourseAccess, memberCount, teacherNames } from '../../lib/courses'
+import { courseImagePrefix, getCourseAccess, memberCount, teacherNames, type CourseImageKind } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
-import { field, intParam, readForm, redirectWith, type Form } from '../../lib/http'
+import { field, fileField, intParam, readForm, redirectWith, type Form } from '../../lib/http'
+import { imageName, putImage, serveImage } from '../../lib/images'
 import { completions, courses, enrollments, items, sections } from '../../lib/schema'
 import { isSharing } from '../../lib/screen-share'
-import { deleteCourseFiles, inBackground } from '../../lib/storage'
-import { COURSE_COLORS, type AppEnv } from '../../lib/types'
+import { deleteCourseFiles, deleteKeys, inBackground } from '../../lib/storage'
+import { COURSE_COLORS, type AppEnv, type Course } from '../../lib/types'
 import { CoursePage, CoursesPage, SettingsPage, type ItemLite } from './views'
 
 function parseCourseForm(form: Form) {
@@ -36,6 +37,8 @@ export async function list(c: Context<AppEnv>) {
       title: courses.title,
       summary: courses.summary,
       color: courses.color,
+      heroImage: courses.heroImage,
+      iconImage: courses.iconImage,
       role: enrollments.role,
       members: memberCount(),
       teachers: teacherNames(),
@@ -100,10 +103,9 @@ export async function show(c: Context<AppEnv>) {
     .where(and(eq(completions.userId, user.id), eq(completions.courseId, id)))
     .all()
   const done = new Set(doneRows.map((r) => r.itemId))
-  const meta = db.select({ members: memberCount(), teachers: teacherNames() }).from(courses).where(eq(courses.id, id)).get()!
   const sharing = new Set(itemList.filter((it) => it.type === 'screen' && isSharing(it.id)).map((it) => it.id))
 
-  return c.render(<CoursePage access={access} sectionList={sectionList} itemList={itemList} done={done} sharing={sharing} meta={meta} />, {
+  return c.render(<CoursePage access={access} sectionList={sectionList} itemList={itemList} done={done} sharing={sharing} />, {
     title: access.course.title,
   })
 }
@@ -145,6 +147,52 @@ export async function updateSettings(c: Context<AppEnv>) {
   }
   db.update(courses).set(values).where(eq(courses.id, id)).run()
   return redirectWith(c, `/courses/${id}/settings`, '設定を保存しました。')
+}
+
+const COURSE_IMAGE_LABELS: Record<CourseImageKind, string> = { hero: 'ヒーロー画像', icon: 'コースアイコン' }
+
+const imageKind = (c: Context<AppEnv>): CourseImageKind | null => {
+  const kind = c.req.param('kind')
+  return kind === 'hero' || kind === 'icon' ? kind : null
+}
+
+const currentImage = (course: Course, kind: CourseImageKind) => (kind === 'hero' ? course.heroImage : course.iconImage)
+
+const imageColumn = (kind: CourseImageKind, key: string | null) => (kind === 'hero' ? { heroImage: key } : { iconImage: key })
+
+export async function courseImage(c: Context<AppEnv>) {
+  const id = intParam(c, 'id')
+  const kind = imageKind(c)
+  const access = id && kind && (await getCourseAccess(c, id))
+  const key = kind && access && currentImage(access.course, kind)
+  // 古い名前を受け付けないのは、差し替え前の URL をキャッシュしたブラウザに新しい画像を古い URL で返さないため
+  if (!key || imageName(key) !== c.req.param('name')) return c.notFound()
+  return (await serveImage(key)) ?? c.notFound()
+}
+
+export async function updateCourseImage(c: Context<AppEnv>) {
+  const id = intParam(c, 'id')
+  const kind = imageKind(c)
+  const access = id && kind && (await getCourseAccess(c, id))
+  if (!kind || !access || !access.canManage) return c.notFound()
+  const back = `/courses/${id}/settings`
+  const file = fileField(await readForm(c), 'image')
+  if (!file) return redirectWith(c, back, '画像を選択してください。', 'error')
+  const result = await putImage(courseImagePrefix(id, kind), file)
+  if ('error' in result) return redirectWith(c, back, result.error, 'error')
+  db.update(courses).set(imageColumn(kind, result.key)).where(eq(courses.id, id)).run()
+  inBackground(deleteKeys([currentImage(access.course, kind)]))
+  return redirectWith(c, back, `${COURSE_IMAGE_LABELS[kind]}を設定しました。`)
+}
+
+export async function removeCourseImage(c: Context<AppEnv>) {
+  const id = intParam(c, 'id')
+  const kind = imageKind(c)
+  const access = id && kind && (await getCourseAccess(c, id))
+  if (!kind || !access || !access.canManage) return c.notFound()
+  db.update(courses).set(imageColumn(kind, null)).where(eq(courses.id, id)).run()
+  inBackground(deleteKeys([currentImage(access.course, kind)]))
+  return redirectWith(c, `/courses/${id}/settings`, `${COURSE_IMAGE_LABELS[kind]}を削除しました。`, 'info')
 }
 
 export async function remove(c: Context<AppEnv>) {

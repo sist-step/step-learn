@@ -40,7 +40,7 @@ export const ItemEditPage = ({
   const base = `/courses/${courseId}/items/${item.id}`
   const v = { title: item.title, body: item.body, url: item.url, ...values }
   return (
-    <AppShell>
+    <AppShell wide>
       <Styles use={['/src/routes/content/content.css']} />
       <CourseHeader access={access} tab="content" />
       <div class="narrow">
