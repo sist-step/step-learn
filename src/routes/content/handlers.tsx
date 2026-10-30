@@ -1,6 +1,15 @@
 import { and, eq, isNotNull } from 'drizzle-orm'
 import type { Context } from 'hono'
-import { getCourseAccess, isVisibleItem, moveRow, nextPosition, visibleDoneCount, visibleItem, visibleItemCount } from '../../lib/courses'
+import {
+  courseRevision,
+  getCourseAccess,
+  isVisibleItem,
+  moveRow,
+  nextPosition,
+  visibleDoneCount,
+  visibleItem,
+  visibleItemCount,
+} from '../../lib/courses'
 import { db } from '../../lib/db'
 import { field, fileField, intParam, isHttpUrl, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
 import { completions, items, sections } from '../../lib/schema'
@@ -289,6 +298,8 @@ export async function showItem(c: Context<AppEnv>) {
   const access = id && iid && (await getCourseAccess(c, id))
   if (!access) return c.notFound()
   const userId = c.var.user!.id
+  // 読み出しの後で取らないのは、その間に変わったときに古い内容へ新しい版を付けてしまい、変更を取りこぼすため
+  const revision = courseRevision(id)
 
   const manage = access.canManage
   const item = getItem(id, iid)
@@ -335,6 +346,7 @@ export async function showItem(c: Context<AppEnv>) {
       next={next}
       sharing={isSharing(item.id)}
       textPreview={textPreview}
+      revision={revision}
     />,
     { title: item.title },
   )

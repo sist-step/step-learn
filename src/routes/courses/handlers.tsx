@@ -3,7 +3,15 @@ import type { Context } from 'hono'
 import type { CourseFormErrors, CourseFormValues } from '../../components/course'
 import type { CourseCardData } from '../../components/ui'
 import { canCreateCourse } from '../../lib/auth'
-import { courseImagePrefix, getCourseAccess, memberCount, teacherNames, visibleItem, type CourseImageKind } from '../../lib/courses'
+import {
+  courseImagePrefix,
+  courseRevision,
+  getCourseAccess,
+  memberCount,
+  teacherNames,
+  visibleItem,
+  type CourseImageKind,
+} from '../../lib/courses'
 import { contains, db } from '../../lib/db'
 import { field, fileField, intParam, readForm, redirectWith, type Form } from '../../lib/http'
 import { imageName, putImage, serveImage } from '../../lib/images'
@@ -81,6 +89,8 @@ export async function show(c: Context<AppEnv>) {
   const access = id && (await getCourseAccess(c, id))
   if (!access) return c.notFound()
   const user = c.var.user!
+  // 読み出しの後で取らないのは、その間に変わったときに古い内容へ新しい版を付けてしまい、変更を取りこぼすため
+  const revision = courseRevision(id)
 
   const manage = access.canManage
   const sectionList = db
@@ -112,9 +122,12 @@ export async function show(c: Context<AppEnv>) {
   const done = new Set(doneRows.map((r) => r.itemId))
   const sharing = new Set(itemList.filter((it) => it.type === 'screen' && isSharing(it.id)).map((it) => it.id))
 
-  return c.render(<CoursePage access={access} sectionList={sectionList} itemList={itemList} done={done} sharing={sharing} />, {
-    title: access.course.title,
-  })
+  return c.render(
+    <CoursePage access={access} sectionList={sectionList} itemList={itemList} done={done} sharing={sharing} revision={revision} />,
+    {
+      title: access.course.title,
+    },
+  )
 }
 
 export async function leave(c: Context<AppEnv>) {
@@ -213,4 +226,11 @@ export async function remove(c: Context<AppEnv>) {
   db.delete(courses).where(eq(courses.id, id)).run()
   inBackground(deleteCourseFiles(id))
   return redirectWith(c, '/dashboard', `「${access.course.title}」を削除しました。`, 'info')
+}
+
+export async function revision(c: Context<AppEnv>) {
+  const id = intParam(c, 'id')
+  const access = id && (await getCourseAccess(c, id))
+  if (!access) return c.notFound()
+  return c.json({ revision: courseRevision(id) })
 }

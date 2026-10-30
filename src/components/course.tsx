@@ -187,3 +187,7 @@ export const ItemIcon = ({ type }: { type: ItemType }) => {
     </span>
   )
 }
+
+export const CourseLiveSync = ({ courseId, revision }: { courseId: number; revision: string }) => (
+  <span hidden data-live={`/courses/${courseId}/revision`} data-live-rev={revision} />
+)

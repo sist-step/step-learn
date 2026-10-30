@@ -1,6 +1,7 @@
 import {
   CourseForm,
   CourseHeader,
+  CourseLiveSync,
   CreateCourseButton,
   ItemIcon,
   type CourseFormErrors,
@@ -283,6 +284,7 @@ export const CoursePage = ({
   itemList,
   done,
   sharing,
+  revision,
 }: {
   access: CourseAccess
   sectionList: Section[]
@@ -290,6 +292,7 @@ export const CoursePage = ({
   done: Set<number>
   /** 画面共有を配信中のアイテムの ID */
   sharing: Set<number>
+  revision: string
 }) => {
   const id = access.course.id
   const manage = access.canManage
@@ -385,6 +388,7 @@ export const CoursePage = ({
         )}
         {manage && sectionList.length > 0 && <AddItemModal courseId={id} sections={sectionList} />}
       </TabPanel>
+      <CourseLiveSync courseId={id} revision={revision} />
     </AppShell>
   )
 }
