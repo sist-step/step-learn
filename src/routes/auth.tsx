@@ -1,3 +1,4 @@
+import { and, eq } from 'drizzle-orm'
 import { Hono, type Context } from 'hono'
 import { AuthShell } from '../components/layout'
 import { Button } from '../components/button'
@@ -22,6 +23,7 @@ import { checkPassword, PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../lib/passwo
 import { rateLimiter } from '../lib/rate-limit'
 import type { AppEnv } from '../lib/types'
 import { db } from '../lib/db'
+import { users } from '../lib/schema'
 
 const app = new Hono<AppEnv>()
 
@@ -182,10 +184,8 @@ app.post('/login', async (c) => {
     return c.render(<LoginPage email={email} next={next} errors={{ form: tooManyRequests(c, wait) }} />, { title: 'ログイン' })
   }
 
-  const user = await db.prepare('SELECT id, password_hash FROM users WHERE email = ?')
-    .bind(email)
-    .first<{ id: number; password_hash: string }>()
-  const ok = user ? await verifyPassword(password, user.password_hash) : await dummyVerify(password)
+  const user = db.select({ id: users.id, passwordHash: users.passwordHash }).from(users).where(eq(users.email, email)).get()
+  const ok = user ? await verifyPassword(password, user.passwordHash) : await dummyVerify(password)
 
   if (!user || !ok) {
     loginFailuresByIp.hit(ip)
@@ -199,10 +199,12 @@ app.post('/login', async (c) => {
 
   loginFailuresByEmail.reset(email)
 
-  if (needsRehash(user.password_hash)) {
+  if (needsRehash(user.passwordHash)) {
+    const passwordHash = await hashPassword(password)
     // id だけを条件にしないのは、同時に行われたパスワード変更を古いパスワードで上書きしないため
-    await db.prepare('UPDATE users SET password_hash = ? WHERE id = ? AND password_hash = ?')
-      .bind(await hashPassword(password), user.id, user.password_hash)
+    db.update(users)
+      .set({ passwordHash })
+      .where(and(eq(users.id, user.id), eq(users.passwordHash, user.passwordHash)))
       .run()
   }
 
@@ -237,7 +239,7 @@ app.post('/register', async (c) => {
 
   // 登録済みかどうかは画面に出さず、メールの内容だけを変える（画面からの登録有無の列挙を防ぐ）
   const origin = config.appOrigin ?? new URL(c.req.url).origin
-  const exists = await db.prepare('SELECT 1 FROM users WHERE email = ?').bind(email).first()
+  const exists = db.select({ id: users.id }).from(users).where(eq(users.email, email)).get()
   const mail = exists
     ? {
         subject: '【StepLearn】このメールアドレスは登録済みです',

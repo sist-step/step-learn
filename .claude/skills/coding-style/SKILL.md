@@ -16,7 +16,7 @@ description: "StepLearn の TypeScript / TSX の書き方（書式・命名・�
 - アロー関数の引数は 1 つでも括弧を付ける: `(c) => ...`
 - 数値リテラルは桁区切りを使う: `600_000`、`10_000`
 - 行頭が `[` `(` で始まる文の前には `;` を付ける（ASI 対策）: `;[a[i], a[j]] = [a[j], a[i]]`
-- SQL はテンプレートリテラルで複数行に分け、キーワードは大文字
+- Drizzle のクエリは 1 行が長くなったらメソッドチェーンごとに改行する
 
 ## import
 
@@ -31,7 +31,7 @@ description: "StepLearn の TypeScript / TSX の書き方（書式・命名・�
 | 変数・関数 | camelCase | `getCourseAccess`、`redirectWith` |
 | コンポーネント・型 | PascalCase | `PageHeader`、`CourseAccess` |
 | モジュール定数 | UPPER_SNAKE | `SESSION_TTL`、`MAX_FILE_SIZE` |
-| DB の行を表す型のプロパティ | カラム名そのまま（snake_case） | `enroll_key`、`created_at` |
+| DB の行を表す型のプロパティ | schema.ts と同じ camelCase | `enrollKey`、`createdAt` |
 | Drizzle スキーマのプロパティ | camelCase（カラム名は snake_case で指定） | `enrollKey: text('enroll_key')` |
 | 表示ラベルの対応表 | `XXX_LABELS: Record<Union, string>` | `ROLE_LABELS` |
 

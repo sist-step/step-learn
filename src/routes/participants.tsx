@@ -1,3 +1,4 @@
+import { and, eq, isNotNull, or } from 'drizzle-orm'
 import { Hono, type Context } from 'hono'
 import { RequestContext } from 'hono/jsx-renderer'
 import { CourseHeader } from '../components/course'
@@ -12,7 +13,8 @@ import { requireAuth } from '../lib/auth'
 import { getCourseAccess } from '../lib/courses'
 import { field, intParam, readForm, redirectWith } from '../lib/http'
 import { COURSE_ROLE_LABELS, type AppEnv, type CourseRole } from '../lib/types'
-import { db } from '../lib/db'
+import { contains, db } from '../lib/db'
+import { completions, enrollments, items, users } from '../lib/schema'
 
 const ROLE_OPTIONS = (['student', 'teacher'] as CourseRole[]).map((r) => ({ value: r, label: COURSE_ROLE_LABELS[r] }))
 
@@ -24,7 +26,7 @@ type Participant = {
   name: string
   email: string
   role: CourseRole
-  created_at: number
+  createdAt: number
   done: number
 }
 
@@ -98,20 +100,21 @@ app.get('/:id/participants', async (c) => {
   if (!access) return c.notFound()
   const me = c.var.user!
 
-  const [pRes, tRes] = await db.batch([
-    db
-      .prepare(
-        `SELECT u.id, u.name, u.email, e.role, e.created_at,
-                (SELECT COUNT(*) FROM completions k WHERE k.user_id = u.id AND k.course_id = e.course_id) AS done
-         FROM enrollments e JOIN users u ON u.id = e.user_id
-         WHERE e.course_id = ?
-         ORDER BY e.role = 'student', u.name`,
-      )
-      .bind(id),
-    db.prepare('SELECT COUNT(*) AS n FROM items WHERE course_id = ?').bind(id),
-  ])
-  const people = pRes.results as Participant[]
-  const totalItems = (tRes.results[0] as { n: number }).n
+  const people: Participant[] = db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: enrollments.role,
+      createdAt: enrollments.createdAt,
+      done: db.$count(completions, and(eq(completions.userId, users.id), eq(completions.courseId, enrollments.courseId))),
+    })
+    .from(enrollments)
+    .innerJoin(users, eq(users.id, enrollments.userId))
+    .where(eq(enrollments.courseId, id))
+    .orderBy(users.name)
+    .all()
+  const totalItems = await db.$count(items, eq(items.courseId, id))
   const teachers = people.filter((p) => p.role === 'teacher')
   const students = people.filter((p) => p.role === 'student')
   const manage = access.canManage
@@ -133,7 +136,7 @@ app.get('/:id/participants', async (c) => {
       {manage && (
         <td class="hide-sm progress-cell">{p.role === 'student' ? <Progress done={p.done} total={totalItems} /> : <span class="muted">—</span>}</td>
       )}
-      <td class="hide-sm muted">{formatDate(p.created_at)}</td>
+      <td class="hide-sm muted">{formatDate(p.createdAt)}</td>
       <td>
         {manage ? (
           <div class="row-actions">
@@ -192,39 +195,33 @@ async function manageAccess(c: Context<AppEnv>) {
 
 /** 最後の教師を外す・学生に変える操作を防ぐ */
 async function isLastTeacher(courseId: number, userId: number) {
-  const row = await db
-    .prepare(
-      `SELECT (SELECT role FROM enrollments WHERE course_id = ?1 AND user_id = ?2) AS role,
-              (SELECT COUNT(*) FROM enrollments WHERE course_id = ?1 AND role = 'teacher') AS teachers`,
-    )
-    .bind(courseId, userId)
-    .first<{ role: CourseRole | null; teachers: number }>()
-  return row?.role === 'teacher' && row.teachers <= 1
+  const target = db
+    .select({ role: enrollments.role })
+    .from(enrollments)
+    .where(and(eq(enrollments.courseId, courseId), eq(enrollments.userId, userId)))
+    .get()
+  if (target?.role !== 'teacher') return false
+  return (await db.$count(enrollments, and(eq(enrollments.courseId, courseId), eq(enrollments.role, 'teacher')))) <= 1
 }
 
 app.get('/:id/participants/candidates', async (c) => {
   const access = await manageAccess(c)
   if (!access) return c.notFound()
   const q = (c.req.query('q') ?? '').trim().slice(0, 100)
-  const pattern = `%${q.replace(/[\\%_]/g, '\\$&')}%`
-  const users = q
-    ? (
-        await db
-          .prepare(
-            `SELECT u.id, u.name, u.email, e.role
-             FROM users u LEFT JOIN enrollments e ON e.user_id = u.id AND e.course_id = ?1
-             WHERE u.name LIKE ?2 ESCAPE '\\' OR u.email LIKE ?2 ESCAPE '\\'
-             ORDER BY e.role IS NOT NULL, u.name
-             LIMIT ?3`,
-          )
-          .bind(access.course.id, pattern, CANDIDATE_LIMIT + 1)
-          .all<Candidate>()
-      ).results
+  const candidates: Candidate[] = q
+    ? db
+        .select({ id: users.id, name: users.name, email: users.email, role: enrollments.role })
+        .from(users)
+        .leftJoin(enrollments, and(eq(enrollments.userId, users.id), eq(enrollments.courseId, access.course.id)))
+        .where(or(contains(users.name, q), contains(users.email, q)))
+        .orderBy(isNotNull(enrollments.role), users.name)
+        .limit(CANDIDATE_LIMIT + 1)
+        .all()
     : []
   // c.render で返さないのは、モーダルの中身だけを差し替えるのにページ全体のレイアウトは要らないため
   return c.html(
     <RequestContext.Provider value={c}>
-      <Candidates q={q} users={users} />
+      <Candidates q={q} users={candidates} />
     </RequestContext.Provider>,
   )
 })
@@ -241,14 +238,12 @@ app.post('/:id/participants', async (c) => {
 
   const user =
     Number.isSafeInteger(userId) && userId > 0
-      ? await db.prepare('SELECT id, name FROM users WHERE id = ?').bind(userId).first<{ id: number; name: string }>()
-      : null
+      ? db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, userId)).get()
+      : undefined
   if (!user) return redirectWith(c, back, 'ユーザーが見つかりませんでした。', 'error')
 
-  const res = await db.prepare('INSERT OR IGNORE INTO enrollments (course_id, user_id, role) VALUES (?, ?, ?)')
-    .bind(id, user.id, role)
-    .run()
-  if (!res.meta.changes) return redirectWith(c, back, `${user.name} さんはすでに参加しています。`, 'info')
+  const res = db.insert(enrollments).values({ courseId: id, userId: user.id, role }).onConflictDoNothing().run()
+  if (!res.changes) return redirectWith(c, back, `${user.name} さんはすでに参加しています。`, 'info')
   return redirectWith(c, back, `${user.name} さんを${COURSE_ROLE_LABELS[role]}として追加しました。`)
 })
 
@@ -263,7 +258,10 @@ app.post('/:id/participants/:uid/role', async (c) => {
   if (role === 'student' && (await isLastTeacher(id, uid))) {
     return redirectWith(c, back, 'コースには少なくとも1人の教師が必要です。', 'error')
   }
-  await db.prepare('UPDATE enrollments SET role = ? WHERE course_id = ? AND user_id = ?').bind(role, id, uid).run()
+  db.update(enrollments)
+    .set({ role })
+    .where(and(eq(enrollments.courseId, id), eq(enrollments.userId, uid)))
+    .run()
   return redirectWith(c, back, 'ロールを変更しました。')
 })
 
@@ -274,10 +272,10 @@ app.post('/:id/participants/:uid/remove', async (c) => {
   const id = access.course.id
   const back = `/courses/${id}/participants`
   if (await isLastTeacher(id, uid)) return redirectWith(c, back, 'コースには少なくとも1人の教師が必要です。', 'error')
-  await db.batch([
-    db.prepare('DELETE FROM enrollments WHERE course_id = ? AND user_id = ?').bind(id, uid),
-    db.prepare('DELETE FROM completions WHERE course_id = ? AND user_id = ?').bind(id, uid),
-  ])
+  db.transaction((tx) => {
+    tx.delete(enrollments).where(and(eq(enrollments.courseId, id), eq(enrollments.userId, uid))).run()
+    tx.delete(completions).where(and(eq(completions.courseId, id), eq(completions.userId, uid))).run()
+  })
   return redirectWith(c, back, 'コースから外しました。', 'info')
 })
 

@@ -78,7 +78,7 @@ app.get('/:id/notes', async (c) => {
 ```
 
 - `title` は「画面名」か「画面名 - コース名」。`| StepLearn` は renderer が付ける
-- 複数のクエリは `db.batch([...])` でまとめる
+- クエリは `db.select()...get()` / `.all()` で書く（書き方は `db-change` スキル）
 - 一覧が空のときは `EmptyState` を出す
 
 ### POST（更新）
@@ -92,7 +92,7 @@ app.post('/:id/notes', async (c) => {
     c.status(422)
     return c.render(<NotePage values={{ title }} errors={{ title: 'タイトルを入力してください。' }} />, { title: 'ノート' })
   }
-  await db.prepare('INSERT INTO notes (course_id, title) VALUES (?, ?)').bind(id, title).run()
+  db.insert(notes).values({ courseId: id, title }).run()
   return redirectWith(c, `/courses/${id}/notes`, 'ノートを追加しました。')
 })
 ```

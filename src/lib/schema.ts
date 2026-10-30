@@ -54,7 +54,7 @@ export const courses = sqliteTable('courses', {
   visible: integer('visible').notNull().default(1),
   createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: integer('created_at').notNull().default(now),
-  updatedAt: integer('updated_at').notNull().default(now),
+  updatedAt: integer('updated_at').notNull().default(now).$onUpdate(() => now),
 })
 
 export const enrollments = sqliteTable(
@@ -110,7 +110,7 @@ export const items = sqliteTable(
     fileType: text('file_type'),
     position: integer('position').notNull().default(0),
     createdAt: integer('created_at').notNull().default(now),
-    updatedAt: integer('updated_at').notNull().default(now),
+    updatedAt: integer('updated_at').notNull().default(now).$onUpdate(() => now),
   },
   (t) => [
     index('items_section').on(t.sectionId, t.position),
