@@ -1,5 +1,6 @@
 import {
   CourseForm,
+  CompletionField,
   CourseHeader,
   CourseLiveSync,
   CreateCourseButton,
@@ -30,9 +31,9 @@ import { Chip, CourseCard, EmptyState, PageHeader, TabPanel, type CourseCardData
 import { courseImageUrl, type CourseAccess, type CourseImageKind } from '../../lib/courses'
 import { MAX_IMAGE_SIZE } from '../../lib/images'
 import { formatBytes } from '../../lib/storage'
-import { ITEM_TYPE_LABELS, type Item, type ItemType, type Section } from '../../lib/types'
+import { COMPLETION_LABELS, ITEM_TYPE_LABELS, type Completion, type Item, type ItemType, type Section } from '../../lib/types'
 
-export type ItemLite = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'url' | 'fileName' | 'fileSize' | 'hidden'>
+export type ItemLite = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'url' | 'fileName' | 'fileSize' | 'hidden' | 'completion'>
 
 // ---------------------------------------------------------------- 一覧
 
@@ -94,17 +95,21 @@ const ItemRow = ({
   courseId,
   done,
   sharing,
-  showCheck,
+  completion,
+  isStudent,
   manage,
 }: {
   item: ItemLite
   courseId: number
   done: boolean
   sharing: boolean
-  showCheck: boolean
+  completion: Completion | null
+  isStudent: boolean
   manage: boolean
 }) => {
   const base = `/courses/${courseId}/items/${item.id}`
+  const tracked = completion && completion !== 'none'
+  const opensToComplete = isStudent && completion === 'view' && item.type === 'link' && !done
   const external = item.type === 'link'
   const newTab = item.type === 'link' || item.type === 'screen'
   const href = item.type === 'link' ? item.url : item.type === 'screen' ? `${base}/screen` : base
@@ -115,11 +120,12 @@ const ItemRow = ({
         ? `${item.fileName ?? ''} · ${formatBytes(item.fileSize ?? 0)}`
         : ITEM_TYPE_LABELS[item.type]
   return (
-    <li class={cx('item-row', done && 'is-done', !!item.hidden && 'is-hidden edit-only')} data-item={item.id}>
+    <li class={cx('item-row', tracked && done && 'is-done', !!item.hidden && 'is-hidden edit-only')} data-item={item.id}>
       <a
         href={href}
         class="item-link"
         {...(newTab ? { target: '_blank', rel: external ? 'noopener noreferrer' : 'noopener', 'data-no-prefetch': '' } : {})}
+        {...(opensToComplete ? { 'data-complete-on-open': `${base}/complete` } : {})}
       >
         <ItemIcon type={item.type} />
         <span class="item-text">
@@ -127,6 +133,11 @@ const ItemRow = ({
           <span class="item-meta truncate">{meta}</span>
         </span>
         {item.hidden ? <HiddenChip /> : null}
+        {manage && tracked && (
+          <Chip icon="check" class="edit-only">
+            {COMPLETION_LABELS[completion]}
+          </Chip>
+        )}
         {sharing && <Chip tone="live">配信中</Chip>}
         {newTab && <Icon name="external" size={14} class="item-ext" />}
       </a>
@@ -140,7 +151,19 @@ const ItemRow = ({
           </form>
         </div>
       )}
-      {showCheck && (
+      {isStudent && tracked && completion !== 'manual' && (
+        <span
+          class="check check-auto"
+          role="img"
+          aria-label={done ? '完了済み' : COMPLETION_LABELS[completion]}
+          title={done ? '完了済み' : COMPLETION_LABELS[completion]}
+          data-complete-check={item.id}
+          data-done={done ? 'true' : 'false'}
+        >
+          <Icon name="check" size={14} />
+        </span>
+      )}
+      {isStudent && completion === 'manual' && (
         <form method="post" action={`${base}/complete`} class={manage ? 'view-only' : undefined} data-complete>
           <button
             type="submit"
@@ -181,7 +204,7 @@ const AddItemButton = ({ sectionId }: { sectionId: number }) => (
   </button>
 )
 
-const AddItemModal = ({ courseId, sections }: { courseId: number; sections: Section[] }) => (
+const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sections: Section[]; tracking: boolean }) => (
   <Modal id={ADD_ITEM_MODAL} heading="アイテムを追加" description="種類を選んで、最初の設定をしてください。内容はあとから編集できます。">
     <form
       method="post"
@@ -246,6 +269,7 @@ const AddItemModal = ({ courseId, sections }: { courseId: number; sections: Sect
           />
         </fieldset>
       </div>
+      {tracking && <CompletionField id="new-item-completion" />}
       <div class="form-actions">
         <Button type="submit" name="then" value="view">
           追加して表示
@@ -320,7 +344,9 @@ export const CoursePage = ({
   const visibleSections = sectionList.filter((s) => !s.hidden)
   // 学生にも同じ番号で見えるよう、表示しているセクションだけで数える
   const sectionNumber = new Map(visibleSections.map((s, i) => [s.id, String(i + 1).padStart(2, '0')]))
-  const visibleItems = itemList.filter((it) => !it.hidden && sectionNumber.has(it.sectionId))
+  const tracking = !!access.course.completionEnabled
+  const isTracked = (it: ItemLite) => tracking && it.completion !== 'none'
+  const trackedItems = itemList.filter((it) => !it.hidden && sectionNumber.has(it.sectionId) && isTracked(it))
 
   return (
     <AppShell wide editable={manage}>
@@ -328,7 +354,7 @@ export const CoursePage = ({
       <CourseHeader
         access={access}
         tab="content"
-        progress={isStudent ? { done: visibleItems.filter((it) => done.has(it.id)).length, total: visibleItems.length } : undefined}
+        progress={isStudent ? { done: trackedItems.filter((it) => done.has(it.id)).length, total: trackedItems.length } : undefined}
       />
       <TabPanel>
         {visibleSections.length === 0 && (
@@ -342,7 +368,8 @@ export const CoursePage = ({
               const list = bySection.get(s.id) ?? []
               const shown = list.filter((it) => !it.hidden)
               const hiddenCount = list.length - shown.length
-              const doneCount = shown.filter((it) => done.has(it.id)).length
+              const shownTracked = shown.filter(isTracked)
+              const doneCount = shownTracked.filter((it) => done.has(it.id)).length
               return (
                 <details class={cx('section-card', !!s.hidden && 'is-hidden edit-only')} id={`section-${s.id}`} open>
                   <summary class="section-head">
@@ -351,12 +378,12 @@ export const CoursePage = ({
                       <span class="section-title">{s.title}</span>
                       <span class="muted small">
                         {shown.length} アイテム
-                        {isStudent && shown.length > 0 && ` · ${doneCount} 完了`}
+                        {isStudent && shownTracked.length > 0 && ` · ${doneCount} 完了`}
                         {hiddenCount > 0 && <span class="edit-only">{` · 非表示 ${hiddenCount}`}</span>}
                       </span>
                     </span>
                     {s.hidden ? <HiddenChip /> : null}
-                    {isStudent && shown.length > 0 && doneCount === shown.length && (
+                    {isStudent && shownTracked.length > 0 && doneCount === shownTracked.length && (
                       <Chip tone="success" icon="check">
                         完了
                       </Chip>
@@ -373,7 +400,8 @@ export const CoursePage = ({
                           courseId={id}
                           done={done.has(it.id)}
                           sharing={sharing.has(it.id)}
-                          showCheck={isStudent}
+                          completion={tracking ? it.completion : null}
+                          isStudent={isStudent}
                           manage={manage}
                         />
                       ))}
@@ -412,7 +440,7 @@ export const CoursePage = ({
             <FieldError id="new-section-title" />
           </form>
         )}
-        {manage && sectionList.length > 0 && <AddItemModal courseId={id} sections={sectionList} />}
+        {manage && sectionList.length > 0 && <AddItemModal courseId={id} sections={sectionList} tracking={tracking} />}
       </TabPanel>
       <CourseLiveSync courseId={id} revision={revision} />
     </AppShell>

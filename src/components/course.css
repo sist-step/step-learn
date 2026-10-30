@@ -69,3 +69,8 @@
 .kind-link { background: var(--info); }
 .kind-file { background: var(--warning); }
 .kind-screen { background: var(--success); }
+
+/* ===== 自動で付く完了の状態（アイテム画面） */
+.completion-status { display: inline-flex; align-items: center; gap: 8px; min-height: var(--control-h-lg); padding: 0 20px; border: 1px dashed var(--border-strong); border-radius: 999px; color: var(--muted); font-size: 14px; font-weight: 500; }
+.completion-status.is-done { border: 1px solid var(--success); background: var(--success-soft); color: var(--success); }
+.completion-status.is-done .icon { animation: pop 0.35s var(--ease); }

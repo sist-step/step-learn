@@ -13,7 +13,7 @@ import {
   type CourseImageKind,
 } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
-import { firstError, validate } from '../../lib/forms'
+import { firstError, validate, type FormValues } from '../../lib/forms'
 import { field, intParam, readForm, redirectWith, type Form } from '../../lib/http'
 import { imageName, putImage, serveImage } from '../../lib/images'
 import { completions, courses, enrollments, items, sections } from '../../lib/schema'
@@ -27,7 +27,12 @@ const courseFormValues = (form: Form): CourseFormValues => ({
   code: field(form, 'code', 30),
   summary: field(form, 'summary', 2000),
   color: field(form, 'color', 20),
+  completionEnabled: field(form, 'completion_enabled', 1) === '1' ? 1 : 0,
 })
+
+type CourseInput = FormValues<'course'>
+
+const courseColumns = ({ completion_enabled: completionEnabled, ...values }: CourseInput) => ({ ...values, completionEnabled })
 
 export async function list(c: Context<AppEnv>) {
   const user = c.var.user!
@@ -70,7 +75,7 @@ export async function create(c: Context<AppEnv>) {
   const course = db.transaction((tx) => {
     const created = tx
       .insert(courses)
-      .values({ ...result.values, createdBy: user.id })
+      .values({ ...courseColumns(result.values), createdBy: user.id })
       .returning({ id: courses.id })
       .get()
     tx.insert(sections).values({ courseId: created.id, title: 'はじめに', position: 1 }).run()
@@ -104,6 +109,7 @@ export async function show(c: Context<AppEnv>) {
       fileName: items.fileName,
       fileSize: items.fileSize,
       hidden: items.hidden,
+      completion: items.completion,
     })
     .from(items)
     .where(and(eq(items.courseId, id), manage ? undefined : visibleItem()))
@@ -167,7 +173,7 @@ export async function updateSettings(c: Context<AppEnv>) {
       title: `設定 - ${access.course.title}`,
     })
   }
-  db.update(courses).set(result.values).where(eq(courses.id, id)).run()
+  db.update(courses).set(courseColumns(result.values)).where(eq(courses.id, id)).run()
   return redirectWith(c, `/courses/${id}/settings`, '設定を保存しました。')
 }
 

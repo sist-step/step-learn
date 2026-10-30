@@ -1,10 +1,11 @@
 import type { Child } from 'hono/jsx'
 import { courseImageUrl, type CourseAccess } from '../lib/courses'
-import { COURSE_COLORS, type Course, type ItemType } from '../lib/types'
+import { completionChoices } from '../lib/forms'
+import { COMPLETION_LABELS, COMPLETIONS, COURSE_COLORS, type Completion, type Course, type ItemType } from '../lib/types'
 import { Button } from './button'
 import { Card } from './card'
 import { cx } from './cx'
-import { TextAreaField, TextField, validateWith } from './form'
+import { SegmentedControl, SelectField, TextAreaField, TextField, validateWith } from './form'
 import { Icon, type IconName } from './icons'
 import { Modal } from './overlay'
 import { Breadcrumbs, CourseIcon, ProgressRing, Tabs, courseInitials, type TabItem } from './ui'
@@ -67,7 +68,7 @@ export const CourseHeader = ({
   )
 }
 
-export type CourseFormValues = Partial<Pick<Course, 'title' | 'code' | 'summary' | 'color'>>
+export type CourseFormValues = Partial<Pick<Course, 'title' | 'code' | 'summary' | 'color' | 'completionEnabled'>>
 export type CourseFormErrors = Partial<Record<'title' | 'code' | 'summary', string>>
 
 const CourseFields = ({ values, errors = {} }: { values: CourseFormValues; errors?: CourseFormErrors }) => {
@@ -115,6 +116,7 @@ const CourseFields = ({ values, errors = {} }: { values: CourseFormValues; error
           ))}
         </div>
       </fieldset>
+      <CourseCompletionField enabled={values.completionEnabled !== 0} />
     </>
   )
 }
@@ -187,4 +189,66 @@ export const ItemIcon = ({ type }: { type: ItemType }) => {
 
 export const CourseLiveSync = ({ courseId, revision }: { courseId: number; revision: string }) => (
   <span hidden data-live={`/courses/${courseId}/revision`} data-live-rev={revision} />
+)
+
+const COMPLETION_HINTS: Record<ItemType | 'any', string> = {
+  page: '「開いたら完了」は、学生がこのページを開いたときに完了になります。',
+  link: '「開いたら完了」は、学生がリンクを開いたときに完了になります。',
+  file: '「開いたら完了」はプレビューを表示するかダウンロードしたとき、「最後まで再生したら完了」は動画・音声を最後まで再生したときに完了になります。',
+  screen: '画面共有では「なし」か「学生が自分で完了にする」を選べます。',
+  any: '「開いたら完了」はページ・リンク・ファイルで、「最後まで再生したら完了」は動画・音声のファイルで選べます。',
+}
+
+export const CompletionField = ({ type, id, value = 'none', error }: { type?: ItemType; id?: string; value?: string; error?: string }) => (
+  <SelectField
+    label="完了の条件"
+    name="completion"
+    id={id}
+    options={(type ? completionChoices(type) : COMPLETIONS).map((c) => ({ value: c, label: COMPLETION_LABELS[c] }))}
+    value={value}
+    error={error}
+    hint={COMPLETION_HINTS[type ?? 'any']}
+  />
+)
+
+const COMPLETION_WAITING: Record<Exclude<Completion, 'none' | 'manual'>, Partial<Record<ItemType, string>>> = {
+  view: { page: 'このページを開くと完了になります', link: 'リンクを開くと完了になります', file: 'ファイルを開くと完了になります' },
+  play: { file: '最後まで再生すると完了になります' },
+}
+
+export const CompletionStatus = ({
+  itemId,
+  type,
+  completion,
+  done,
+}: {
+  itemId: number
+  type: ItemType
+  completion: Completion
+  done: boolean
+}) => {
+  useStyle('/src/components/course.css')
+  if (completion === 'none' || completion === 'manual') return null
+  return (
+    <p class={cx('completion-status', done && 'is-done')} data-complete-status={itemId}>
+      <Icon name="check" size={16} />
+      <span data-complete-label>{done ? '完了済み' : COMPLETION_WAITING[completion][type]}</span>
+    </p>
+  )
+}
+
+const CourseCompletionField = ({ enabled }: { enabled: boolean }) => (
+  <fieldset class="field">
+    <legend>完了ステータス</legend>
+    <SegmentedControl
+      name="completion_enabled"
+      label="完了ステータス"
+      options={[
+        { value: '1', label: '使う', icon: 'check' },
+        { value: '0', label: '使わない', icon: 'x' },
+      ]}
+      value={enabled ? '1' : '0'}
+    />
+    <p class="field-hint">使うと、アイテムごとに完了の条件を決めて、学生の進捗を表示します。</p>
+  </fieldset>
 )

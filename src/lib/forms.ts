@@ -1,7 +1,8 @@
 // サーバーの handlers と client.ts の両方が読み込むので、DB や Node の API を使うモジュールを import しない
 import * as z from 'zod/mini'
 import { checkPassword } from './password'
-import { COURSE_COLORS } from './types'
+import { isMediaFile } from './preview'
+import { COMPLETIONS, COURSE_COLORS, type Completion, type ItemType } from './types'
 import { checkUsername, normalizeUsername } from './username'
 
 export const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) && s.length <= 254
@@ -101,31 +102,60 @@ const course = z.object({
   code: text('コースコード', 30),
   summary: text('概要', 2000),
   color: choice(COURSE_COLORS, 'cyan'),
+  completion_enabled: flag(),
 })
 
 const section = z.object({ title: text('セクション名', 120, { required: true }), summary: z.optional(text('説明', 2000)) })
 
-const itemFields = { title: text('タイトル', 200, { required: true }), body: text('本文', 100_000), hidden: flag() }
+export const completionChoices = (type: ItemType): Completion[] =>
+  type === 'screen' ? ['none', 'manual'] : type === 'file' ? [...COMPLETIONS] : ['none', 'manual', 'view']
+
+// file に null を受け付けるのは、ブラウザでは保存済みのファイルの種類が分からず、保存するときにサーバーで確かめ直すため
+export function completionError(type: ItemType, completion: Completion | undefined, file: { type: string; name: string } | null) {
+  if (!completion) return null
+  if (completion === 'play' && (type !== 'file' || (file && !isMediaFile(file))))
+    return '「最後まで再生したら完了」は動画・音声のファイルでだけ選べます。'
+  if (!completionChoices(type).includes(completion)) return 'この種類のアイテムでは選べない完了の条件です。'
+  return null
+}
+
+const completionIssue = (v: { type: ItemType; completion?: Completion; file?: unknown }) =>
+  completionError(v.type, v.completion, isFile(v.file) ? v.file : null)
+
+const itemFields = {
+  title: text('タイトル', 200, { required: true }),
+  body: text('本文', 100_000),
+  hidden: flag(),
+  type: choice(['page', 'link', 'file', 'screen'], 'page'),
+  completion: z.optional(z.enum(COMPLETIONS, '完了の条件が正しくありません。')),
+  // 必須にしないのは、ファイルの欄がファイルのアイテムのフォームにしかないため
+  file: z.optional(z.unknown()),
+}
 
 const URL_INVALID = 'http:// または https:// で始まる URL を入力してください。'
 
-const item = z
-  .object({ ...itemFields, type: choice(['page', 'link', 'file', 'screen'], 'page'), url: text('URL', 2000), file: z.unknown() })
-  .check(
-    z.superRefine((v, ctx) => {
-      if (v.type === 'link' && !isHttpUrl(v.url)) ctx.issues.push({ code: 'custom', message: URL_INVALID, input: v, path: ['url'] })
-      if (v.type === 'file' && !isFile(v.file))
-        ctx.issues.push({ code: 'custom', message: 'ファイルを選択してください。', input: v, path: ['file'] })
-    }),
-  )
+const item = z.object({ ...itemFields, url: text('URL', 2000) }).check(
+  z.superRefine((v, ctx) => {
+    if (v.type === 'link' && !isHttpUrl(v.url)) ctx.issues.push({ code: 'custom', message: URL_INVALID, input: v, path: ['url'] })
+    if (v.type === 'file' && !isFile(v.file))
+      ctx.issues.push({ code: 'custom', message: 'ファイルを選択してください。', input: v, path: ['file'] })
+    const message = completionIssue(v)
+    if (message) ctx.issues.push({ code: 'custom', message, input: v, path: ['completion'] })
+  }),
+)
 
 // URL の欄はリンクのアイテムの編集画面にしかないので、欄があるときだけ確かめる
-const itemEdit = z.object({
-  ...itemFields,
-  url: z.optional(z.pipe(text('URL', 2000), z.string().check(rule((s: string) => (isHttpUrl(s) ? null : URL_INVALID))))),
-  // 必須にしないのは、ファイルの欄がファイルのアイテムのフォームにしかないため
-  file: z.optional(z.unknown()),
-})
+const itemEdit = z
+  .object({
+    ...itemFields,
+    url: z.optional(z.pipe(text('URL', 2000), z.string().check(rule((s: string) => (isHttpUrl(s) ? null : URL_INVALID))))),
+  })
+  .check(
+    z.superRefine((v, ctx) => {
+      const message = completionIssue(v)
+      if (message) ctx.issues.push({ code: 'custom', message, input: v, path: ['completion'] })
+    }),
+  )
 
 const image = z.object({ image: file('画像を選択してください。') })
 

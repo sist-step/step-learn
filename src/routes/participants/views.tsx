@@ -104,7 +104,7 @@ const ParticipantRow = ({ p, courseId, meId, manage, totalItems }: TableProps & 
     </td>
     {manage && (
       <td class="hide-sm progress-cell">
-        {p.role === 'student' ? <Progress done={p.done} total={totalItems} /> : <span class="muted">—</span>}
+        {p.role === 'student' && totalItems > 0 ? <Progress done={p.done} total={totalItems} /> : <span class="muted">—</span>}
       </td>
     )}
     <td class="hide-sm muted">{formatDate(p.createdAt)}</td>
