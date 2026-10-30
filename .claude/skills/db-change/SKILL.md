@@ -1,6 +1,6 @@
 ---
 name: db-change
-description: "StepLearn の DB スキーマ変更とマイグレーション生成、Drizzle でのクエリの書き方。テーブルやカラム・インデックスを追加・変更する、src/lib/schema.ts や migrations/ に触れる、db.select / db.insert などでデータを読み書きする、データの保存方法を設計するときに読み込む。「〇〇を保存できるようにして」「カラムを追加」「テーブルを作って」なども対象。"
+description: "STEP Learn の DB スキーマ変更とマイグレーション生成、Drizzle でのクエリの書き方。テーブルやカラム・インデックスを追加・変更する、src/lib/schema.ts や migrations/ に触れる、db.select / db.insert などでデータを読み書きする、データの保存方法を設計するときに読み込む。「〇〇を保存できるようにして」「カラムを追加」「テーブルを作って」なども対象。"
 ---
 
 # DB の変更とクエリ

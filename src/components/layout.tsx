@@ -54,7 +54,7 @@ type NavItem = { href: string; icon: IconName; label: string; active: boolean }
 export const Brand = () => (
   <a href="/" class="brand">
     <img src="/favicon.png" alt="" class="brand-mark" width={32} height={32} />
-    <span class="brand-name">StepLearn</span>
+    <span class="brand-name">STEP Learn</span>
   </a>
 )
 
@@ -191,7 +191,7 @@ export const AuthShell = ({ children }: { children: Child }) => {
           <div class="auth-glass">
             <strong>学びを、一歩ずつ確かに。</strong>
             <span>コース・教材・進捗をひとつの場所に。</span>
-            <small>© {new Date().getFullYear()} StepLearn</small>
+            <small>© {new Date().getFullYear()} STEP Learn</small>
           </div>
         </section>
       </div>

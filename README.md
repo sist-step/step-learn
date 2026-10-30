@@ -1,4 +1,4 @@
-# StepLearn
+# STEP Learn
 
 Moodle の「よく使う機能だけ」を、速く・安く・使いやすく作り直した軽量 LMS です。
 Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はローカルディスク、本番は Cloudflare R2 に保存します。

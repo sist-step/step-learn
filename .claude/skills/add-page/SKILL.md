@@ -1,11 +1,11 @@
 ---
 name: add-page
-description: "StepLearn に画面・ルート・フォーム処理を追加または変更する手順と型。src/routes/<name>/ のルーティング・ハンドラ・ビューを足す、新しいページを作る、フォームの送信先を作る、権限チェックやバリデーションを書く、一覧・詳細・編集・削除の画面を作るときに読み込む。「〇〇画面を作って」「〇〇できるようにして」「ページを追加」「フォームを追加」などの依頼が対象。"
+description: "STEP Learn に画面・ルート・フォーム処理を追加または変更する手順と型。src/routes/<name>/ のルーティング・ハンドラ・ビューを足す、新しいページを作る、フォームの送信先を作る、権限チェックやバリデーションを書く、一覧・詳細・編集・削除の画面を作るときに読み込む。「〇〇画面を作って」「〇〇できるようにして」「ページを追加」「フォームを追加」などの依頼が対象。"
 ---
 
 # 画面・ルートの追加
 
-StepLearn は MPA。サーバーで HTML を返し、操作はすべて `<form method="post">` の送信と 303 リダイレクト（PRG）で完結させる。`client.ts` がこの送信を fetch に置き換えて再読み込みなしで遷移させる（JavaScript は必須）。
+STEP Learn は MPA。サーバーで HTML を返し、操作はすべて `<form method="post">` の送信と 303 リダイレクト（PRG）で完結させる。`client.ts` がこの送信を fetch に置き換えて再読み込みなしで遷移させる（JavaScript は必須）。
 
 ## 置き場所
 
@@ -119,7 +119,7 @@ export async function show(c: Context<AppEnv>) {
 }
 ```
 
-- `title` は「画面名」か「画面名 - コース名」。`| StepLearn` は renderer が付ける
+- `title` は「画面名」か「画面名 - コース名」。`| STEP Learn` は renderer が付ける
 - クエリは `db.select()...get()` / `.all()` で書く（書き方は `db-change` スキル）
 - 一覧が空のときは `EmptyState` を出す
 
