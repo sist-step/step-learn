@@ -37,19 +37,6 @@
 :root:not([data-edit-mode]) .edit-only,
 :root[data-edit-mode] .view-only { display: none; }
 
-.edit-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  margin-bottom: 18px;
-  border-radius: var(--radius);
-  background: var(--warning-soft);
-  color: color-mix(in srgb, #b7791f 85%, var(--text));
-  font-size: 13.5px;
-  font-weight: 500;
-}
-
 .sections { display: flex; flex-direction: column; gap: 12px; }
 .section-card {
   position: relative;

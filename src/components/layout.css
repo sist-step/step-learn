@@ -29,6 +29,7 @@
 }
 .topbar-start { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .topbar-end { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; }
+:root:not([data-edit-mode]) .topbar-edit-mode { display: none; }
 .topbar-avatar { display: block; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface); cursor: pointer; transition: box-shadow 0.15s; }
 .topbar-avatar::-webkit-details-marker { display: none; }
 .topbar-avatar:hover, .user-menu[open] > .topbar-avatar { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--border-strong); }

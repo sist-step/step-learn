@@ -8,7 +8,7 @@ import { IconButton } from './button'
 import { Switch } from './form'
 import { MenuItem, Popover } from './overlay'
 import { useStyle } from './style'
-import { Avatar, CourseIcon, Person } from './ui'
+import { Avatar, Chip, CourseIcon, Person } from './ui'
 
 type ToastType = Flash['type']
 
@@ -117,6 +117,11 @@ export const AppShell = ({ children, wide, editable }: { children: Child; wide?:
           <Brand />
         </div>
         <div class="topbar-end">
+          {editable && (
+            <Chip tone="accent" icon="pencil" class="topbar-edit-mode">
+              編集モード
+            </Chip>
+          )}
           <UserMenu editable={editable} />
         </div>
       </header>

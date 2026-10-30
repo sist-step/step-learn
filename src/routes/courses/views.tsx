@@ -246,13 +246,6 @@ export const CoursePage = ({
         progress={isStudent ? { done: visibleItems.filter((it) => done.has(it.id)).length, total: visibleItems.length } : undefined}
       />
       <TabPanel>
-        {manage && (
-          <div class="edit-banner edit-only">
-            <Icon name="pencil" size={16} />
-            <span>編集モード — セクションやアイテムの追加・並べ替え・学生への表示の切り替えができます。オフにすると学生と同じ見え方になります。</span>
-          </div>
-        )}
-
         {visibleSections.length === 0 && (
           <div class="view-only">
             <EmptyState icon="layers" title="まだ教材がありません" text="教師が教材を追加するとここに表示されます。" />
