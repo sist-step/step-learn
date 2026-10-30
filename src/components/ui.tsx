@@ -164,7 +164,7 @@ export type TabItem = { href: string; label: Child; active: boolean }
 export const Tabs = ({ label, items, block }: { label: string; items: readonly TabItem[]; block?: boolean }) => {
   useStyle('/src/components/ui.css')
   return (
-    <nav class={cx('tabs', block && 'tabs-block')} aria-label={label}>
+    <nav class={cx('tabs', block && 'tabs-block')} aria-label={label} data-tabs>
       {items.map((t) => (
         <a href={t.href} class={t.active ? 'tab active' : 'tab'} aria-current={t.active ? 'page' : undefined}>
           {t.label}
@@ -172,6 +172,11 @@ export const Tabs = ({ label, items, block }: { label: string; items: readonly T
       ))}
     </nav>
   )
+}
+
+export const TabPanel = ({ children }: { children: Child }) => {
+  useStyle('/src/components/ui.css')
+  return <div class="tab-panel">{children}</div>
 }
 
 export const Progress = ({ done, total, label = true }: { done: number; total: number; label?: boolean }) => {

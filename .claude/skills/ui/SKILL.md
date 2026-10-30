@@ -5,7 +5,7 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 
 # UI の作り方
 
-方針は「SSR ＋ 小さなクライアント JS」。JavaScript は必須で、無効なときは renderer の noscript が案内だけを出すので、JS なしの代替は作らない。CSS は部品・画面ごとのファイルに分け、そのページで使う分だけを読み込む（下の「CSS の置き場所と読み込み」）。JS は `src/client.ts` の 1 ファイル。CSS フレームワークや UI ライブラリは入れない。
+方針は「SSR ＋ 小さなクライアント JS」。JavaScript は必須で、無効なときは renderer の noscript が案内だけを出すので、JS なしの代替は作らない。CSS は部品・画面ごとのファイルに分け、そのページで使う分だけを読み込む（下の「CSS の置き場所と読み込み」）。JS は `src/client.ts` の 1 ファイル（Markdown エディターの CodeMirror だけは重いので、`src/markdown-editor.ts` に分けて、エディターのある画面で `client.ts` が動的に読み込む）。CSS フレームワークや UI ライブラリは入れない。
 
 ## まず既存の部品を使う
 
@@ -41,6 +41,7 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 | `Input` / `Select` / `Textarea` / `FileInput` | ラベルなしの部品。表の中や横並びのフォームで使う（`aria-label` を付ける）。`compact` で小さくなる |
 | `SearchBox` | 一覧上部の検索欄（`/` キーでフォーカス） |
 | `SegmentedControl` | ラジオボタンの切り替え（`name` / `label` / `options`（`icon` 付き可）/ `value`） |
+| `MarkdownEditor`（`markdown.tsx`） | Markdown の入力欄。CodeMirror のエディターに書式ボタン（⌘B / ⌘I / ⌘K）と「書く / プレビュー」の切り替え、書き方の早見表が付く。`label` / `name` / `value` / `rows`（最低の高さ）/ `placeholder` / `error` / `hint`。送信されるのは中の `textarea`（`name`）の値。Markdown を受け取る入力欄では `TextAreaField` ではなくこれを使う |
 | `Switch` | オン・オフのスイッチ（`role="switch"` のボタン）。`label` / `checked` / `icon`。切り替えの処理は `data-*` を付けて `client.ts` に書く |
 
 各 `XxxField` の `fieldClass` は外側の `.field` に付くクラス（`when-link` などの出し分け用）。
@@ -93,12 +94,14 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 | 部品 | 用途 |
 | --- | --- |
 | `PageHeader` | 画面上部の見出し（`eyebrow` / `title` / `description` / `actions`） |
-| `Tabs` | ページを切り替えるタブ（`label` / `items`（`{ href, label, active }[]`）/ `block` で横幅いっぱい） |
+| `Tabs` | ページを切り替えるタブ（`label` / `items`（`{ href, label, active }[]`）/ `block` で横幅いっぱい）。切り替えると選択中の背景が前のタブから滑る（`client.ts` の `markTabSwitch`） |
+| `TabPanel` | `Tabs` の下の中身を包む。タブを切り替えたとき、中身が切り替えた向きに少し流れて入れ替わる。`Tabs` を置いた画面では必ず使う |
 | `Chip` | 小さなラベル（`tone`: `default` / `accent` / `success` / `live`、`icon`） |
 | `Alert` | 帯状のメッセージ（`tone`: `error` / `info` / `success` / `warning`）。フォームのエラーなど |
 | `Breadcrumbs` | パンくず（`items`: `{ label, href? }[]`。最後は現在地なので `href` なし） |
 | `Person` | アバターと名前・補足を横に並べる（`avatar` / `name` / `meta` / `href`）。表の 1 列目など |
 | `EmptyState` | 一覧が空のとき（`icon` / `title` / `text` / `action`）。`page` で画面全体の空状態（404 など） |
+| `Markdown`（`markdown.tsx`） | Markdown を HTML にして `.prose` の見た目で出す（`source`）。`lib/markdown.ts` の変換を使うので生の HTML は通らない |
 | `Avatar` | 名前から色とイニシャルを作るアイコン |
 | `Progress` / `ProgressRing` | 進捗バー・リング（JS で更新できる `data-*` 付き） |
 | `CourseCard` | コース一覧のカード |
@@ -164,6 +167,7 @@ CSS は 1 ファイルにまとめず、使う部品・画面の隣に置く。�
 - 送信に時間がかかるフォームには `data-loading-form`（二重送信防止）
 - 取り消せない操作のフォームには `data-confirm="〜しますか？"`
 - `select` を変えたら即送信するフォームには `data-autosubmit`
+- 編集画面の保存ボタンには `data-save-shortcut`（⌘S / Ctrl+S で押される。フォームの外に置くときは `form="<id>"` を付ける）
 - 開閉は `<details>` / `<summary>` で作る（ボタンの下に出すパネルは `Popover` 部品）
 - モーダルは `Modal` 部品と `<Button popovertarget="...">` で作る（開閉・Esc・外側クリックをブラウザに任せられる。例は `components/course.tsx` の `CreateCourseButton`）。自前で書く場合も `popover` は値まで書く（真偽値で書くと hono が `popover="true"` と出力し、manual 扱いになって Esc や外側のクリックで閉じない）。`<dialog>` は開閉の処理を `client.ts` に書くことになるので使わない
 - 先読みさせたくないリンク（ログアウト・ダウンロードなど）は `data-no-prefetch`

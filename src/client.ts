@@ -199,15 +199,24 @@ document.addEventListener('keydown', (e) => {
   }
 })
 
-// --- 開いた「アイテムを追加」の最初の入力にフォーカス
+// --- 開いたポップオーバーの最初の入力にフォーカス
 document.addEventListener(
   'toggle',
   (e) => {
     const d = e.target as HTMLDetailsElement
-    if (d.matches?.('[data-autofocus-details], .popover') && d.open) d.querySelector<HTMLElement>('input:not([type=hidden]):not([type=radio]), textarea')?.focus()
+    if (d.matches?.('.popover') && d.open) d.querySelector<HTMLElement>('input:not([type=hidden]):not([type=radio]), textarea')?.focus()
   },
   true,
 )
+
+// --- 「アイテムを追加」を押したセクションを、モーダルのセクション欄で選んでおく
+// セクションごとにモーダルを置かないのは、セクションの数だけ同じフォームが HTML に並ぶため
+document.addEventListener('click', (e) => {
+  const btn = (e.target as Element).closest<HTMLElement>('[data-add-item-section]')
+  const modal = btn && document.getElementById(btn.getAttribute('popovertarget') ?? '')
+  const select = modal?.querySelector<HTMLSelectElement>('select[name=section_id]')
+  if (btn && select) select.value = btn.dataset.addItemSection ?? ''
+})
 
 // --- ポップオーバーは外側クリックと Esc で閉じる
 document.addEventListener('click', (e) => {
@@ -295,6 +304,25 @@ function updateToc() {
 }
 addEventListener('scroll', updateToc, { passive: true })
 addEventListener('hashchange', updateToc)
+
+// --- Markdown エディター（components/markdown.tsx の MarkdownEditor）
+// ここに直接 import しないのは、CodeMirror が大きく、エディターのない画面でも毎回読み込むことになるため
+function initMarkdownEditors() {
+  const fields = $$<HTMLElement>('[data-md-editor]:not([data-md-ready])')
+  if (!fields.length) return
+  import('./markdown-editor')
+    .then(({ mountMarkdownEditor }) => fields.forEach(mountMarkdownEditor))
+    .catch(() => toast('エディターを読み込めませんでした。', 'error'))
+}
+
+// --- ⌘S / Ctrl+S で保存（data-save-shortcut のボタンを押す）
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 's' || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return
+  const btn = document.querySelector<HTMLButtonElement>('[data-save-shortcut]')
+  if (!btn) return
+  e.preventDefault()
+  if (!btn.disabled) btn.click()
+})
 
 // --- 参加者を追加するモーダルのユーザー検索
 let userSearchTimer = 0
@@ -453,20 +481,49 @@ function loadStyles(doc: Document) {
   return Promise.all(pending)
 }
 
+// --- タブを切り替えたら、選択中の背景を前のタブの位置から滑らせ、中身を切り替えた向きに流す
+// 背景を CSS の transition に任せないのは、遷移でタブごと差し替わり、前の状態の要素が残らないため
+function markTabSwitch(doc: Document) {
+  const prev = $$('[data-tabs] .tab.active').map((a) => a.getAttribute('href'))
+  const from = $$<HTMLElement>('[data-tabs] .tab:not(.active)', doc).find((a) => prev.includes(a.getAttribute('href')))
+  const tabs = from?.parentElement ? $$<HTMLElement>('.tab', from.parentElement) : []
+  const to = tabs.find((a) => a.classList.contains('active'))
+  if (!from || !to) return
+  from.classList.add('is-leaving')
+  to.classList.add('is-entering')
+  return tabs.indexOf(to) > tabs.indexOf(from) ? 'next' : 'prev'
+}
+
+function slideTabIndicator() {
+  const from = document.querySelector('.tab.is-leaving')
+  const to = document.querySelector<HTMLElement>('.tab.is-entering')
+  if (!from || !to) return
+  const f = from.getBoundingClientRect()
+  const t = to.getBoundingClientRect()
+  to.style.setProperty('--tab-from-left', `${f.left - t.left}px`)
+  to.style.setProperty('--tab-from-right', `${t.right - f.right}px`)
+}
+
 function render(doc: Document, scroll: () => void) {
   // DOMParser はスクリプト無効として解析し noscript の中身を要素にするので、そのまま差し込むと表示されるブラウザがある
   $$('noscript', doc.body).forEach((el) => el.remove())
   holdRail()
+  const tabSlide = markTabSwitch(doc)
   const swap = () => {
     document.title = doc.title
     swapBody(doc.body)
+    slideTabIndicator()
     holdRail()
     initPage()
     document.querySelector<HTMLElement>('[autofocus]')?.focus()
     scroll()
   }
   if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return swap()
-  return document.startViewTransition(swap).updateCallbackDone
+  const root = document.documentElement
+  if (tabSlide) root.dataset.tabSlide = tabSlide
+  const transition = document.startViewTransition(swap)
+  transition.finished.finally(() => root.dataset.tabSlide === tabSlide && delete root.dataset.tabSlide)
+  return transition.updateCallbackDone
 }
 
 function scrollToHash(hash: string) {
@@ -585,6 +642,7 @@ function initPage() {
   restoreCollapsed()
   applyEditMode(readEditMode())
   updateToc()
+  initMarkdownEditors()
 }
 initPage()
 
