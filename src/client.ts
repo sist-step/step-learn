@@ -122,7 +122,7 @@ document.addEventListener('submit', async (e) => {
 
   // 二重送信防止とローディング表示
   if (form.hasAttribute('data-loading-form')) {
-    const btn = form.querySelector<HTMLButtonElement>('button[type=submit], button:not([type])')
+    const btn = e.submitter instanceof HTMLButtonElement ? e.submitter : form.querySelector<HTMLButtonElement>('button[type=submit], button:not([type])')
     if (btn) {
       setTimeout(() => {
         btn.disabled = true
@@ -257,6 +257,32 @@ document.addEventListener('change', (e) => {
   const title = input.form?.querySelector<HTMLInputElement>('input[name=title]')
   if (title && !title.value) title.value = input.files[0].name.replace(/\.[^.]+$/, '')
 })
+
+// --- 参加者を追加するモーダルのユーザー検索
+let userSearchTimer = 0
+let userSearchController: AbortController | null = null
+document.addEventListener('input', (e) => {
+  const input = (e.target as Element).closest<HTMLInputElement>('[data-user-search]')
+  if (!input) return
+  clearTimeout(userSearchTimer)
+  userSearchTimer = window.setTimeout(() => searchUsers(input), 200)
+})
+
+async function searchUsers(input: HTMLInputElement) {
+  const results = document.getElementById(input.getAttribute('aria-controls') ?? '')
+  if (!results) return
+  userSearchController?.abort()
+  const controller = (userSearchController = new AbortController())
+  const url = new URL(input.dataset.userSearch!, location.href)
+  url.searchParams.set('q', input.value)
+  try {
+    const res = await fetch(url, { signal: controller.signal })
+    if (!res.ok) throw new Error()
+    results.innerHTML = await res.text()
+  } catch {
+    if (!controller.signal.aborted) toast('検索できませんでした。通信状況を確認してください。', 'error')
+  }
+}
 
 // --- ページ遷移を再読み込みなしで行う（JS がなければ通常のリンク・フォーム送信で遷移する）
 type Page = { url: string; redirected: boolean; isHtml: boolean; html: string }

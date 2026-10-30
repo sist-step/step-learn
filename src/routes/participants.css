@@ -1,8 +1,11 @@
 .progress-cell { width: 200px; }
 
-.invite { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; padding: 16px 20px; margin-bottom: 8px; }
-.invite h2 { font-size: 15px; }
-.invite-fields { display: flex; gap: 8px; flex: 1; max-width: 560px; min-width: min(100%, 320px); }
-.invite-fields input.input { flex: 1; }
-.invite-fields select.input { width: 110px; flex: none; }
-@media (max-width: 560px) { .invite-fields { flex-wrap: wrap; } .invite-fields input.input { flex-basis: 100%; } }
+.participants-toolbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+
+.candidates-box { min-height: 120px; max-height: min(360px, 50dvh); overflow-y: auto; }
+.candidates { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.candidate { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; }
+.candidate:hover { background: var(--surface-2); }
+.candidate > .person { flex: 1; }
+.candidate > :last-child { flex: none; }
+.candidates-note { padding: 8px 10px; }
