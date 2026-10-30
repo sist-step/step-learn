@@ -11,8 +11,9 @@
 .auth-frame {
   display: grid;
   grid-template-columns: minmax(380px, 0.9fr) minmax(0, 1.1fr);
+  --auth-frame-h: min(760px, calc(100dvh - 48px));
   width: min(1180px, 100%);
-  min-height: min(760px, calc(100dvh - 48px));
+  min-height: var(--auth-frame-h);
   padding: 12px;
   border-radius: 34px;
   background: color-mix(in srgb, var(--art-shine) 6%, transparent);
@@ -29,14 +30,19 @@
   background: linear-gradient(170deg, var(--surface) 30%, color-mix(in srgb, var(--art-bright) 10%, var(--surface)));
   box-shadow: 0 0 0 1px var(--border), 12px 0 40px rgb(0 0 0 / 0.25);
 }
+/* 中央寄せにしないのは、入力欄の数やエラーの有無でロゴと見出しが上下に動かないようにするため */
+.auth-main:has(.tab-panel) { align-items: flex-start; padding-top: max(48px, calc((var(--auth-frame-h) - 396px) / 2)); }
 .auth-column { width: 100%; max-width: 360px; animation: rise 0.35s var(--ease); }
 .auth-column > .brand { margin-bottom: 28px; }
 .auth-card h1 { font-size: 22px; font-weight: 650; }
-.auth-card > p { margin: 6px 0 24px; word-break: auto-phrase; }
+.auth-card > p { min-height: 2lh; margin: 6px 0 24px; word-break: auto-phrase; }
 .auth-card .alert { margin-bottom: 18px; }
 .auth-card form { gap: 16px; }
 .auth-card .tabs { margin: 0 0 24px; }
+.auth-card h1 + .tabs { margin-top: 20px; }
 .auth-card .btn-block { margin-top: 8px; }
+.auth-card .tab-panel form { min-height: 223px; }
+.auth-card .tab-panel .btn-block { margin-top: auto; }
 .auth-switch { margin-top: 24px; text-align: center; font-size: 13.5px; color: var(--muted); }
 .auth-switch a { font-weight: 600; }
 .auth .empty-page { padding-top: 0; }
@@ -69,6 +75,6 @@
 @media (max-width: 900px) {
   .auth { padding: 0; place-items: stretch; }
   .auth-frame { grid-template-columns: 1fr; min-height: 100dvh; padding: 0; border-radius: 0; box-shadow: none; }
-  .auth-main { align-items: flex-start; padding: 48px 20px; border-radius: 0; box-shadow: none; }
+  .auth-main, .auth-main:has(.tab-panel) { align-items: flex-start; padding: 48px 20px; border-radius: 0; box-shadow: none; }
   .auth-art { display: none; }
 }

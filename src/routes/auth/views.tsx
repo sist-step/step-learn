@@ -26,7 +26,6 @@ export const LoginPage = ({ login = '', next = '', errors = {} }: { login?: stri
   <AuthShell>
     <div class="auth-card">
       <h1>おかえりなさい</h1>
-      <p class="muted">アカウントにログインして学習を続けましょう。</p>
       <AuthTabs current="login" next={next} />
       <TabPanel>
         <FormError message={errors.form} />
@@ -63,7 +62,6 @@ export const RegisterPage = ({ email = '', next = '', errors = {} }: { email?: s
   <AuthShell>
     <div class="auth-card">
       <h1>アカウントを作成</h1>
-      <p class="muted">メールアドレスに届くリンクから登録を完了してください。</p>
       <AuthTabs current="register" next={next} />
       <TabPanel>
         <FormError message={errors.form} />
