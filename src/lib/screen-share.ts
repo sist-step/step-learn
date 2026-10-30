@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { Server, type Socket } from 'socket.io'
 import { userFromCookieHeader } from './auth'
 import { config } from './config'
-import { getCourseAccessFor } from './courses'
+import { getCourseAccessFor, isVisibleItem } from './courses'
 import { db } from './db'
 import { items } from './schema'
 import {
@@ -194,6 +194,7 @@ export function attachScreenShare(httpServer: HttpServer) {
       const access = await getCourseAccessFor(user, courseId)
       if (!access || (mode === 'present' && !access.canManage)) return next(shareError('not_found'))
       if (!(await isScreenItem(courseId, itemId))) return next(shareError('not_found'))
+      if (!access.canManage && !isVisibleItem(itemId)) return next(shareError('not_found'))
       const presenter = rooms.get(itemId)?.presenter
       if (mode === 'present' && presenter && presenter.data.user.id !== user.id) return next(shareError('busy'))
       socket.data = { user, itemId, mode }

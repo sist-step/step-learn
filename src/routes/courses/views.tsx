@@ -2,6 +2,7 @@ import { CourseForm, CourseHeader, CreateCourseButton, ItemIcon, type CourseForm
 import { Button, IconButton } from '../../components/button'
 import { Card, DangerRow } from '../../components/card'
 import { FileField, ImageField, SearchBox, SegmentedControl, TextAreaField, TextField } from '../../components/form'
+import { cx } from '../../components/cx'
 import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Popover } from '../../components/overlay'
@@ -12,7 +13,7 @@ import { MAX_IMAGE_SIZE } from '../../lib/images'
 import { formatBytes } from '../../lib/storage'
 import { ITEM_TYPE_LABELS, type Item, type ItemType, type Section } from '../../lib/types'
 
-export type ItemLite = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'url' | 'fileName' | 'fileSize'>
+export type ItemLite = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'url' | 'fileName' | 'fileSize' | 'hidden'>
 
 // ---------------------------------------------------------------- 一覧
 
@@ -95,7 +96,7 @@ const ItemRow = ({
         ? `${item.fileName ?? ''} · ${formatBytes(item.fileSize ?? 0)}`
         : ITEM_TYPE_LABELS[item.type]
   return (
-    <li class={done ? 'item-row is-done' : 'item-row'} data-item={item.id}>
+    <li class={cx('item-row', done && 'is-done', !!item.hidden && 'is-hidden edit-only')} data-item={item.id}>
       <a
         href={href}
         class="item-link"
@@ -106,12 +107,14 @@ const ItemRow = ({
           <span class="item-title">{item.title}</span>
           <span class="item-meta truncate">{meta}</span>
         </span>
+        {item.hidden ? <HiddenChip /> : null}
         {sharing && <Chip tone="live">配信中</Chip>}
         {newTab && <Icon name="external" size={14} class="item-ext" />}
       </a>
       {manage && (
         <div class="row-actions edit-only">
           <IconButton href={`${base}/edit`} icon="pencil" label="編集" />
+          <VisibilityButton action={`${base}/visibility`} hidden={!!item.hidden} />
           <MoveButtons action={`${base}/move`} />
           <form method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`}>
             <IconButton type="submit" icon="trash" label="削除" danger />
@@ -129,11 +132,20 @@ const ItemRow = ({
   )
 }
 
+const HiddenChip = () => <Chip icon="eyeSlash">学生に非表示</Chip>
+
+const VisibilityButton = ({ action, hidden }: { action: string; hidden: boolean }) => (
+  <form method="post" action={action}>
+    <input type="hidden" name="hidden" value={hidden ? '0' : '1'} />
+    <IconButton type="submit" icon={hidden ? 'eye' : 'eyeSlash'} label={hidden ? '学生に表示する' : '学生に非表示にする'} />
+  </form>
+)
+
 const ADD_ITEM_ICONS: Record<ItemType, IconName> = { page: 'page', link: 'link', file: 'upload', screen: 'monitor' }
 const ADD_ITEM_OPTIONS = (['page', 'link', 'file', 'screen'] as const).map((t) => ({ value: t, label: ITEM_TYPE_LABELS[t], icon: ADD_ITEM_ICONS[t] }))
 
 const AddItemForm = ({ courseId, sectionId }: { courseId: number; sectionId: number }) => (
-  <details class="add-item" data-autofocus-details>
+  <details class="add-item edit-only" data-autofocus-details>
     <summary>
       <Icon name="plus" size={16} /> アイテムを追加
     </summary>
@@ -191,6 +203,7 @@ const SectionEditBar = ({ courseId, section }: { courseId: number; section: Sect
           </div>
         </form>
       </Popover>
+      <VisibilityButton action={`${base}/visibility`} hidden={!!section.hidden} />
       <MoveButtons action={`${base}/move`} />
       <form method="post" action={`${base}/delete`} data-confirm={`セクション「${section.title}」と中のアイテムをすべて削除しますか？`}>
         <IconButton type="submit" icon="trash" label="削除" danger />
@@ -219,6 +232,10 @@ export const CoursePage = ({
 
   const bySection = new Map<number, ItemLite[]>()
   for (const it of itemList) bySection.set(it.sectionId, [...(bySection.get(it.sectionId) ?? []), it])
+  const visibleSections = sectionList.filter((s) => !s.hidden)
+  // 学生にも同じ番号で見えるよう、表示しているセクションだけで数える
+  const sectionNumber = new Map(visibleSections.map((s, i) => [s.id, String(i + 1).padStart(2, '0')]))
+  const visibleItems = itemList.filter((it) => !it.hidden && sectionNumber.has(it.sectionId))
 
   return (
     <AppShell wide editable={manage}>
@@ -226,37 +243,42 @@ export const CoursePage = ({
       <CourseHeader
         access={access}
         tab="content"
-        progress={isStudent ? { done: done.size, total: itemList.length } : undefined}
+        progress={isStudent ? { done: visibleItems.filter((it) => done.has(it.id)).length, total: visibleItems.length } : undefined}
       />
 
       {manage && (
         <div class="edit-banner edit-only">
           <Icon name="pencil" size={16} />
-          <span>編集モード — セクションやアイテムを追加・並べ替えできます。終了するまでほかのコースでも続きます。</span>
+          <span>編集モード — セクションやアイテムの追加・並べ替え・学生への表示の切り替えができます。オフにすると学生と同じ見え方になります。</span>
         </div>
       )}
 
-      {sectionList.length === 0 ? (
+      {visibleSections.length === 0 && (
         <div class="view-only">
           <EmptyState icon="layers" title="まだ教材がありません" text="教師が教材を追加するとここに表示されます。" />
         </div>
-      ) : (
+      )}
+      {sectionList.length > 0 && (
         <div class="sections">
-          {sectionList.map((s, idx) => {
+          {sectionList.map((s) => {
             const list = bySection.get(s.id) ?? []
-            const doneCount = list.filter((it) => done.has(it.id)).length
+            const shown = list.filter((it) => !it.hidden)
+            const hiddenCount = list.length - shown.length
+            const doneCount = shown.filter((it) => done.has(it.id)).length
             return (
-              <details class="section-card" id={`section-${s.id}`} open>
+              <details class={cx('section-card', !!s.hidden && 'is-hidden edit-only')} id={`section-${s.id}`} open>
                 <summary class="section-head">
-                  <span class="section-num">{String(idx + 1).padStart(2, '0')}</span>
+                  <span class="section-num">{sectionNumber.get(s.id) ?? <Icon name="eyeSlash" size={14} />}</span>
                   <span class="section-title-wrap">
                     <span class="section-title">{s.title}</span>
                     <span class="muted small">
-                      {list.length} アイテム
-                      {isStudent && list.length > 0 && ` · ${doneCount} 完了`}
+                      {shown.length} アイテム
+                      {isStudent && shown.length > 0 && ` · ${doneCount} 完了`}
+                      {hiddenCount > 0 && <span class="edit-only">{` · 非表示 ${hiddenCount}`}</span>}
                     </span>
                   </span>
-                  {isStudent && list.length > 0 && doneCount === list.length && (
+                  {s.hidden ? <HiddenChip /> : null}
+                  {isStudent && shown.length > 0 && doneCount === shown.length && (
                     <Chip tone="success" icon="check">
                       完了
                     </Chip>
@@ -265,15 +287,14 @@ export const CoursePage = ({
                 </summary>
                 {manage && <SectionEditBar courseId={id} section={s} />}
                 {s.summary && <p class="section-summary">{s.summary}</p>}
-                {list.length > 0 ? (
+                {list.length > 0 && (
                   <ul class="items">
                     {list.map((it) => (
                       <ItemRow item={it} courseId={id} done={done.has(it.id)} sharing={sharing.has(it.id)} showCheck={isStudent} manage={manage} />
                     ))}
                   </ul>
-                ) : (
-                  <p class="muted small section-empty view-only">このセクションにはまだアイテムがありません。</p>
                 )}
+                {shown.length === 0 && <p class="muted small section-empty view-only">このセクションにはまだアイテムがありません。</p>}
                 {manage && <AddItemForm courseId={id} sectionId={s.id} />}
               </details>
             )

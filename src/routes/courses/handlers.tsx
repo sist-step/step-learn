@@ -3,7 +3,7 @@ import type { Context } from 'hono'
 import type { CourseFormErrors, CourseFormValues } from '../../components/course'
 import type { CourseCardData } from '../../components/ui'
 import { canCreateCourse } from '../../lib/auth'
-import { courseImagePrefix, getCourseAccess, memberCount, teacherNames, type CourseImageKind } from '../../lib/courses'
+import { courseImagePrefix, getCourseAccess, memberCount, teacherNames, visibleItem, type CourseImageKind } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
 import { field, fileField, intParam, readForm, redirectWith, type Form } from '../../lib/http'
 import { imageName, putImage, serveImage } from '../../lib/images'
@@ -82,7 +82,13 @@ export async function show(c: Context<AppEnv>) {
   if (!access) return c.notFound()
   const user = c.var.user!
 
-  const sectionList = db.select().from(sections).where(eq(sections.courseId, id)).orderBy(sections.position, sections.id).all()
+  const manage = access.canManage
+  const sectionList = db
+    .select()
+    .from(sections)
+    .where(and(eq(sections.courseId, id), manage ? undefined : eq(sections.hidden, 0)))
+    .orderBy(sections.position, sections.id)
+    .all()
   const itemList: ItemLite[] = db
     .select({
       id: items.id,
@@ -92,9 +98,10 @@ export async function show(c: Context<AppEnv>) {
       url: items.url,
       fileName: items.fileName,
       fileSize: items.fileSize,
+      hidden: items.hidden,
     })
     .from(items)
-    .where(eq(items.courseId, id))
+    .where(and(eq(items.courseId, id), manage ? undefined : visibleItem()))
     .orderBy(items.position, items.id)
     .all()
   const doneRows = db
