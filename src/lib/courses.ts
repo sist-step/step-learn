@@ -1,10 +1,10 @@
-import { and, eq, max, sql, type SQL } from 'drizzle-orm'
+import { and, eq, inArray, max, notInArray, sql, type SQL, type SQLWrapper } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import type { Context } from 'hono'
 import type { AppEnv, Course, CourseRole, User } from './types'
 import { db } from './db'
 import { imageName } from './images'
-import { courses, enrollments, items, sections, users } from './schema'
+import { completions, courses, enrollments, items, sections, users } from './schema'
 
 export type CourseAccess = {
   course: Course
@@ -37,6 +37,26 @@ export const courseImageUrl = (courseId: number, kind: CourseImageKind, key: str
   key ? `/courses/${courseId}/${kind}/${imageName(key)}` : null
 
 export const courseImagePrefix = (courseId: number, kind: CourseImageKind) => `courses/${courseId}/${kind}`
+
+/** items を FROM に含むクエリで使う、学生に見えるアイテム（アイテムもセクションも非表示でない）の条件 */
+export const visibleItem = () =>
+  and(eq(items.hidden, 0), notInArray(items.sectionId, db.select({ id: sections.id }).from(sections).where(eq(sections.hidden, 1))))
+
+export const isVisibleItem = (itemId: number) => !!db.select({ id: items.id }).from(items).where(and(eq(items.id, itemId), visibleItem())).get()
+
+/** 進捗の分母。courseId には courses.id などの列も渡せる */
+export const visibleItemCount = (courseId: number | SQLWrapper) => db.$count(items, and(eq(items.courseId, courseId), visibleItem()))
+
+// 完了の記録を消さずに数えるときだけ外すのは、表示に戻したときに学生の進捗をそのまま復元するため
+export const visibleDoneCount = (userId: number | SQLWrapper, courseId: number | SQLWrapper) =>
+  db.$count(
+    completions,
+    and(
+      eq(completions.userId, userId),
+      eq(completions.courseId, courseId),
+      inArray(completions.itemId, db.select({ id: items.id }).from(items).where(visibleItem())),
+    ),
+  )
 
 /** courses を FROM に含むクエリで使う、コースの参加者数 */
 export const memberCount = () => db.$count(enrollments, eq(enrollments.courseId, courses.id))

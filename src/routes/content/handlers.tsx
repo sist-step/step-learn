@@ -1,6 +1,6 @@
 import { and, eq, isNotNull } from 'drizzle-orm'
 import type { Context } from 'hono'
-import { getCourseAccess, moveRow, nextPosition } from '../../lib/courses'
+import { getCourseAccess, isVisibleItem, moveRow, nextPosition, visibleDoneCount, visibleItem, visibleItemCount } from '../../lib/courses'
 import { db } from '../../lib/db'
 import { field, fileField, intParam, isHttpUrl, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
 import { completions, items, sections } from '../../lib/schema'
@@ -68,6 +68,26 @@ export async function moveSection(c: Context<AppEnv>) {
   const dir = field(await readForm(c), 'dir') === 'up' ? 'up' : 'down'
   moveRow(sections, eq(sections.courseId, access.course.id), sid, dir)
   return c.redirect(editUrl(access.course.id, sid), 303)
+}
+
+// トグルにせず値を送らせるのは、二重送信や古い画面からの送信で意図と逆の状態になるのを避けるため
+const readHidden = async (c: Context<AppEnv>) => (field(await readForm(c), 'hidden') === '1' ? 1 : 0)
+
+const hiddenMessage = (title: string, hidden: number) => `「${title}」を${hidden ? '学生に非表示にしました' : '学生に表示しました'}。`
+
+export async function setSectionHidden(c: Context<AppEnv>) {
+  const access = await manageAccess(c)
+  const sid = intParam(c, 'sid')
+  if (!access || !sid) return c.notFound()
+  const hidden = await readHidden(c)
+  const section = db
+    .update(sections)
+    .set({ hidden })
+    .where(and(eq(sections.id, sid), eq(sections.courseId, access.course.id)))
+    .returning({ title: sections.title })
+    .get()
+  if (!section) return c.notFound()
+  return redirectWith(c, editUrl(access.course.id, sid), hiddenMessage(section.title, hidden), 'info')
 }
 
 export async function removeSection(c: Context<AppEnv>) {
@@ -200,6 +220,21 @@ export async function moveItem(c: Context<AppEnv>) {
   return c.redirect(editUrl(access.course.id, item.sectionId), 303)
 }
 
+export async function setItemHidden(c: Context<AppEnv>) {
+  const access = await manageAccess(c)
+  const iid = intParam(c, 'iid')
+  if (!access || !iid) return c.notFound()
+  const hidden = await readHidden(c)
+  const item = db
+    .update(items)
+    .set({ hidden })
+    .where(and(eq(items.id, iid), eq(items.courseId, access.course.id)))
+    .returning({ sectionId: items.sectionId, title: items.title })
+    .get()
+  if (!item) return c.notFound()
+  return redirectWith(c, editUrl(access.course.id, item.sectionId), hiddenMessage(item.title, hidden), 'info')
+}
+
 export async function removeItem(c: Context<AppEnv>) {
   const access = await manageAccess(c)
   const iid = intParam(c, 'iid')
@@ -223,18 +258,19 @@ export async function showItem(c: Context<AppEnv>) {
   if (!access) return c.notFound()
   const userId = c.var.user!.id
 
+  const manage = access.canManage
   const item = getItem(id, iid)
-  if (!item) return c.notFound()
+  if (!item || (!manage && !isVisibleItem(iid))) return c.notFound()
   const sectionList = db
-    .select({ id: sections.id, title: sections.title })
+    .select({ id: sections.id, title: sections.title, hidden: sections.hidden })
     .from(sections)
-    .where(eq(sections.courseId, id))
+    .where(and(eq(sections.courseId, id), manage ? undefined : eq(sections.hidden, 0)))
     .orderBy(sections.position, sections.id)
     .all()
   const outline: OutlineItem[] = db
-    .select({ id: items.id, sectionId: items.sectionId, type: items.type, title: items.title, url: items.url })
+    .select({ id: items.id, sectionId: items.sectionId, type: items.type, title: items.title, url: items.url, hidden: items.hidden })
     .from(items)
-    .where(eq(items.courseId, id))
+    .where(and(eq(items.courseId, id), manage ? undefined : visibleItem()))
     .orderBy(items.position, items.id)
     .all()
   const doneRows = db
@@ -271,7 +307,7 @@ export async function toggleComplete(c: Context<AppEnv>) {
   const id = intParam(c, 'id')
   const iid = intParam(c, 'iid')
   const access = id && iid && (await getCourseAccess(c, id))
-  if (!access || access.role !== 'student') return c.notFound()
+  if (!access || access.role !== 'student' || !isVisibleItem(iid)) return c.notFound()
   const userId = c.var.user!.id
 
   // 削除できたら未完了に、なければ完了として挿入（トグル）
@@ -286,8 +322,8 @@ export async function toggleComplete(c: Context<AppEnv>) {
   const completed = !removed
 
   if (wantsJson(c)) {
-    const total = await db.$count(items, eq(items.courseId, id))
-    const done = await db.$count(completions, and(eq(completions.userId, userId), eq(completions.courseId, id)))
+    const total = await visibleItemCount(id)
+    const done = await visibleDoneCount(userId, id)
     return c.json({ completed, total, done })
   }
   return c.redirect(c.req.header('referer') ?? `/courses/${id}`, 303)
@@ -299,7 +335,7 @@ export async function downloadFile(c: Context<AppEnv>) {
   const access = id && iid && (await getCourseAccess(c, id))
   if (!access) return c.notFound()
   const item = getItem(id, iid)
-  if (!item || item.type !== 'file' || !item.fileKey) return c.notFound()
+  if (!item || item.type !== 'file' || !item.fileKey || (!access.canManage && !isVisibleItem(iid))) return c.notFound()
 
   const type = item.fileType ?? 'application/octet-stream'
   // インライン表示は PDF とラスタ画像だけ（PDF ビューアは sandbox CSP 下で表示されないため、sandbox は添付時のみ）
