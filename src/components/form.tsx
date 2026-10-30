@@ -13,9 +13,7 @@ const controlClass = ({ compact, class: cls }: ControlProps) => cx('input', comp
 
 export const Input = ({ compact, invalid, class: cls, ...rest }: ControlProps & JSX.IntrinsicElements['input']) => {
   useStyle('/src/components/form.css')
-  return (
-    <input class={controlClass({ compact, class: cls })} aria-invalid={invalid ? 'true' : undefined} {...rest} />
-  )
+  return <input class={controlClass({ compact, class: cls })} aria-invalid={invalid ? 'true' : undefined} {...rest} />
 }
 
 export const Select = ({
@@ -159,9 +157,7 @@ export const TextAreaField = ({
 
 export const FileInput = ({ class: cls, ...rest }: Omit<JSX.IntrinsicElements['input'], 'type'> & { class?: string }) => {
   useStyle('/src/components/form.css')
-  return (
-    <input type="file" class={cx('file-input', cls)} {...rest} />
-  )
+  return <input type="file" class={cx('file-input', cls)} {...rest} />
 }
 
 export const FileField = ({
@@ -193,9 +189,9 @@ export const ImageField = ({
   fieldClass,
   ...rest
 }: LabeledProps & { src?: string | null; aspect?: string; width?: number } & Omit<
-  JSX.IntrinsicElements['input'],
-  'id' | 'name' | 'type' | 'src' | 'width'
->) => {
+    JSX.IntrinsicElements['input'],
+    'id' | 'name' | 'type' | 'src' | 'width'
+  >) => {
   useStyle('/src/components/form.css')
   return (
     <FormField id={id} label={label} error={error} hint={hint} class={fieldClass}>
@@ -219,7 +215,17 @@ export const ImageField = ({
   )
 }
 
-export const SearchBox = ({ label, value, placeholder, name = 'q' }: { label: string; value?: string; placeholder: string; name?: string }) => {
+export const SearchBox = ({
+  label,
+  value,
+  placeholder,
+  name = 'q',
+}: {
+  label: string
+  value?: string
+  placeholder: string
+  name?: string
+}) => {
   useStyle('/src/components/form.css')
   return (
     <label class="search">

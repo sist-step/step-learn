@@ -52,7 +52,14 @@ export const AccountPage = ({ user, errors = {}, values }: { user: User; errors?
 
       <Card heading="パスワード" description="変更すると、ほかの端末のセッションはすべてログアウトされます。">
         <form method="post" action="/account/password" class="stack" data-loading-form>
-          <TextField label="現在のパスワード" name="current" type="password" error={errors.current} autocomplete="current-password" required />
+          <TextField
+            label="現在のパスワード"
+            name="current"
+            type="password"
+            error={errors.current}
+            autocomplete="current-password"
+            required
+          />
           <TextField
             label="新しいパスワード"
             name="password"

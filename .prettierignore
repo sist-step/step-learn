@@ -1,0 +1,7 @@
+migrations/
+dist/
+data/
+public/
+package-lock.json
+*.md
+*.css

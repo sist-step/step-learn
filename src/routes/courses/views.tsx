@@ -1,4 +1,11 @@
-import { CourseForm, CourseHeader, CreateCourseButton, ItemIcon, type CourseFormErrors, type CourseFormValues } from '../../components/course'
+import {
+  CourseForm,
+  CourseHeader,
+  CreateCourseButton,
+  ItemIcon,
+  type CourseFormErrors,
+  type CourseFormValues,
+} from '../../components/course'
 import { Button, IconButton } from '../../components/button'
 import { Card, DangerRow } from '../../components/card'
 import { FileField, ImageField, SearchBox, SegmentedControl, SelectField, TextAreaField, TextField } from '../../components/form'
@@ -43,13 +50,13 @@ export const CoursesPage = ({
         icon="book"
         title={q ? `「${q}」に一致するコースはありません` : isAdmin ? 'まだコースがありません' : 'まだ参加しているコースはありません'}
         text={
-          q ? '別のキーワードで検索してみてください。' : isAdmin ? '「コースを作成」から最初のコースを作りましょう。' : 'コースに追加されると、ここに表示されます。'
+          q
+            ? '別のキーワードで検索してみてください。'
+            : isAdmin
+              ? '「コースを作成」から最初のコースを作りましょう。'
+              : 'コースに追加されると、ここに表示されます。'
         }
-        action={
-          q && (
-            <Button href="/courses">検索をクリア</Button>
-          )
-        }
+        action={q && <Button href="/courses">検索をクリア</Button>}
       />
     ) : (
       <div class="course-grid">
@@ -124,7 +131,13 @@ const ItemRow = ({
       )}
       {showCheck && (
         <form method="post" action={`${base}/complete`} class={manage ? 'view-only' : undefined} data-complete>
-          <button type="submit" class="check" aria-pressed={done ? 'true' : 'false'} aria-label={done ? '未完了に戻す' : '完了にする'} title={done ? '完了済み' : '完了にする'}>
+          <button
+            type="submit"
+            class="check"
+            aria-pressed={done ? 'true' : 'false'}
+            aria-label={done ? '未完了に戻す' : '完了にする'}
+            title={done ? '完了済み' : '完了にする'}
+          >
             <Icon name="check" size={14} />
           </button>
         </form>
@@ -177,7 +190,13 @@ const AddItemModal = ({ courseId, sections }: { courseId: number; sections: Sect
       </fieldset>
       <TextField label="タイトル" name="title" id="new-item-title" maxlength={200} placeholder="例：第1回 講義資料" required autofocus />
       <TextField label="URL" name="url" id="new-item-url" type="url" placeholder="https://" fieldClass="when-link" />
-      <FileField label="ファイル" name="file" id="new-item-file" hint="最大 30MB。PDF・画像はブラウザでプレビューできます。" fieldClass="when-file" />
+      <FileField
+        label="ファイル"
+        name="file"
+        id="new-item-file"
+        hint="最大 30MB。PDF・画像はブラウザでプレビューできます。"
+        fieldClass="when-file"
+      />
       <MarkdownEditor
         label={
           <>
@@ -191,7 +210,12 @@ const AddItemModal = ({ courseId, sections }: { courseId: number; sections: Sect
         placeholder="あとから編集画面でも書けます"
       />
       <div class="grid-2">
-        <SelectField label="セクション" name="section_id" id="new-item-section" options={sections.map((s) => ({ value: String(s.id), label: s.title }))} />
+        <SelectField
+          label="セクション"
+          name="section_id"
+          id="new-item-section"
+          options={sections.map((s) => ({ value: String(s.id), label: s.title }))}
+        />
         <fieldset class="field">
           <legend>学生への表示</legend>
           <SegmentedControl
@@ -324,7 +348,14 @@ export const CoursePage = ({
                   {list.length > 0 && (
                     <ul class="items">
                       {list.map((it) => (
-                        <ItemRow item={it} courseId={id} done={done.has(it.id)} sharing={sharing.has(it.id)} showCheck={isStudent} manage={manage} />
+                        <ItemRow
+                          item={it}
+                          courseId={id}
+                          done={done.has(it.id)}
+                          sharing={sharing.has(it.id)}
+                          showCheck={isStudent}
+                          manage={manage}
+                        />
                       ))}
                     </ul>
                   )}
@@ -339,7 +370,14 @@ export const CoursePage = ({
         {manage && (
           <form method="post" action={`/courses/${id}/sections`} class="add-section edit-only" data-loading-form>
             <Icon name="plus" />
-            <input class="add-section-input" name="title" placeholder="新しいセクション名（例：第2週 データの扱い方）" maxlength={120} required aria-label="新しいセクション名" />
+            <input
+              class="add-section-input"
+              name="title"
+              placeholder="新しいセクション名（例：第2週 データの扱い方）"
+              maxlength={120}
+              required
+              aria-label="新しいセクション名"
+            />
             <Button type="submit" variant="primary" size="sm">
               セクションを追加
             </Button>
@@ -353,21 +391,22 @@ export const CoursePage = ({
 
 // ---------------------------------------------------------------- 設定
 
-const COURSE_IMAGE_FIELDS: Record<CourseImageKind, { heading: string; description: string; hint: string; aspect: string; width?: number }> = {
-  icon: {
-    heading: 'コースアイコン',
-    description: 'コース名の横と、左のメニューに表示されます。未設定のときはコースコード（なければコース名）の頭文字を表示します。',
-    hint: '正方形の画像が向いています（推奨 256×256px 以上）。',
-    aspect: '1 / 1',
-    width: 120,
-  },
-  hero: {
-    heading: 'ヒーロー画像',
-    description: 'コースページの上部と、コース一覧のカードに表示されます。',
-    hint: '横長の画像が向いています（推奨 1600×400px）。',
-    aspect: '4 / 1',
-  },
-}
+const COURSE_IMAGE_FIELDS: Record<CourseImageKind, { heading: string; description: string; hint: string; aspect: string; width?: number }> =
+  {
+    icon: {
+      heading: 'コースアイコン',
+      description: 'コース名の横と、左のメニューに表示されます。未設定のときはコースコード（なければコース名）の頭文字を表示します。',
+      hint: '正方形の画像が向いています（推奨 256×256px 以上）。',
+      aspect: '1 / 1',
+      width: 120,
+    },
+    hero: {
+      heading: 'ヒーロー画像',
+      description: 'コースページの上部と、コース一覧のカードに表示されます。',
+      hint: '横長の画像が向いています（推奨 1600×400px）。',
+      aspect: '4 / 1',
+    },
+  }
 
 const CourseImageCard = ({ courseId, kind, imageKey }: { courseId: number; kind: CourseImageKind; imageKey: string | null }) => {
   const f = COURSE_IMAGE_FIELDS[kind]
@@ -433,7 +472,14 @@ export const SettingsPage = ({ access, values, errors }: { access: CourseAccess;
             ))}
           </nav>
           <div class="stack-lg">
-            <CourseForm id="settings-basic" action={`/courses/${id}/settings`} values={values} errors={errors} submitLabel="変更を保存" cancelHref={`/courses/${id}`} />
+            <CourseForm
+              id="settings-basic"
+              action={`/courses/${id}/settings`}
+              values={values}
+              errors={errors}
+              submitLabel="変更を保存"
+              cancelHref={`/courses/${id}`}
+            />
 
             <CourseImageCard courseId={id} kind="icon" imageKey={access.course.iconImage} />
             <CourseImageCard courseId={id} kind="hero" imageKey={access.course.heroImage} />

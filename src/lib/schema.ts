@@ -15,7 +15,9 @@ export const users = sqliteTable(
     // NOT NULL にしないのは、ユーザー名の導入前に登録したユーザーにはまだ値がないため
     username: textNocase('username'),
     passwordHash: text('password_hash').notNull(),
-    role: text('role', { enum: ['admin', 'teacher', 'student'] }).notNull().default('student'),
+    role: text('role', { enum: ['admin', 'teacher', 'student'] })
+      .notNull()
+      .default('student'),
     createdAt: integer('created_at').notNull().default(now),
   },
   (t) => [uniqueIndex('users_username').on(t.username), check('users_role', sql`${t.role} IN ('admin', 'teacher', 'student')`)],
@@ -58,7 +60,10 @@ export const courses = sqliteTable('courses', {
   visible: integer('visible').notNull().default(1),
   createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: integer('created_at').notNull().default(now),
-  updatedAt: integer('updated_at').notNull().default(now).$onUpdate(() => now),
+  updatedAt: integer('updated_at')
+    .notNull()
+    .default(now)
+    .$onUpdate(() => now),
 })
 
 export const enrollments = sqliteTable(
@@ -70,7 +75,9 @@ export const enrollments = sqliteTable(
     userId: integer('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    role: text('role', { enum: ['teacher', 'student'] }).notNull().default('student'),
+    role: text('role', { enum: ['teacher', 'student'] })
+      .notNull()
+      .default('student'),
     createdAt: integer('created_at').notNull().default(now),
   },
   (t) => [
@@ -116,7 +123,10 @@ export const items = sqliteTable(
     hidden: integer('hidden').notNull().default(0),
     position: integer('position').notNull().default(0),
     createdAt: integer('created_at').notNull().default(now),
-    updatedAt: integer('updated_at').notNull().default(now).$onUpdate(() => now),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .default(now)
+      .$onUpdate(() => now),
   },
   (t) => [
     index('items_section').on(t.sectionId, t.position),

@@ -61,7 +61,9 @@ export const UsersPage = ({
     {list.length === 0 ? (
       <EmptyState icon="users" title="ユーザーが見つかりません" text="検索条件を変えてお試しください。" />
     ) : (
-      <Table columns={[{ label: 'ユーザー' }, { label: '登録日', class: 'hide-sm' }, { label: 'コース', class: 'hide-sm' }, { label: 'ロール' }]}>
+      <Table
+        columns={[{ label: 'ユーザー' }, { label: '登録日', class: 'hide-sm' }, { label: 'コース', class: 'hide-sm' }, { label: 'ロール' }]}
+      >
         {list.map((u) => (
           <tr>
             <td>

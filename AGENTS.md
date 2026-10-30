@@ -7,12 +7,14 @@ Hono（hono/jsx の SSR）＋ SQLite（better-sqlite3 / Drizzle）で動く軽�
 ```sh
 npm run dev        # http://localhost:5173（data/ に DB が自動作成される）
 npm run typecheck  # 型チェック
+npm run lint       # oxlint（型情報を使うルールも含む）
+npm run format     # Prettier で整形（CI は format:check）
 npm run build      # dist/ を生成。CLI（user:create）もこれで作られる
 npm run db:generate  # schema.ts からマイグレーションを生成
 npm run db:check     # マイグレーションの整合性を確認（CI と同じ）
 ```
 
-テストフレームワークはない。完了の基準は `typecheck` と `build` が通り、変更した画面を実際に動かして確かめたこと。
+テストフレームワークはない。完了の基準は `typecheck`・`lint`・`format:check`・`build` が通り、変更した画面を実際に動かして確かめたこと。
 
 ## 作業の進め方
 

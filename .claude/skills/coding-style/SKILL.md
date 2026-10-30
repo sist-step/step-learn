@@ -9,14 +9,15 @@ description: "StepLearn の TypeScript / TSX の書き方（書式・命名・�
 
 ## 書式
 
-フォーマッタは入れていない。以下を手で守る（`.editorconfig` も参照）。
+TS・TSX・JSON・YAML は Prettier（`.prettierrc.json`）で整える。書いたら `npm run format` をかけ、手で整形しない。設定はインデント 2・セミコロンなし・シングルクォート・末尾カンマあり・140 文字。
 
-- インデントはスペース 2、セミコロンなし、文字列はシングルクォート、末尾カンマあり
-- 1 行は 140 文字程度まで。超えるときは引数やオブジェクトを改行で区切る
-- アロー関数の引数は 1 つでも括弧を付ける: `(c) => ...`
+CSS は 1 行にまとめたルールを残すため Prettier の対象外（`.prettierignore`）。`.editorconfig` に合わせて手で書く。
+
+lint は oxlint（`.oxlintrc.json`）。ルールを止めるときは `// oxlint-disable-next-line <ルール> -- <理由>` と理由を書く。
+
+Prettier では決まらないもの:
+
 - 数値リテラルは桁区切りを使う: `600_000`、`10_000`
-- 行頭が `[` `(` で始まる文の前には `;` を付ける（ASI 対策）: `;[a[i], a[j]] = [a[j], a[i]]`
-- Drizzle のクエリは 1 行が長くなったらメソッドチェーンごとに改行する
 
 ## import
 
