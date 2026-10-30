@@ -3,6 +3,7 @@
 // 全ページ共通のクライアント処理。JS が無効な環境では renderer の noscript がアプリを使えなくする。
 
 import checkSvg from 'heroicons/24/outline/check.svg?raw'
+import { renderMarkdown } from './lib/markdown'
 
 const $$ = <T extends Element>(sel: string, root: ParentNode = document) => [...root.querySelectorAll<T>(sel)]
 
@@ -295,6 +296,34 @@ function updateToc() {
 }
 addEventListener('scroll', updateToc, { passive: true })
 addEventListener('hashchange', updateToc)
+
+// --- Markdown の入力欄の「書く / プレビュー」切り替え
+// プレビューをサーバーに頼まないのは、表示と同じ変換をそのまま手元で使え、通信を待たずに切り替えられるため
+document.addEventListener('click', (e) => {
+  const btn = (e.target as Element).closest<HTMLButtonElement>('[data-md-mode]')
+  const field = btn?.closest('[data-md]')
+  const textarea = field?.querySelector('textarea')
+  const preview = field?.querySelector<HTMLElement>('[data-md-preview]')
+  if (!btn || !field || !textarea || !preview) return
+  const showPreview = btn.dataset.mdMode === 'preview'
+  if (showPreview) {
+    preview.style.minHeight = `${textarea.offsetHeight}px`
+    preview.innerHTML = textarea.value.trim() ? renderMarkdown(textarea.value) : '<p class="muted">まだ何も書かれていません。</p>'
+  }
+  textarea.hidden = showPreview
+  preview.hidden = !showPreview
+  $$('[data-md-mode]', field).forEach((b) => b.setAttribute('aria-pressed', String(b === btn)))
+  if (!showPreview) textarea.focus()
+})
+
+// --- ⌘S / Ctrl+S で保存（data-save-shortcut のボタンを押す）
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 's' || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return
+  const btn = document.querySelector<HTMLButtonElement>('[data-save-shortcut]')
+  if (!btn) return
+  e.preventDefault()
+  if (!btn.disabled) btn.click()
+})
 
 // --- 参加者を追加するモーダルのユーザー検索
 let userSearchTimer = 0

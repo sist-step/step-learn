@@ -183,13 +183,15 @@ export async function updateItem(c: Context<AppEnv>) {
   const input = readItemInput(form)
   const requestedSection = Number(field(form, 'section_id'))
   const sectionId = getSection(courseId, requestedSection) ? requestedSection : item.sectionId
+  const hidden = field(form, 'hidden', 1) === '1' ? 1 : 0
 
   const error = validateItem(item.type, input, false)
   if (error) {
     c.status(422)
-    return c.render(<ItemEditPage access={access} item={item} sections={listSections(courseId)} values={input} error={error} />, {
-      title: `編集 - ${item.title}`,
-    })
+    return c.render(
+      <ItemEditPage access={access} item={item} sections={listSections(courseId)} values={{ ...input, hidden, sectionId }} error={error} />,
+      { title: `編集 - ${item.title}` },
+    )
   }
 
   let stored: StoredFile | null = null
@@ -200,13 +202,14 @@ export async function updateItem(c: Context<AppEnv>) {
       title: input.title,
       body: input.body,
       url: item.type === 'link' ? input.url : '',
+      hidden,
       ...fileColumns(stored),
       ...(sectionId !== item.sectionId && { sectionId, position: nextPosition(items, eq(items.sectionId, sectionId)) }),
     })
     .where(eq(items.id, iid))
     .run()
   if (stored && item.fileKey) inBackground(deleteKeys([item.fileKey]))
-  return redirectWith(c, editUrl(courseId, sectionId), '保存しました。')
+  return redirectWith(c, `/courses/${courseId}/items/${iid}/edit`, '保存しました。')
 }
 
 export async function moveItem(c: Context<AppEnv>) {

@@ -1,13 +1,13 @@
 import { raw } from 'hono/html'
-import { CourseHeader, ItemIcon } from '../../components/course'
+import { ItemIcon } from '../../components/course'
 import { cx } from '../../components/cx'
 import { Icon } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
 import { Button } from '../../components/button'
-import { FileInput, FormField, SelectField, TextAreaField, TextField } from '../../components/form'
-import { Card, LinkCard } from '../../components/card'
-import { Alert, Breadcrumbs, Chip, TabPanel } from '../../components/ui'
+import { FileInput, FormField, SegmentedControl, SelectField, TextField, Textarea } from '../../components/form'
+import { Card, DangerRow, LinkCard } from '../../components/card'
+import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import type { CourseAccess } from '../../lib/courses'
 import { renderMarkdown } from '../../lib/markdown'
 import { MAX_FILE_SIZE, formatBytes } from '../../lib/storage'
@@ -24,6 +24,53 @@ export const PREVIEWABLE = /^(application\/pdf|image\/(png|jpe?g|gif|webp|avif))
 export const editUrl = (courseId: number, sectionId?: number) =>
   `/courses/${courseId}${sectionId ? `#section-${sectionId}` : ''}`
 
+const MARKDOWN_HELP: [string, string][] = [
+  ['# 見出し', '見出し（## で小見出し）'],
+  ['**太字**', '太字'],
+  ['*斜体*', '斜体'],
+  ['- 項目', '箇条書き'],
+  ['1. 項目', '番号付きの箇条書き'],
+  ['> 引用', '引用'],
+  ['`コード`', 'コード（``` で囲むと複数行）'],
+  ['[文字](https://…)', 'リンク'],
+]
+
+const MarkdownField = ({ label, name, value, tall }: { label: string; name: string; value?: string; tall?: boolean }) => {
+  const id = `f-${name}`
+  return (
+    <div class={cx('field md-field', tall && 'is-tall')} data-md>
+      <div class="md-field-head">
+        <label for={id}>{label}</label>
+        <div class="md-modes" role="group" aria-label="表示の切り替え">
+          <button type="button" aria-pressed="true" data-md-mode="write">
+            <Icon name="pencil" size={14} /> 書く
+          </button>
+          <button type="button" aria-pressed="false" data-md-mode="preview">
+            <Icon name="eye" size={14} /> プレビュー
+          </button>
+        </div>
+      </div>
+      <Textarea id={id} name={name} value={value} rows={tall ? 16 : 5} />
+      <div class="md-preview prose" data-md-preview hidden />
+      <details class="md-help">
+        <summary>
+          <Icon name="info" size={14} /> Markdown で書式を付けられます
+        </summary>
+        <dl>
+          {MARKDOWN_HELP.map(([syntax, meaning]) => (
+            <>
+              <dt>
+                <code>{syntax}</code>
+              </dt>
+              <dd>{meaning}</dd>
+            </>
+          ))}
+        </dl>
+      </details>
+    </div>
+  )
+}
+
 export const ItemEditPage = ({
   access,
   item,
@@ -34,69 +81,98 @@ export const ItemEditPage = ({
   access: CourseAccess
   item: Item
   sections: Section[]
-  values?: Partial<ItemInput>
+  values?: Partial<ItemInput> & { hidden?: number; sectionId?: number }
   error?: string
 }) => {
   const courseId = access.course.id
   const base = `/courses/${courseId}/items/${item.id}`
-  const v = { title: item.title, body: item.body, url: item.url, ...values }
+  const v = { title: item.title, body: item.body, url: item.url, hidden: item.hidden, sectionId: item.sectionId, ...values }
+  const section = sections.find((s) => s.id === item.sectionId)
+  const typeLabel = ITEM_TYPE_LABELS[item.type]
   return (
     <AppShell wide>
       <Styles use={['/src/routes/content/content.css']} />
-      <CourseHeader access={access} tab="content" />
-      <TabPanel>
-        <div class="narrow">
-          <a href={editUrl(courseId, item.sectionId)} class="back-link">
-            <Icon name="chevronLeft" size={16} /> コースに戻る
-          </a>
-          <Card
-            as="form"
-            method="post"
-            action={base}
-            enctype="multipart/form-data"
-            class="stack"
-            data-loading-form
-            leading={<ItemIcon type={item.type} />}
-            heading={`${ITEM_TYPE_LABELS[item.type]}を編集`}
-          >
-            {error && <Alert>{error}</Alert>}
-            <TextField label="タイトル" name="title" value={v.title} required maxlength={200} />
-            <SelectField
-              label="セクション"
-              name="section_id"
-              id="f-section"
-              options={sections.map((s) => ({ value: String(s.id), label: s.title }))}
-              value={String(item.sectionId)}
-            />
-            {item.type === 'link' && <TextField label="URL" name="url" type="url" value={v.url} required />}
-            {item.type === 'file' && (
-              <FormField id="f-file" label="ファイル" hint={`差し替える場合は新しいファイルを選択（最大 ${formatBytes(MAX_FILE_SIZE)}）`}>
-                <div class="file-current">
-                  <Icon name="file" />
-                  <span class="truncate">{item.fileName}</span>
-                  <span class="muted small">{formatBytes(item.fileSize ?? 0)}</span>
-                </div>
-                <FileInput id="f-file" name="file" aria-describedby="f-file-desc" />
-              </FormField>
-            )}
-            <TextAreaField
-              label={item.type === 'page' ? '本文' : '説明（任意）'}
-              name="body"
-              value={v.body}
-              rows={item.type === 'page' ? 16 : 4}
-              hint="Markdown が使えます：# 見出し、**太字**、*斜体*、- 箇条書き、1. 番号付き、> 引用、```コード```、[リンク](https://…)"
-            />
-            <div class="form-actions">
-              <Button href={editUrl(courseId, item.sectionId)} variant="ghost">
-                キャンセル
-              </Button>
-              <Button type="submit" variant="primary">
-                保存
-              </Button>
-            </div>
-          </Card>
+      <Breadcrumbs
+        items={[
+          { href: '/courses', label: 'コース' },
+          { href: editUrl(courseId, item.sectionId), label: access.course.code || access.course.title },
+          { label: section?.title },
+        ]}
+      />
+      <header class="editor-head">
+        <ItemIcon type={item.type} />
+        <div class="editor-head-text">
+          <span class="eyebrow">{typeLabel}を編集</span>
+          <h1 class="truncate">{item.title}</h1>
         </div>
-      </TabPanel>
+        <div class="editor-head-actions">
+          <Button href={base} variant="ghost" icon="eye" aria-label="表示">
+            <span class="hide-sm">表示</span>
+          </Button>
+          <Button type="submit" form="item-form" variant="primary" icon="check" title="保存（⌘S / Ctrl+S）" data-save-shortcut>
+            保存
+          </Button>
+        </div>
+      </header>
+
+      <div class="editor">
+        <form id="item-form" method="post" action={base} enctype="multipart/form-data" class="editor-form" data-loading-form>
+          <Card class="editor-main stack">
+            {error && <Alert>{error}</Alert>}
+            <TextField label="タイトル" name="title" value={v.title} required maxlength={200} class="editor-title" />
+            {item.type === 'link' && <TextField label="URL" name="url" type="url" value={v.url} required placeholder="https://" />}
+            <MarkdownField label={item.type === 'page' ? '本文' : '説明（任意）'} name="body" value={v.body} tall={item.type === 'page'} />
+          </Card>
+
+          <aside class="editor-side">
+            <Card heading="公開と配置">
+              <div class="stack">
+                <fieldset class="field">
+                  <legend>学生への表示</legend>
+                  <SegmentedControl
+                    name="hidden"
+                    label="学生への表示"
+                    options={[
+                      { value: '0', label: '表示', icon: 'eye' },
+                      { value: '1', label: '非表示', icon: 'eyeSlash' },
+                    ]}
+                    value={String(v.hidden)}
+                  />
+                </fieldset>
+                <SelectField
+                  label="セクション"
+                  name="section_id"
+                  id="f-section"
+                  options={sections.map((s) => ({ value: String(s.id), label: s.title }))}
+                  value={String(v.sectionId)}
+                />
+              </div>
+            </Card>
+            {item.type === 'file' && (
+              <Card heading="ファイル">
+                <FormField id="f-file" label="差し替えるファイル" hint={`選ばなければ今のファイルのまま（最大 ${formatBytes(MAX_FILE_SIZE)}）`}>
+                  <div class="file-current">
+                    <Icon name="file" />
+                    <span class="truncate">{item.fileName}</span>
+                    <span class="muted small">{formatBytes(item.fileSize ?? 0)}</span>
+                  </div>
+                  <FileInput id="f-file" name="file" aria-describedby="f-file-desc" />
+                </FormField>
+              </Card>
+            )}
+          </aside>
+        </form>
+
+        <Card tone="danger" class="editor-danger">
+          <DangerRow heading="アイテムを削除" description="学生の完了記録も消え、元に戻せません。">
+            <form method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`}>
+              <Button type="submit" variant="danger-outline" size="sm" icon="trash">
+                削除
+              </Button>
+            </form>
+          </DangerRow>
+        </Card>
+      </div>
     </AppShell>
   )
 }
