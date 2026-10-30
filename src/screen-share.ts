@@ -380,11 +380,11 @@ function setup(root: HTMLElement) {
 
   // --- 操作
   startBtn?.addEventListener('click', () => {
-    if (!presentation) startPresenting()
+    if (!presentation) void startPresenting()
   })
   stopBtn?.addEventListener('click', () => presentation?.stop())
   const toggleFullscreen = () => {
-    if (document.fullscreenElement) document.exitFullscreen()
+    if (document.fullscreenElement) void document.exitFullscreen()
     else stage.requestFullscreen?.().catch(() => {})
   }
   fullscreenBtn.addEventListener('click', toggleFullscreen)
