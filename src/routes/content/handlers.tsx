@@ -5,7 +5,7 @@ import { db } from '../../lib/db'
 import { field, intParam, isHttpUrl, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
 import { completions, items, sections } from '../../lib/schema'
 import { isSharing } from '../../lib/screen-share'
-import { MAX_FILE_SIZE, deleteKeys, formatBytes, inBackground, putCourseFile, storage, type StoredFile } from '../../lib/storage'
+import { FILE_TOO_LARGE, MAX_FILE_SIZE, deleteKeys, inBackground, putCourseFile, storage, type StoredFile } from '../../lib/storage'
 import type { AppEnv, ItemType } from '../../lib/types'
 import { ItemEditPage, ItemPage, PREVIEWABLE, editUrl, type ItemInput, type OutlineItem } from './views'
 
@@ -105,7 +105,7 @@ function validateItem(type: ItemType, input: ItemInput, requireFile: boolean) {
   if (!input.title) return 'タイトルを入力してください。'
   if (type === 'link' && !isHttpUrl(input.url)) return 'http:// または https:// で始まる URL を入力してください。'
   if (type === 'file' && requireFile && !input.file) return 'ファイルを選択してください。'
-  if (input.file && input.file.size > MAX_FILE_SIZE) return `ファイルサイズは ${formatBytes(MAX_FILE_SIZE)} までです。`
+  if (input.file && input.file.size > MAX_FILE_SIZE) return FILE_TOO_LARGE
   return null
 }
 
