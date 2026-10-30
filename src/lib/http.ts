@@ -3,6 +3,7 @@ import type { Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
 import { config } from './config'
+import { formatBytes } from './storage'
 import type { AppEnv, Flash } from './types'
 
 const FLASH_COOKIE = 'flash'
@@ -24,6 +25,40 @@ export function redirectWith(c: Context<AppEnv>, location: string, message: stri
   setCookie(c, FLASH_COOKIE, JSON.stringify({ type, message }), { path: '/', httpOnly: true, sameSite: 'Lax', maxAge: 60 })
   return c.redirect(location, 303)
 }
+
+/** Referer が同一オリジンならそのパスを、そうでなければ fallback を返す */
+export function sameOriginReferer(c: Context, fallback: string) {
+  try {
+    const ref = new URL(c.req.header('referer') ?? '')
+    if (ref.origin === new URL(c.req.url).origin) return ref.pathname + ref.search
+  } catch {}
+  return fallback
+}
+
+// hono/body-limit を使わないのは、読み切った本文を new Request(c.req.raw) で包み直す実装で、
+// global の Request を差し替えない開発サーバーでは @hono/node-server の軽量な Request を受け付けられず 500 になるため
+export const limitBody = (maxSize: number, message = `送信できるデータの大きさは ${formatBytes(maxSize)} までです。`) =>
+  createMiddleware<AppEnv>(async (c, next) => {
+    const raw = c.req.raw
+    if (!raw.body) return next()
+    // 413 を返さないのは、client.ts が HTML でない応答を受けると送信先の URL を GET で開き直してしまうため
+    const tooLarge = () => redirectWith(c, sameOriginReferer(c, '/'), message, 'error')
+    const length = raw.headers.get('content-length')
+    if (length !== null && !raw.headers.has('transfer-encoding')) return Number(length) > maxSize ? tooLarge() : next()
+
+    const reader = raw.body.getReader()
+    const chunks: Uint8Array<ArrayBuffer>[] = []
+    let size = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.length
+      if (size > maxSize) return tooLarge()
+      chunks.push(value)
+    }
+    c.req.raw = new Request(c.req.url, { method: raw.method, headers: raw.headers, body: new Blob(chunks) })
+    await next()
+  })
 
 export type Theme = 'light' | 'dark'
 

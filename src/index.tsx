@@ -7,7 +7,8 @@ import { AppShell, AuthShell } from './components/layout'
 import { EmptyState } from './components/ui'
 import { session } from './lib/auth'
 import { config } from './lib/config'
-import { flashMiddleware } from './lib/http'
+import { flashMiddleware, limitBody } from './lib/http'
+import { FILE_TOO_LARGE, MAX_FILE_SIZE } from './lib/storage'
 import type { AppEnv } from './lib/types'
 import { renderer } from './renderer'
 import account from './routes/account'
@@ -21,11 +22,17 @@ import screen from './routes/screen'
 
 const app = new Hono<AppEnv>()
 
+// 全員に同じ上限をかけないのは、ログインしていなくても POST できるので、教材ファイル並みの大きさを受け付けると誰でもメモリを使わせられるため
+const guestBodyLimit = limitBody(64 * 1024)
+// ファイルの上限ちょうどにしないのは、同じフォームで本文などの入力欄も一緒に送るため
+const userBodyLimit = limitBody(MAX_FILE_SIZE + 1024 * 1024, FILE_TOO_LARGE)
+
 app.use(secureHeaders())
 // フォーム POST の Origin を検証（SameSite=Lax Cookie と合わせた CSRF 対策）
 app.use(csrf(config.appOrigin ? { origin: config.appOrigin } : undefined))
 app.use(flashMiddleware)
 app.use(session)
+app.use((c, next) => (c.var.user ? userBodyLimit : guestBodyLimit)(c, next))
 app.use(renderer)
 
 app.get('/', (c) => c.redirect(c.var.user ? '/dashboard' : '/login'))
