@@ -5,7 +5,17 @@ import { db } from '../../lib/db'
 import { field, fileField, intParam, isHttpUrl, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
 import { completions, items, sections } from '../../lib/schema'
 import { isSharing } from '../../lib/screen-share'
-import { FILE_TOO_LARGE, MAX_FILE_SIZE, deleteKeys, inBackground, putCourseFile, storage, type StoredFile } from '../../lib/storage'
+import {
+  EXECUTABLE_NOT_ALLOWED,
+  FILE_TOO_LARGE,
+  MAX_FILE_SIZE,
+  deleteKeys,
+  inBackground,
+  isExecutable,
+  putCourseFile,
+  storage,
+  type StoredFile,
+} from '../../lib/storage'
 import type { AppEnv, ItemType } from '../../lib/types'
 import { ItemEditPage, ItemPage, TEXT_PREVIEW_MAX, editUrl, previewKind, type ItemInput, type OutlineItem } from './views'
 
@@ -121,11 +131,12 @@ function readItemInput(form: Form): ItemInput {
   }
 }
 
-function validateItem(type: ItemType, input: ItemInput, requireFile: boolean) {
+async function validateItem(type: ItemType, input: ItemInput, requireFile: boolean) {
   if (!input.title) return 'タイトルを入力してください。'
   if (type === 'link' && !isHttpUrl(input.url)) return 'http:// または https:// で始まる URL を入力してください。'
   if (type === 'file' && requireFile && !input.file) return 'ファイルを選択してください。'
   if (input.file && input.file.size > MAX_FILE_SIZE) return FILE_TOO_LARGE
+  if (input.file && (await isExecutable(input.file))) return EXECUTABLE_NOT_ALLOWED
   return null
 }
 
@@ -141,7 +152,7 @@ export async function createItem(c: Context<AppEnv>) {
   const hidden = field(form, 'hidden', 1) === '1' ? 1 : 0
 
   if (!getSection(courseId, sectionId)) return c.notFound()
-  const error = validateItem(type, input, true)
+  const error = await validateItem(type, input, true)
   if (error) return redirectWith(c, editUrl(courseId, sectionId), error, 'error')
 
   let stored: StoredFile | null = null
@@ -191,7 +202,7 @@ export async function updateItem(c: Context<AppEnv>) {
   const sectionId = getSection(courseId, requestedSection) ? requestedSection : item.sectionId
   const hidden = field(form, 'hidden', 1) === '1' ? 1 : 0
 
-  const error = validateItem(item.type, input, false)
+  const error = await validateItem(item.type, input, false)
   if (error) {
     c.status(422)
     return c.render(
