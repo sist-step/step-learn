@@ -1,6 +1,6 @@
 ---
 name: ui
-description: "StepLearn の見た目と UI の作り方（既存の UI 部品・CSS クラス・デザイントークン・アイコン・ダークモード・スマホ対応・クライアント JS）。画面のマークアップを書く、src/styles/ や src/components/ の CSS・部品を変更する、src/client.ts に挙動を足す、デザインを調整するときに読み込む。「見た目を整えて」「ボタンを追加」「レイアウトを変えて」「画面遷移なしで反映したい」なども対象。"
+description: "STEP Learn の見た目と UI の作り方（既存の UI 部品・CSS クラス・デザイントークン・アイコン・ダークモード・スマホ対応・クライアント JS）。画面のマークアップを書く、src/styles/ や src/components/ の CSS・部品を変更する、src/client.ts に挙動を足す、デザインを調整するときに読み込む。「見た目を整えて」「ボタンを追加」「レイアウトを変えて」「画面遷移なしで反映したい」なども対象。"
 ---
 
 # UI の作り方
@@ -46,8 +46,10 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 
 各 `XxxField` の `fieldClass` は外側の `.field` に付くクラス（`when-link` などの出し分け用）。
 
+入力の検証にブラウザの `required` / `maxlength` などは使わない。フォームに `{...validateWith('名前')}`（`lib/forms.ts` の `FORMS` の名前）を付けると、`client.ts` が送信前と入力中にスキーマで確かめ、各欄の `FieldError` にエラーを出す。`XxxField` と `MarkdownEditor` は `FieldError` を含んでいる（`error` がなくても隠して置いておき、`client.ts` が `${入力欄の id}-error` で探す）。部品を使わない入力欄には、入力欄に `id` と `aria-describedby="${id}-error"` を付け、近くに `<FieldError id={id} />` を置き、`.field` で囲む（例は `courses/views.tsx` のセクション追加欄）。置き場所のない欄のエラーはトーストで出る
+
 ```tsx
-<TextField label="氏名" name="name" value={name} error={errors.name} required maxlength={60} />
+<TextField label="氏名" name="name" value={name} error={errors.name} />
 <SelectField label="セクション" name="section_id" options={sections.map((s) => ({ value: String(s.id), label: s.title }))} value={String(current)} />
 <Select name="role" compact options={ROLE_OPTIONS} value={role} aria-label="ロール" />
 ```
@@ -173,6 +175,7 @@ CSS は 1 ファイルにまとめず、使う部品・画面の隣に置く。�
 - 先読みさせたくないリンク（ログアウト・ダウンロードなど）は `data-no-prefetch`
 - リンクとフォーム送信は `client.ts` が fetch に置き換え、body を差し替えて再読み込みなしで遷移する。通常の遷移で開かせたいリンク・フォームには `data-reload`（`download` 付きのリンクと `target` 付きは自動で対象外）
 - 遷移しても DOM ごと残したい要素（開いたまま保ちたいサイドバーなど）には `id` と `data-persist` を付ける。その要素は丸ごと差し替えず、新しいページとの違い（属性・文字・増減した子要素）だけを書き換える。入力途中の値まで持ち越されるので、フォームには付けない
+- コースの内容を見せる画面（コースページ・アイテム）には `components/course.tsx` の `CourseLiveSync` を置く。`client.ts` が 10 秒ごとにコースの版（`lib/courses.ts` の `courseRevision`。`/courses/:id/` 配下の POST で進む）を確かめ、変わっていたら同じ URL を取り直して、前回描いた内容との差分だけを `<main>` に当てる。入力中の欄・開いているポップオーバーやモーダル・再生中の動画を含む部分は、使い終わるまで差し替えない。描画前に版を読むこと（読み出しの後だと変更を取りこぼす）
 - body を差し替えても `<script>` は実行されないので、専用スクリプトを読み込むページは自動で通常の読み込みになる。毎回の表示で必要な初期化は `client.ts` の `initPage()` に足す
 - 入力欄には `label`、アイコンボタンには `aria-label`、状態は `aria-pressed` / `aria-invalid` で伝える
 - 文言はすべて日本語

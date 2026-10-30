@@ -1,4 +1,4 @@
-# StepLearn
+# STEP Learn
 
 Moodle の「よく使う機能だけ」を、速く・安く・使いやすく作り直した軽量 LMS です。
 Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はローカルディスク、本番は Cloudflare R2 に保存します。
@@ -31,7 +31,7 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
 | 速さ | SSR（hono/jsx）＋ 小さなクライアント JS。リンクとフォーム送信を fetch に置き換え、ホバー時の先読みと View Transitions で再読み込みなしに遷移する（SPA）。JavaScript は必須で、無効なブラウザには有効化を求める案内だけを表示する |
 | DB | `better-sqlite3`（WAL モード）＋ Drizzle ORM。DB サーバーは要らない。テーブル定義は `src/lib/schema.ts` で、マイグレーションは drizzle-kit で生成する。クエリも Drizzle のクエリビルダーで書き、結果に型が付く |
 | コスト | 必要なのは Node.js が動くサーバー 1 台だけ。R2 を使う場合、ダウンロードは署名付き URL で R2 から直接配信されるので、サーバーの帯域を使わない（R2 は転送料無料） |
-| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）・`nodemailer`（確認メールの SMTP 送信）・`better-sqlite3`・`drizzle-orm`・`socket.io`（画面共有の中継）だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる。ブラウザ側のライブラリは Markdown エディターの CodeMirror だけで、エディターのある画面でだけ読み込む |
+| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）・`nodemailer`（確認メールの SMTP 送信）・`better-sqlite3`・`drizzle-orm`・`socket.io`（画面共有の中継）・`zod`（入力の検証。同じ規則をブラウザでも使うので、ブラウザ側は軽量版の `zod/mini`）だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる。ブラウザ側のライブラリは入力の検証の `zod/mini` と、Markdown エディターの CodeMirror だけ。CodeMirror はエディターのある画面でだけ読み込む |
 | セキュリティ | PBKDF2（60 万回、ログイン時に旧設定のハッシュを再計算）、推測されやすいパスワードの拒否、ログイン失敗と確認メール送信のレート制限、登録画面からメールアドレスの登録有無がわからない設計、セッション Cookie は HMAC-SHA256 で署名しトークンは SHA-256 で保存、CSRF 対策は Origin 検証と SameSite=Lax、ファイルは権限を確認したうえで配信（PDF と画像以外は添付として返す） |
 
 ## 開発

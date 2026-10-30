@@ -18,7 +18,7 @@ export const renderer = jsxRenderer(({ children, title }, c) => {
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content={theme} />
-        <title>{title ? `${title} | StepLearn` : 'StepLearn'}</title>
+        <title>{title ? `${title} | STEP Learn` : 'STEP Learn'}</title>
         <link rel="icon" href="/favicon.ico" sizes="32x32" />
         <link rel="icon" href="/favicon.png" type="image/png" sizes="160x160" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -37,7 +37,7 @@ export const renderer = jsxRenderer(({ children, title }, c) => {
             <img src="/favicon.png" alt="" width={48} height={48} />
             <h1>JavaScript を有効にしてください</h1>
             <p class="muted">
-              StepLearn は JavaScript を使って動作します。ブラウザの設定で JavaScript を有効にしてから、ページを再読み込みしてください。
+              STEP Learn は JavaScript を使って動作します。ブラウザの設定で JavaScript を有効にしてから、ページを再読み込みしてください。
             </p>
           </div>
         </noscript>

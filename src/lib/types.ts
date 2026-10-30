@@ -38,6 +38,17 @@ export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   screen: '画面共有',
 }
 
+export const COMPLETIONS = ['none', 'manual', 'view', 'play'] as const
+
+export type Completion = (typeof COMPLETIONS)[number]
+
+export const COMPLETION_LABELS: Record<Completion, string> = {
+  none: 'なし',
+  manual: '学生が自分で完了にする',
+  view: '開いたら完了',
+  play: '最後まで再生したら完了',
+}
+
 export const COURSE_COLORS = ['cyan', 'indigo', 'sky', 'emerald', 'amber', 'rose', 'violet', 'teal', 'slate'] as const
 
 export const ROLE_LABELS: Record<Role, string> = {

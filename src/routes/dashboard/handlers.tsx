@@ -2,7 +2,7 @@ import { desc, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 import type { CourseCardData } from '../../components/ui'
 import { canCreateCourse } from '../../lib/auth'
-import { memberCount, visibleDoneCount, visibleItemCount } from '../../lib/courses'
+import { memberCount, trackedDoneCount, trackedItemCount } from '../../lib/courses'
 import { db } from '../../lib/db'
 import { courses, enrollments } from '../../lib/schema'
 import type { AppEnv } from '../../lib/types'
@@ -19,8 +19,8 @@ export async function show(c: Context<AppEnv>) {
       color: courses.color,
       iconImage: courses.iconImage,
       role: enrollments.role,
-      total: visibleItemCount(courses.id),
-      done: visibleDoneCount(user.id, courses.id),
+      total: trackedItemCount(courses.id),
+      done: trackedDoneCount(user.id, courses.id),
       members: memberCount(),
     })
     .from(enrollments)

@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm'
 import { Server, type Socket } from 'socket.io'
 import { userFromCookieHeader } from './auth'
 import { config } from './config'
-import { getCourseAccessFor, isVisibleItem } from './courses'
+import { getCourseAccessFor, isVisibleItem, touchCourse } from './courses'
 import { db } from './db'
 import { items } from './schema'
 import {
@@ -19,7 +19,7 @@ import {
 } from './screen-share-protocol'
 import type { User } from './types'
 
-type SocketData = { user: User; itemId: number; mode: ShareMode }
+type SocketData = { user: User; courseId: number; itemId: number; mode: ShareMode }
 type ShareServer = Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>
 type ShareSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>
 
@@ -130,6 +130,7 @@ function present(socket: ShareSocket, itemId: number, room: Room) {
   const previous = room.presenter
   room.presenter = socket
   room.stream = null
+  if (!previous) touchCourse(socket.data.courseId)
   // 同じ人が別のタブや再接続で共有し直したときは、古い接続を閉じて引き継ぐ
   previous?.disconnect(true)
 
@@ -156,6 +157,7 @@ function present(socket: ShareSocket, itemId: number, room: Room) {
     room.presenter = null
     room.stream = null
     for (const viewer of room.viewers.values()) viewer.socket.emit('idle')
+    touchCourse(socket.data.courseId)
     releaseRoom(itemId, room)
   })
 }
@@ -201,7 +203,7 @@ export function attachScreenShare(httpServer: HttpServer) {
       if (!access.canManage && !isVisibleItem(itemId)) return next(shareError('not_found'))
       const presenter = rooms.get(itemId)?.presenter
       if (mode === 'present' && presenter && presenter.data.user.id !== user.id) return next(shareError('busy'))
-      socket.data = { user, itemId, mode }
+      socket.data = { user, courseId, itemId, mode }
       next()
     } catch (err) {
       next(err instanceof Error ? err : new Error(String(err)))

@@ -1,4 +1,5 @@
 import type { Child, JSX } from 'hono/jsx'
+import type { FormName } from '../lib/forms'
 import { IMAGE_ACCEPT, IMAGE_TOO_LARGE, MAX_IMAGE_SIZE } from '../lib/images'
 import { cx } from './cx'
 import { Icon, type IconName } from './icons'
@@ -59,21 +60,30 @@ type FieldFrameProps = {
   children: Child
 }
 
+// required などのブラウザの検証を使わないのは、ブラウザごとに見た目と文言の違う吹き出しになり、サーバーと同じ規則・文言で欄の下に出せないため
+export const validateWith = (name: FormName) => ({ 'data-validate': name, novalidate: true })
+
+// エラーがないときも描いておくのは、client.ts が `${入力欄の id}-error` で探して中身と表示を切り替えるため
+export const FieldError = ({ id, error }: { id: string; error?: string }) => {
+  useStyle('/src/components/form.css')
+  return (
+    <p id={`${id}-error`} class="field-error" hidden={!error}>
+      <Icon name="alert" size={14} />
+      <span data-field-error>{error}</span>
+    </p>
+  )
+}
+
 export const FormField = ({ id, label, error, hint, class: cls, children }: FieldFrameProps) => {
   useStyle('/src/components/form.css')
   return (
-    <div class={cx('field', cls)}>
+    <div class={cx('field', error && 'has-error', cls)}>
       <label for={id}>{label}</label>
       {children}
-      {(error || hint) && (
-        <p id={`${id}-desc`} class={error ? 'field-error' : 'field-hint'}>
-          {error ? (
-            <>
-              <Icon name="alert" size={14} /> {error}
-            </>
-          ) : (
-            hint
-          )}
+      <FieldError id={id} error={error} />
+      {hint && (
+        <p id={`${id}-desc`} class="field-hint">
+          {hint}
         </p>
       )}
     </div>
@@ -89,9 +99,11 @@ type LabeledProps = {
   fieldClass?: string
 }
 
+const describedBy = (id: string, hint: Child) => (hint ? `${id}-error ${id}-desc` : `${id}-error`)
+
 const describe = (id: string, { error, hint }: Pick<LabeledProps, 'error' | 'hint'>) => ({
   invalid: !!error,
-  'aria-describedby': error || hint ? `${id}-desc` : undefined,
+  'aria-describedby': describedBy(id, hint),
 })
 
 export const TextField = ({
@@ -172,7 +184,7 @@ export const FileField = ({
   useStyle('/src/components/form.css')
   return (
     <FormField id={id} label={label} error={error} hint={hint} class={fieldClass}>
-      <FileInput id={id} name={name} aria-describedby={error || hint ? `${id}-desc` : undefined} {...rest} />
+      <FileInput id={id} name={name} aria-invalid={error ? 'true' : undefined} aria-describedby={describedBy(id, hint)} {...rest} />
     </FormField>
   )
 }
@@ -204,7 +216,8 @@ export const ImageField = ({
           id={id}
           name={name}
           accept={IMAGE_ACCEPT}
-          aria-describedby={error || hint ? `${id}-desc` : undefined}
+          aria-invalid={error ? 'true' : undefined}
+          aria-describedby={describedBy(id, hint)}
           data-image-input
           data-max-size={String(MAX_IMAGE_SIZE)}
           data-too-large={IMAGE_TOO_LARGE}

@@ -1,39 +1,26 @@
-import { ItemIcon } from '../../components/course'
+import { CompletionField, CompletionStatus, CourseLiveSync, ItemIcon } from '../../components/course'
 import { cx } from '../../components/cx'
 import { Icon } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
 import { Button } from '../../components/button'
-import { FileInput, FormField, SegmentedControl, SelectField, TextField } from '../../components/form'
+import { FileInput, FormField, SegmentedControl, SelectField, TextField, validateWith } from '../../components/form'
 import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, DangerRow, LinkCard } from '../../components/card'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import type { CourseAccess } from '../../lib/courses'
+import type { FieldErrors } from '../../lib/forms'
+import { previewKind } from '../../lib/preview'
 import { MAX_FILE_SIZE, formatBytes } from '../../lib/storage'
 import { ITEM_TYPE_LABELS, type Item, type Section } from '../../lib/types'
 
 export type ItemInput = { title: string; body: string; url: string; file: File | null }
 
-export type OutlineItem = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'url' | 'hidden'>
+export type OutlineItem = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'url' | 'hidden' | 'completion'>
 
 export type OutlineSection = Pick<Section, 'id' | 'title' | 'hidden'>
 
 export const TEXT_PREVIEW_MAX = 200 * 1024
-
-export type PreviewKind = 'pdf' | 'image' | 'video' | 'audio' | 'text'
-
-// 種類が空や別物（.ts が video/mp2t など）で届くことがあるので、テキストは拡張子でも判定する
-const TEXT_FILE_NAME =
-  /\.(txt|md|markdown|csv|tsv|json|jsonl|log|ya?ml|toml|ini|xml|html?|css|scss|[cm]?[jt]sx?|py|rb|go|rs|java|kt|swift|c|h|cc|cpp|hpp|cs|php|sh|sql|r)$/i
-
-export function previewKind(type: string, name: string): PreviewKind | null {
-  if (type === 'application/pdf') return 'pdf'
-  if (/^image\/(png|jpe?g|gif|webp|avif)$/.test(type)) return 'image'
-  if (/^video\/(mp4|webm|ogg)$/.test(type)) return 'video'
-  if (/^audio\/(mpeg|mp4|x-m4a|aac|wav|x-wav|wave|ogg|webm|flac)$/.test(type)) return 'audio'
-  if (type.startsWith('text/') || /^application\/(json|xml)$/.test(type) || TEXT_FILE_NAME.test(name)) return 'text'
-  return null
-}
 
 export const editUrl = (courseId: number, sectionId?: number) => `/courses/${courseId}${sectionId ? `#section-${sectionId}` : ''}`
 
@@ -42,17 +29,25 @@ export const ItemEditPage = ({
   item,
   sections,
   values,
-  error,
+  errors = {},
 }: {
   access: CourseAccess
   item: Item
   sections: Section[]
-  values?: Partial<ItemInput> & { hidden?: number; sectionId?: number }
-  error?: string
+  values?: Partial<ItemInput> & { hidden?: number; sectionId?: number; completion?: string }
+  errors?: FieldErrors
 }) => {
   const courseId = access.course.id
   const base = `/courses/${courseId}/items/${item.id}`
-  const v = { title: item.title, body: item.body, url: item.url, hidden: item.hidden, sectionId: item.sectionId, ...values }
+  const v = {
+    title: item.title,
+    body: item.body,
+    url: item.url,
+    hidden: item.hidden,
+    sectionId: item.sectionId,
+    completion: item.completion as string,
+    ...values,
+  }
   const section = sections.find((s) => s.id === item.sectionId)
   const typeLabel = ITEM_TYPE_LABELS[item.type]
   return (
@@ -82,15 +77,26 @@ export const ItemEditPage = ({
       </header>
 
       <div class="editor">
-        <form id="item-form" method="post" action={base} enctype="multipart/form-data" class="editor-form" data-loading-form>
+        <form
+          id="item-form"
+          method="post"
+          action={base}
+          enctype="multipart/form-data"
+          class="editor-form"
+          data-loading-form
+          {...validateWith('itemEdit')}
+        >
+          <input type="hidden" name="type" value={item.type} />
           <Card class="editor-main stack">
-            {error && <Alert>{error}</Alert>}
-            <TextField label="タイトル" name="title" value={v.title} required maxlength={200} class="editor-title" />
-            {item.type === 'link' && <TextField label="URL" name="url" type="url" value={v.url} required placeholder="https://" />}
+            <TextField label="タイトル" name="title" value={v.title} error={errors.title} class="editor-title" />
+            {item.type === 'link' && (
+              <TextField label="URL" name="url" type="url" value={v.url} error={errors.url} placeholder="https://" />
+            )}
             <MarkdownEditor
               label={item.type === 'page' ? '本文' : '説明（任意）'}
               name="body"
               value={v.body}
+              error={errors.body}
               rows={item.type === 'page' ? 18 : 5}
             />
           </Card>
@@ -117,12 +123,16 @@ export const ItemEditPage = ({
                   options={sections.map((s) => ({ value: String(s.id), label: s.title }))}
                   value={String(v.sectionId)}
                 />
+                {!!access.course.completionEnabled && (
+                  <CompletionField type={item.type} id="f-completion" value={v.completion} error={errors.completion} />
+                )}
               </div>
             </Card>
             {item.type === 'file' && (
               <Card heading="ファイル">
                 <FormField
                   id="f-file"
+                  error={errors.file}
                   label="差し替えるファイル"
                   hint={`選ばなければ今のファイルのまま（最大 ${formatBytes(MAX_FILE_SIZE)}）`}
                 >
@@ -131,7 +141,12 @@ export const ItemEditPage = ({
                     <span class="truncate">{item.fileName}</span>
                     <span class="muted small">{formatBytes(item.fileSize ?? 0)}</span>
                   </div>
-                  <FileInput id="f-file" name="file" aria-describedby="f-file-desc" />
+                  <FileInput
+                    id="f-file"
+                    name="file"
+                    aria-invalid={errors.file ? 'true' : undefined}
+                    aria-describedby="f-file-error f-file-desc"
+                  />
                 </FormField>
               </Card>
             )}
@@ -163,6 +178,7 @@ export const ItemPage = ({
   next,
   sharing,
   textPreview,
+  revision,
 }: {
   access: CourseAccess
   item: Item
@@ -174,6 +190,7 @@ export const ItemPage = ({
   next?: OutlineItem
   sharing: boolean
   textPreview: string | null
+  revision: string
 }) => {
   const id = access.course.id
   const isStudent = access.role === 'student'
@@ -182,6 +199,15 @@ export const ItemPage = ({
   const fileUrl = `${base}/${item.id}/file`
   const preview = item.type === 'file' ? previewKind(item.fileType ?? '', item.fileName ?? '') : null
   const previewUrl = `${fileUrl}?inline=1`
+
+  const isTracked = (o: OutlineItem) => !!access.course.completionEnabled && o.completion !== 'none'
+  const completeUrl = (o: OutlineItem) => `${base}/${o.id}/complete`
+  // 完了済みなら付けないのは、開くたびに送って、すでに付いている完了を書き直さないため
+  const waitsFor = (o: OutlineItem, completion: 'view' | 'play') =>
+    isStudent && isTracked(o) && o.completion === completion && !done.has(o.id)
+  const onOpen = (o: OutlineItem) => (waitsFor(o, 'view') ? { 'data-complete-on-open': completeUrl(o) } : {})
+  const opensOnView = item.type === 'page' || (!!preview && (preview !== 'text' || textPreview !== null))
+  const tracked = outline.filter(isTracked)
 
   const navHref = (o: OutlineItem) => `${base}/${o.id}`
   const hiddenSections = new Set(sections.filter((s) => s.hidden).map((s) => s.id))
@@ -211,7 +237,7 @@ export const ItemPage = ({
           )}
 
           {item.type === 'link' && (
-            <LinkCard href={item.url} icon="link" target="_blank" rel="noopener noreferrer" data-no-prefetch>
+            <LinkCard href={item.url} icon="link" target="_blank" rel="noopener noreferrer" data-no-prefetch {...onOpen(item)}>
               <span class="truncate">{item.url}</span>
               <Button as="span" variant="primary" size="sm" iconEnd="external">
                 開く
@@ -236,7 +262,7 @@ export const ItemPage = ({
                   <span class="truncate strong">{item.fileName}</span>
                   <span class="muted small">{formatBytes(item.fileSize ?? 0)}</span>
                 </span>
-                <Button href={fileUrl} variant="primary" size="sm" icon="download" data-no-prefetch download>
+                <Button href={fileUrl} variant="primary" size="sm" icon="download" data-no-prefetch download {...onOpen(item)}>
                   ダウンロード
                 </Button>
               </LinkCard>
@@ -252,15 +278,39 @@ export const ItemPage = ({
                 </div>
               )}
               {preview === 'image' && <img class="file-preview-img" src={previewUrl} alt={item.title} loading="lazy" />}
-              {preview === 'video' && <video class="file-preview-video" src={previewUrl} controls preload="metadata" />}
-              {preview === 'audio' && <audio class="file-preview-audio" src={previewUrl} controls preload="metadata" />}
+              {preview === 'video' && (
+                <video
+                  class="file-preview-video"
+                  src={previewUrl}
+                  controls
+                  preload="metadata"
+                  data-complete-on-ended={waitsFor(item, 'play') ? completeUrl(item) : undefined}
+                />
+              )}
+              {preview === 'audio' && (
+                <audio
+                  class="file-preview-audio"
+                  src={previewUrl}
+                  controls
+                  preload="metadata"
+                  data-complete-on-ended={waitsFor(item, 'play') ? completeUrl(item) : undefined}
+                />
+              )}
             </>
           )}
 
           {item.body ? <Markdown source={item.body} /> : item.type === 'page' && <p class="muted">本文はまだありません。</p>}
 
-          {isStudent && (
-            <form method="post" action={`${base}/${item.id}/complete`} class="complete-bar" data-complete>
+          {waitsFor(item, 'view') && opensOnView && <span hidden data-complete-on-view={completeUrl(item)} />}
+
+          {isStudent && isTracked(item) && item.completion !== 'manual' && (
+            <div class="complete-bar">
+              <CompletionStatus itemId={item.id} type={item.type} completion={item.completion} done={isDone} />
+            </div>
+          )}
+
+          {isStudent && isTracked(item) && item.completion === 'manual' && (
+            <form method="post" action={completeUrl(item)} class="complete-bar" data-complete>
               <Button
                 type="submit"
                 variant={isDone ? 'success' : 'primary'}
@@ -307,9 +357,9 @@ export const ItemPage = ({
             <a href={`/courses/${id}`} class="strong truncate">
               {access.course.title}
             </a>
-            {isStudent && (
+            {isStudent && tracked.length > 0 && (
               <span class="muted small">
-                {outline.filter((o) => done.has(o.id)).length} / {outline.length} 完了
+                <span data-progress-done>{tracked.filter((o) => done.has(o.id)).length}</span> / {tracked.length} 完了
               </span>
             )}
           </div>
@@ -331,9 +381,10 @@ export const ItemPage = ({
                           ? { target: '_blank', rel: o.type === 'link' ? 'noopener noreferrer' : 'noopener', 'data-no-prefetch': '' }
                           : {})}
                         aria-current={o.id === item.id ? 'page' : undefined}
+                        {...(o.type === 'link' ? onOpen(o) : {})}
                       >
-                        <span class={done.has(o.id) ? 'outline-dot done' : 'outline-dot'} data-outline-dot={o.id}>
-                          {done.has(o.id) && <Icon name="check" size={10} />}
+                        <span class={cx('outline-dot', isTracked(o) ? done.has(o.id) && 'done' : 'is-untracked')} data-outline-dot={o.id}>
+                          {isTracked(o) && done.has(o.id) && <Icon name="check" size={10} />}
                         </span>
                         <span class="truncate">{o.title}</span>
                         {!!o.hidden && <Icon name="eyeSlash" size={12} class="outline-hidden" />}
@@ -345,6 +396,7 @@ export const ItemPage = ({
           ))}
         </aside>
       </div>
+      <CourseLiveSync courseId={id} revision={revision} />
     </AppShell>
   )
 }

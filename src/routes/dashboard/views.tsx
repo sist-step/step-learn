@@ -38,7 +38,7 @@ export const DashboardPage = ({ name, canCreate, results }: { name: string; canC
             </div>
           )}
         </Tile>
-        {learning.length > 0 ? (
+        {totalItems > 0 ? (
           <>
             <Tile class="tile-stat">
               <span class="stat-label">全体の進捗</span>
@@ -50,6 +50,17 @@ export const DashboardPage = ({ name, canCreate, results }: { name: string; canC
                 {doneItems}
                 <small> / {totalItems}</small>
               </span>
+            </Tile>
+          </>
+        ) : learning.length > 0 ? (
+          <>
+            <Tile class="tile-stat">
+              <span class="stat-label">受講中のコース</span>
+              <span class="stat-value">{learning.length}</span>
+            </Tile>
+            <Tile class="tile-stat">
+              <span class="stat-label">担当しているコース</span>
+              <span class="stat-value">{teaching.length}</span>
             </Tile>
           </>
         ) : (

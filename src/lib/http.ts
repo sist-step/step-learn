@@ -88,17 +88,6 @@ export function intParam(c: Context, key: string) {
   return Number.isSafeInteger(n) && n > 0 ? n : null
 }
 
-export const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) && s.length <= 254
-
-export const isHttpUrl = (s: string) => {
-  try {
-    const u = new URL(s)
-    return u.protocol === 'http:' || u.protocol === 'https:'
-  } catch {
-    return false
-  }
-}
-
 export const wantsJson = (c: Context) => (c.req.header('accept') ?? '').includes('application/json')
 
 export function clientIp(c: Context) {
