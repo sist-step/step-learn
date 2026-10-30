@@ -5,6 +5,7 @@ import { ROLE_LABELS, type AppEnv, type Flash } from '../lib/types'
 import { Icon, type IconName } from './icons'
 import { FluidArt } from './art'
 import { IconButton } from './button'
+import { cx } from './cx'
 import { Switch } from './form'
 import { MenuItem, Popover } from './overlay'
 import { useStyle } from './style'
@@ -147,7 +148,7 @@ export const AppShell = ({ children, wide, editable }: { children: Child; wide?:
             {navCourses.map((nc) => (
               <a
                 href={`/courses/${nc.id}`}
-                class={currentCourse === nc.id ? 'rail-link active' : 'rail-link'}
+                class={cx('rail-link rail-course', currentCourse === nc.id && 'active')}
                 aria-current={currentCourse === nc.id ? 'page' : undefined}
                 title={nc.title}
               >
