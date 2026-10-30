@@ -1,4 +1,5 @@
 import type { Child, JSX } from 'hono/jsx'
+import { courseImageUrl } from '../lib/courses'
 import { cx } from './cx'
 import { Icon, type IconName } from './icons'
 import { useStyle } from './style'
@@ -209,6 +210,8 @@ export type CourseCardData = {
   title: string
   summary: string
   color: string
+  heroImage?: string | null
+  iconImage?: string | null
   role?: string | null
   total?: number
   done?: number
@@ -216,12 +219,34 @@ export type CourseCardData = {
   teachers?: string | null
 }
 
+export const CourseIcon = ({
+  course,
+  text,
+  class: cls,
+}: {
+  course: { id: number; iconImage?: string | null }
+  text: string
+  class: string
+}) => {
+  useStyle('/src/components/ui.css')
+  const src = courseImageUrl(course.id, 'icon', course.iconImage)
+  return (
+    <span class={cx(cls, 'course-icon', src && 'has-image')} aria-hidden="true">
+      {src ? <img src={src} alt="" loading="lazy" /> : text}
+    </span>
+  )
+}
+
+export const courseInitials = (course: { code: string; title: string }) => [...(course.code || course.title)].slice(0, 2).join('')
+
 export const CourseCard = ({ course, showProgress }: { course: CourseCardData; showProgress?: boolean }) => {
   useStyle('/src/components/ui.css')
+  const hero = courseImageUrl(course.id, 'hero', course.heroImage)
   return (
     <a href={`/courses/${course.id}`} class={`course-card tone-${course.color}`}>
-      <div class="course-cover">
-        <span class="course-mono">{[...(course.code || course.title)].slice(0, 2).join('')}</span>
+      <div class={cx('course-cover', hero && 'has-image')}>
+        {hero && <img class="course-cover-img" src={hero} alt="" loading="lazy" />}
+        <CourseIcon course={course} text={courseInitials(course)} class="course-mono" />
         <div class="course-cover-badges">
           {course.role === 'teacher' && <Chip tone="accent">担当</Chip>}
           {course.role === 'student' && !showProgress && <Chip tone="success">受講中</Chip>}
@@ -251,7 +276,7 @@ export const CourseRow = ({ course }: { course: CourseCardData }) => {
   useStyle('/src/components/ui.css')
   return (
     <a href={`/courses/${course.id}`} class={`course-row tone-${course.color}`}>
-      <span class="course-mono">{[...(course.code || course.title)].slice(0, 2).join('')}</span>
+      <CourseIcon course={course} text={courseInitials(course)} class="course-mono" />
       <span class="course-row-text">
         <span class="strong truncate">{course.title}</span>
         {course.code && <span class="muted small truncate">{course.code}</span>}

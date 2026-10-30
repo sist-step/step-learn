@@ -155,7 +155,7 @@ export const ParticipantsPage = ({
 }) => {
   const props = { courseId: access.course.id, meId, manage: access.canManage, totalItems }
   return (
-    <AppShell>
+    <AppShell wide>
       <Styles use={['/src/routes/participants/participants.css']} />
       <CourseHeader access={access} tab="participants" />
       {access.canManage && <AddParticipant courseId={access.course.id} />}

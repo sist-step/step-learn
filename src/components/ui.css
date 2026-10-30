@@ -144,7 +144,15 @@
   font-size: 13px;
   text-transform: uppercase;
 }
+.course-icon.has-image { display: block; padding: 0; overflow: hidden; background: var(--surface-2); }
+.course-icon.has-image img { display: block; width: 0; min-width: 100%; height: 100%; object-fit: cover; }
 .course-cover-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
+.course-cover.has-image { position: relative; aspect-ratio: 5 / 2; padding: 12px; justify-content: flex-end; }
+.course-cover-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: var(--surface-2); }
+.course-cover.has-image .course-mono { position: absolute; left: 20px; bottom: -20px; box-shadow: 0 0 0 3px var(--surface); }
+.course-cover.has-image .course-cover-badges { position: relative; align-self: flex-start; padding: 2px; border-radius: 999px; background: var(--surface); }
+.course-cover.has-image .course-cover-badges:empty { display: none; }
+.course-cover.has-image + .course-body { padding-top: 30px; }
 .course-body { display: flex; flex-direction: column; flex: 1; padding: 16px 20px 20px; gap: 2px; }
 .course-code { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: 0.02em; }
 .course-title { font-size: 15px; font-weight: 600; }

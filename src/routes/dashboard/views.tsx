@@ -3,7 +3,7 @@ import { Bento, Tile } from '../../components/card'
 import { Icon } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
-import { CourseRow, EmptyState, Progress, ProgressRing, type CourseCardData } from '../../components/ui'
+import { CourseIcon, CourseRow, EmptyState, courseInitials, Progress, ProgressRing, type CourseCardData } from '../../components/ui'
 import { randomTip } from '../../lib/tips'
 
 const greeting = () => {
@@ -65,7 +65,7 @@ export const DashboardPage = ({ name, canCreate, results }: { name: string; canC
         {next && (
           <Tile href={`/courses/${next.id}`} rows={2} class={`tile-feature tone-${next.color}`}>
             <span class="tile-feature-label">続きから学習</span>
-            <span class="course-mono">{[...(next.code || next.title)].slice(0, 2).join('')}</span>
+            <CourseIcon course={next} text={courseInitials(next)} class="course-mono" />
             <strong class="tile-feature-title">{next.title}</strong>
             <Progress done={next.done ?? 0} total={next.total ?? 0} />
             <span class="tile-feature-cta">

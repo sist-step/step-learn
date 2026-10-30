@@ -41,6 +41,20 @@ input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--mute
   cursor: pointer;
 }
 
+.image-field { display: flex; flex-direction: column; gap: 10px; }
+.image-preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.image-preview img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.image-preview img[hidden] { display: none; }
+
 .input-wrap { position: relative; }
 .input-wrap.with-action .input { padding-right: 48px; }
 .input-action {

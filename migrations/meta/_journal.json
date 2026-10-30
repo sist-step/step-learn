@@ -29,6 +29,20 @@
       "when": 1793330325206,
       "tag": "0003_kind_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793331565807,
+      "tag": "0004_peaceful_genesis",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793332042732,
+      "tag": "0005_wet_talkback",
+      "breakpoints": true
     }
   ]
 }
