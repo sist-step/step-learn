@@ -73,7 +73,11 @@ const isMode = (m: unknown): m is ShareMode => m === 'present' || m === 'view'
 const isId = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n > 0
 
 const isScreenItem = async (courseId: number, itemId: number) =>
-  !!db.select({ id: items.id }).from(items).where(and(eq(items.id, itemId), eq(items.courseId, courseId), eq(items.type, 'screen'))).get()
+  !!db
+    .select({ id: items.id })
+    .from(items)
+    .where(and(eq(items.id, itemId), eq(items.courseId, courseId), eq(items.type, 'screen')))
+    .get()
 
 const isDimension = (n: unknown, max: number): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0 && n <= max
 

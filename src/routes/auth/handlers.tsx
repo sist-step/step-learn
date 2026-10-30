@@ -174,15 +174,20 @@ export async function submitCompleteRegister(c: Context<AppEnv>) {
   if (passwordError) errors.password = passwordError
   if (Object.keys(errors).length) {
     c.status(422)
-    return c.render(<CompleteRegisterPage token={token} email={email} name={name} username={username} errors={errors} />, { title: '新規登録' })
+    return c.render(<CompleteRegisterPage token={token} email={email} name={name} username={username} errors={errors} />, {
+      title: '新規登録',
+    })
   }
 
   const created = await createUser({ email, name, username, password })
   if ('taken' in created) {
-    if (created.taken === 'email') return redirectWith(c, '/login', 'このメールアドレスはすでに登録されています。ログインしてください。', 'info')
+    if (created.taken === 'email')
+      return redirectWith(c, '/login', 'このメールアドレスはすでに登録されています。ログインしてください。', 'info')
     c.status(422)
     const errors = { username: 'このユーザー名はすでに使われています。' }
-    return c.render(<CompleteRegisterPage token={token} email={email} name={name} username={username} errors={errors} />, { title: '新規登録' })
+    return c.render(<CompleteRegisterPage token={token} email={email} name={name} username={username} errors={errors} />, {
+      title: '新規登録',
+    })
   }
 
   await createSession(c, created.id)

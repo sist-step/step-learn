@@ -77,7 +77,8 @@ export const EmptyState = ({
 }
 
 /** Person の meta に出す「@ユーザー名 · メールアドレス」。メールアドレスを見せない画面では email を渡さない */
-export const userMeta = (u: { username: string | null; email?: string }) => [u.username && `@${u.username}`, u.email].filter(Boolean).join(' · ')
+export const userMeta = (u: { username: string | null; email?: string }) =>
+  [u.username && `@${u.username}`, u.email].filter(Boolean).join(' · ')
 
 export const Person = ({
   avatar,
@@ -267,8 +268,7 @@ export const CourseCard = ({ course, showProgress }: { course: CourseCardData; s
           <Progress done={course.done ?? 0} total={course.total ?? 0} />
         ) : (
           <span class="meta">
-            <Icon name="users" size={14} /> {course.members ?? 0}人
-            {course.teachers && <span class="meta-sep">·</span>}
+            <Icon name="users" size={14} /> {course.members ?? 0}人{course.teachers && <span class="meta-sep">·</span>}
             {course.teachers && <span class="truncate">{course.teachers}</span>}
           </span>
         )}

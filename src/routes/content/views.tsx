@@ -20,8 +20,7 @@ export type OutlineSection = Pick<Section, 'id' | 'title' | 'hidden'>
 
 export const PREVIEWABLE = /^(application\/pdf|image\/(png|jpe?g|gif|webp|avif))$/
 
-export const editUrl = (courseId: number, sectionId?: number) =>
-  `/courses/${courseId}${sectionId ? `#section-${sectionId}` : ''}`
+export const editUrl = (courseId: number, sectionId?: number) => `/courses/${courseId}${sectionId ? `#section-${sectionId}` : ''}`
 
 export const ItemEditPage = ({
   access,
@@ -73,7 +72,12 @@ export const ItemEditPage = ({
             {error && <Alert>{error}</Alert>}
             <TextField label="タイトル" name="title" value={v.title} required maxlength={200} class="editor-title" />
             {item.type === 'link' && <TextField label="URL" name="url" type="url" value={v.url} required placeholder="https://" />}
-            <MarkdownEditor label={item.type === 'page' ? '本文' : '説明（任意）'} name="body" value={v.body} rows={item.type === 'page' ? 18 : 5} />
+            <MarkdownEditor
+              label={item.type === 'page' ? '本文' : '説明（任意）'}
+              name="body"
+              value={v.body}
+              rows={item.type === 'page' ? 18 : 5}
+            />
           </Card>
 
           <aside class="editor-side">
@@ -102,7 +106,11 @@ export const ItemEditPage = ({
             </Card>
             {item.type === 'file' && (
               <Card heading="ファイル">
-                <FormField id="f-file" label="差し替えるファイル" hint={`選ばなければ今のファイルのまま（最大 ${formatBytes(MAX_FILE_SIZE)}）`}>
+                <FormField
+                  id="f-file"
+                  label="差し替えるファイル"
+                  hint={`選ばなければ今のファイルのまま（最大 ${formatBytes(MAX_FILE_SIZE)}）`}
+                >
                   <div class="file-current">
                     <Icon name="file" />
                     <span class="truncate">{item.fileName}</span>
@@ -179,7 +187,8 @@ export const ItemPage = ({
 
           {access.canManage && isHidden(item) && (
             <Alert tone="info">
-              {item.hidden ? 'このアイテム' : 'このアイテムのセクション'}は学生に非表示です。学生のコース画面には表示されず、URL を開いても見つかりません。
+              {item.hidden ? 'このアイテム' : 'このアイテムのセクション'}は学生に非表示です。学生のコース画面には表示されず、URL
+              を開いても見つかりません。
             </Alert>
           )}
 
@@ -222,15 +231,17 @@ export const ItemPage = ({
             </>
           )}
 
-          {item.body ? (
-            <Markdown source={item.body} />
-          ) : (
-            item.type === 'page' && <p class="muted">本文はまだありません。</p>
-          )}
+          {item.body ? <Markdown source={item.body} /> : item.type === 'page' && <p class="muted">本文はまだありません。</p>}
 
           {isStudent && (
             <form method="post" action={`${base}/${item.id}/complete`} class="complete-bar" data-complete>
-              <Button type="submit" variant={isDone ? 'success' : 'primary'} size="lg" icon="check" aria-pressed={isDone ? 'true' : 'false'}>
+              <Button
+                type="submit"
+                variant={isDone ? 'success' : 'primary'}
+                size="lg"
+                icon="check"
+                aria-pressed={isDone ? 'true' : 'false'}
+              >
                 <span data-complete-label>{isDone ? '完了済み' : '完了にする'}</span>
               </Button>
             </form>

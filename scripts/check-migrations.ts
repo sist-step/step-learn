@@ -45,7 +45,10 @@ step('適用済みのマイグレーションが変更・削除されていな�
     .filter(Boolean)
     .map((line) => line.split('\t') as [string, string])
   for (const [status, file] of changed) {
-    if (protectedFiles.has(file)) errors.push(`${file} が${status === 'D' ? '削除' : '変更'}されています。適用済みのマイグレーションは編集せず、新しいマイグレーションを追加してください`)
+    if (protectedFiles.has(file))
+      errors.push(
+        `${file} が${status === 'D' ? '削除' : '変更'}されています。適用済みのマイグレーションは編集せず、新しいマイグレーションを追加してください`,
+      )
   }
 })
 
@@ -59,7 +62,9 @@ step('journal は既存エントリを保ったまま末尾に追加されてい
     if (e.idx !== baseJournal.length + i) errors.push(`${e.tag} の idx が連番になっていません`)
     // migrator は最後に適用した when より新しいものだけを適用するため、古い when は本番で黙ってスキップされる
     if (e.when <= Math.max(lastWhen, prev?.when ?? 0)) {
-      errors.push(`${e.tag} の作成日時が既存のマイグレーションより古いため、適用済みの DB では実行されません。ベースブランチを取り込んでから npm run db:generate で作り直してください`)
+      errors.push(
+        `${e.tag} の作成日時が既存のマイグレーションより古いため、適用済みの DB では実行されません。ベースブランチを取り込んでから npm run db:generate で作り直してください`,
+      )
     }
   })
 })
@@ -67,7 +72,8 @@ step('journal は既存エントリを保ったまま末尾に追加されてい
 step('migrations/ の SQL がすべて journal に載っている', () => {
   const tags = new Set(headJournal.map((e) => e.tag))
   for (const f of fs.readdirSync(DIR).filter((f) => f.endsWith('.sql'))) {
-    if (!tags.has(f.replace(/\.sql$/, ''))) errors.push(`${DIR}/${f} が journal にないため適用されません。手で作らず npm run db:generate で生成してください`)
+    if (!tags.has(f.replace(/\.sql$/, '')))
+      errors.push(`${DIR}/${f} が journal にないため適用されません。手で作らず npm run db:generate で生成してください`)
   }
   for (const e of headJournal) {
     if (!fs.existsSync(`${DIR}/${e.tag}.sql`)) errors.push(`${DIR}/${e.tag}.sql がありません`)
@@ -87,14 +93,18 @@ step('schema.ts とマイグレーションが一致している', () => {
   fs.cpSync(DIR, out, { recursive: true })
   const config = path.join(work, 'drizzle.config.ts')
   // drizzle-kit は out の先頭に ./ を付けて解決するため、絶対パスでは渡せない
-  fs.writeFileSync(config, `export default ${JSON.stringify({ dialect: 'sqlite', schema: './src/lib/schema.ts', out: path.relative('.', out) })}\n`)
+  fs.writeFileSync(
+    config,
+    `export default ${JSON.stringify({ dialect: 'sqlite', schema: './src/lib/schema.ts', out: path.relative('.', out) })}\n`,
+  )
   try {
     kit(config, 'check')
     const before = fs.readdirSync(out).length
     kit(config, 'generate')
-    if (fs.readdirSync(out).length !== before) errors.push('schema.ts の変更に対応するマイグレーションがありません。npm run db:generate を実行してコミットしてください')
+    if (fs.readdirSync(out).length !== before)
+      errors.push('schema.ts の変更に対応するマイグレーションがありません。npm run db:generate を実行してコミットしてください')
   } catch (e) {
-    errors.push(`drizzle-kit が失敗しました\n${(e as { stderr?: string }).stderr ?? e}`)
+    errors.push(`drizzle-kit が失敗しました\n${(e as { stderr?: string }).stderr ?? String(e)}`)
   }
 })
 
@@ -111,7 +121,8 @@ function applyAll(folders: string[]) {
 step('マイグレーションが空の DB と適用済みの DB の両方に適用できる', () => {
   const expected = readMigrationFiles({ migrationsFolder: DIR }).map((m) => m.hash)
   try {
-    if (JSON.stringify(applyAll([DIR])) !== JSON.stringify(expected)) errors.push('空の DB にすべてのマイグレーションが適用されませんでした')
+    if (JSON.stringify(applyAll([DIR])) !== JSON.stringify(expected))
+      errors.push('空の DB にすべてのマイグレーションが適用されませんでした')
   } catch (e) {
     errors.push(`空の DB への適用に失敗しました: ${(e as Error).message}`)
   }
@@ -121,7 +132,8 @@ step('マイグレーションが空の DB と適用済みの DB の両方に適
   execFileSync('sh', ['-c', `git archive ${base} ${DIR} | tar -x -C ${JSON.stringify(baseDir)}`])
   try {
     const applied = applyAll([path.join(baseDir, DIR), DIR])
-    if (JSON.stringify(applied) !== JSON.stringify(expected)) errors.push('ベースブランチのマイグレーションを適用済みの DB に、追加分が正しく適用されませんでした')
+    if (JSON.stringify(applied) !== JSON.stringify(expected))
+      errors.push('ベースブランチのマイグレーションを適用済みの DB に、追加分が正しく適用されませんでした')
   } catch (e) {
     errors.push(`ベースブランチのマイグレーションを適用済みの DB への適用に失敗しました: ${(e as Error).message}`)
   }

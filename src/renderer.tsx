@@ -36,7 +36,9 @@ export const renderer = jsxRenderer(({ children, title }, c) => {
           <div class="noscript">
             <img src="/favicon.png" alt="" width={48} height={48} />
             <h1>JavaScript を有効にしてください</h1>
-            <p class="muted">StepLearn は JavaScript を使って動作します。ブラウザの設定で JavaScript を有効にしてから、ページを再読み込みしてください。</p>
+            <p class="muted">
+              StepLearn は JavaScript を使って動作します。ブラウザの設定で JavaScript を有効にしてから、ページを再読み込みしてください。
+            </p>
           </div>
         </noscript>
       </body>

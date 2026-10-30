@@ -54,6 +54,7 @@ export const StyleLinksResolver = () => {
     if (!buffer) return
     const used = c.get('styles') ?? new Set()
     const links = STYLESHEETS.filter((href) => href === BASE || used.has(href))
+      // oxlint-disable-next-line typescript/no-base-to-string -- Link は非同期の子を持たないので、Promise ではなく描画済みの文字列が返る
       .map((href) => String(Link({ href, rel: 'stylesheet', 'data-style-order': String(STYLESHEETS.indexOf(href)) })))
       .join('')
     buffer[0] = buffer[0].replace(PLACEHOLDER, links)

@@ -42,7 +42,12 @@ export const courseImagePrefix = (courseId: number, kind: CourseImageKind) => `c
 export const visibleItem = () =>
   and(eq(items.hidden, 0), notInArray(items.sectionId, db.select({ id: sections.id }).from(sections).where(eq(sections.hidden, 1))))
 
-export const isVisibleItem = (itemId: number) => !!db.select({ id: items.id }).from(items).where(and(eq(items.id, itemId), visibleItem())).get()
+export const isVisibleItem = (itemId: number) =>
+  !!db
+    .select({ id: items.id })
+    .from(items)
+    .where(and(eq(items.id, itemId), visibleItem()))
+    .get()
 
 /** 進捗の分母。courseId には courses.id などの列も渡せる */
 export const visibleItemCount = (courseId: number | SQLWrapper) => db.$count(items, and(eq(items.courseId, courseId), visibleItem()))
@@ -75,7 +80,11 @@ type Ordered = typeof sections | typeof items
 
 /** 末尾に足すときの position */
 export function nextPosition(table: Ordered, scope: SQL) {
-  const row = db.select({ last: max(table.position) }).from(table).where(scope).get()
+  const row = db
+    .select({ last: max(table.position) })
+    .from(table)
+    .where(scope)
+    .get()
   return (row?.last ?? 0) + 1
 }
 
