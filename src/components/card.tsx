@@ -21,7 +21,12 @@ export type CardProps = CardOwnProps &
     | ({ as: 'div' } & JSX.IntrinsicElements['div'])
   )
 
-export const CardHead = ({ heading, description, leading, actions }: Pick<CardOwnProps, 'heading' | 'description' | 'leading' | 'actions'>) => {
+export const CardHead = ({
+  heading,
+  description,
+  leading,
+  actions,
+}: Pick<CardOwnProps, 'heading' | 'description' | 'leading' | 'actions'>) => {
   useStyle('/src/components/card.css')
   return (
     <div class="card-head">
@@ -35,7 +40,17 @@ export const CardHead = ({ heading, description, leading, actions }: Pick<CardOw
   )
 }
 
-export const Card = ({ as = 'section', heading, description, leading, actions, tone = 'default', class: cls, children, ...rest }: CardProps) => {
+export const Card = ({
+  as = 'section',
+  heading,
+  description,
+  leading,
+  actions,
+  tone = 'default',
+  class: cls,
+  children,
+  ...rest
+}: CardProps) => {
   useStyle('/src/components/card.css')
   const Tag = as
   return (
@@ -112,7 +127,19 @@ export const Stats = ({ children }: { children: Child }) => {
   return <div class="stats">{children}</div>
 }
 
-export const Stat = ({ label, value, href, class: cls, children }: { label: Child; value?: Child; href?: string; class?: string; children?: Child }) => {
+export const Stat = ({
+  label,
+  value,
+  href,
+  class: cls,
+  children,
+}: {
+  label: Child
+  value?: Child
+  href?: string
+  class?: string
+  children?: Child
+}) => {
   useStyle('/src/components/card.css')
   const body = (
     <>
@@ -137,8 +164,7 @@ export const LinkCard = ({
   children,
   ...rest
 }: { icon: IconName; class?: string; children: Child } & (
-  | ({ href: string } & JSX.IntrinsicElements['a'])
-  | ({ href?: undefined } & JSX.IntrinsicElements['div'])
+  ({ href: string } & JSX.IntrinsicElements['a']) | ({ href?: undefined } & JSX.IntrinsicElements['div'])
 )) => {
   useStyle('/src/components/card.css')
   const body = (
@@ -164,8 +190,7 @@ export const Bento = ({ children }: { children: Child }) => {
 }
 
 export type TileProps = { span?: 1 | 2 | 3 | 4; rows?: 1 | 2; class?: string; children: Child } & (
-  | ({ href: string } & JSX.IntrinsicElements['a'])
-  | ({ href?: undefined } & JSX.IntrinsicElements['section'])
+  ({ href: string } & JSX.IntrinsicElements['a']) | ({ href?: undefined } & JSX.IntrinsicElements['section'])
 )
 
 export const Tile = ({ span = 1, rows = 1, class: cls, children, ...rest }: TileProps) => {

@@ -134,11 +134,7 @@ export const AppShell = ({ children, wide, editable }: { children: Child; wide?:
 
         <nav class="rail-nav" aria-label="メイン">
           {links.map((l) => (
-            <a
-              href={l.href}
-              class={l.active ? 'rail-link active' : 'rail-link'}
-              aria-current={l.active ? 'page' : undefined}
-            >
+            <a href={l.href} class={l.active ? 'rail-link active' : 'rail-link'} aria-current={l.active ? 'page' : undefined}>
               <Icon name={l.icon} size={20} />
               <span class="rail-label">{l.label}</span>
             </a>

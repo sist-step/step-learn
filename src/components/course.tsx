@@ -75,10 +75,34 @@ const CourseFields = ({ values, errors = {} }: { values: CourseFormValues; error
   return (
     <>
       <div class="grid-2">
-        <TextField label="コース名" name="title" value={values.title} error={errors.title} required maxlength={120} placeholder="例：情報リテラシー入門" autofocus={!values.title} />
-        <TextField label="コースコード（任意）" name="code" value={values.code} error={errors.code} maxlength={30} placeholder="例：INFO101" hint="一覧やカードに表示される短い識別名" />
+        <TextField
+          label="コース名"
+          name="title"
+          value={values.title}
+          error={errors.title}
+          required
+          maxlength={120}
+          placeholder="例：情報リテラシー入門"
+          autofocus={!values.title}
+        />
+        <TextField
+          label="コースコード（任意）"
+          name="code"
+          value={values.code}
+          error={errors.code}
+          maxlength={30}
+          placeholder="例：INFO101"
+          hint="一覧やカードに表示される短い識別名"
+        />
       </div>
-      <TextAreaField label="概要" name="summary" value={values.summary} error={errors.summary} rows={3} placeholder="このコースで学べることを簡潔に" />
+      <TextAreaField
+        label="概要"
+        name="summary"
+        value={values.summary}
+        error={errors.summary}
+        rows={3}
+        placeholder="このコースで学べることを簡潔に"
+      />
 
       <fieldset class="field">
         <legend>カラー</legend>

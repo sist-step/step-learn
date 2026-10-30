@@ -26,7 +26,9 @@ export const DashboardPage = ({ name, canCreate, results }: { name: string; canC
       <Bento>
         <Tile span={2} class="tile-welcome">
           <div class="eyebrow">
-            {new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())}
+            {new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'long', day: 'numeric', weekday: 'long' }).format(
+              new Date(),
+            )}
           </div>
           <h1>{`${greeting()}、${name}さん`}</h1>
           <p class="tile-tip">{randomTip()}</p>

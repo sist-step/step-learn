@@ -43,14 +43,7 @@ export const LoginPage = ({ login = '', next = '', errors = {} }: { login?: stri
             required
             autofocus={!login}
           />
-          <TextField
-            label="パスワード"
-            name="password"
-            type="password"
-            autocomplete="current-password"
-            required
-            autofocus={!!login}
-          />
+          <TextField label="パスワード" name="password" type="password" autocomplete="current-password" required autofocus={!!login} />
           <Button type="submit" variant="primary" size="lg" block>
             ログイン
           </Button>
@@ -70,7 +63,16 @@ export const RegisterPage = ({ email = '', next = '', errors = {} }: { email?: s
         <FormError message={errors.form} />
         <form method="post" action="/register" class="stack" data-loading-form>
           <input type="hidden" name="next" value={next} />
-          <TextField label="メールアドレス" name="email" type="email" value={email} error={errors.email} autocomplete="email" required autofocus />
+          <TextField
+            label="メールアドレス"
+            name="email"
+            type="email"
+            value={email}
+            error={errors.email}
+            autocomplete="email"
+            required
+            autofocus
+          />
           <Button type="submit" variant="primary" size="lg" block>
             確認メールを送る
           </Button>

@@ -84,8 +84,7 @@ function setup(root: HTMLElement) {
     if (stopBtn) stopBtn.hidden = !presenting
   }
 
-  const connect = (mode: ShareMode): ShareSocket =>
-    io({ auth: { courseId, itemId, mode } satisfies ShareAuth, forceNew: true })
+  const connect = (mode: ShareMode): ShareSocket => io({ auth: { courseId, itemId, mode } satisfies ShareAuth, forceNew: true })
 
   const stats = { frames: 0, bytes: 0, width: 0, height: 0 }
   if (statsText) {
@@ -339,7 +338,9 @@ function setup(root: HTMLElement) {
     socket.on('keyframe', sendKeyframeSoon)
     socket.on('connect_error', (err) => {
       if (socket.active) return
-      showError(err.message === 'busy' ? 'ほかの人が画面を共有しているため、共有を開始できませんでした。' : '画面共有を開始できませんでした。')
+      showError(
+        err.message === 'busy' ? 'ほかの人が画面を共有しているため、共有を開始できませんでした。' : '画面共有を開始できませんでした。',
+      )
       stop()
     })
     socket.on('disconnect', (reason) => {
@@ -447,7 +448,8 @@ function startFrameSource(track: MediaStreamTrack, video: HTMLVideoElement, onFr
 
   let active = true
   const grab = () => {
-    if (active && video.readyState >= 2 && video.videoWidth > 0) onFrame(new VideoFrame(video, { timestamp: Math.round(performance.now() * 1000) }))
+    if (active && video.readyState >= 2 && video.videoWidth > 0)
+      onFrame(new VideoFrame(video, { timestamp: Math.round(performance.now() * 1000) }))
   }
   if ('requestVideoFrameCallback' in video) {
     const loop = () => {

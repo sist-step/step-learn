@@ -15,13 +15,7 @@
       "Bash(git show:*)",
       "Bash(git branch:*)"
     ],
-    "deny": [
-      "Read(./.env)",
-      "Read(./.env.*)",
-      "Read(./data/session-secret)",
-      "Edit(./migrations/**)",
-      "Write(./migrations/**)"
-    ]
+    "deny": ["Read(./.env)", "Read(./.env.*)", "Read(./data/session-secret)", "Edit(./migrations/**)", "Write(./migrations/**)"]
   },
   "hooks": {
     "Stop": [

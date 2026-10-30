@@ -122,7 +122,10 @@ document.addEventListener('submit', async (e) => {
 
   // 二重送信防止とローディング表示
   if (form.hasAttribute('data-loading-form')) {
-    const btn = e.submitter instanceof HTMLButtonElement ? e.submitter : form.querySelector<HTMLButtonElement>('button[type=submit], button:not([type])')
+    const btn =
+      e.submitter instanceof HTMLButtonElement
+        ? e.submitter
+        : form.querySelector<HTMLButtonElement>('button[type=submit], button:not([type])')
     if (btn) {
       setTimeout(() => {
         btn.disabled = true
@@ -172,9 +175,7 @@ function setCompleteUI(form: HTMLFormElement, done: boolean) {
   const dot = id && document.querySelector(`[data-outline-dot="${id}"]`)
   if (dot) {
     dot.classList.toggle('done', done)
-    dot.innerHTML = done
-      ? checkSvg.replace('<svg ', '<svg class="icon" width="10" height="10" ')
-      : ''
+    dot.innerHTML = done ? checkSvg.replace('<svg ', '<svg class="icon" width="10" height="10" ') : ''
   }
 }
 
@@ -299,7 +300,8 @@ function updateToc() {
     if (section && section.getBoundingClientRect().top - offset <= 8) current = a
   }
   // 末尾まで来たら最後の節にしないと、短い節は上端まで届かず一度も強調されない
-  if (innerHeight + scrollY >= document.documentElement.scrollHeight - 2) current = links.find((a) => a.hash === location.hash) ?? links.at(-1)!
+  if (innerHeight + scrollY >= document.documentElement.scrollHeight - 2)
+    current = links.find((a) => a.hash === location.hash) ?? links.at(-1)!
   links.forEach((a) => a.classList.toggle('active', a === current))
 }
 addEventListener('scroll', updateToc, { passive: true })

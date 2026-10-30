@@ -123,8 +123,12 @@ export async function remove(c: Context<AppEnv>) {
   const back = `/courses/${id}/participants`
   if (await isLastTeacher(id, uid)) return redirectWith(c, back, 'コースには少なくとも1人の教師が必要です。', 'error')
   db.transaction((tx) => {
-    tx.delete(enrollments).where(and(eq(enrollments.courseId, id), eq(enrollments.userId, uid))).run()
-    tx.delete(completions).where(and(eq(completions.courseId, id), eq(completions.userId, uid))).run()
+    tx.delete(enrollments)
+      .where(and(eq(enrollments.courseId, id), eq(enrollments.userId, uid)))
+      .run()
+    tx.delete(completions)
+      .where(and(eq(completions.courseId, id), eq(completions.userId, uid)))
+      .run()
   })
   return redirectWith(c, back, 'コースから外しました。', 'info')
 }
