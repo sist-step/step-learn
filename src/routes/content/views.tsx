@@ -18,7 +18,22 @@ export type OutlineItem = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'ur
 
 export type OutlineSection = Pick<Section, 'id' | 'title' | 'hidden'>
 
-export const PREVIEWABLE = /^(application\/pdf|image\/(png|jpe?g|gif|webp|avif))$/
+export const TEXT_PREVIEW_MAX = 200 * 1024
+
+export type PreviewKind = 'pdf' | 'image' | 'video' | 'audio' | 'text'
+
+// 種類が空や別物（.ts が video/mp2t など）で届くことがあるので、テキストは拡張子でも判定する
+const TEXT_FILE_NAME =
+  /\.(txt|md|markdown|csv|tsv|json|jsonl|log|ya?ml|toml|ini|xml|html?|css|scss|[cm]?[jt]sx?|py|rb|go|rs|java|kt|swift|c|h|cc|cpp|hpp|cs|php|sh|sql|r)$/i
+
+export function previewKind(type: string, name: string): PreviewKind | null {
+  if (type === 'application/pdf') return 'pdf'
+  if (/^image\/(png|jpe?g|gif|webp|avif)$/.test(type)) return 'image'
+  if (/^video\/(mp4|webm|ogg)$/.test(type)) return 'video'
+  if (/^audio\/(mpeg|mp4|x-m4a|aac|wav|x-wav|wave|ogg|webm|flac)$/.test(type)) return 'audio'
+  if (type.startsWith('text/') || /^application\/(json|xml)$/.test(type) || TEXT_FILE_NAME.test(name)) return 'text'
+  return null
+}
 
 export const editUrl = (courseId: number, sectionId?: number) => `/courses/${courseId}${sectionId ? `#section-${sectionId}` : ''}`
 
@@ -147,6 +162,7 @@ export const ItemPage = ({
   prev,
   next,
   sharing,
+  textPreview,
 }: {
   access: CourseAccess
   item: Item
@@ -157,13 +173,15 @@ export const ItemPage = ({
   prev?: OutlineItem
   next?: OutlineItem
   sharing: boolean
+  textPreview: string | null
 }) => {
   const id = access.course.id
   const isStudent = access.role === 'student'
   const isDone = done.has(item.id)
   const base = `/courses/${id}/items`
   const fileUrl = `${base}/${item.id}/file`
-  const canPreview = item.type === 'file' && PREVIEWABLE.test(item.fileType ?? '')
+  const preview = item.type === 'file' ? previewKind(item.fileType ?? '', item.fileName ?? '') : null
+  const previewUrl = `${fileUrl}?inline=1`
 
   const navHref = (o: OutlineItem) => `${base}/${o.id}`
   const hiddenSections = new Set(sections.filter((s) => s.hidden).map((s) => s.id))
@@ -222,12 +240,20 @@ export const ItemPage = ({
                   ダウンロード
                 </Button>
               </LinkCard>
-              {canPreview &&
-                (item.fileType === 'application/pdf' ? (
-                  <iframe class="file-preview" src={`${fileUrl}?inline=1`} title={item.fileName ?? 'プレビュー'} loading="lazy" />
-                ) : (
-                  <img class="file-preview-img" src={`${fileUrl}?inline=1`} alt={item.title} loading="lazy" />
-                ))}
+              {preview === 'pdf' && <iframe class="file-preview" src={previewUrl} title={item.fileName ?? 'プレビュー'} loading="lazy" />}
+              {textPreview !== null && (
+                <div class="file-preview-text">
+                  <pre>{textPreview}</pre>
+                  {(item.fileSize ?? 0) > TEXT_PREVIEW_MAX && (
+                    <p class="muted small">
+                      先頭の {formatBytes(TEXT_PREVIEW_MAX)} だけを表示しています。全体はダウンロードして確認してください。
+                    </p>
+                  )}
+                </div>
+              )}
+              {preview === 'image' && <img class="file-preview-img" src={previewUrl} alt={item.title} loading="lazy" />}
+              {preview === 'video' && <video class="file-preview-video" src={previewUrl} controls preload="metadata" />}
+              {preview === 'audio' && <audio class="file-preview-audio" src={previewUrl} controls preload="metadata" />}
             </>
           )}
 
