@@ -453,20 +453,49 @@ function loadStyles(doc: Document) {
   return Promise.all(pending)
 }
 
+// --- タブを切り替えたら、選択中の背景を前のタブの位置から滑らせ、中身を切り替えた向きに流す
+// 背景を CSS の transition に任せないのは、遷移でタブごと差し替わり、前の状態の要素が残らないため
+function markTabSwitch(doc: Document) {
+  const prev = $$('[data-tabs] .tab.active').map((a) => a.getAttribute('href'))
+  const from = $$<HTMLElement>('[data-tabs] .tab:not(.active)', doc).find((a) => prev.includes(a.getAttribute('href')))
+  const tabs = from?.parentElement ? $$<HTMLElement>('.tab', from.parentElement) : []
+  const to = tabs.find((a) => a.classList.contains('active'))
+  if (!from || !to) return
+  from.classList.add('is-leaving')
+  to.classList.add('is-entering')
+  return tabs.indexOf(to) > tabs.indexOf(from) ? 'next' : 'prev'
+}
+
+function slideTabIndicator() {
+  const from = document.querySelector('.tab.is-leaving')
+  const to = document.querySelector<HTMLElement>('.tab.is-entering')
+  if (!from || !to) return
+  const f = from.getBoundingClientRect()
+  const t = to.getBoundingClientRect()
+  to.style.setProperty('--tab-from-left', `${f.left - t.left}px`)
+  to.style.setProperty('--tab-from-right', `${t.right - f.right}px`)
+}
+
 function render(doc: Document, scroll: () => void) {
   // DOMParser はスクリプト無効として解析し noscript の中身を要素にするので、そのまま差し込むと表示されるブラウザがある
   $$('noscript', doc.body).forEach((el) => el.remove())
   holdRail()
+  const tabSlide = markTabSwitch(doc)
   const swap = () => {
     document.title = doc.title
     swapBody(doc.body)
+    slideTabIndicator()
     holdRail()
     initPage()
     document.querySelector<HTMLElement>('[autofocus]')?.focus()
     scroll()
   }
   if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return swap()
-  return document.startViewTransition(swap).updateCallbackDone
+  const root = document.documentElement
+  if (tabSlide) root.dataset.tabSlide = tabSlide
+  const transition = document.startViewTransition(swap)
+  transition.finished.finally(() => root.dataset.tabSlide === tabSlide && delete root.dataset.tabSlide)
+  return transition.updateCallbackDone
 }
 
 function scrollToHash(hash: string) {

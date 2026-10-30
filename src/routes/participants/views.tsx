@@ -5,7 +5,7 @@ import { Input, SegmentedControl, Select } from '../../components/form'
 import { AppShell } from '../../components/layout'
 import { Modal } from '../../components/overlay'
 import { Styles } from '../../components/style'
-import { Avatar, Chip, Person, Progress, formatDate, userMeta } from '../../components/ui'
+import { Avatar, Chip, Person, Progress, TabPanel, formatDate, userMeta } from '../../components/ui'
 import type { CourseAccess } from '../../lib/courses'
 import { COURSE_ROLE_LABELS, type CourseRole } from '../../lib/types'
 
@@ -158,9 +158,11 @@ export const ParticipantsPage = ({
     <AppShell wide>
       <Styles use={['/src/routes/participants/participants.css']} />
       <CourseHeader access={access} tab="participants" />
-      {access.canManage && <AddParticipant courseId={access.course.id} />}
-      <ParticipantTable heading="教師" list={people.filter((p) => p.role === 'teacher')} {...props} />
-      <ParticipantTable heading="学生" list={people.filter((p) => p.role === 'student')} {...props} />
+      <TabPanel>
+        {access.canManage && <AddParticipant courseId={access.course.id} />}
+        <ParticipantTable heading="教師" list={people.filter((p) => p.role === 'teacher')} {...props} />
+        <ParticipantTable heading="学生" list={people.filter((p) => p.role === 'student')} {...props} />
+      </TabPanel>
     </AppShell>
   )
 }

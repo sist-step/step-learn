@@ -7,7 +7,7 @@ import { Styles } from '../../components/style'
 import { Button } from '../../components/button'
 import { FileInput, FormField, SelectField, TextAreaField, TextField } from '../../components/form'
 import { Card, LinkCard } from '../../components/card'
-import { Alert, Breadcrumbs, Chip } from '../../components/ui'
+import { Alert, Breadcrumbs, Chip, TabPanel } from '../../components/ui'
 import type { CourseAccess } from '../../lib/courses'
 import { renderMarkdown } from '../../lib/markdown'
 import { MAX_FILE_SIZE, formatBytes } from '../../lib/storage'
@@ -44,57 +44,59 @@ export const ItemEditPage = ({
     <AppShell wide>
       <Styles use={['/src/routes/content/content.css']} />
       <CourseHeader access={access} tab="content" />
-      <div class="narrow">
-        <a href={editUrl(courseId, item.sectionId)} class="back-link">
-          <Icon name="chevronLeft" size={16} /> コースに戻る
-        </a>
-        <Card
-          as="form"
-          method="post"
-          action={base}
-          enctype="multipart/form-data"
-          class="stack"
-          data-loading-form
-          leading={<ItemIcon type={item.type} />}
-          heading={`${ITEM_TYPE_LABELS[item.type]}を編集`}
-        >
-          {error && <Alert>{error}</Alert>}
-          <TextField label="タイトル" name="title" value={v.title} required maxlength={200} />
-          <SelectField
-            label="セクション"
-            name="section_id"
-            id="f-section"
-            options={sections.map((s) => ({ value: String(s.id), label: s.title }))}
-            value={String(item.sectionId)}
-          />
-          {item.type === 'link' && <TextField label="URL" name="url" type="url" value={v.url} required />}
-          {item.type === 'file' && (
-            <FormField id="f-file" label="ファイル" hint={`差し替える場合は新しいファイルを選択（最大 ${formatBytes(MAX_FILE_SIZE)}）`}>
-              <div class="file-current">
-                <Icon name="file" />
-                <span class="truncate">{item.fileName}</span>
-                <span class="muted small">{formatBytes(item.fileSize ?? 0)}</span>
-              </div>
-              <FileInput id="f-file" name="file" aria-describedby="f-file-desc" />
-            </FormField>
-          )}
-          <TextAreaField
-            label={item.type === 'page' ? '本文' : '説明（任意）'}
-            name="body"
-            value={v.body}
-            rows={item.type === 'page' ? 16 : 4}
-            hint="Markdown が使えます：# 見出し、**太字**、*斜体*、- 箇条書き、1. 番号付き、> 引用、```コード```、[リンク](https://…)"
-          />
-          <div class="form-actions">
-            <Button href={editUrl(courseId, item.sectionId)} variant="ghost">
-              キャンセル
-            </Button>
-            <Button type="submit" variant="primary">
-              保存
-            </Button>
-          </div>
-        </Card>
-      </div>
+      <TabPanel>
+        <div class="narrow">
+          <a href={editUrl(courseId, item.sectionId)} class="back-link">
+            <Icon name="chevronLeft" size={16} /> コースに戻る
+          </a>
+          <Card
+            as="form"
+            method="post"
+            action={base}
+            enctype="multipart/form-data"
+            class="stack"
+            data-loading-form
+            leading={<ItemIcon type={item.type} />}
+            heading={`${ITEM_TYPE_LABELS[item.type]}を編集`}
+          >
+            {error && <Alert>{error}</Alert>}
+            <TextField label="タイトル" name="title" value={v.title} required maxlength={200} />
+            <SelectField
+              label="セクション"
+              name="section_id"
+              id="f-section"
+              options={sections.map((s) => ({ value: String(s.id), label: s.title }))}
+              value={String(item.sectionId)}
+            />
+            {item.type === 'link' && <TextField label="URL" name="url" type="url" value={v.url} required />}
+            {item.type === 'file' && (
+              <FormField id="f-file" label="ファイル" hint={`差し替える場合は新しいファイルを選択（最大 ${formatBytes(MAX_FILE_SIZE)}）`}>
+                <div class="file-current">
+                  <Icon name="file" />
+                  <span class="truncate">{item.fileName}</span>
+                  <span class="muted small">{formatBytes(item.fileSize ?? 0)}</span>
+                </div>
+                <FileInput id="f-file" name="file" aria-describedby="f-file-desc" />
+              </FormField>
+            )}
+            <TextAreaField
+              label={item.type === 'page' ? '本文' : '説明（任意）'}
+              name="body"
+              value={v.body}
+              rows={item.type === 'page' ? 16 : 4}
+              hint="Markdown が使えます：# 見出し、**太字**、*斜体*、- 箇条書き、1. 番号付き、> 引用、```コード```、[リンク](https://…)"
+            />
+            <div class="form-actions">
+              <Button href={editUrl(courseId, item.sectionId)} variant="ghost">
+                キャンセル
+              </Button>
+              <Button type="submit" variant="primary">
+                保存
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </TabPanel>
     </AppShell>
   )
 }
