@@ -138,5 +138,6 @@ src/client.ts        クライアント側の小さな拡張（再読み込み�
 src/styles/base.css  デザイントークンと共通スタイル（ダークモード対応）。部品・画面ごとの CSS は各 .tsx の隣に置き、使うページでだけ読み込む
 src/lib/             設定・DB・認証・HTTP ヘルパー・Markdown・ストレージ・コースの権限
 src/components/      レイアウトと UI 部品
-src/routes/          auth / account / admin / courses / content / participants
+src/routes/<ルート>/ auth / account / admin / dashboard / courses / content / participants / screen。
+                     ルートごとに index.ts（ルーティング）・handlers.tsx（処理）・views.tsx（画面）・<ルート>.css に分ける
 ```
