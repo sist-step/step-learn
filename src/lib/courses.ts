@@ -100,3 +100,11 @@ export function moveRow(table: Ordered, scope: SQL, id: number, dir: 'up' | 'dow
     for (const r of updates) tx.update(table).set({ position: r.next }).where(eq(table.id, r.id)).run()
   })
 }
+
+// DB に持たないのは、画面に変更を知らせるためだけの値で、再起動で失われても開いている画面が一度取り直すだけで済むため
+const BOOT_ID = Date.now().toString(36)
+const revisions = new Map<number, number>()
+
+export const courseRevision = (courseId: number) => `${BOOT_ID}.${revisions.get(courseId) ?? 0}`
+
+export const touchCourse = (courseId: number) => revisions.set(courseId, (revisions.get(courseId) ?? 0) + 1)

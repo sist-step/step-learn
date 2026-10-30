@@ -509,6 +509,7 @@ function slideTabIndicator() {
 function render(doc: Document, scroll: () => void) {
   // DOMParser はスクリプト無効として解析し noscript の中身を要素にするので、そのまま差し込むと表示されるブラウザがある
   $$('noscript', doc.body).forEach((el) => el.remove())
+  liveBase = cloneMain(doc)
   holdRail()
   const tabSlide = markTabSwitch(doc)
   const swap = () => {
@@ -638,9 +639,156 @@ document.addEventListener(
   { passive: true },
 )
 
+// --- 開いているコースの内容が変わったら、再読み込みなしで画面に反映する（components/course.tsx の CourseLiveSync）
+// socket.io で知らせないのは、画面共有の画面だけが読み込んでいるクライアントを、すべての画面で読み込むことになるため
+const LIVE_INTERVAL = 10_000
+const EDITING = 'input, textarea, select, [contenteditable]'
+const OPENED = 'details.popover[open], [popover]:popover-open'
+
+const cloneMain = (doc: Document) => (doc.querySelector('main')?.cloneNode(true) as Element | undefined) ?? null
+const liveMarker = (root: ParentNode = document) => root.querySelector<HTMLElement>('[data-live]')
+
+// 画面の要素と新しい内容を直接比べないのは、開閉や完了の切り替えなど画面で変えた状態まで、サーバーでの変更として扱ってしまうため
+let liveBase = cloneMain(document)
+let liveRevision: string | null = null
+let liveTimer = 0
+let liveRun = 0
+
+type LiveChange = {
+  baseParent: Node
+  liveParent: Node
+  base: ChildNode[]
+  live: ChildNode[]
+  next: ChildNode[]
+  baseAnchor: Node | null
+  liveAnchor: Node | null
+}
+
+const sameShell = (a: Node, b: Node) =>
+  a instanceof Element &&
+  b instanceof Element &&
+  a.tagName === b.tagName &&
+  a.attributes.length === b.attributes.length &&
+  [...a.attributes].every((attr) => b.getAttribute(attr.name) === attr.value)
+
+// 子は位置で対応させるので、画面で子を足し引きした要素（エディターを組み込んだ入力欄など）は、中を比べず丸ごと置き換える
+function diffChildren(base: Node, next: Node, live: Node, changes: LiveChange[]) {
+  const b = [...base.childNodes]
+  const n = [...next.childNodes]
+  const l = [...live.childNodes]
+  if (l.length !== b.length || b.some((node, i) => node.nodeName !== l[i].nodeName)) return false
+  let start = 0
+  while (start < b.length && start < n.length && b[start].isEqualNode(n[start])) start++
+  let end = 0
+  while (end < b.length - start && end < n.length - start && b[b.length - 1 - end].isEqualNode(n[n.length - 1 - end])) end++
+  const bMid = b.slice(start, b.length - end)
+  const nMid = n.slice(start, n.length - end)
+  const lMid = l.slice(start, b.length - end)
+  if (bMid.length !== nMid.length) {
+    const baseAnchor = b[start] ?? null
+    const liveAnchor = l[start] ?? null
+    changes.push({ baseParent: base, liveParent: live, base: bMid, live: lMid, next: nMid, baseAnchor, liveAnchor })
+    return true
+  }
+  bMid.forEach((node, i) => {
+    if (node.isEqualNode(nMid[i]) || (sameShell(node, nMid[i]) && diffChildren(node, nMid[i], lMid[i], changes))) return
+    changes.push({
+      baseParent: base,
+      liveParent: live,
+      base: [node],
+      live: [lMid[i]],
+      next: [nMid[i]],
+      baseAnchor: node,
+      liveAnchor: lMid[i],
+    })
+  })
+  return true
+}
+
+const isPlaying = (el: Element) => [el, ...$$('video, audio', el)].some((m) => m instanceof HTMLMediaElement && !m.paused)
+
+// 使っている最中の部分をすぐ差し替えないのは、入力途中の値や開いているパネル、再生している位置が消えるため
+function inUse(node: Node) {
+  if (!(node instanceof Element)) return false
+  const active = document.activeElement
+  return (!!active?.matches(EDITING) && node.contains(active)) || node.matches(OPENED) || !!node.querySelector(OPENED) || isPlaying(node)
+}
+
+function applyChange(change: LiveChange) {
+  change.next.forEach((node) => change.liveParent.insertBefore(document.importNode(node, true), change.liveAnchor))
+  change.live.forEach((node) => node.remove())
+  change.next.forEach((node) => change.baseParent.insertBefore(node.cloneNode(true), change.baseAnchor))
+  change.base.forEach((node) => node.remove())
+}
+
+async function syncLive(run: number, revision: string | null) {
+  const page = await fetchPage(new URL(location.href))
+  if (run !== liveRun || navController) return
+  const doc = new DOMParser().parseFromString(page.html, 'text/html')
+  // 読み込み直しが要るときやログイン画面などへ移されたときに切り替えないのは、見ている画面がいきなり別の画面になるため
+  if (!page.isHtml || page.redirected || needsFullLoad(doc)) {
+    liveRevision = revision
+    return
+  }
+  $$('noscript', doc.body).forEach((el) => el.remove())
+  await loadStyles(doc)
+  const live = document.querySelector('main')
+  if (run !== liveRun || navController || document.querySelector('dialog[open]') || !live) return
+
+  const next = doc.querySelector('main')
+  const changes: LiveChange[] = []
+  if (!liveMarker(doc) || !next || !liveBase || !sameShell(liveBase, next) || !diffChildren(liveBase, next, live, changes)) {
+    if (inUse(live)) return
+    const y = scrollY
+    return render(doc, () => scrollTo(0, y))
+  }
+  const ready = changes.filter((change) => !change.live.some(inUse))
+  ready.forEach(applyChange)
+  if (ready.length > 0) {
+    document.title = doc.title
+    initContent()
+  }
+  // 見送った部分があるときに版を進めないのは、次の確認でもう一度取り直して反映するため
+  if (ready.length === changes.length) liveRevision = liveMarker(doc)!.dataset.liveRev ?? null
+}
+
+async function checkLive() {
+  const run = liveRun
+  const url = liveMarker()?.dataset.live
+  if (!url) return
+  try {
+    if (!document.hidden && !navController) {
+      const res = await fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      const revision = res.status === 404 ? null : ((await res.json()) as { revision: string }).revision
+      if (run === liveRun && revision !== liveRevision) await syncLive(run, revision)
+    }
+  } catch {}
+  if (run === liveRun) scheduleLive()
+}
+
+function scheduleLive(delay = LIVE_INTERVAL) {
+  clearTimeout(liveTimer)
+  if (liveMarker()) liveTimer = window.setTimeout(() => void checkLive(), delay)
+}
+
+function watchLive() {
+  liveRun++
+  liveRevision = liveMarker()?.dataset.liveRev ?? null
+  scheduleLive()
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) scheduleLive(0)
+})
+
 // --- 表示のたびに行う初期化（最初の表示と再読み込みなしの遷移の両方）
 function initPage() {
   $$('[data-toast]').forEach((el) => dismissLater(el, 5000))
+  initContent()
+  watchLive()
+}
+
+function initContent() {
   restoreCollapsed()
   applyEditMode(readEditMode())
   updateToc()

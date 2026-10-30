@@ -1,4 +1,4 @@
-import { ItemIcon } from '../../components/course'
+import { CourseLiveSync, ItemIcon } from '../../components/course'
 import { cx } from '../../components/cx'
 import { Icon } from '../../components/icons'
 import { AppShell } from '../../components/layout'
@@ -163,6 +163,7 @@ export const ItemPage = ({
   next,
   sharing,
   textPreview,
+  revision,
 }: {
   access: CourseAccess
   item: Item
@@ -174,6 +175,7 @@ export const ItemPage = ({
   next?: OutlineItem
   sharing: boolean
   textPreview: string | null
+  revision: string
 }) => {
   const id = access.course.id
   const isStudent = access.role === 'student'
@@ -345,6 +347,7 @@ export const ItemPage = ({
           ))}
         </aside>
       </div>
+      <CourseLiveSync courseId={id} revision={revision} />
     </AppShell>
   )
 }
