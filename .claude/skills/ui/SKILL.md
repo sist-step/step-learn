@@ -5,7 +5,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 
 # UI の作り方
 
-方針は「SSR ＋ 小さなクライアント JS」。JavaScript は必須で、無効なときは renderer の noscript が案内だけを出すので、JS なしの代替は作らない。CSS は部品・画面ごとのファイルに分け、そのページで使う分だけを読み込む（下の「CSS の置き場所と読み込み」）。JS は `src/client.ts` の 1 ファイル（Markdown エディターの CodeMirror だけは重いので、`src/markdown-editor.ts` に分けて、エディターのある画面で `client.ts` が動的に読み込む）。CSS フレームワークや UI ライブラリは入れない。
+方針は「SSR ＋ 小さなクライアント JS」。JavaScript は必須で、無効なときは renderer の noscript が案内だけを出すので、JS なしの代替は作らない。CSS は部品・画面ごとのファイルに分け、そのページで使う分だけを読み込む（下の「CSS の置き場所と読み込み」）。JS は `src/client.ts` の 1 ファイル（重いライブラリを使うものは分けて、使う画面でだけ `client.ts` が動的に読み込む。Markdown エディターの CodeMirror は `src/markdown-editor.ts`、ログイン画面の three.js は `src/auth-art.ts`）。CSS フレームワークや UI ライブラリは入れない。
 
 ## まず既存の部品を使う
 
@@ -111,7 +111,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `CourseRow` | コースの 1 行表示（頭文字・名前・コード、学生は進捗、教師は「担当」）。タイルの中などの狭い場所で使う |
 | `formatDate` | UNIX 秒を「2026年10月28日」形式で表示 |
 
-`src/components/art.tsx` の `FluidArt` はログイン画面の流体アート（SVG）。色は `--art-deep` / `--art-mid` / `--art-bright` / `--art-shine` で決まる。
+ログイン前の画面（`AuthShell`）の右側は、`src/auth-art.ts` が three.js で描く 3D アニメーション（背景は無地で、台座の上で小さなキューブが 14 種類の形（ロケット・ネコ・家・アイスクリームなど。`MODELS`）に組み上がっては組み替わる。クリックでつつくとキューブが弾け、3 回続けると次の形へ。ドラッグで回せる）。`data-auth-art` の要素に `client.ts` が canvas を置き、再読み込みなしの遷移では同じ canvas を新しい要素へ移して続きから動かす。色は `--art-deep` / `--art-mid` / `--art-bright` / `--art-shine` とコースの色（`tone-*`）を読み取る。スマホ幅（非表示）では three.js を読み込まない
 
 クラス名を条件で組み立てるときは `components/cx.ts` の `cx('a', cond && 'b')` を使う。
 
