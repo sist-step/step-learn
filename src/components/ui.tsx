@@ -75,6 +75,9 @@ export const EmptyState = ({
   )
 }
 
+/** Person の meta に出す「@ユーザー名 · メールアドレス」。メールアドレスを見せない画面では email を渡さない */
+export const userMeta = (u: { username: string | null; email?: string }) => [u.username && `@${u.username}`, u.email].filter(Boolean).join(' · ')
+
 export const Person = ({
   avatar,
   name,

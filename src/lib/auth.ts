@@ -95,19 +95,22 @@ export async function destroySession(c: Context<AppEnv>) {
   deleteCookie(c, SESSION_COOKIE, { path: '/' })
 }
 
-/** 作成できたらユーザー ID を、メールアドレスが登録済みなら null を返す */
-export async function createUser(user: { email: string; name: string; password: string; role?: Role }) {
+/** 作成できたらユーザー ID を、メールアドレスかユーザー名が登録済みならどちらが重複したかを返す */
+export async function createUser(user: { email: string; name: string; username: string; password: string; role?: Role }) {
   const passwordHash = await hashPassword(user.password)
-  return db.transaction((tx) => {
+  return db.transaction((tx): { id: number } | { taken: 'email' | 'username' } => {
     const inserted = tx
       .insert(users)
-      .values({ email: user.email, name: user.name, passwordHash, role: user.role ?? 'student' })
-      // 事前の存在確認だけに頼らないのは、確認と INSERT の間に同じメールで登録されると UNIQUE 制約違反になるため
+      .values({ email: user.email, name: user.name, username: user.username, passwordHash, role: user.role ?? 'student' })
+      // 事前の存在確認だけに頼らないのは、確認と INSERT の間に同じメールやユーザー名で登録されると UNIQUE 制約違反になるため
       .onConflictDoNothing()
       .returning({ id: users.id })
       .get()
-    tx.delete(emailVerifications).where(eq(emailVerifications.email, user.email)).run()
-    return inserted?.id ?? null
+    const emailTaken = !inserted && !!tx.select({ id: users.id }).from(users).where(eq(users.email, user.email)).get()
+    // ユーザー名の重複で確認用トークンを消さないのは、別のユーザー名で登録をやり直せるようにするため
+    if (inserted || emailTaken) tx.delete(emailVerifications).where(eq(emailVerifications.email, user.email)).run()
+    if (inserted) return { id: inserted.id }
+    return { taken: emailTaken ? 'email' : 'username' }
   })
 }
 
@@ -141,7 +144,7 @@ export async function destroyOtherSessions(c: Context<AppEnv>, userId: number) {
   db.delete(sessions).where(and(eq(sessions.userId, userId), ne(sessions.id, current))).run()
 }
 
-const userColumns = { id: users.id, email: users.email, name: users.name, role: users.role }
+const userColumns = { id: users.id, email: users.email, name: users.name, username: users.username, role: users.role }
 
 const findSessionUser = (sid: string) =>
   db

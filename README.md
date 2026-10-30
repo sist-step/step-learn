@@ -7,7 +7,8 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
 ## 機能（現時点）
 
 - **認証**：メール＋パスワードでの登録とログイン、セッション管理、プロフィールとパスワードの変更
-  - 新規登録はメールアドレスの確認が必要です（届いたリンクから氏名とパスワードを設定）
+  - 新規登録はメールアドレスの確認が必要です（届いたリンクから氏名・ユーザー名・パスワードを設定）
+  - ログインはメールアドレスとユーザー名のどちらでもできます。ユーザー名の導入前に登録したユーザーは、アカウント画面で設定します
   - 管理者は CLI（`npm run user:create`）で作成します。Web からの登録はすべて学生になります
   - ロールは 管理者 / 教師 / 学生。コースを作成できるのは管理者だけです
 - **コース**
@@ -50,7 +51,7 @@ npm run dev          # http://localhost:5173
 
 ```sh
 npm run build
-npm run user:create -- --email admin@example.com --name "管理者"
+npm run user:create -- --email admin@example.com --name "管理者" --username admin
 ```
 
 ```sh
@@ -80,10 +81,11 @@ npm start            # = node dist/server/index.js
 ### ユーザーを CLI で作成する
 
 ```sh
-npm run user:create -- --email admin@example.com --name "管理者" [--role admin|teacher|student]
+npm run user:create -- --email admin@example.com --name "管理者" --username admin [--role admin|teacher|student]
 ```
 
 - `--role` を省略すると管理者になります
+- `--username` は半角英数字と `.` `_` `-` で 3〜30 文字です
 - パスワードは対話的に入力します。パイプで渡した場合は 1 行目を使います（例 `cat password.txt | npm run user:create -- ...`）
 - Web の新規登録と同じパスワードの基準を満たす必要があります
 
