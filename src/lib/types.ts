@@ -1,3 +1,5 @@
+import type { courses, items, sections } from './schema'
+
 export type Role = 'admin' | 'teacher' | 'student'
 export type CourseRole = 'teacher' | 'student'
 
@@ -5,6 +7,7 @@ export type User = {
   id: number
   email: string
   name: string
+  username: string | null
   role: Role
 }
 
@@ -22,40 +25,9 @@ export type AppEnv = {
   }
 }
 
-export type Course = {
-  id: number
-  code: string
-  title: string
-  summary: string
-  color: string
-  enroll_key: string | null
-  visible: number
-  created_at: number
-  updated_at: number
-}
-
-export type Section = {
-  id: number
-  course_id: number
-  title: string
-  summary: string
-  position: number
-}
-
-export type Item = {
-  id: number
-  course_id: number
-  section_id: number
-  type: ItemType
-  title: string
-  body: string
-  url: string
-  file_key: string | null
-  file_name: string | null
-  file_size: number | null
-  file_type: string | null
-  position: number
-}
+export type Course = typeof courses.$inferSelect
+export type Section = typeof sections.$inferSelect
+export type Item = typeof items.$inferSelect
 
 export type ItemType = 'page' | 'link' | 'file' | 'screen'
 

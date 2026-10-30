@@ -6,8 +6,9 @@ import { createUser } from './lib/auth'
 import { isEmail } from './lib/http'
 import { checkPassword } from './lib/password'
 import { ROLE_LABELS, type Role } from './lib/types'
+import { checkUsername, normalizeUsername } from './lib/username'
 
-const USAGE = `使い方: npm run user:create -- --email <メールアドレス> --name <氏名> [--role admin|teacher|student]
+const USAGE = `使い方: npm run user:create -- --email <メールアドレス> --name <氏名> --username <ユーザー名> [--role admin|teacher|student]
 
 ユーザーを作成します。ロールを省略すると管理者になります。
 パスワードは対話的に入力します（パイプで渡した場合は 1 行目を使います）。`
@@ -66,25 +67,30 @@ async function createUserCommand(args: string[]) {
     options: {
       email: { type: 'string' },
       name: { type: 'string' },
+      username: { type: 'string' },
       role: { type: 'string', default: 'admin' },
     },
   })
   const email = (values.email ?? '').trim().toLowerCase()
   const name = (values.name ?? '').trim()
+  const username = normalizeUsername(values.username ?? '')
   const role = values.role as Role
 
   if (!isEmail(email)) fail('--email に有効なメールアドレスを指定してください。')
   if (!name || name.length > 60) fail('--name に 60 文字以内の氏名を指定してください。')
+  const usernameError = checkUsername(username)
+  if (usernameError) fail(`--username: ${usernameError}`)
   if (!Object.hasOwn(ROLE_LABELS, role)) fail('--role には admin / teacher / student のいずれかを指定してください。')
 
   // ログインフォームの field() と同じ扱いにしないと、作成したパスワードでログインできなくなる
   const password = (await readPassword()).trim()
   if (password.length > 200) fail('パスワードは 200 文字以内にしてください。')
-  const passwordError = checkPassword(password, { email, name })
+  const passwordError = checkPassword(password, { email, name, username })
   if (passwordError) fail(passwordError)
 
-  if (!(await createUser({ email, name, password, role }))) fail(`${email} はすでに登録されています。`)
-  console.log(`${ROLE_LABELS[role]}「${name}」（${email}）を作成しました。`)
+  const created = await createUser({ email, name, username, password, role })
+  if ('taken' in created) fail(created.taken === 'email' ? `${email} はすでに登録されています。` : `ユーザー名 ${username} はすでに使われています。`)
+  console.log(`${ROLE_LABELS[role]}「${name}」（@${username}、${email}）を作成しました。`)
 }
 
 const [command, ...rest] = process.argv.slice(2)

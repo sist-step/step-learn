@@ -1,6 +1,6 @@
 ---
 name: add-page
-description: "StepLearn に画面・ルート・フォーム処理を追加または変更する手順と型。src/routes/ にハンドラを足す、新しいページを作る、フォームの送信先を作る、権限チェックやバリデーションを書く、一覧・詳細・編集・削除の画面を作るときに読み込む。「〇〇画面を作って」「〇〇できるようにして」「ページを追加」「フォームを追加」などの依頼が対象。"
+description: "StepLearn に画面・ルート・フォーム処理を追加または変更する手順と型。src/routes/<name>/ のルーティング・ハンドラ・ビューを足す、新しいページを作る、フォームの送信先を作る、権限チェックやバリデーションを書く、一覧・詳細・編集・削除の画面を作るときに読み込む。「〇〇画面を作って」「〇〇できるようにして」「ページを追加」「フォームを追加」などの依頼が対象。"
 ---
 
 # 画面・ルートの追加
@@ -9,33 +9,56 @@ StepLearn は MPA。サーバーで HTML を返し、操作はすべて `<form m
 
 ## 置き場所
 
-- 既存の機能領域に入るものは、該当する `src/routes/*.tsx` に足す
-  - `courses.tsx`（コース本体・設定）、`content.tsx`（セクション・アイテム）、`participants.tsx`（参加者）、`account.tsx`、`admin.tsx`、`auth.tsx`
-- 新しい領域なら `src/routes/<name>.tsx` を作り、`src/index.tsx` で `app.route('/<prefix>', <name>)` する
+ルートごとにフォルダーを作り、「ルーティング / 処理 / ビュー」をファイルで分ける。
+
+```
+src/routes/<name>/
+  index.ts       ルーティング。new Hono<AppEnv>()、ミドルウェア（requireAuth など）、パスとハンドラの対応だけを書く
+  handlers.tsx   処理。権限チェック・入力の検証・DB の読み書き・c.render / redirectWith を返すハンドラ関数
+  views.tsx      ビュー。画面と部品の JSX。データは props だけで受け取り、Context や db には触らない
+  <name>.css     その画面だけで使う CSS（なければ作らない）
+```
+
+- 既存の機能領域に入るものは、該当するフォルダーに足す
+  - `courses/`（コース一覧・作成・コースページ・設定）、`dashboard/`、`content/`（セクション・アイテム）、`participants/`（参加者）、`account/`、`admin/`、`auth/`、`screen/`（画面共有）
+- 新しい領域なら `src/routes/<name>/` を作り、`src/index.tsx` で `app.route('/<prefix>', <name>)` する
 - ナビゲーションに出す画面は `src/components/layout.tsx` の `links` に足す（左のアイコンレールに出る。権限で出し分ける）
-- 複数の画面で使う部品は `src/components/`、コース関連の部品は `components/course.tsx`
+- 複数のルートで使う部品は `src/components/`、コース関連の部品は `components/course.tsx`。複数のルートで使う DB の処理は `src/lib/`（`lib/courses.ts` など）
+- handlers と views の両方で使う型・定数（一覧の行の型、件数の上限など）は views.tsx から export する
 
 ## ファイルの骨組み
 
-```tsx
+`index.ts`
+
+```ts
 import { Hono } from 'hono'
-import { Button } from '../components/button'
-import { TextField } from '../components/form'
-import { AppShell } from '../components/layout'
-import { PageHeader } from '../components/ui'
-import { requireAuth } from '../lib/auth'
-import { getCourseAccess } from '../lib/courses'
-import { field, intParam, readForm, redirectWith } from '../lib/http'
-import type { AppEnv } from '../lib/types'
-import { db } from '../lib/db'
+import { requireAuth } from '../../lib/auth'
+import type { AppEnv } from '../../lib/types'
+import { create, list } from './handlers'
 
 const app = new Hono<AppEnv>()
 app.use(requireAuth)
 
-type Errors = Partial<Record<'title', string>>
+app.get('/:id/notes', list)
+app.post('/:id/notes', create)
 
-const NotePage = ({ values, errors = {} }: { values: { title?: string }; errors?: Errors }) => (
+export default app
+```
+
+`views.tsx`
+
+```tsx
+import { Button } from '../../components/button'
+import { TextField } from '../../components/form'
+import { AppShell } from '../../components/layout'
+import { Styles } from '../../components/style'
+import { PageHeader } from '../../components/ui'
+
+export type NoteErrors = Partial<Record<'title', string>>
+
+export const NotePage = ({ values, errors = {} }: { values: { title?: string }; errors?: NoteErrors }) => (
   <AppShell>
+    <Styles use={['/src/routes/notes/notes.css']} />
     <PageHeader title="ノート" description="..." />
     <form method="post" class="stack" data-loading-form>
       <TextField label="タイトル" name="title" value={values.title} error={errors.title} required maxlength={120} />
@@ -47,9 +70,28 @@ const NotePage = ({ values, errors = {} }: { values: { title?: string }; errors?
     </form>
   </AppShell>
 )
-
-export default app
 ```
+
+`handlers.tsx`
+
+```tsx
+import { eq } from 'drizzle-orm'
+import type { Context } from 'hono'
+import { getCourseAccess } from '../../lib/courses'
+import { db } from '../../lib/db'
+import { field, intParam, readForm, redirectWith } from '../../lib/http'
+import { notes } from '../../lib/schema'
+import type { AppEnv } from '../../lib/types'
+import { NotePage } from './views'
+
+export async function list(c: Context<AppEnv>) {
+  // 権限チェック → データ取得 → c.render(<NotePage ... />, { title })
+}
+```
+
+- ハンドラは `export async function 動詞(c: Context<AppEnv>)` で書き、名前は短い動詞にする（`list` / `show` / `create` / `update` / `remove` / `move` など。`delete` は予約語なので `remove`）。同じフォルダーで表示と送信が対になるときは `showLogin` / `submitLogin` のようにする
+- ハンドラの中に JSX のマークアップを書かない。`c.render(<XxxPage ... />, { title })` で views のページを呼ぶだけにする
+- import は 外部パッケージ → `../../components` → `../../lib` → `./views` の順
 
 ## ハンドラの型
 
@@ -65,26 +107,26 @@ if (!access || !access.canManage) return c.notFound()
 - コースに関わる処理は `getCourseAccess` を通す。参加していないコースは（管理者以外）`null` になる。`canManage`（教師・管理者）/ `role` で判定する
 - 権限がないときは 403 ではなく `c.notFound()`。存在を知らせない
 - サイト全体のロールで絞るときは `app.use(requireAuth, requireRole('admin'))`
-- 同じ判定を何度も書くなら `manageAccess(c)` のようにファイル内の関数にまとめる（`participants.tsx` 参照）
+- 同じ判定を何度も書くなら `manageAccess(c)` のように handlers.tsx 内の関数にまとめる（`participants/handlers.tsx` 参照）
 - 子リソース（アイテムなど）は親の ID でも絞る: `WHERE id = ? AND course_id = ?`
 
 ### GET（表示）
 
-```ts
-app.get('/:id/notes', async (c) => {
+```tsx
+export async function show(c: Context<AppEnv>) {
   // 権限チェック
   return c.render(<NotePage values={{}} />, { title: `ノート - ${access.course.title}` })
-})
+}
 ```
 
 - `title` は「画面名」か「画面名 - コース名」。`| StepLearn` は renderer が付ける
-- 複数のクエリは `db.batch([...])` でまとめる
+- クエリは `db.select()...get()` / `.all()` で書く（書き方は `db-change` スキル）
 - 一覧が空のときは `EmptyState` を出す
 
 ### POST（更新）
 
-```ts
-app.post('/:id/notes', async (c) => {
+```tsx
+export async function create(c: Context<AppEnv>) {
   // 権限チェック
   const form = await readForm(c)
   const title = field(form, 'title', 120)
@@ -92,9 +134,9 @@ app.post('/:id/notes', async (c) => {
     c.status(422)
     return c.render(<NotePage values={{ title }} errors={{ title: 'タイトルを入力してください。' }} />, { title: 'ノート' })
   }
-  await db.prepare('INSERT INTO notes (course_id, title) VALUES (?, ?)').bind(id, title).run()
+  db.insert(notes).values({ courseId: id, title }).run()
   return redirectWith(c, `/courses/${id}/notes`, 'ノートを追加しました。')
-})
+}
 ```
 
 - フォームの値は `field(form, key, 最大長)` で取る（trim と長さの切り詰めを兼ねる）。最大長は必ず指定する
@@ -102,7 +144,7 @@ app.post('/:id/notes', async (c) => {
 - 一覧画面の小さなフォームなど描き直しにくいものは `redirectWith(c, back, 'メッセージ。', 'error')`
 - 成功したら `redirectWith(c, url, 'メッセージ。')`（303 とトースト）。種類は `success`（既定）/ `info`（削除・退出など）/ `error`
 - 選択肢の値は型ガードで検証し、不正なら `c.notFound()`
-- バリデーションが長くなるなら `parseXxxForm(form): { values, errors, ok }` に切り出す（`courses.tsx` の `parseCourseForm` 参照）
+- バリデーションが長くなるなら `parseXxxForm(form): { values, errors, ok }` に切り出す（`courses/handlers.tsx` の `parseCourseForm` 参照）
 
 ### 削除・状態変更
 
@@ -121,7 +163,7 @@ return c.redirect(c.req.header('referer') ?? `/courses/${id}`, 303)
 
 ### 未ログインでも使える POST
 
-ログイン・登録のように誰でも叩ける処理には `rateLimiter`（`lib/rate-limit.ts`）を使い、キーは `clientIp(c)` やメールアドレスにする。メールアドレスの登録有無が応答からわからないようにする（`auth.tsx` 参照）。
+ログイン・登録のように誰でも叩ける処理には `rateLimiter`（`lib/rate-limit.ts`）を使い、キーは `clientIp(c)` やメールアドレスにする。メールアドレスの登録有無が応答からわからないようにする（`auth/handlers.tsx` 参照）。
 
 ## 終わったら
 

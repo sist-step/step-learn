@@ -23,7 +23,10 @@ function isSequence(s: string) {
 }
 
 /** 使えないパスワードなら理由を、問題なければ null を返す */
-export function checkPassword(password: string, { email = '', name = '' }: { email?: string; name?: string } = {}) {
+export function checkPassword(
+  password: string,
+  { email = '', name = '', username }: { email?: string; name?: string; username?: string | null } = {},
+) {
   if (password.length < PASSWORD_MIN_LENGTH) return `パスワードは${PASSWORD_MIN_LENGTH}文字以上にしてください。`
 
   const lower = password.toLowerCase()
@@ -31,10 +34,10 @@ export function checkPassword(password: string, { email = '', name = '' }: { ema
   if (/^\d+$/.test(password)) return '数字だけのパスワードは使えません。'
   if (new Set(password).size < 4 || isSequence(lower)) return '同じ文字の繰り返しや連続した文字は使えません。'
 
-  const personal = [email.split('@')[0], name.replace(/\s+/g, ''), ...name.split(/\s+/)]
+  const personal = [email.split('@')[0], username ?? '', name.replace(/\s+/g, ''), ...name.split(/\s+/)]
     .map((s) => s.toLowerCase())
     .filter((s) => s.length >= 3)
-  if (personal.some((s) => lower.includes(s))) return 'メールアドレスや氏名を含むパスワードは使えません。'
+  if (personal.some((s) => lower.includes(s))) return 'メールアドレス・ユーザー名・氏名を含むパスワードは使えません。'
 
   return null
 }

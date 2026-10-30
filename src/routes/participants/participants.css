@@ -1,0 +1,11 @@
+.progress-cell { width: 200px; }
+
+.participants-toolbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+
+.candidates-box { min-height: 120px; max-height: min(360px, 50dvh); overflow-y: auto; }
+.candidates { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.candidate { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; }
+.candidate:hover { background: var(--surface-2); }
+.candidate > .person { flex: 1; }
+.candidate > :last-child { flex: none; }
+.candidates-note { padding: 8px 10px; }
