@@ -119,7 +119,10 @@
   transition: all 0.2s var(--ease);
 }
 .check:hover { border-color: var(--primary); color: color-mix(in srgb, var(--primary) 50%, transparent); }
-.check[aria-pressed='true'] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); animation: pop 0.3s var(--ease); }
+.check[aria-pressed='true'], .check-auto[data-done='true'] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); animation: pop 0.3s var(--ease); }
+.check-auto { flex: none; border-style: dashed; }
+.check-auto:hover { border-color: var(--border-strong); color: transparent; }
+.check-auto[data-done='true']:hover { border-color: var(--primary); color: var(--on-primary); }
 
 .add-item {
   display: flex;
@@ -166,13 +169,15 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 14px;
   padding: 6px 6px 6px 16px;
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-lg);
   color: var(--muted);
   background: var(--surface);
 }
+.add-section-form { margin-top: 14px; }
+.add-section-form .field-error { padding-left: 16px; }
 .add-section:focus-within { border-color: var(--primary); border-style: solid; }
+.has-error .add-section { border-color: var(--danger); border-style: solid; }
 .add-section-input { flex: 1; min-width: 0; height: var(--control-h-sm); padding: 0; border: 0; background: none; color: var(--text); }
 .add-section-input:focus, .add-section-input:focus-visible { outline: none; box-shadow: none; }

@@ -7,6 +7,7 @@ import { AppShell, AuthShell } from './components/layout'
 import { EmptyState } from './components/ui'
 import { session } from './lib/auth'
 import { config } from './lib/config'
+import { touchCourse } from './lib/courses'
 import { flashMiddleware, limitBody } from './lib/http'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE } from './lib/storage'
 import type { AppEnv } from './lib/types'
@@ -34,6 +35,14 @@ app.use(flashMiddleware)
 app.use(session)
 app.use((c, next) => (c.var.user ? userBodyLimit : guestBodyLimit)(c, next))
 app.use(renderer)
+
+// 各ハンドラで呼ばないのは、内容を変える操作を足したときに呼び忘れると、開いている画面に反映されなくなるため
+// 完了の切り替えを除くのは、本人にしか関係がないのに、コースを開いている全員に取り直させることになるため
+app.post('/courses/:id/*', async (c, next) => {
+  await next()
+  const id = Number(c.req.param('id'))
+  if (Number.isSafeInteger(id) && c.res.status < 400 && !c.req.path.endsWith('/complete')) touchCourse(id)
+})
 
 app.get('/', (c) => c.redirect(c.var.user ? '/dashboard' : '/login'))
 

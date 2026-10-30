@@ -1,4 +1,4 @@
-import { and, eq, inArray, max, notInArray, sql, type SQL, type SQLWrapper } from 'drizzle-orm'
+import { and, eq, inArray, max, ne, notInArray, sql, type SQL, type SQLWrapper } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import type { Context } from 'hono'
 import type { AppEnv, Course, CourseRole, User } from './types'
@@ -49,17 +49,25 @@ export const isVisibleItem = (itemId: number) =>
     .where(and(eq(items.id, itemId), visibleItem()))
     .get()
 
-/** 進捗の分母。courseId には courses.id などの列も渡せる */
-export const visibleItemCount = (courseId: number | SQLWrapper) => db.$count(items, and(eq(items.courseId, courseId), visibleItem()))
+/** items を FROM に含むクエリで使う、進捗に数えるアイテム（学生に見えて、完了の条件があり、コースが完了ステータスを使う）の条件 */
+export const trackedItem = () =>
+  and(
+    visibleItem(),
+    ne(items.completion, 'none'),
+    inArray(items.courseId, db.select({ id: courses.id }).from(courses).where(eq(courses.completionEnabled, 1))),
+  )
 
-// 完了の記録を消さずに数えるときだけ外すのは、表示に戻したときに学生の進捗をそのまま復元するため
-export const visibleDoneCount = (userId: number | SQLWrapper, courseId: number | SQLWrapper) =>
+/** 進捗の分母。courseId には courses.id などの列も渡せる */
+export const trackedItemCount = (courseId: number | SQLWrapper) => db.$count(items, and(eq(items.courseId, courseId), trackedItem()))
+
+// 完了の記録を消さずに数えるときだけ外すのは、表示に戻したり完了の条件を付け直したりしたときに、学生の進捗をそのまま復元するため
+export const trackedDoneCount = (userId: number | SQLWrapper, courseId: number | SQLWrapper) =>
   db.$count(
     completions,
     and(
       eq(completions.userId, userId),
       eq(completions.courseId, courseId),
-      inArray(completions.itemId, db.select({ id: items.id }).from(items).where(visibleItem())),
+      inArray(completions.itemId, db.select({ id: items.id }).from(items).where(trackedItem())),
     ),
   )
 
@@ -100,3 +108,11 @@ export function moveRow(table: Ordered, scope: SQL, id: number, dir: 'up' | 'dow
     for (const r of updates) tx.update(table).set({ position: r.next }).where(eq(table.id, r.id)).run()
   })
 }
+
+// DB に持たないのは、画面に変更を知らせるためだけの値で、再起動で失われても開いている画面が一度取り直すだけで済むため
+const BOOT_ID = Date.now().toString(36)
+const revisions = new Map<number, number>()
+
+export const courseRevision = (courseId: number) => `${BOOT_ID}.${revisions.get(courseId) ?? 0}`
+
+export const touchCourse = (courseId: number) => revisions.set(courseId, (revisions.get(courseId) ?? 0) + 1)

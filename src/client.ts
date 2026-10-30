@@ -3,6 +3,7 @@
 // 全ページ共通のクライアント処理。JS が無効な環境では renderer の noscript がアプリを使えなくする。
 
 import checkSvg from 'heroicons/24/outline/check.svg?raw'
+import { isFormName, validate, type FieldErrors, type FormInput } from './lib/forms'
 
 const $$ = <T extends Element>(sel: string, root: ParentNode = document) => [...root.querySelectorAll<T>(sel)]
 
@@ -88,6 +89,68 @@ document.addEventListener('click', (e) => {
   btn.classList.toggle('on', show)
 })
 
+// --- 入力の検証（components/form.tsx の validateWith を付けたフォーム）
+function formInput(form: HTMLFormElement) {
+  const input: FormInput = {}
+  for (const [key, value] of new FormData(form)) {
+    const prev = input[key]
+    input[key] = prev === undefined ? value : [...(Array.isArray(prev) ? prev : [prev]), value]
+  }
+  return input
+}
+
+function checkForm(form: HTMLFormElement): FieldErrors | null {
+  const name = form.dataset.validate
+  if (!isFormName(name)) return null
+  const result = validate(name, formInput(form))
+  return result.ok ? {} : result.errors
+}
+
+const fieldNames = (form: HTMLFormElement) => new Set($$<HTMLInputElement>('[name]', form).map((el) => el.name))
+
+function setFieldError(form: HTMLFormElement, name: string, message?: string) {
+  const control = form.elements.namedItem(name)
+  const slot = control instanceof HTMLElement && control.id ? document.getElementById(`${control.id}-error`) : null
+  if (!(control instanceof HTMLElement) || !slot) return false
+  if (message) control.setAttribute('aria-invalid', 'true')
+  else control.removeAttribute('aria-invalid')
+  control.closest('.field')?.classList.toggle('has-error', !!message)
+  slot.querySelector('[data-field-error]')!.textContent = message ?? ''
+  slot.hidden = !message
+  return true
+}
+
+document.addEventListener(
+  'submit',
+  (e) => {
+    const form = e.target as HTMLFormElement
+    const errors = checkForm(form)
+    if (!errors) return
+    form.dataset.validated = ''
+    const unplaced = Object.entries(errors).filter(([name, message]) => !setFieldError(form, name, message))
+    for (const name of fieldNames(form)) if (!errors[name]) setFieldError(form, name)
+    if (Object.keys(errors).length === 0) return
+    // 送信の処理（確認ダイアログ・再読み込みなしの遷移）より先に止めるため、捕捉の段階で伝わるのを止める
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    unplaced.forEach(([, message]) => toast(message!, 'error'))
+    $$<HTMLElement>('[aria-invalid="true"]', form)[0]?.focus()
+  },
+  true,
+)
+
+// 送信しようとする前は、エラーを出している欄しか確かめ直さないのは、入力し始めたばかりの欄にエラーを出してしまうため
+const recheck = (e: Event) => {
+  const control = e.target as HTMLInputElement
+  const form = control.form
+  const errors = form && checkForm(form)
+  if (!form || !errors || !control.name) return
+  if ('validated' in form.dataset) fieldNames(form).forEach((name) => setFieldError(form, name, errors[name]))
+  else if (control.getAttribute('aria-invalid') === 'true') setFieldError(form, control.name, errors[control.name])
+}
+document.addEventListener('input', recheck)
+document.addEventListener('change', recheck)
+
 // --- 確認ダイアログ（ネイティブ confirm の代わり）
 let dialog: HTMLDialogElement | null = null
 function confirmDialog(message: string): Promise<boolean> {
@@ -142,6 +205,8 @@ document.addEventListener('change', (e) => {
 })
 
 // --- 完了トグルを画面遷移なしで反映
+type CompleteResult = { completed: boolean; done: number; total: number }
+
 async function handleComplete(e: SubmitEvent, form: HTMLFormElement) {
   e.preventDefault()
   const btn = form.querySelector('button')!
@@ -150,10 +215,9 @@ async function handleComplete(e: SubmitEvent, form: HTMLFormElement) {
   try {
     const res = await fetch(form.action, { method: 'POST', headers: { Accept: 'application/json' } })
     if (!res.ok) throw new Error()
-    const data: { completed: boolean; done: number; total: number } = await res.json()
+    const data: CompleteResult = await res.json()
     setCompleteUI(form, data.completed)
-    updateProgress(data.done, data.total)
-    if (data.completed && data.done === data.total && data.total > 0) toast('🎉 コースのすべてのアイテムを完了しました！')
+    showProgress(data)
   } catch {
     setCompleteUI(form, !next)
     toast('更新できませんでした。通信状況を確認してください。', 'error')
@@ -164,19 +228,85 @@ function setCompleteUI(form: HTMLFormElement, done: boolean) {
   const btn = form.querySelector('button')!
   btn.setAttribute('aria-pressed', String(done))
   btn.setAttribute('aria-label', done ? '未完了に戻す' : '完了にする')
-  form.closest('.item-row')?.classList.toggle('is-done', done)
   const label = form.querySelector('[data-complete-label]')
   if (label) {
     label.textContent = done ? '完了済み' : '完了にする'
     btn.classList.toggle('btn-success', done)
     btn.classList.toggle('btn-primary', !done)
   }
-  const id = form.action.match(/items\/(\d+)\/complete/)?.[1]
+  setItemDone(completeItemId(form.action), done)
+}
+
+const completeItemId = (url: string) => url.match(/items\/(\d+)\/complete/)?.[1] ?? ''
+
+function setItemDone(id: string, done: boolean) {
+  $$(`.item-row[data-item="${id}"]`).forEach((row) => row.classList.toggle('is-done', done))
+  $$<HTMLElement>(`[data-complete-check="${id}"]`).forEach((el) => {
+    el.dataset.done = String(done)
+    if (done) el.setAttribute('aria-label', '完了済み')
+  })
+  $$(`[data-complete-status="${id}"]`).forEach((el) => {
+    el.classList.toggle('is-done', done)
+    if (done) el.querySelector('[data-complete-label]')!.textContent = '完了済み'
+  })
   const dot = id && document.querySelector(`[data-outline-dot="${id}"]`)
   if (dot) {
     dot.classList.toggle('done', done)
     dot.innerHTML = done ? checkSvg.replace('<svg ', '<svg class="icon" width="10" height="10" ') : ''
   }
+}
+
+function showProgress(data: CompleteResult) {
+  updateProgress(data.done, data.total)
+  if (data.completed && data.done === data.total && data.total > 0) toast('🎉 コースのすべてのアイテムを完了しました！')
+}
+
+// --- 開いた・最後まで再生したアイテムを自動で完了にする（components/course.tsx の CompletionStatus）
+// 失敗してもエラーを出さないのは、学生が自分で操作したわけではなく、次に開いたときにもう一度送れるため
+async function autoComplete(url: string, on: 'view' | 'ended') {
+  $$(`[data-complete-on-open="${CSS.escape(url)}"]`).forEach((el) => el.removeAttribute('data-complete-on-open'))
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      body: new URLSearchParams({ on }),
+      headers: { Accept: 'application/json' },
+      // 新しいタブで開くリンクでも、この画面から離れる操作でも送り切るため
+      keepalive: true,
+    })
+    if (!res.ok) return
+    const data: CompleteResult = await res.json()
+    setItemDone(completeItemId(url), data.completed)
+    showProgress(data)
+  } catch {}
+}
+
+const completeOnOpen = (e: MouseEvent) => {
+  const url = (e.target as Element).closest<HTMLElement>('[data-complete-on-open]')?.dataset.completeOnOpen
+  if (url && e.button <= 1) void autoComplete(url, 'view')
+}
+document.addEventListener('click', completeOnOpen)
+document.addEventListener('auxclick', completeOnOpen)
+
+// ended は伝わってこないので、捕捉の段階で拾う
+document.addEventListener(
+  'ended',
+  (e) => {
+    const media = e.target as HTMLElement
+    const url = media.dataset?.completeOnEnded
+    if (!url) return
+    media.removeAttribute('data-complete-on-ended')
+    void autoComplete(url, 'ended')
+  },
+  true,
+)
+
+function completeOnView() {
+  $$<HTMLElement>('[data-complete-on-view]').forEach((el) => {
+    const url = el.dataset.completeOnView!
+    // 要素ごと消さないのは、ライブ同期が子の数で前回の内容と画面の要素を対応させているため
+    el.removeAttribute('data-complete-on-view')
+    void autoComplete(url, 'view')
+  })
 }
 
 function updateProgress(done: number, total: number) {
@@ -509,6 +639,7 @@ function slideTabIndicator() {
 function render(doc: Document, scroll: () => void) {
   // DOMParser はスクリプト無効として解析し noscript の中身を要素にするので、そのまま差し込むと表示されるブラウザがある
   $$('noscript', doc.body).forEach((el) => el.remove())
+  liveBase = cloneMain(doc)
   holdRail()
   const tabSlide = markTabSwitch(doc)
   const swap = () => {
@@ -638,9 +769,157 @@ document.addEventListener(
   { passive: true },
 )
 
+// --- 開いているコースの内容が変わったら、再読み込みなしで画面に反映する（components/course.tsx の CourseLiveSync）
+// socket.io で知らせないのは、画面共有の画面だけが読み込んでいるクライアントを、すべての画面で読み込むことになるため
+const LIVE_INTERVAL = 10_000
+const EDITING = 'input, textarea, select, [contenteditable]'
+const OPENED = 'details.popover[open], [popover]:popover-open'
+
+const cloneMain = (doc: Document) => (doc.querySelector('main')?.cloneNode(true) as Element | undefined) ?? null
+const liveMarker = (root: ParentNode = document) => root.querySelector<HTMLElement>('[data-live]')
+
+// 画面の要素と新しい内容を直接比べないのは、開閉や完了の切り替えなど画面で変えた状態まで、サーバーでの変更として扱ってしまうため
+let liveBase = cloneMain(document)
+let liveRevision: string | null = null
+let liveTimer = 0
+let liveRun = 0
+
+type LiveChange = {
+  baseParent: Node
+  liveParent: Node
+  base: ChildNode[]
+  live: ChildNode[]
+  next: ChildNode[]
+  baseAnchor: Node | null
+  liveAnchor: Node | null
+}
+
+const sameShell = (a: Node, b: Node) =>
+  a instanceof Element &&
+  b instanceof Element &&
+  a.tagName === b.tagName &&
+  a.attributes.length === b.attributes.length &&
+  [...a.attributes].every((attr) => b.getAttribute(attr.name) === attr.value)
+
+// 子は位置で対応させるので、画面で子を足し引きした要素（エディターを組み込んだ入力欄など）は、中を比べず丸ごと置き換える
+function diffChildren(base: Node, next: Node, live: Node, changes: LiveChange[]) {
+  const b = [...base.childNodes]
+  const n = [...next.childNodes]
+  const l = [...live.childNodes]
+  if (l.length !== b.length || b.some((node, i) => node.nodeName !== l[i].nodeName)) return false
+  let start = 0
+  while (start < b.length && start < n.length && b[start].isEqualNode(n[start])) start++
+  let end = 0
+  while (end < b.length - start && end < n.length - start && b[b.length - 1 - end].isEqualNode(n[n.length - 1 - end])) end++
+  const bMid = b.slice(start, b.length - end)
+  const nMid = n.slice(start, n.length - end)
+  const lMid = l.slice(start, b.length - end)
+  if (bMid.length !== nMid.length) {
+    const baseAnchor = b[start] ?? null
+    const liveAnchor = l[start] ?? null
+    changes.push({ baseParent: base, liveParent: live, base: bMid, live: lMid, next: nMid, baseAnchor, liveAnchor })
+    return true
+  }
+  bMid.forEach((node, i) => {
+    if (node.isEqualNode(nMid[i]) || (sameShell(node, nMid[i]) && diffChildren(node, nMid[i], lMid[i], changes))) return
+    changes.push({
+      baseParent: base,
+      liveParent: live,
+      base: [node],
+      live: [lMid[i]],
+      next: [nMid[i]],
+      baseAnchor: node,
+      liveAnchor: lMid[i],
+    })
+  })
+  return true
+}
+
+const isPlaying = (el: Element) => [el, ...$$('video, audio', el)].some((m) => m instanceof HTMLMediaElement && !m.paused)
+
+// 使っている最中の部分をすぐ差し替えないのは、入力途中の値や開いているパネル、再生している位置が消えるため
+function inUse(node: Node) {
+  if (!(node instanceof Element)) return false
+  const active = document.activeElement
+  return (!!active?.matches(EDITING) && node.contains(active)) || node.matches(OPENED) || !!node.querySelector(OPENED) || isPlaying(node)
+}
+
+function applyChange(change: LiveChange) {
+  change.next.forEach((node) => change.liveParent.insertBefore(document.importNode(node, true), change.liveAnchor))
+  change.live.forEach((node) => node.remove())
+  change.next.forEach((node) => change.baseParent.insertBefore(node.cloneNode(true), change.baseAnchor))
+  change.base.forEach((node) => node.remove())
+}
+
+async function syncLive(run: number, revision: string | null) {
+  const page = await fetchPage(new URL(location.href))
+  if (run !== liveRun || navController) return
+  const doc = new DOMParser().parseFromString(page.html, 'text/html')
+  // 読み込み直しが要るときやログイン画面などへ移されたときに切り替えないのは、見ている画面がいきなり別の画面になるため
+  if (!page.isHtml || page.redirected || needsFullLoad(doc)) {
+    liveRevision = revision
+    return
+  }
+  $$('noscript', doc.body).forEach((el) => el.remove())
+  await loadStyles(doc)
+  const live = document.querySelector('main')
+  if (run !== liveRun || navController || document.querySelector('dialog[open]') || !live) return
+
+  const next = doc.querySelector('main')
+  const changes: LiveChange[] = []
+  if (!liveMarker(doc) || !next || !liveBase || !sameShell(liveBase, next) || !diffChildren(liveBase, next, live, changes)) {
+    if (inUse(live)) return
+    const y = scrollY
+    return render(doc, () => scrollTo(0, y))
+  }
+  const ready = changes.filter((change) => !change.live.some(inUse))
+  ready.forEach(applyChange)
+  if (ready.length > 0) {
+    document.title = doc.title
+    initContent()
+  }
+  // 見送った部分があるときに版を進めないのは、次の確認でもう一度取り直して反映するため
+  if (ready.length === changes.length) liveRevision = liveMarker(doc)!.dataset.liveRev ?? null
+}
+
+async function checkLive() {
+  const run = liveRun
+  const url = liveMarker()?.dataset.live
+  if (!url) return
+  try {
+    if (!document.hidden && !navController) {
+      const res = await fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      const revision = res.status === 404 ? null : ((await res.json()) as { revision: string }).revision
+      if (run === liveRun && revision !== liveRevision) await syncLive(run, revision)
+    }
+  } catch {}
+  if (run === liveRun) scheduleLive()
+}
+
+function scheduleLive(delay = LIVE_INTERVAL) {
+  clearTimeout(liveTimer)
+  if (liveMarker()) liveTimer = window.setTimeout(() => void checkLive(), delay)
+}
+
+function watchLive() {
+  liveRun++
+  liveRevision = liveMarker()?.dataset.liveRev ?? null
+  scheduleLive()
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) scheduleLive(0)
+})
+
 // --- 表示のたびに行う初期化（最初の表示と再読み込みなしの遷移の両方）
 function initPage() {
   $$('[data-toast]').forEach((el) => dismissLater(el, 5000))
+  initContent()
+  watchLive()
+}
+
+function initContent() {
+  completeOnView()
   restoreCollapsed()
   applyEditMode(readEditMode())
   updateToc()

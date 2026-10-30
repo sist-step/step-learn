@@ -23,7 +23,7 @@ server.use('/apple-touch-icon.png', serveStatic({ path: './dist/client/apple-tou
 server.route('/', app)
 
 const httpServer = serve({ fetch: server.fetch, port: config.port }, (info) => {
-  console.log(`StepLearn listening on http://localhost:${info.port}`)
+  console.log(`STEP Learn listening on http://localhost:${info.port}`)
 })
 const io = attachScreenShare(httpServer as HttpServer)
 

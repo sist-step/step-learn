@@ -1,5 +1,5 @@
 /* ==========================================================================
-   StepLearn — デザイントークン
+   STEP Learn — デザイントークン
    ========================================================================== */
 
 :root {
@@ -19,6 +19,7 @@
   --primary-soft: #dcfbfd;
   --primary-text: #00788a;
   --on-primary: #ffffff;
+  --current-ring: #ffffff;
   --accent: #00f0ff;
   --on-accent: #000000;
   --success: #16a35f;
@@ -74,6 +75,7 @@
   --primary-soft: rgb(0 240 255 / 0.12);
   --primary-text: #5cf3ff;
   --on-primary: #000000;
+  --current-ring: #ffffff;
   --accent: #00f0ff;
   --on-accent: #000000;
   --success: #34c27a;
