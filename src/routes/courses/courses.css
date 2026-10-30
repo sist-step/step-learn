@@ -76,10 +76,10 @@
 }
 .section-title-wrap { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.35; }
 .section-title { font-weight: 600; font-size: 15px; transition: color 0.15s; }
-.section-caret { color: var(--muted); transition: transform 0.2s var(--ease); }
+.section-caret { flex: none; color: var(--muted); transition: transform 0.2s var(--ease); }
 .section-card:not([open]) .section-caret { transform: rotate(-90deg); }
 .section-card > .row-actions { position: absolute; top: 17px; right: 56px; }
-:root[data-edit-mode] .section-card:has(> .row-actions) > .section-head { padding-right: 240px; }
+:root[data-edit-mode] .section-card:has(> .row-actions) .section-caret { margin-left: 180px; }
 .section-card.is-hidden { border-style: dashed; background: color-mix(in srgb, var(--surface) 60%, transparent); }
 .section-card.is-hidden .section-title, .item-row.is-hidden .item-link { opacity: 0.6; }
 .item-link .chip { flex: none; }
@@ -87,7 +87,7 @@
 /* 狭い画面で右に重ねたままにしないのは、タイトルの幅がなくなり 1 文字ずつ折り返されるため */
 @media (max-width: 640px) {
   .section-card > .row-actions { position: static; justify-content: flex-end; padding: 6px 14px 0; }
-  :root[data-edit-mode] .section-card:has(> .row-actions) > .section-head { padding-right: 18px; }
+  :root[data-edit-mode] .section-card:has(> .row-actions) .section-caret { margin-left: 0; }
   :root[data-edit-mode] .item-row:has(> .row-actions) { flex-wrap: wrap; }
   .item-row > .row-actions { width: 100%; justify-content: flex-end; padding-bottom: 4px; }
 }
