@@ -1,0 +1,1 @@
+ALTER TABLE `courses` ADD `hero_image` text;

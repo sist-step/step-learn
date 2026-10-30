@@ -36,6 +36,7 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 | `SelectField` | ラベル付きのセレクト。`options`（`{ value, label }[]`）と `value` |
 | `TextAreaField` | ラベル付きの複数行入力 |
 | `FileField` | ラベル付きのファイル選択 |
+| `ImageField` | プレビュー付きの画像選択。`src`（保存済みの画像の URL）/ `aspect`（プレビューの縦横比、既定 `16 / 9`）。選ぶとプレビューが替わり、上限を超えるファイルは `client.ts` が送信前に取り消す。受け取ったファイルは `lib/images.ts` の `putImage(prefix, file)` で検証・保存し、`serveImage(key)` で配信する |
 | `FormField` | ラベル・エラー・ヒントの枠だけ。中身を自由に組みたいとき（`children` に `Input` などを置く） |
 | `Input` / `Select` / `Textarea` / `FileInput` | ラベルなしの部品。表の中や横並びのフォームで使う（`aria-label` を付ける）。`compact` で小さくなる |
 | `SearchBox` | 一覧上部の検索欄（`/` キーでフォーカス） |
@@ -101,6 +102,7 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 | `Avatar` | 名前から色とイニシャルを作るアイコン |
 | `Progress` / `ProgressRing` | 進捗バー・リング（JS で更新できる `data-*` 付き） |
 | `CourseCard` | コース一覧のカード |
+| `CourseIcon` | コースの頭文字のバッジ。コースアイコンが設定されていれば画像を出す。大きさと形は `class`（`course-mono` / `course-hero-mono` / `dot`）で決める |
 | `CourseRow` | コースの 1 行表示（頭文字・名前・コード、学生は進捗、教師は「担当」）。タイルの中などの狭い場所で使う |
 | `formatDate` | UNIX 秒を「2026年10月28日」形式で表示 |
 

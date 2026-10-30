@@ -22,6 +22,17 @@
   gap: 16px;
   margin-top: 12px;
 }
+.course-hero-cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 1;
+  margin-top: 12px;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+}
+.course-hero.has-cover { margin-top: 14px; padding: 0 20px; }
+.course-hero.has-cover .course-hero-mono { margin-top: -40px; box-shadow: 0 0 0 4px var(--bg); }
 .course-hero-mono {
   display: grid;
   place-items: center;
@@ -39,8 +50,6 @@
 .course-hero-body { min-width: 0; flex: 1; }
 .course-hero h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.03em; }
 .course-hero-summary { margin-top: 4px; max-width: 680px; color: var(--muted); font-size: 13.5px; }
-.course-hero-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 10px; font-size: 13px; color: var(--muted); }
-.course-hero-meta > span { display: inline-flex; align-items: center; gap: 6px; }
 .course-hero-side { display: flex; align-items: center; gap: 20px; flex: none; }
 .course-hero-actions { display: flex; gap: 8px; }
 .course-hero-progress { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding-right: 20px; border-right: 1px solid var(--border); }
@@ -50,6 +59,8 @@
   .course-hero { flex-wrap: wrap; }
   .course-hero-body { flex-basis: calc(100% - 64px); }
   .course-hero h1 { font-size: 21px; }
+  .course-hero-cover { aspect-ratio: 5 / 2; }
+  .course-hero.has-cover { padding: 0 12px; }
   .course-hero-side { width: 100%; justify-content: space-between; }
 }
 

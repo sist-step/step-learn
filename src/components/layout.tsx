@@ -8,7 +8,7 @@ import { IconButton } from './button'
 import { Switch } from './form'
 import { MenuItem, Popover } from './overlay'
 import { useStyle } from './style'
-import { Avatar, Person } from './ui'
+import { Avatar, CourseIcon, Person } from './ui'
 
 type ToastType = Flash['type']
 
@@ -150,7 +150,7 @@ export const AppShell = ({ children, wide, editable }: { children: Child; wide?:
                 aria-current={currentCourse === nc.id ? 'page' : undefined}
                 title={nc.title}
               >
-                <span class={`dot tone-${nc.color}`}>{[...nc.title][0]}</span>
+                <CourseIcon course={nc} text={[...nc.title][0]} class={`dot tone-${nc.color}`} />
                 <span class="rail-label truncate">{nc.title}</span>
               </a>
             ))}

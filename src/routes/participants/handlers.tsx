@@ -1,10 +1,10 @@
 import { and, eq, isNotNull, or } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { RequestContext } from 'hono/jsx-renderer'
-import { getCourseAccess } from '../../lib/courses'
+import { getCourseAccess, visibleDoneCount, visibleItemCount } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
 import { field, intParam, readForm, redirectWith } from '../../lib/http'
-import { completions, enrollments, items, users } from '../../lib/schema'
+import { completions, enrollments, users } from '../../lib/schema'
 import { COURSE_ROLE_LABELS, type AppEnv, type CourseRole } from '../../lib/types'
 import { CANDIDATE_LIMIT, Candidates, ParticipantsPage, type Candidate, type Participant } from './views'
 
@@ -40,14 +40,14 @@ export async function list(c: Context<AppEnv>) {
       email: users.email,
       role: enrollments.role,
       createdAt: enrollments.createdAt,
-      done: db.$count(completions, and(eq(completions.userId, users.id), eq(completions.courseId, enrollments.courseId))),
+      done: visibleDoneCount(users.id, enrollments.courseId),
     })
     .from(enrollments)
     .innerJoin(users, eq(users.id, enrollments.userId))
     .where(eq(enrollments.courseId, id))
     .orderBy(users.name)
     .all()
-  const totalItems = await db.$count(items, eq(items.courseId, id))
+  const totalItems = await visibleItemCount(id)
 
   return c.render(<ParticipantsPage access={access} people={people} meId={c.var.user!.id} totalItems={totalItems} />, {
     title: `参加者 - ${access.course.title}`,

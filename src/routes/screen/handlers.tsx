@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
-import { getCourseAccess } from '../../lib/courses'
+import { getCourseAccess, isVisibleItem } from '../../lib/courses'
 import { db } from '../../lib/db'
 import { intParam } from '../../lib/http'
 import { items } from '../../lib/schema'
@@ -17,7 +17,7 @@ export async function show(c: Context<AppEnv>) {
     .from(items)
     .where(and(eq(items.id, iid), eq(items.courseId, id), eq(items.type, 'screen')))
     .get()
-  if (!item) return c.notFound()
+  if (!item || (!access.canManage && !isVisibleItem(item.id))) return c.notFound()
 
   return c.render(<ScreenPage access={access} item={item} />, { title: item.title })
 }

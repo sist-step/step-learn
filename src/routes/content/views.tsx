@@ -1,5 +1,6 @@
 import { raw } from 'hono/html'
 import { CourseHeader, ItemIcon } from '../../components/course'
+import { cx } from '../../components/cx'
 import { Icon } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
@@ -14,9 +15,9 @@ import { ITEM_TYPE_LABELS, type Item, type Section } from '../../lib/types'
 
 export type ItemInput = { title: string; body: string; url: string; file: File | null }
 
-export type OutlineItem = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'url'>
+export type OutlineItem = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'url' | 'hidden'>
 
-export type OutlineSection = Pick<Section, 'id' | 'title'>
+export type OutlineSection = Pick<Section, 'id' | 'title' | 'hidden'>
 
 export const PREVIEWABLE = /^(application\/pdf|image\/(png|jpe?g|gif|webp|avif))$/
 
@@ -40,7 +41,7 @@ export const ItemEditPage = ({
   const base = `/courses/${courseId}/items/${item.id}`
   const v = { title: item.title, body: item.body, url: item.url, ...values }
   return (
-    <AppShell>
+    <AppShell wide>
       <Styles use={['/src/routes/content/content.css']} />
       <CourseHeader access={access} tab="content" />
       <div class="narrow">
@@ -127,6 +128,8 @@ export const ItemPage = ({
   const canPreview = item.type === 'file' && PREVIEWABLE.test(item.fileType ?? '')
 
   const navHref = (o: OutlineItem) => `${base}/${o.id}`
+  const hiddenSections = new Set(sections.filter((s) => s.hidden).map((s) => s.id))
+  const isHidden = (o: OutlineItem) => !!o.hidden || hiddenSections.has(o.sectionId)
 
   return (
     <AppShell wide>
@@ -143,6 +146,12 @@ export const ItemPage = ({
               </Button>
             )}
           </header>
+
+          {access.canManage && isHidden(item) && (
+            <Alert tone="info">
+              {item.hidden ? 'このアイテム' : 'このアイテムのセクション'}は学生に非表示です。学生のコース画面には表示されず、URL を開いても見つかりません。
+            </Alert>
+          )}
 
           {item.type === 'link' && (
             <LinkCard href={item.url} icon="link" target="_blank" rel="noopener noreferrer" data-no-prefetch>
@@ -233,13 +242,16 @@ export const ItemPage = ({
             </a>
             {isStudent && (
               <span class="muted small">
-                {done.size} / {outline.length} 完了
+                {outline.filter((o) => done.has(o.id)).length} / {outline.length} 完了
               </span>
             )}
           </div>
           {sections.map((s) => (
             <div class="outline-section">
-              <div class="outline-title">{s.title}</div>
+              <div class={cx('outline-title', !!s.hidden && 'is-hidden')}>
+                {s.title}
+                {!!s.hidden && <Icon name="eyeSlash" size={12} />}
+              </div>
               <ul>
                 {outline
                   .filter((o) => o.sectionId === s.id)
@@ -247,7 +259,7 @@ export const ItemPage = ({
                     <li>
                       <a
                         href={o.type === 'link' ? o.url : o.type === 'screen' ? `${navHref(o)}/screen` : navHref(o)}
-                        class={o.id === item.id ? 'outline-link active' : 'outline-link'}
+                        class={cx('outline-link', o.id === item.id && 'active', isHidden(o) && 'is-hidden')}
                         {...(o.type === 'link' || o.type === 'screen'
                           ? { target: '_blank', rel: o.type === 'link' ? 'noopener noreferrer' : 'noopener', 'data-no-prefetch': '' }
                           : {})}
@@ -257,6 +269,7 @@ export const ItemPage = ({
                           {done.has(o.id) && <Icon name="check" size={10} />}
                         </span>
                         <span class="truncate">{o.title}</span>
+                        {!!o.hidden && <Icon name="eyeSlash" size={12} class="outline-hidden" />}
                       </a>
                     </li>
                   ))}

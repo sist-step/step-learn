@@ -11,7 +11,7 @@ export type User = {
   role: Role
 }
 
-export type NavCourse = { id: number; title: string; color: string }
+export type NavCourse = { id: number; title: string; color: string; iconImage: string | null }
 
 export type Flash = { type: 'success' | 'error' | 'info'; message: string }
 
