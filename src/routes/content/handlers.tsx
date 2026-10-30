@@ -6,13 +6,14 @@ import {
   isVisibleItem,
   moveRow,
   nextPosition,
-  visibleDoneCount,
+  trackedDoneCount,
+  trackedItemCount,
   visibleItem,
-  visibleItemCount,
 } from '../../lib/courses'
 import { db } from '../../lib/db'
-import { firstError, isFile, validate, type FieldErrors } from '../../lib/forms'
+import { completionError, firstError, isFile, validate, type FieldErrors } from '../../lib/forms'
 import { field, fileField, intParam, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
+import { previewKind } from '../../lib/preview'
 import { completions, items, sections } from '../../lib/schema'
 import { isSharing } from '../../lib/screen-share'
 import {
@@ -26,8 +27,8 @@ import {
   storage,
   type StoredFile,
 } from '../../lib/storage'
-import type { AppEnv } from '../../lib/types'
-import { ItemEditPage, ItemPage, TEXT_PREVIEW_MAX, editUrl, previewKind, type ItemInput, type OutlineItem } from './views'
+import type { AppEnv, Completion } from '../../lib/types'
+import { ItemEditPage, ItemPage, TEXT_PREVIEW_MAX, editUrl, type ItemInput, type OutlineItem } from './views'
 
 async function manageAccess(c: Context<AppEnv>) {
   const id = intParam(c, 'id')
@@ -173,6 +174,7 @@ export async function createItem(c: Context<AppEnv>) {
       body: input.body,
       url: type === 'link' ? input.url : '',
       hidden,
+      completion: access.course.completionEnabled ? (input.completion ?? 'none') : 'none',
       ...fileColumns(stored),
       position: nextPosition(items, eq(items.sectionId, sectionId)),
     })
@@ -204,14 +206,29 @@ export async function updateItem(c: Context<AppEnv>) {
   const form = await readForm(c)
   const requestedSection = Number(field(form, 'section_id'))
   const sectionId = getSection(courseId, requestedSection) ? requestedSection : item.sectionId
-  const result = validate('itemEdit', form)
+  // 送られてきた種類を使わないのは、画面の隠し欄は書き換えられ、保存済みのアイテムの種類と違うかもしれないため
+  const result = validate('itemEdit', { ...form, type: item.type })
   const file = result.ok && item.type === 'file' && isFile(result.values.file) ? result.values.file : null
-  const uploadError = await checkUpload(file)
-  if (!result.ok || uploadError) {
-    const errors: FieldErrors = result.ok ? { file: uploadError! } : result.errors
-    const values = { ...readItemInput(form), hidden: field(form, 'hidden', 1) === '1' ? 1 : 0, sectionId }
+  const completion = (result.ok && result.values.completion) || item.completion
+  const savedFile = { type: file?.type ?? item.fileType ?? '', name: file?.name ?? item.fileName ?? '' }
+  const uploadError = result.ok ? await checkUpload(file) : null
+  const completionMessage = result.ok ? completionError(item.type, completion, item.type === 'file' ? savedFile : null) : null
+  const errors: FieldErrors | null = !result.ok
+    ? result.errors
+    : uploadError
+      ? { file: uploadError }
+      : completionMessage
+        ? { completion: completionMessage }
+        : null
+  if (!result.ok || errors) {
+    const values = {
+      ...readItemInput(form),
+      hidden: field(form, 'hidden', 1) === '1' ? 1 : 0,
+      sectionId,
+      completion: field(form, 'completion', 10),
+    }
     c.status(422)
-    return c.render(<ItemEditPage access={access} item={item} sections={listSections(courseId)} values={values} errors={errors} />, {
+    return c.render(<ItemEditPage access={access} item={item} sections={listSections(courseId)} values={values} errors={errors ?? {}} />, {
       title: `編集 - ${item.title}`,
     })
   }
@@ -224,6 +241,7 @@ export async function updateItem(c: Context<AppEnv>) {
       body: input.body,
       url: item.type === 'link' ? (input.url ?? '') : '',
       hidden,
+      completion,
       ...fileColumns(stored),
       ...(sectionId !== item.sectionId && { sectionId, position: nextPosition(items, eq(items.sectionId, sectionId)) }),
     })
@@ -306,7 +324,15 @@ export async function showItem(c: Context<AppEnv>) {
     .orderBy(sections.position, sections.id)
     .all()
   const outline: OutlineItem[] = db
-    .select({ id: items.id, sectionId: items.sectionId, type: items.type, title: items.title, url: items.url, hidden: items.hidden })
+    .select({
+      id: items.id,
+      sectionId: items.sectionId,
+      type: items.type,
+      title: items.title,
+      url: items.url,
+      hidden: items.hidden,
+      completion: items.completion,
+    })
     .from(items)
     .where(and(eq(items.courseId, id), manage ? undefined : visibleItem()))
     .orderBy(items.position, items.id)
@@ -347,28 +373,33 @@ export async function showItem(c: Context<AppEnv>) {
   )
 }
 
+// 自動の完了で on（開いた・最後まで再生した）を送らせるのは、手動の切り替えと取り違えて、自動で付いた完了を未完了に戻さないため
+const AUTO_COMPLETE_ON: Partial<Record<Completion, string>> = { view: 'view', play: 'ended' }
+
 export async function toggleComplete(c: Context<AppEnv>) {
   const id = intParam(c, 'id')
   const iid = intParam(c, 'iid')
   const access = id && iid && (await getCourseAccess(c, id))
-  if (!access || access.role !== 'student' || !isVisibleItem(iid)) return c.notFound()
+  if (!access || access.role !== 'student' || !access.course.completionEnabled || !isVisibleItem(iid)) return c.notFound()
+  const item = getItem(id, iid)
+  const on = field(await readForm(c), 'on', 10)
+  const manual = item?.completion === 'manual' && !on
+  if (!item || !(manual || (on && AUTO_COMPLETE_ON[item.completion] === on))) return c.notFound()
   const userId = c.var.user!.id
 
-  // 削除できたら未完了に、なければ完了として挿入（トグル）
+  // 手動のときは、削除できたら未完了に、なければ完了として挿入（トグル）。自動のときは完了にするだけで戻さない
   const removed =
+    manual &&
     db
       .delete(completions)
       .where(and(eq(completions.userId, userId), eq(completions.itemId, iid)))
       .run().changes > 0
-  if (!removed) {
-    if (!getItem(id, iid)) return c.notFound()
-    db.insert(completions).values({ userId, itemId: iid, courseId: id }).run()
-  }
+  if (!removed) db.insert(completions).values({ userId, itemId: iid, courseId: id }).onConflictDoNothing().run()
   const completed = !removed
 
   if (wantsJson(c)) {
-    const total = await visibleItemCount(id)
-    const done = await visibleDoneCount(userId, id)
+    const total = await trackedItemCount(id)
+    const done = await trackedDoneCount(userId, id)
     return c.json({ completed, total, done })
   }
   return c.redirect(c.req.header('referer') ?? `/courses/${id}`, 303)

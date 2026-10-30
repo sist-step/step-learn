@@ -286,7 +286,13 @@ export const CourseRow = ({ course }: { course: CourseCardData }) => {
         <span class="strong truncate">{course.title}</span>
         {course.code && <span class="muted small truncate">{course.code}</span>}
       </span>
-      {course.role === 'student' ? <Progress done={course.done ?? 0} total={course.total ?? 0} /> : <Chip tone="accent">担当</Chip>}
+      {course.role !== 'student' ? (
+        <Chip tone="accent">担当</Chip>
+      ) : course.total ? (
+        <Progress done={course.done ?? 0} total={course.total} />
+      ) : (
+        <Chip tone="success">受講中</Chip>
+      )}
     </a>
   )
 }

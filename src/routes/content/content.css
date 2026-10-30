@@ -103,6 +103,8 @@
   color: #fff;
 }
 .outline-dot.done { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.outline-dot.is-untracked { border-color: transparent; }
+.outline-dot.is-untracked::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--border-strong); }
 .outline-dot .icon { stroke-width: 3; }
 
 @media (max-width: 1100px) {

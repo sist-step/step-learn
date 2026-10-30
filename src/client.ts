@@ -205,6 +205,8 @@ document.addEventListener('change', (e) => {
 })
 
 // --- 完了トグルを画面遷移なしで反映
+type CompleteResult = { completed: boolean; done: number; total: number }
+
 async function handleComplete(e: SubmitEvent, form: HTMLFormElement) {
   e.preventDefault()
   const btn = form.querySelector('button')!
@@ -213,10 +215,9 @@ async function handleComplete(e: SubmitEvent, form: HTMLFormElement) {
   try {
     const res = await fetch(form.action, { method: 'POST', headers: { Accept: 'application/json' } })
     if (!res.ok) throw new Error()
-    const data: { completed: boolean; done: number; total: number } = await res.json()
+    const data: CompleteResult = await res.json()
     setCompleteUI(form, data.completed)
-    updateProgress(data.done, data.total)
-    if (data.completed && data.done === data.total && data.total > 0) toast('🎉 コースのすべてのアイテムを完了しました！')
+    showProgress(data)
   } catch {
     setCompleteUI(form, !next)
     toast('更新できませんでした。通信状況を確認してください。', 'error')
@@ -227,19 +228,85 @@ function setCompleteUI(form: HTMLFormElement, done: boolean) {
   const btn = form.querySelector('button')!
   btn.setAttribute('aria-pressed', String(done))
   btn.setAttribute('aria-label', done ? '未完了に戻す' : '完了にする')
-  form.closest('.item-row')?.classList.toggle('is-done', done)
   const label = form.querySelector('[data-complete-label]')
   if (label) {
     label.textContent = done ? '完了済み' : '完了にする'
     btn.classList.toggle('btn-success', done)
     btn.classList.toggle('btn-primary', !done)
   }
-  const id = form.action.match(/items\/(\d+)\/complete/)?.[1]
+  setItemDone(completeItemId(form.action), done)
+}
+
+const completeItemId = (url: string) => url.match(/items\/(\d+)\/complete/)?.[1] ?? ''
+
+function setItemDone(id: string, done: boolean) {
+  $$(`.item-row[data-item="${id}"]`).forEach((row) => row.classList.toggle('is-done', done))
+  $$<HTMLElement>(`[data-complete-check="${id}"]`).forEach((el) => {
+    el.dataset.done = String(done)
+    if (done) el.setAttribute('aria-label', '完了済み')
+  })
+  $$(`[data-complete-status="${id}"]`).forEach((el) => {
+    el.classList.toggle('is-done', done)
+    if (done) el.querySelector('[data-complete-label]')!.textContent = '完了済み'
+  })
   const dot = id && document.querySelector(`[data-outline-dot="${id}"]`)
   if (dot) {
     dot.classList.toggle('done', done)
     dot.innerHTML = done ? checkSvg.replace('<svg ', '<svg class="icon" width="10" height="10" ') : ''
   }
+}
+
+function showProgress(data: CompleteResult) {
+  updateProgress(data.done, data.total)
+  if (data.completed && data.done === data.total && data.total > 0) toast('🎉 コースのすべてのアイテムを完了しました！')
+}
+
+// --- 開いた・最後まで再生したアイテムを自動で完了にする（components/course.tsx の CompletionStatus）
+// 失敗してもエラーを出さないのは、学生が自分で操作したわけではなく、次に開いたときにもう一度送れるため
+async function autoComplete(url: string, on: 'view' | 'ended') {
+  $$(`[data-complete-on-open="${CSS.escape(url)}"]`).forEach((el) => el.removeAttribute('data-complete-on-open'))
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      body: new URLSearchParams({ on }),
+      headers: { Accept: 'application/json' },
+      // 新しいタブで開くリンクでも、この画面から離れる操作でも送り切るため
+      keepalive: true,
+    })
+    if (!res.ok) return
+    const data: CompleteResult = await res.json()
+    setItemDone(completeItemId(url), data.completed)
+    showProgress(data)
+  } catch {}
+}
+
+const completeOnOpen = (e: MouseEvent) => {
+  const url = (e.target as Element).closest<HTMLElement>('[data-complete-on-open]')?.dataset.completeOnOpen
+  if (url && e.button <= 1) void autoComplete(url, 'view')
+}
+document.addEventListener('click', completeOnOpen)
+document.addEventListener('auxclick', completeOnOpen)
+
+// ended は伝わってこないので、捕捉の段階で拾う
+document.addEventListener(
+  'ended',
+  (e) => {
+    const media = e.target as HTMLElement
+    const url = media.dataset?.completeOnEnded
+    if (!url) return
+    media.removeAttribute('data-complete-on-ended')
+    void autoComplete(url, 'ended')
+  },
+  true,
+)
+
+function completeOnView() {
+  $$<HTMLElement>('[data-complete-on-view]').forEach((el) => {
+    const url = el.dataset.completeOnView!
+    // 要素ごと消さないのは、ライブ同期が子の数で前回の内容と画面の要素を対応させているため
+    el.removeAttribute('data-complete-on-view')
+    void autoComplete(url, 'view')
+  })
 }
 
 function updateProgress(done: number, total: number) {
@@ -852,6 +919,7 @@ function initPage() {
 }
 
 function initContent() {
+  completeOnView()
   restoreCollapsed()
   applyEditMode(readEditMode())
   updateToc()

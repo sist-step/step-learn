@@ -1,7 +1,7 @@
 import { and, eq, isNotNull, or } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { RequestContext } from 'hono/jsx-renderer'
-import { getCourseAccess, visibleDoneCount, visibleItemCount } from '../../lib/courses'
+import { getCourseAccess, trackedDoneCount, trackedItemCount } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
 import { field, intParam, readForm, redirectWith } from '../../lib/http'
 import { completions, enrollments, users } from '../../lib/schema'
@@ -40,14 +40,14 @@ export async function list(c: Context<AppEnv>) {
       email: users.email,
       role: enrollments.role,
       createdAt: enrollments.createdAt,
-      done: visibleDoneCount(users.id, enrollments.courseId),
+      done: trackedDoneCount(users.id, enrollments.courseId),
     })
     .from(enrollments)
     .innerJoin(users, eq(users.id, enrollments.userId))
     .where(eq(enrollments.courseId, id))
     .orderBy(users.name)
     .all()
-  const totalItems = await visibleItemCount(id)
+  const totalItems = await trackedItemCount(id)
 
   return c.render(<ParticipantsPage access={access} people={people} meId={c.var.user!.id} totalItems={totalItems} />, {
     title: `参加者 - ${access.course.title}`,

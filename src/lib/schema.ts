@@ -58,6 +58,7 @@ export const courses = sqliteTable('courses', {
   iconImage: text('icon_image'),
   enrollKey: text('enroll_key'),
   visible: integer('visible').notNull().default(1),
+  completionEnabled: integer('completion_enabled').notNull().default(1),
   createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: integer('created_at').notNull().default(now),
   updatedAt: integer('updated_at')
@@ -121,6 +122,9 @@ export const items = sqliteTable(
     fileSize: integer('file_size'),
     fileType: text('file_type'),
     hidden: integer('hidden').notNull().default(0),
+    completion: text('completion', { enum: ['none', 'manual', 'view', 'play'] })
+      .notNull()
+      .default('none'),
     position: integer('position').notNull().default(0),
     createdAt: integer('created_at').notNull().default(now),
     updatedAt: integer('updated_at')
@@ -132,6 +136,7 @@ export const items = sqliteTable(
     index('items_section').on(t.sectionId, t.position),
     index('items_course').on(t.courseId),
     check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen')`),
+    check('items_completion', sql`${t.completion} IN ('none', 'manual', 'view', 'play')`),
   ],
 )
 
