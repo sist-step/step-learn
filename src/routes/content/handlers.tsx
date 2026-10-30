@@ -137,6 +137,7 @@ export async function createItem(c: Context<AppEnv>) {
   const typeRaw = field(form, 'type')
   const type: ItemType = typeRaw === 'link' || typeRaw === 'file' || typeRaw === 'screen' ? typeRaw : 'page'
   const input = readItemInput(form)
+  const hidden = field(form, 'hidden', 1) === '1' ? 1 : 0
 
   if (!getSection(courseId, sectionId)) return c.notFound()
   const error = validateItem(type, input, true)
@@ -145,7 +146,8 @@ export async function createItem(c: Context<AppEnv>) {
   let stored: StoredFile | null = null
   if (type === 'file' && input.file) stored = await putCourseFile(courseId, input.file)
 
-  db.insert(items)
+  const created = db
+    .insert(items)
     .values({
       courseId,
       sectionId,
@@ -153,11 +155,14 @@ export async function createItem(c: Context<AppEnv>) {
       title: input.title,
       body: input.body,
       url: type === 'link' ? input.url : '',
+      hidden,
       ...fileColumns(stored),
       position: nextPosition(items, eq(items.sectionId, sectionId)),
     })
-    .run()
-  return redirectWith(c, editUrl(courseId, sectionId), `「${input.title}」を追加しました。`)
+    .returning({ id: items.id })
+    .get()
+  const next = field(form, 'then') === 'view' ? `/courses/${courseId}/items/${created.id}` : editUrl(courseId, sectionId)
+  return redirectWith(c, next, `「${input.title}」を追加しました。`)
 }
 
 export async function editItem(c: Context<AppEnv>) {
