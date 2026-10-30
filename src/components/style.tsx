@@ -17,12 +17,12 @@ export const STYLESHEETS = [
   '/src/components/course.css',
   '/src/components/art.css',
   '/src/components/auth.css',
-  '/src/routes/dashboard.css',
-  '/src/routes/courses.css',
-  '/src/routes/participants.css',
-  '/src/routes/content.css',
-  '/src/routes/account.css',
-  '/src/routes/screen.css',
+  '/src/routes/dashboard/dashboard.css',
+  '/src/routes/courses/courses.css',
+  '/src/routes/participants/participants.css',
+  '/src/routes/content/content.css',
+  '/src/routes/account/account.css',
+  '/src/routes/screen/screen.css',
 ] as const
 
 export type StyleSheet = (typeof STYLESHEETS)[number]
