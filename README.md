@@ -57,6 +57,8 @@ npm run user:create -- --email admin@example.com --name "管理者" --username a
 
 ```sh
 npm run typecheck
+npm run lint          # oxlint
+npm run format        # Prettier で整形（確認だけなら format:check）
 ```
 
 ## 本番運用
