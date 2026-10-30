@@ -22,16 +22,17 @@ import { mailer } from '../lib/mail'
 import { checkPassword, PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../lib/password'
 import { rateLimiter } from '../lib/rate-limit'
 import type { AppEnv } from '../lib/types'
+import { USERNAME_HINT, USERNAME_MAX_LENGTH, checkUsername, normalizeUsername } from '../lib/username'
 import { db } from '../lib/db'
 import { users } from '../lib/schema'
 
 const app = new Hono<AppEnv>()
 
-type Errors = Partial<Record<'name' | 'email' | 'password' | 'form', string>>
+type Errors = Partial<Record<'name' | 'username' | 'email' | 'password' | 'form', string>>
 
 // IP ごとの上限を高めにしているのは、教室などで同じグローバル IP から大勢が一斉にアクセスするため
 const loginFailuresByIp = rateLimiter({ limit: 50, windowSec: 15 * 60 })
-const loginFailuresByEmail = rateLimiter({ limit: 10, windowSec: 15 * 60 })
+const loginFailuresByAccount = rateLimiter({ limit: 10, windowSec: 15 * 60 })
 const registerByIp = rateLimiter({ limit: 100, windowSec: 60 * 60 })
 const registerByEmail = rateLimiter({ limit: 3, windowSec: 60 * 60 })
 
@@ -57,7 +58,7 @@ const AuthTabs = ({ current, next }: { current: 'login' | 'register'; next: stri
   )
 }
 
-const LoginPage = ({ email = '', next = '', errors = {} }: { email?: string; next?: string; errors?: Errors }) => (
+const LoginPage = ({ login = '', next = '', errors = {} }: { login?: string; next?: string; errors?: Errors }) => (
   <AuthShell>
     <div class="auth-card">
       <h1>おかえりなさい</h1>
@@ -66,14 +67,23 @@ const LoginPage = ({ email = '', next = '', errors = {} }: { email?: string; nex
       <FormError message={errors.form} />
       <form method="post" action="/login" class="stack" data-loading-form>
         <input type="hidden" name="next" value={next} />
-        <TextField label="メールアドレス" name="email" type="email" value={email} autocomplete="email" required autofocus={!email} />
+        <TextField
+          label="メールアドレスまたはユーザー名"
+          name="login"
+          value={login}
+          autocomplete="username"
+          autocapitalize="none"
+          spellcheck={false}
+          required
+          autofocus={!login}
+        />
         <TextField
           label="パスワード"
           name="password"
           type="password"
           autocomplete="current-password"
           required
-          autofocus={!!email}
+          autofocus={!!login}
         />
         <Button type="submit" variant="primary" size="lg" block>
           ログイン
@@ -120,23 +130,37 @@ const CompleteRegisterPage = ({
   token,
   email,
   name = '',
+  username = '',
   errors = {},
 }: {
   token: string
   email: string
   name?: string
+  username?: string
   errors?: Errors
 }) => (
   <AuthShell>
     <div class="auth-card">
       <h1>登録を完了する</h1>
-      <p class="muted">{email} で登録します。氏名とパスワードを設定してください。</p>
+      <p class="muted">{email} で登録します。氏名・ユーザー名・パスワードを設定してください。</p>
       <FormError message={errors.form} />
       <form method="post" action="/register/complete" class="stack" data-loading-form>
         <input type="hidden" name="token" value={token} />
         {/* パスワードマネージャーがメールアドレスと組にして保存できるようにする */}
         <input type="hidden" name="email" value={email} autocomplete="username" />
         <TextField label="氏名" name="name" value={name} error={errors.name} autocomplete="name" required autofocus maxlength={60} />
+        <TextField
+          label="ユーザー名"
+          name="username"
+          value={username}
+          error={errors.username}
+          hint={USERNAME_HINT}
+          autocomplete="off"
+          autocapitalize="none"
+          spellcheck={false}
+          required
+          maxlength={USERNAME_MAX_LENGTH}
+        />
         <TextField
           label="パスワード"
           name="password"
@@ -174,30 +198,34 @@ app.get('/login', (c) => {
 
 app.post('/login', async (c) => {
   const form = await readForm(c)
-  const email = field(form, 'email', 254).toLowerCase()
+  const login = field(form, 'login', 254).toLowerCase()
   const password = field(form, 'password', 200)
   const next = field(form, 'next', 500)
 
   const ip = clientIp(c)
-  const wait = Math.max(loginFailuresByIp.retryAfter(ip), loginFailuresByEmail.retryAfter(email))
+  const wait = Math.max(loginFailuresByIp.retryAfter(ip), loginFailuresByAccount.retryAfter(login))
   if (wait) {
-    return c.render(<LoginPage email={email} next={next} errors={{ form: tooManyRequests(c, wait) }} />, { title: 'ログイン' })
+    return c.render(<LoginPage login={login} next={next} errors={{ form: tooManyRequests(c, wait) }} />, { title: 'ログイン' })
   }
 
-  const user = db.select({ id: users.id, passwordHash: users.passwordHash }).from(users).where(eq(users.email, email)).get()
+  const user = db
+    .select({ id: users.id, passwordHash: users.passwordHash })
+    .from(users)
+    .where(login.includes('@') ? eq(users.email, login) : eq(users.username, login))
+    .get()
   const ok = user ? await verifyPassword(password, user.passwordHash) : await dummyVerify(password)
 
   if (!user || !ok) {
     loginFailuresByIp.hit(ip)
-    loginFailuresByEmail.hit(email)
+    loginFailuresByAccount.hit(login)
     c.status(401)
     return c.render(
-      <LoginPage email={email} next={next} errors={{ form: 'メールアドレスまたはパスワードが正しくありません。' }} />,
+      <LoginPage login={login} next={next} errors={{ form: 'メールアドレス（ユーザー名）またはパスワードが正しくありません。' }} />,
       { title: 'ログイン' },
     )
   }
 
-  loginFailuresByEmail.reset(email)
+  loginFailuresByAccount.reset(login)
 
   if (needsRehash(user.passwordHash)) {
     const passwordHash = await hashPassword(password)
@@ -284,6 +312,7 @@ app.post('/register/complete', async (c) => {
   const form = await readForm(c)
   const token = field(form, 'token', 100)
   const name = field(form, 'name', 60)
+  const username = normalizeUsername(field(form, 'username', 100))
   const password = field(form, 'password', 200)
 
   const verification = await findEmailVerification(token)
@@ -295,17 +324,24 @@ app.post('/register/complete', async (c) => {
 
   const errors: Errors = {}
   if (!name) errors.name = '氏名を入力してください。'
-  const passwordError = checkPassword(password, { email, name })
+  const usernameError = checkUsername(username)
+  if (usernameError) errors.username = usernameError
+  const passwordError = checkPassword(password, { email, name, username })
   if (passwordError) errors.password = passwordError
   if (Object.keys(errors).length) {
     c.status(422)
-    return c.render(<CompleteRegisterPage token={token} email={email} name={name} errors={errors} />, { title: '新規登録' })
+    return c.render(<CompleteRegisterPage token={token} email={email} name={name} username={username} errors={errors} />, { title: '新規登録' })
   }
 
-  const userId = await createUser({ email, name, password })
-  if (!userId) return redirectWith(c, '/login', 'このメールアドレスはすでに登録されています。ログインしてください。', 'info')
+  const created = await createUser({ email, name, username, password })
+  if ('taken' in created) {
+    if (created.taken === 'email') return redirectWith(c, '/login', 'このメールアドレスはすでに登録されています。ログインしてください。', 'info')
+    c.status(422)
+    const errors = { username: 'このユーザー名はすでに使われています。' }
+    return c.render(<CompleteRegisterPage token={token} email={email} name={name} username={username} errors={errors} />, { title: '新規登録' })
+  }
 
-  await createSession(c, userId)
+  await createSession(c, created.id)
   return redirectWith(c, safeNext(next), `ようこそ、${name}さん！`)
 })
 

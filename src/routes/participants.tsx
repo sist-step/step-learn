@@ -8,7 +8,7 @@ import { Input, SegmentedControl, Select } from '../components/form'
 import { AppShell } from '../components/layout'
 import { Modal } from '../components/overlay'
 import { Styles } from '../components/style'
-import { Avatar, Chip, Person, Progress, formatDate } from '../components/ui'
+import { Avatar, Chip, Person, Progress, formatDate, userMeta } from '../components/ui'
 import { requireAuth } from '../lib/auth'
 import { getCourseAccess } from '../lib/courses'
 import { field, intParam, readForm, redirectWith } from '../lib/http'
@@ -24,6 +24,7 @@ app.use(requireAuth)
 type Participant = {
   id: number
   name: string
+  username: string | null
   email: string
   role: CourseRole
   createdAt: number
@@ -33,6 +34,7 @@ type Participant = {
 type Candidate = {
   id: number
   name: string
+  username: string | null
   email: string
   role: CourseRole | null
 }
@@ -44,14 +46,14 @@ const ADD_RESULTS = 'add-participant-results'
 const isCourseRole = (r: string): r is CourseRole => r === 'teacher' || r === 'student'
 
 const Candidates = ({ q, users }: { q: string; users: Candidate[] }) => {
-  if (!q) return <p class="candidates-note muted small">名前またはメールアドレスの一部を入力してください。</p>
+  if (!q) return <p class="candidates-note muted small">名前・ユーザー名・メールアドレスの一部を入力してください。</p>
   if (users.length === 0) return <p class="candidates-note muted small">「{q}」に一致するユーザーはいません。</p>
   return (
     <>
       <ul class="candidates">
         {users.slice(0, CANDIDATE_LIMIT).map((u) => (
           <li class="candidate">
-            <Person avatar={<Avatar name={u.name} />} name={u.name} meta={u.email} />
+            <Person avatar={<Avatar name={u.name} />} name={u.name} meta={userMeta(u)} />
             {u.role ? (
               <Chip>{COURSE_ROLE_LABELS[u.role]}として参加中</Chip>
             ) : (
@@ -76,7 +78,7 @@ const AddParticipant = ({ courseId }: { courseId: number }) => (
       <div class="stack">
         <Input
           type="search"
-          placeholder="名前・メールアドレスで検索"
+          placeholder="名前・ユーザー名・メールアドレスで検索"
           aria-label="ユーザーを検索"
           aria-controls={ADD_RESULTS}
           autocomplete="off"
@@ -104,6 +106,7 @@ app.get('/:id/participants', async (c) => {
     .select({
       id: users.id,
       name: users.name,
+      username: users.username,
       email: users.email,
       role: enrollments.role,
       createdAt: enrollments.createdAt,
@@ -130,7 +133,7 @@ app.get('/:id/participants', async (c) => {
               {p.id === me.id && <span class="muted small">（あなた）</span>}
             </>
           }
-          meta={manage && p.email}
+          meta={userMeta(manage ? p : { username: p.username })}
         />
       </td>
       {manage && (
@@ -210,10 +213,10 @@ app.get('/:id/participants/candidates', async (c) => {
   const q = (c.req.query('q') ?? '').trim().slice(0, 100)
   const candidates: Candidate[] = q
     ? db
-        .select({ id: users.id, name: users.name, email: users.email, role: enrollments.role })
+        .select({ id: users.id, name: users.name, username: users.username, email: users.email, role: enrollments.role })
         .from(users)
         .leftJoin(enrollments, and(eq(enrollments.userId, users.id), eq(enrollments.courseId, access.course.id)))
-        .where(or(contains(users.name, q), contains(users.email, q)))
+        .where(or(contains(users.name, q), contains(users.username, q), contains(users.email, q)))
         .orderBy(isNotNull(enrollments.role), users.name)
         .limit(CANDIDATE_LIMIT + 1)
         .all()

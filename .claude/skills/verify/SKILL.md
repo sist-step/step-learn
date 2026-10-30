@@ -32,9 +32,9 @@ npm run dev   # http://localhost:5173
 - ログインが必要な画面は、ユーザーを CLI で作ってから確かめる（CLI は `npm run build` 後に使える。作成済みのユーザーはエラーになるので飛ばしてよい）
 
   ```sh
-  printf 'step-learn-dev-pass\n' | npm run user:create -- --email admin@example.com --name "管理者"
-  printf 'step-learn-dev-pass\n' | npm run user:create -- --email teacher@example.com --name "教師" --role teacher
-  printf 'step-learn-dev-pass\n' | npm run user:create -- --email student@example.com --name "学生" --role student
+  printf 'step-learn-dev-pass\n' | npm run user:create -- --email admin@example.com --name "管理者" --username admin
+  printf 'step-learn-dev-pass\n' | npm run user:create -- --email teacher@example.com --name "教師" --username teacher --role teacher
+  printf 'step-learn-dev-pass\n' | npm run user:create -- --email student@example.com --name "学生" --username student --role student
   ```
 
 - ブラウザで確認できる環境なら、変更した画面を実際に操作する。できなければ `curl` でステータスコードと HTML を確かめる

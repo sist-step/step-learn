@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, customType, index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { check, customType, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 const now = sql`(unixepoch())`
 
@@ -12,11 +12,13 @@ export const users = sqliteTable(
     id: integer('id').primaryKey(),
     email: textNocase('email').notNull().unique(),
     name: text('name').notNull(),
+    // NOT NULL にしないのは、ユーザー名の導入前に登録したユーザーにはまだ値がないため
+    username: textNocase('username'),
     passwordHash: text('password_hash').notNull(),
     role: text('role', { enum: ['admin', 'teacher', 'student'] }).notNull().default('student'),
     createdAt: integer('created_at').notNull().default(now),
   },
-  (t) => [check('users_role', sql`${t.role} IN ('admin', 'teacher', 'student')`)],
+  (t) => [uniqueIndex('users_username').on(t.username), check('users_role', sql`${t.role} IN ('admin', 'teacher', 'student')`)],
 )
 
 export const sessions = sqliteTable(

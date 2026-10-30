@@ -10,15 +10,18 @@ import { destroyOtherSessions, hashPassword, requireAuth, verifyPassword } from 
 import { field, readForm, redirectWith } from '../lib/http'
 import { checkPassword, PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../lib/password'
 import { ROLE_LABELS, type AppEnv, type User } from '../lib/types'
+import { USERNAME_HINT, USERNAME_MAX_LENGTH, checkUsername, normalizeUsername } from '../lib/username'
 import { db } from '../lib/db'
 import { users } from '../lib/schema'
 
 const app = new Hono<AppEnv>()
 app.use(requireAuth)
 
-type Errors = Partial<Record<'name' | 'current' | 'password', string>>
+type Errors = Partial<Record<'name' | 'username' | 'current' | 'password', string>>
 
-const AccountPage = ({ user, errors = {}, name }: { user: User; errors?: Errors; name?: string }) => (
+type Profile = { name: string; username: string }
+
+const AccountPage = ({ user, errors = {}, values }: { user: User; errors?: Errors; values?: Profile }) => (
   <AppShell>
     <Styles use={['/src/routes/account.css']} />
     <PageHeader title="アカウント" description="プロフィールとセキュリティの設定" />
@@ -29,12 +32,25 @@ const AccountPage = ({ user, errors = {}, name }: { user: User; errors?: Errors;
           <div>
             <div class="strong">{user.name}</div>
             <div class="muted small">
+              {user.username && `@${user.username} · `}
               {user.email} · {ROLE_LABELS[user.role]}
             </div>
           </div>
         </div>
         <form method="post" action="/account" class="stack" data-loading-form>
-          <TextField label="氏名" name="name" value={name ?? user.name} error={errors.name} required maxlength={60} />
+          <TextField label="氏名" name="name" value={values?.name ?? user.name} error={errors.name} required maxlength={60} />
+          <TextField
+            label="ユーザー名"
+            name="username"
+            value={values?.username ?? user.username ?? ''}
+            error={errors.username}
+            hint={user.username ? USERNAME_HINT : `まだ設定されていません。${USERNAME_HINT}`}
+            autocomplete="off"
+            autocapitalize="none"
+            spellcheck={false}
+            required
+            maxlength={USERNAME_MAX_LENGTH}
+          />
           <div class="form-actions">
             <Button type="submit" variant="primary">
               保存
@@ -71,12 +87,17 @@ app.get('/', (c) => c.render(<AccountPage user={c.var.user!} />, { title: 'ア�
 
 app.post('/', async (c) => {
   const user = c.var.user!
-  const name = field(await readForm(c), 'name', 60)
-  if (!name) {
+  const form = await readForm(c)
+  const values = { name: field(form, 'name', 60), username: normalizeUsername(field(form, 'username', 100)) }
+  const errors: Errors = {}
+  if (!values.name) errors.name = '氏名を入力してください。'
+  const usernameError = checkUsername(values.username, user.id)
+  if (usernameError) errors.username = usernameError
+  if (Object.keys(errors).length) {
     c.status(422)
-    return c.render(<AccountPage user={user} name={name} errors={{ name: '氏名を入力してください。' }} />, { title: 'アカウント' })
+    return c.render(<AccountPage user={user} values={values} errors={errors} />, { title: 'アカウント' })
   }
-  db.update(users).set({ name }).where(eq(users.id, user.id)).run()
+  db.update(users).set(values).where(eq(users.id, user.id)).run()
   return redirectWith(c, '/account', 'プロフィールを更新しました。')
 })
 

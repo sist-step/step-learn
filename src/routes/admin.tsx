@@ -6,7 +6,7 @@ import { IconButton } from '../components/button'
 import { SearchBox, Select } from '../components/form'
 import { AppShell } from '../components/layout'
 import { Stat, Stats, Table } from '../components/card'
-import { Avatar, EmptyState, PageHeader, Person, Tabs, formatDate } from '../components/ui'
+import { Avatar, EmptyState, PageHeader, Person, Tabs, formatDate, userMeta } from '../components/ui'
 import { requireAuth, requireRole } from '../lib/auth'
 import { teacherNames } from '../lib/courses'
 import { field, intParam, readForm, redirectWith } from '../lib/http'
@@ -44,13 +44,14 @@ app.get('/', async (c) => {
     .select({
       id: users.id,
       name: users.name,
+      username: users.username,
       email: users.email,
       role: users.role,
       createdAt: users.createdAt,
       courses: db.$count(enrollments, eq(enrollments.userId, users.id)),
     })
     .from(users)
-    .where(q ? or(contains(users.name, q), contains(users.email, q)) : undefined)
+    .where(q ? or(contains(users.name, q), contains(users.username, q), contains(users.email, q)) : undefined)
     .orderBy(desc(users.createdAt))
     .limit(200)
     .all()
@@ -67,7 +68,7 @@ app.get('/', async (c) => {
       </Stats>
 
       <form method="get" class="toolbar">
-        <SearchBox label="ユーザーを検索" value={q} placeholder="名前・メールで検索" />
+        <SearchBox label="ユーザーを検索" value={q} placeholder="名前・ユーザー名・メールで検索" />
       </form>
 
       {list.length === 0 ? (
@@ -85,7 +86,7 @@ app.get('/', async (c) => {
                       {u.id === me.id && <span class="muted small">（あなた）</span>}
                     </>
                   }
-                  meta={u.email}
+                  meta={userMeta(u)}
                 />
               </td>
               <td class="hide-sm muted">{formatDate(u.createdAt)}</td>
