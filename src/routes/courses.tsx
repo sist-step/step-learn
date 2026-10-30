@@ -1,3 +1,4 @@
+import { and, desc, eq, isNotNull, or } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { CourseForm, CourseHeader, CreateCourseButton, ItemIcon, type CourseFormErrors, type CourseFormValues } from '../components/course'
 import { Button, IconButton } from '../components/button'
@@ -9,13 +10,14 @@ import { Popover } from '../components/overlay'
 import { Styles } from '../components/style'
 import { Chip, CourseCard, CourseRow, EmptyState, PageHeader, Progress, ProgressRing, type CourseCardData } from '../components/ui'
 import { canCreateCourse, requireAuth } from '../lib/auth'
-import { getCourseAccess, type CourseAccess } from '../lib/courses'
+import { getCourseAccess, memberCount, teacherNames, type CourseAccess } from '../lib/courses'
 import { field, intParam, readForm, redirectWith, type Form } from '../lib/http'
 import { isSharing } from '../lib/screen-share'
 import { randomTip } from '../lib/tips'
 import { deleteCourseFiles, formatBytes, inBackground } from '../lib/storage'
 import { COURSE_COLORS, ITEM_TYPE_LABELS, type AppEnv, type Item, type ItemType, type Section } from '../lib/types'
-import { db } from '../lib/db'
+import { contains, db } from '../lib/db'
+import { completions, courses, enrollments, items, sections } from '../lib/schema'
 
 const app = new Hono<AppEnv>()
 app.use(requireAuth)
@@ -39,19 +41,27 @@ app.get('/', async (c) => {
   const user = c.var.user!
   const isAdmin = user.role === 'admin'
   const q = (c.req.query('q') ?? '').trim().slice(0, 100)
-  const { results } = await db.prepare(
-    `SELECT c.id, c.code, c.title, c.summary, c.color, e.role,
-            (SELECT COUNT(*) FROM enrollments x WHERE x.course_id = c.id) AS members,
-            (SELECT group_concat(u.name, '、') FROM enrollments t JOIN users u ON u.id = t.user_id
-              WHERE t.course_id = c.id AND t.role = 'teacher') AS teachers
-     FROM courses c
-     LEFT JOIN enrollments e ON e.course_id = c.id AND e.user_id = ?1
-     WHERE (e.role IS NOT NULL OR ?2)
-       AND (?3 = '' OR c.title LIKE ?4 OR c.code LIKE ?4 OR c.summary LIKE ?4)
-     ORDER BY c.created_at DESC`,
-  )
-    .bind(user.id, isAdmin ? 1 : 0, q, `%${q}%`)
-    .all<CourseCardData>()
+  const results: CourseCardData[] = db
+    .select({
+      id: courses.id,
+      code: courses.code,
+      title: courses.title,
+      summary: courses.summary,
+      color: courses.color,
+      role: enrollments.role,
+      members: memberCount(),
+      teachers: teacherNames(),
+    })
+    .from(courses)
+    .leftJoin(enrollments, and(eq(enrollments.courseId, courses.id), eq(enrollments.userId, user.id)))
+    .where(
+      and(
+        isAdmin ? undefined : isNotNull(enrollments.role),
+        q ? or(contains(courses.title, q), contains(courses.code, q), contains(courses.summary, q)) : undefined,
+      ),
+    )
+    .orderBy(desc(courses.createdAt))
+    .all()
 
   return c.render(
     <AppShell>
@@ -97,20 +107,21 @@ app.post('/', async (c) => {
   // 入力欄の横にエラーを出さないのは、作成フォームが一覧画面のモーダルにあって描き直せないため
   if (!ok) return redirectWith(c, '/courses', Object.values(errors)[0], 'error')
 
-  const course = await db
-    .prepare(
-      `INSERT INTO courses (code, title, summary, color, created_by)
-       VALUES (?, ?, ?, ?, ?) RETURNING id`,
-    )
-    .bind(values.code, values.title, values.summary, values.color, user.id)
-    .first<{ id: number }>()
-  await db.prepare(`INSERT INTO sections (course_id, title, position) VALUES (?, 'はじめに', 1)`).bind(course!.id).run()
-  return redirectWith(c, `/courses/${course!.id}`, 'コースを作成しました。参加者タブから教師と学生を追加しましょう。')
+  const course = db.transaction((tx) => {
+    const created = tx
+      .insert(courses)
+      .values({ ...values, createdBy: user.id })
+      .returning({ id: courses.id })
+      .get()
+    tx.insert(sections).values({ courseId: created.id, title: 'はじめに', position: 1 }).run()
+    return created
+  })
+  return redirectWith(c, `/courses/${course.id}`, 'コースを作成しました。参加者タブから教師と学生を追加しましょう。')
 })
 
 // ---------------------------------------------------------------- コースページ
 
-type ItemLite = Pick<Item, 'id' | 'section_id' | 'type' | 'title' | 'url' | 'file_name' | 'file_size'>
+type ItemLite = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'url' | 'fileName' | 'fileSize'>
 
 const hostOf = (url: string) => {
   try {
@@ -141,7 +152,7 @@ const ItemRow = ({
     item.type === 'link'
       ? hostOf(item.url)
       : item.type === 'file'
-        ? `${item.file_name ?? ''} · ${formatBytes(item.file_size ?? 0)}`
+        ? `${item.fileName ?? ''} · ${formatBytes(item.fileSize ?? 0)}`
         : ITEM_TYPE_LABELS[item.type]
   return (
     <li class={done ? 'item-row is-done' : 'item-row'} data-item={item.id}>
@@ -255,28 +266,32 @@ app.get('/:id', async (c) => {
   const user = c.var.user!
   const manage = access.canManage
 
-  const [secRes, itemRes, doneRes, metaRes] = await db.batch([
-    db.prepare('SELECT * FROM sections WHERE course_id = ? ORDER BY position, id').bind(id),
-    db
-      .prepare('SELECT id, section_id, type, title, url, file_name, file_size FROM items WHERE course_id = ? ORDER BY position, id')
-      .bind(id),
-    db.prepare('SELECT item_id FROM completions WHERE user_id = ? AND course_id = ?').bind(user.id, id),
-    db
-      .prepare(
-        `SELECT COUNT(*) AS members,
-                group_concat(CASE WHEN e.role = 'teacher' THEN u.name END, '、') AS teachers
-         FROM enrollments e JOIN users u ON u.id = e.user_id WHERE e.course_id = ?`,
-      )
-      .bind(id),
-  ])
-  const sections = secRes.results as Section[]
-  const items = itemRes.results as ItemLite[]
-  const done = new Set((doneRes.results as { item_id: number }[]).map((r) => r.item_id))
-  const meta = metaRes.results[0] as { members: number; teachers: string | null }
+  const sectionList = db.select().from(sections).where(eq(sections.courseId, id)).orderBy(sections.position, sections.id).all()
+  const itemList: ItemLite[] = db
+    .select({
+      id: items.id,
+      sectionId: items.sectionId,
+      type: items.type,
+      title: items.title,
+      url: items.url,
+      fileName: items.fileName,
+      fileSize: items.fileSize,
+    })
+    .from(items)
+    .where(eq(items.courseId, id))
+    .orderBy(items.position, items.id)
+    .all()
+  const doneRows = db
+    .select({ itemId: completions.itemId })
+    .from(completions)
+    .where(and(eq(completions.userId, user.id), eq(completions.courseId, id)))
+    .all()
+  const done = new Set(doneRows.map((r) => r.itemId))
+  const meta = db.select({ members: memberCount(), teachers: teacherNames() }).from(courses).where(eq(courses.id, id)).get()!
   const isStudent = access.role === 'student'
 
   const bySection = new Map<number, ItemLite[]>()
-  for (const it of items) bySection.set(it.section_id, [...(bySection.get(it.section_id) ?? []), it])
+  for (const it of itemList) bySection.set(it.sectionId, [...(bySection.get(it.sectionId) ?? []), it])
 
   const metaLine = (
     <>
@@ -289,7 +304,7 @@ app.get('/:id', async (c) => {
         <Icon name="users" size={14} /> {meta.members}人
       </span>
       <span>
-        <Icon name="layers" size={14} /> {items.length}アイテム
+        <Icon name="layers" size={14} /> {itemList.length}アイテム
       </span>
     </>
   )
@@ -301,7 +316,7 @@ app.get('/:id', async (c) => {
         access={access}
         tab="content"
         meta={metaLine}
-        progress={isStudent ? { done: done.size, total: items.length } : undefined}
+        progress={isStudent ? { done: done.size, total: itemList.length } : undefined}
       />
 
       {manage && (
@@ -311,13 +326,13 @@ app.get('/:id', async (c) => {
         </div>
       )}
 
-      {sections.length === 0 ? (
+      {sectionList.length === 0 ? (
         <div class="view-only">
           <EmptyState icon="layers" title="まだ教材がありません" text="教師が教材を追加するとここに表示されます。" />
         </div>
       ) : (
         <div class="sections">
-          {sections.map((s, idx) => {
+          {sectionList.map((s, idx) => {
             const list = bySection.get(s.id) ?? []
             const doneCount = list.filter((it) => done.has(it.id)).length
             return (
@@ -379,13 +394,13 @@ app.post('/:id/leave', async (c) => {
   const userId = c.var.user!.id
 
   if (access.role === 'teacher') {
-    const t = await db.prepare(`SELECT COUNT(*) AS n FROM enrollments WHERE course_id = ? AND role = 'teacher'`).bind(id).first<{ n: number }>()
-    if ((t?.n ?? 0) <= 1) return redirectWith(c, `/courses/${id}/settings`, '最後の教師はコースから退出できません。', 'error')
+    const teachers = await db.$count(enrollments, and(eq(enrollments.courseId, id), eq(enrollments.role, 'teacher')))
+    if (teachers <= 1) return redirectWith(c, `/courses/${id}/settings`, '最後の教師はコースから退出できません。', 'error')
   }
-  await db.batch([
-    db.prepare('DELETE FROM enrollments WHERE course_id = ? AND user_id = ?').bind(id, userId),
-    db.prepare('DELETE FROM completions WHERE course_id = ? AND user_id = ?').bind(id, userId),
-  ])
+  db.transaction((tx) => {
+    tx.delete(enrollments).where(and(eq(enrollments.courseId, id), eq(enrollments.userId, userId))).run()
+    tx.delete(completions).where(and(eq(completions.courseId, id), eq(completions.userId, userId))).run()
+  })
   return redirectWith(c, '/dashboard', `「${access.course.title}」から退出しました。`, 'info')
 })
 
@@ -440,12 +455,7 @@ app.post('/:id/settings', async (c) => {
     c.status(422)
     return c.render(<SettingsPage access={access} values={values} errors={errors} />, { title: `設定 - ${access.course.title}` })
   }
-  await db.prepare(
-    `UPDATE courses SET code = ?, title = ?, summary = ?, color = ?, updated_at = unixepoch()
-     WHERE id = ?`,
-  )
-    .bind(values.code, values.title, values.summary, values.color, id)
-    .run()
+  db.update(courses).set(values).where(eq(courses.id, id)).run()
   return redirectWith(c, `/courses/${id}/settings`, '設定を保存しました。')
 })
 
@@ -453,8 +463,8 @@ app.post('/:id/delete', async (c) => {
   const id = intParam(c, 'id')
   const access = id && (await getCourseAccess(c, id))
   if (!access || !access.canManage) return c.notFound()
-  await db.prepare('DELETE FROM courses WHERE id = ?').bind(id).run()
-  inBackground(deleteCourseFiles(id!))
+  db.delete(courses).where(eq(courses.id, id)).run()
+  inBackground(deleteCourseFiles(id))
   return redirectWith(c, '/dashboard', `「${access.course.title}」を削除しました。`, 'info')
 })
 
@@ -472,17 +482,23 @@ const greeting = () => {
 
 dashboard.get('/', async (c) => {
   const user = c.var.user!
-  const { results } = await db.prepare(
-    `SELECT c.id, c.code, c.title, c.summary, c.color, e.role,
-            (SELECT COUNT(*) FROM items i WHERE i.course_id = c.id) AS total,
-            (SELECT COUNT(*) FROM completions k WHERE k.user_id = ?1 AND k.course_id = c.id) AS done,
-            (SELECT COUNT(*) FROM enrollments x WHERE x.course_id = c.id) AS members
-     FROM enrollments e JOIN courses c ON c.id = e.course_id
-     WHERE e.user_id = ?1
-     ORDER BY e.created_at DESC`,
-  )
-    .bind(user.id)
-    .all<CourseCardData>()
+  const results: CourseCardData[] = db
+    .select({
+      id: courses.id,
+      code: courses.code,
+      title: courses.title,
+      summary: courses.summary,
+      color: courses.color,
+      role: enrollments.role,
+      total: db.$count(items, eq(items.courseId, courses.id)),
+      done: db.$count(completions, and(eq(completions.userId, user.id), eq(completions.courseId, courses.id))),
+      members: memberCount(),
+    })
+    .from(enrollments)
+    .innerJoin(courses, eq(courses.id, enrollments.courseId))
+    .where(eq(enrollments.userId, user.id))
+    .orderBy(desc(enrollments.createdAt))
+    .all()
 
   const teaching = results.filter((r) => r.role === 'teacher')
   const learning = results.filter((r) => r.role === 'student')

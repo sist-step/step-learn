@@ -1,3 +1,4 @@
+import { and, eq, isNotNull } from 'drizzle-orm'
 import { Hono, type Context } from 'hono'
 import { raw } from 'hono/html'
 import { CourseHeader, ItemIcon } from '../components/course'
@@ -9,13 +10,14 @@ import { FileInput, FormField, SelectField, TextAreaField, TextField } from '../
 import { Card, LinkCard } from '../components/card'
 import { Alert, Breadcrumbs, Chip } from '../components/ui'
 import { requireAuth } from '../lib/auth'
-import { getCourseAccess, moveRow, type CourseAccess } from '../lib/courses'
+import { getCourseAccess, moveRow, nextPosition, type CourseAccess } from '../lib/courses'
 import { field, intParam, isHttpUrl, readForm, redirectWith, wantsJson, type Form } from '../lib/http'
 import { renderMarkdown } from '../lib/markdown'
 import { isSharing } from '../lib/screen-share'
 import { MAX_FILE_SIZE, deleteKeys, formatBytes, inBackground, putCourseFile, storage, type StoredFile } from '../lib/storage'
 import { ITEM_TYPE_LABELS, type AppEnv, type Item, type ItemType, type Section } from '../lib/types'
 import { db } from '../lib/db'
+import { completions, items, sections } from '../lib/schema'
 
 const app = new Hono<AppEnv>()
 app.use(requireAuth)
@@ -29,11 +31,21 @@ async function manageAccess(c: Context<AppEnv>) {
   return access && access.canManage ? access : null
 }
 
-const getItem = (c: Context<AppEnv>, courseId: number, itemId: number) =>
-  db.prepare('SELECT * FROM items WHERE id = ? AND course_id = ?').bind(itemId, courseId).first<Item>()
+const getItem = (courseId: number, itemId: number) =>
+  db
+    .select()
+    .from(items)
+    .where(and(eq(items.id, itemId), eq(items.courseId, courseId)))
+    .get()
 
-const getSection = (c: Context<AppEnv>, courseId: number, sectionId: number) =>
-  db.prepare('SELECT * FROM sections WHERE id = ? AND course_id = ?').bind(sectionId, courseId).first<Section>()
+const getSection = (courseId: number, sectionId: number) =>
+  db
+    .select()
+    .from(sections)
+    .where(and(eq(sections.id, sectionId), eq(sections.courseId, courseId)))
+    .get()
+
+const listSections = (courseId: number) => db.select().from(sections).where(eq(sections.courseId, courseId)).orderBy(sections.position, sections.id).all()
 
 // ---------------------------------------------------------------- セクション
 
@@ -43,13 +55,12 @@ app.post('/:id/sections', async (c) => {
   const id = access.course.id
   const title = field(await readForm(c), 'title', 120)
   if (!title) return redirectWith(c, editUrl(id), 'セクション名を入力してください。', 'error')
-  const row = await db.prepare(
-    `INSERT INTO sections (course_id, title, position)
-     VALUES (?1, ?2, (SELECT COALESCE(MAX(position), 0) + 1 FROM sections WHERE course_id = ?1)) RETURNING id`,
-  )
-    .bind(id, title)
-    .first<{ id: number }>()
-  return redirectWith(c, editUrl(id, row!.id), 'セクションを追加しました。')
+  const row = db
+    .insert(sections)
+    .values({ courseId: id, title, position: nextPosition(sections, eq(sections.courseId, id)) })
+    .returning({ id: sections.id })
+    .get()
+  return redirectWith(c, editUrl(id, row.id), 'セクションを追加しました。')
 })
 
 app.post('/:id/sections/:sid', async (c) => {
@@ -59,8 +70,9 @@ app.post('/:id/sections/:sid', async (c) => {
   const form = await readForm(c)
   const title = field(form, 'title', 120)
   if (!title) return redirectWith(c, editUrl(access.course.id, sid), 'セクション名を入力してください。', 'error')
-  await db.prepare('UPDATE sections SET title = ?, summary = ? WHERE id = ? AND course_id = ?')
-    .bind(title, field(form, 'summary', 2000), sid, access.course.id)
+  db.update(sections)
+    .set({ title, summary: field(form, 'summary', 2000) })
+    .where(and(eq(sections.id, sid), eq(sections.courseId, access.course.id)))
     .run()
   return redirectWith(c, editUrl(access.course.id, sid), 'セクションを更新しました。')
 })
@@ -70,7 +82,7 @@ app.post('/:id/sections/:sid/move', async (c) => {
   const sid = intParam(c, 'sid')
   if (!access || !sid) return c.notFound()
   const dir = field(await readForm(c), 'dir') === 'up' ? 'up' : 'down'
-  await moveRow('sections', 'course_id', access.course.id, sid, dir)
+  moveRow(sections, eq(sections.courseId, access.course.id), sid, dir)
   return c.redirect(editUrl(access.course.id, sid), 303)
 })
 
@@ -78,18 +90,24 @@ app.post('/:id/sections/:sid/delete', async (c) => {
   const access = await manageAccess(c)
   const sid = intParam(c, 'sid')
   if (!access || !sid) return c.notFound()
-  const { results } = await db
-    .prepare('SELECT file_key FROM items WHERE section_id = ? AND course_id = ? AND file_key IS NOT NULL')
-    .bind(sid, access.course.id)
-    .all<{ file_key: string }>()
-  await db.prepare('DELETE FROM sections WHERE id = ? AND course_id = ?').bind(sid, access.course.id).run()
-  inBackground(deleteKeys(results.map((r) => r.file_key)))
+  const files = db
+    .select({ fileKey: items.fileKey })
+    .from(items)
+    .where(and(eq(items.sectionId, sid), eq(items.courseId, access.course.id), isNotNull(items.fileKey)))
+    .all()
+  db.delete(sections)
+    .where(and(eq(sections.id, sid), eq(sections.courseId, access.course.id)))
+    .run()
+  inBackground(deleteKeys(files.map((r) => r.fileKey!)))
   return redirectWith(c, editUrl(access.course.id), 'セクションを削除しました。', 'info')
 })
 
 // ---------------------------------------------------------------- アイテム作成・更新
 
 type ItemInput = { title: string; body: string; url: string; file: File | null }
+
+const fileColumns = (stored: StoredFile | null) =>
+  stored ? { fileKey: stored.key, fileName: stored.name, fileSize: stored.size, fileType: stored.type } : {}
 
 function readItemInput(form: Form): ItemInput {
   const f = form.file
@@ -119,30 +137,24 @@ app.post('/:id/items', async (c) => {
   const type: ItemType = typeRaw === 'link' || typeRaw === 'file' || typeRaw === 'screen' ? typeRaw : 'page'
   const input = readItemInput(form)
 
-  if (!(await getSection(c, courseId, sectionId))) return c.notFound()
+  if (!getSection(courseId, sectionId)) return c.notFound()
   const error = validateItem(type, input, true)
   if (error) return redirectWith(c, editUrl(courseId, sectionId), error, 'error')
 
   let stored: StoredFile | null = null
   if (type === 'file' && input.file) stored = await putCourseFile(courseId, input.file)
 
-  await db.prepare(
-    `INSERT INTO items (course_id, section_id, type, title, body, url, file_key, file_name, file_size, file_type, position)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10,
-             (SELECT COALESCE(MAX(position), 0) + 1 FROM items WHERE section_id = ?2))`,
-  )
-    .bind(
+  db.insert(items)
+    .values({
       courseId,
       sectionId,
       type,
-      input.title,
-      input.body,
-      type === 'link' ? input.url : '',
-      stored?.key ?? null,
-      stored?.name ?? null,
-      stored?.size ?? null,
-      stored?.type ?? null,
-    )
+      title: input.title,
+      body: input.body,
+      url: type === 'link' ? input.url : '',
+      ...fileColumns(stored),
+      position: nextPosition(items, eq(items.sectionId, sectionId)),
+    })
     .run()
   return redirectWith(c, editUrl(courseId, sectionId), `「${input.title}」を追加しました。`)
 })
@@ -168,7 +180,7 @@ const ItemEditPage = ({
       <Styles use={['/src/routes/content.css']} />
       <CourseHeader access={access} tab="content" />
       <div class="narrow">
-        <a href={editUrl(courseId, item.section_id)} class="back-link">
+        <a href={editUrl(courseId, item.sectionId)} class="back-link">
           <Icon name="chevronLeft" size={16} /> コースに戻る
         </a>
         <Card
@@ -188,15 +200,15 @@ const ItemEditPage = ({
             name="section_id"
             id="f-section"
             options={sections.map((s) => ({ value: String(s.id), label: s.title }))}
-            value={String(item.section_id)}
+            value={String(item.sectionId)}
           />
           {item.type === 'link' && <TextField label="URL" name="url" type="url" value={v.url} required />}
           {item.type === 'file' && (
             <FormField id="f-file" label="ファイル" hint={`差し替える場合は新しいファイルを選択（最大 ${formatBytes(MAX_FILE_SIZE)}）`}>
               <div class="file-current">
                 <Icon name="file" />
-                <span class="truncate">{item.file_name}</span>
-                <span class="muted small">{formatBytes(item.file_size ?? 0)}</span>
+                <span class="truncate">{item.fileName}</span>
+                <span class="muted small">{formatBytes(item.fileSize ?? 0)}</span>
               </div>
               <FileInput id="f-file" name="file" aria-describedby="f-file-desc" />
             </FormField>
@@ -209,7 +221,7 @@ const ItemEditPage = ({
             hint="Markdown が使えます：# 見出し、**太字**、*斜体*、- 箇条書き、1. 番号付き、> 引用、```コード```、[リンク](https://…)"
           />
           <div class="form-actions">
-            <Button href={editUrl(courseId, item.section_id)} variant="ghost">
+            <Button href={editUrl(courseId, item.sectionId)} variant="ghost">
               キャンセル
             </Button>
             <Button type="submit" variant="primary">
@@ -226,13 +238,9 @@ app.get('/:id/items/:iid/edit', async (c) => {
   const access = await manageAccess(c)
   const iid = intParam(c, 'iid')
   if (!access || !iid) return c.notFound()
-  const [itemRes, secRes] = await db.batch([
-    db.prepare('SELECT * FROM items WHERE id = ? AND course_id = ?').bind(iid, access.course.id),
-    db.prepare('SELECT * FROM sections WHERE course_id = ? ORDER BY position, id').bind(access.course.id),
-  ])
-  const item = itemRes.results[0] as Item | undefined
+  const item = getItem(access.course.id, iid)
   if (!item) return c.notFound()
-  return c.render(<ItemEditPage access={access} item={item} sections={secRes.results as Section[]} />, {
+  return c.render(<ItemEditPage access={access} item={item} sections={listSections(access.course.id)} />, {
     title: `編集 - ${item.title}`,
   })
 })
@@ -242,21 +250,18 @@ app.post('/:id/items/:iid', async (c) => {
   const iid = intParam(c, 'iid')
   if (!access || !iid) return c.notFound()
   const courseId = access.course.id
-  const item = await getItem(c, courseId, iid)
+  const item = getItem(courseId, iid)
   if (!item) return c.notFound()
 
   const form = await readForm(c)
   const input = readItemInput(form)
   const requestedSection = Number(field(form, 'section_id'))
-  const sectionId = (await getSection(c, courseId, requestedSection)) ? requestedSection : item.section_id
+  const sectionId = getSection(courseId, requestedSection) ? requestedSection : item.sectionId
 
   const error = validateItem(item.type, input, false)
   if (error) {
-    const { results } = await db.prepare('SELECT * FROM sections WHERE course_id = ? ORDER BY position, id')
-      .bind(courseId)
-      .all<Section>()
     c.status(422)
-    return c.render(<ItemEditPage access={access} item={item} sections={results} values={input} error={error} />, {
+    return c.render(<ItemEditPage access={access} item={item} sections={listSections(courseId)} values={input} error={error} />, {
       title: `編集 - ${item.title}`,
     })
   }
@@ -264,31 +269,17 @@ app.post('/:id/items/:iid', async (c) => {
   let stored: StoredFile | null = null
   if (item.type === 'file' && input.file) stored = await putCourseFile(courseId, input.file)
 
-  await db
-    .prepare(
-      `UPDATE items SET
-         title = ?1, body = ?2, url = ?3,
-         file_key = COALESCE(?4, file_key), file_name = COALESCE(?5, file_name),
-         file_size = COALESCE(?6, file_size), file_type = COALESCE(?7, file_type),
-         position = CASE WHEN section_id = ?9 THEN position
-                         ELSE (SELECT COALESCE(MAX(position), 0) + 1 FROM items WHERE section_id = ?9) END,
-         section_id = ?9,
-         updated_at = unixepoch()
-       WHERE id = ?8`,
-    )
-    .bind(
-      input.title,
-      input.body,
-      item.type === 'link' ? input.url : '',
-      stored?.key ?? null,
-      stored?.name ?? null,
-      stored?.size ?? null,
-      stored?.type ?? null,
-      iid,
-      sectionId,
-    )
+  db.update(items)
+    .set({
+      title: input.title,
+      body: input.body,
+      url: item.type === 'link' ? input.url : '',
+      ...fileColumns(stored),
+      ...(sectionId !== item.sectionId && { sectionId, position: nextPosition(items, eq(items.sectionId, sectionId)) }),
+    })
+    .where(eq(items.id, iid))
     .run()
-  if (stored && item.file_key) inBackground(deleteKeys([item.file_key]))
+  if (stored && item.fileKey) inBackground(deleteKeys([item.fileKey]))
   return redirectWith(c, editUrl(courseId, sectionId), '保存しました。')
 })
 
@@ -296,28 +287,30 @@ app.post('/:id/items/:iid/move', async (c) => {
   const access = await manageAccess(c)
   const iid = intParam(c, 'iid')
   if (!access || !iid) return c.notFound()
-  const item = await getItem(c, access.course.id, iid)
+  const item = getItem(access.course.id, iid)
   if (!item) return c.notFound()
   const dir = field(await readForm(c), 'dir') === 'up' ? 'up' : 'down'
-  await moveRow('items', 'section_id', item.section_id, iid, dir)
-  return c.redirect(editUrl(access.course.id, item.section_id), 303)
+  moveRow(items, eq(items.sectionId, item.sectionId), iid, dir)
+  return c.redirect(editUrl(access.course.id, item.sectionId), 303)
 })
 
 app.post('/:id/items/:iid/delete', async (c) => {
   const access = await manageAccess(c)
   const iid = intParam(c, 'iid')
   if (!access || !iid) return c.notFound()
-  const item = await db.prepare('DELETE FROM items WHERE id = ? AND course_id = ? RETURNING section_id, file_key, title')
-    .bind(iid, access.course.id)
-    .first<{ section_id: number; file_key: string | null; title: string }>()
+  const item = db
+    .delete(items)
+    .where(and(eq(items.id, iid), eq(items.courseId, access.course.id)))
+    .returning({ sectionId: items.sectionId, fileKey: items.fileKey, title: items.title })
+    .get()
   if (!item) return c.notFound()
-  if (item.file_key) inBackground(deleteKeys([item.file_key]))
-  return redirectWith(c, editUrl(access.course.id, item.section_id), `「${item.title}」を削除しました。`, 'info')
+  if (item.fileKey) inBackground(deleteKeys([item.fileKey]))
+  return redirectWith(c, editUrl(access.course.id, item.sectionId), `「${item.title}」を削除しました。`, 'info')
 })
 
 // ---------------------------------------------------------------- 閲覧・完了
 
-type OutlineItem = Pick<Item, 'id' | 'section_id' | 'type' | 'title' | 'url'>
+type OutlineItem = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'url'>
 
 const PREVIEWABLE = /^(application\/pdf|image\/(png|jpe?g|gif|webp|avif))$/
 
@@ -328,29 +321,38 @@ app.get('/:id/items/:iid', async (c) => {
   if (!access) return c.notFound()
   const userId = c.var.user!.id
 
-  const [itemRes, secRes, outRes, doneRes] = await db.batch([
-    db.prepare('SELECT * FROM items WHERE id = ? AND course_id = ?').bind(iid, id),
-    db.prepare('SELECT id, title FROM sections WHERE course_id = ? ORDER BY position, id').bind(id),
-    db.prepare('SELECT id, section_id, type, title, url FROM items WHERE course_id = ? ORDER BY position, id').bind(id),
-    db.prepare('SELECT item_id FROM completions WHERE user_id = ? AND course_id = ?').bind(userId, id),
-  ])
-  const item = itemRes.results[0] as Item | undefined
+  const item = getItem(id, iid)
   if (!item) return c.notFound()
-  const sections = secRes.results as Pick<Section, 'id' | 'title'>[]
-  const outline = outRes.results as OutlineItem[]
-  const done = new Set((doneRes.results as { item_id: number }[]).map((r) => r.item_id))
+  const sectionList = db
+    .select({ id: sections.id, title: sections.title })
+    .from(sections)
+    .where(eq(sections.courseId, id))
+    .orderBy(sections.position, sections.id)
+    .all()
+  const outline: OutlineItem[] = db
+    .select({ id: items.id, sectionId: items.sectionId, type: items.type, title: items.title, url: items.url })
+    .from(items)
+    .where(eq(items.courseId, id))
+    .orderBy(items.position, items.id)
+    .all()
+  const doneRows = db
+    .select({ itemId: completions.itemId })
+    .from(completions)
+    .where(and(eq(completions.userId, userId), eq(completions.courseId, id)))
+    .all()
+  const done = new Set(doneRows.map((r) => r.itemId))
 
   // セクション順 → アイテム順でコース全体を並べ、前後のアイテムを求める
-  const ordered = sections.flatMap((s) => outline.filter((o) => o.section_id === s.id))
+  const ordered = sectionList.flatMap((s) => outline.filter((o) => o.sectionId === s.id))
   const idx = ordered.findIndex((o) => o.id === item.id)
   const prev = ordered[idx - 1]
   const next = ordered[idx + 1]
-  const section = sections.find((s) => s.id === item.section_id)
+  const section = sectionList.find((s) => s.id === item.sectionId)
   const isStudent = access.role === 'student'
   const isDone = done.has(item.id)
   const base = `/courses/${id}/items`
   const fileUrl = `${base}/${item.id}/file`
-  const canPreview = item.type === 'file' && PREVIEWABLE.test(item.file_type ?? '')
+  const canPreview = item.type === 'file' && PREVIEWABLE.test(item.fileType ?? '')
 
   const navHref = (o: OutlineItem) => `${base}/${o.id}`
 
@@ -393,16 +395,16 @@ app.get('/:id/items/:iid', async (c) => {
             <>
               <LinkCard icon="file">
                 <span class="file-name">
-                  <span class="truncate strong">{item.file_name}</span>
-                  <span class="muted small">{formatBytes(item.file_size ?? 0)}</span>
+                  <span class="truncate strong">{item.fileName}</span>
+                  <span class="muted small">{formatBytes(item.fileSize ?? 0)}</span>
                 </span>
                 <Button href={fileUrl} variant="primary" size="sm" icon="download" data-no-prefetch download>
                   ダウンロード
                 </Button>
               </LinkCard>
               {canPreview &&
-                (item.file_type === 'application/pdf' ? (
-                  <iframe class="file-preview" src={`${fileUrl}?inline=1`} title={item.file_name ?? 'プレビュー'} loading="lazy" />
+                (item.fileType === 'application/pdf' ? (
+                  <iframe class="file-preview" src={`${fileUrl}?inline=1`} title={item.fileName ?? 'プレビュー'} loading="lazy" />
                 ) : (
                   <img class="file-preview-img" src={`${fileUrl}?inline=1`} alt={item.title} loading="lazy" />
                 ))}
@@ -463,12 +465,12 @@ app.get('/:id/items/:iid', async (c) => {
               </span>
             )}
           </div>
-          {sections.map((s) => (
+          {sectionList.map((s) => (
             <div class="outline-section">
               <div class="outline-title">{s.title}</div>
               <ul>
                 {outline
-                  .filter((o) => o.section_id === s.id)
+                  .filter((o) => o.sectionId === s.id)
                   .map((o) => (
                     <li>
                       <a
@@ -504,25 +506,20 @@ app.post('/:id/items/:iid/complete', async (c) => {
   const userId = c.var.user!.id
 
   // 削除できたら未完了に、なければ完了として挿入（トグル）
-  const removed = await db.prepare('DELETE FROM completions WHERE user_id = ? AND item_id = ? RETURNING item_id').bind(userId, iid).first()
+  const removed = db
+    .delete(completions)
+    .where(and(eq(completions.userId, userId), eq(completions.itemId, iid)))
+    .run().changes > 0
   if (!removed) {
-    const inserted = await db
-      .prepare('INSERT INTO completions (user_id, item_id, course_id) SELECT ?, id, course_id FROM items WHERE id = ? AND course_id = ? RETURNING item_id')
-      .bind(userId, iid, id)
-      .first()
-    if (!inserted) return c.notFound()
+    if (!getItem(id, iid)) return c.notFound()
+    db.insert(completions).values({ userId, itemId: iid, courseId: id }).run()
   }
   const completed = !removed
 
   if (wantsJson(c)) {
-    const stats = await db
-      .prepare(
-        `SELECT (SELECT COUNT(*) FROM items WHERE course_id = ?1) AS total,
-                (SELECT COUNT(*) FROM completions WHERE user_id = ?2 AND course_id = ?1) AS done`,
-      )
-      .bind(id, userId)
-      .first<{ total: number; done: number }>()
-    return c.json({ completed, ...stats })
+    const total = await db.$count(items, eq(items.courseId, id))
+    const done = await db.$count(completions, and(eq(completions.userId, userId), eq(completions.courseId, id)))
+    return c.json({ completed, total, done })
   }
   return c.redirect(c.req.header('referer') ?? `/courses/${id}`, 303)
 })
@@ -532,13 +529,13 @@ app.get('/:id/items/:iid/file', async (c) => {
   const iid = intParam(c, 'iid')
   const access = id && iid && (await getCourseAccess(c, id))
   if (!access) return c.notFound()
-  const item = await getItem(c, id!, iid!)
-  if (!item || item.type !== 'file' || !item.file_key) return c.notFound()
+  const item = getItem(id, iid)
+  if (!item || item.type !== 'file' || !item.fileKey) return c.notFound()
 
-  const type = item.file_type ?? 'application/octet-stream'
+  const type = item.fileType ?? 'application/octet-stream'
   // インライン表示は PDF とラスタ画像だけ（PDF ビューアは sandbox CSP 下で表示されないため、sandbox は添付時のみ）
-  const res = await storage.serve(item.file_key, {
-    filename: item.file_name ?? 'file',
+  const res = await storage.serve(item.fileKey, {
+    filename: item.fileName ?? 'file',
     contentType: type,
     inline: c.req.query('inline') === '1' && PREVIEWABLE.test(type),
   })

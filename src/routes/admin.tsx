@@ -1,3 +1,4 @@
+import { and, count, desc, eq, or } from 'drizzle-orm'
 import { Hono } from 'hono'
 import type { Child } from 'hono/jsx'
 import { CreateCourseButton } from '../components/course'
@@ -7,9 +8,11 @@ import { AppShell } from '../components/layout'
 import { Stat, Stats, Table } from '../components/card'
 import { Avatar, EmptyState, PageHeader, Person, Tabs, formatDate } from '../components/ui'
 import { requireAuth, requireRole } from '../lib/auth'
+import { teacherNames } from '../lib/courses'
 import { field, intParam, readForm, redirectWith } from '../lib/http'
 import { ROLE_LABELS, type AppEnv, type Role } from '../lib/types'
-import { db } from '../lib/db'
+import { contains, db } from '../lib/db'
+import { courses, enrollments, items, users } from '../lib/schema'
 
 const app = new Hono<AppEnv>()
 app.use(requireAuth, requireRole('admin'))
@@ -33,25 +36,26 @@ const AdminShell = ({ tab, children }: { tab: Tab; children: Child }) => (
 
 // ---------------------------------------------------------------- ユーザー
 
-type UserRow = { id: number; name: string; email: string; role: Role; created_at: number; courses: number }
-
 app.get('/users', (c) => c.redirect('/admin', 301))
 
 app.get('/', async (c) => {
   const q = (c.req.query('q') ?? '').trim().slice(0, 100)
-  const like = `%${q}%`
-  const [rows, counts] = await db.batch([
-    db.prepare(
-      `SELECT u.id, u.name, u.email, u.role, u.created_at,
-              (SELECT COUNT(*) FROM enrollments e WHERE e.user_id = u.id) AS courses
-       FROM users u
-       WHERE ?1 = '' OR u.name LIKE ?2 OR u.email LIKE ?2
-       ORDER BY u.created_at DESC LIMIT 200`,
-    ).bind(q, like),
-    db.prepare('SELECT role, COUNT(*) AS n FROM users GROUP BY role'),
-  ])
-  const users = rows.results as UserRow[]
-  const byRole = Object.fromEntries((counts.results as { role: Role; n: number }[]).map((r) => [r.role, r.n]))
+  const list = db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      createdAt: users.createdAt,
+      courses: db.$count(enrollments, eq(enrollments.userId, users.id)),
+    })
+    .from(users)
+    .where(q ? or(contains(users.name, q), contains(users.email, q)) : undefined)
+    .orderBy(desc(users.createdAt))
+    .limit(200)
+    .all()
+  const counts = db.select({ role: users.role, n: count() }).from(users).groupBy(users.role).all()
+  const byRole = Object.fromEntries(counts.map((r) => [r.role, r.n]))
   const me = c.var.user!
 
   return c.render(
@@ -66,11 +70,11 @@ app.get('/', async (c) => {
         <SearchBox label="ユーザーを検索" value={q} placeholder="名前・メールで検索" />
       </form>
 
-      {users.length === 0 ? (
+      {list.length === 0 ? (
         <EmptyState icon="users" title="ユーザーが見つかりません" text="検索条件を変えてお試しください。" />
       ) : (
         <Table columns={[{ label: 'ユーザー' }, { label: '登録日', class: 'hide-sm' }, { label: 'コース', class: 'hide-sm' }, { label: 'ロール' }]}>
-          {users.map((u) => (
+          {list.map((u) => (
             <tr>
               <td>
                 <Person
@@ -84,7 +88,7 @@ app.get('/', async (c) => {
                   meta={u.email}
                 />
               </td>
-              <td class="hide-sm muted">{formatDate(u.created_at)}</td>
+              <td class="hide-sm muted">{formatDate(u.createdAt)}</td>
               <td class="hide-sm muted">{u.courses}</td>
               <td>
                 <form method="post" action={`/admin/users/${u.id}/role`} data-autosubmit>
@@ -113,38 +117,30 @@ app.post('/users/:id/role', async (c) => {
   if (!id || !['admin', 'teacher', 'student'].includes(role)) return c.notFound()
   if (id === c.var.user!.id) return redirectWith(c, '/admin', '自分自身のロールは変更できません。', 'error')
 
-  const row = await db.prepare('UPDATE users SET role = ? WHERE id = ? RETURNING name').bind(role, id).first<{ name: string }>()
+  const row = db.update(users).set({ role }).where(eq(users.id, id)).returning({ name: users.name }).get()
   if (!row) return c.notFound()
   return redirectWith(c, '/admin', `${row.name} さんを${ROLE_LABELS[role]}に変更しました。`)
 })
 
 // ---------------------------------------------------------------- コース
 
-type CourseRow = {
-  id: number
-  code: string
-  title: string
-  color: string
-  created_at: number
-  teachers: string | null
-  students: number
-  items: number
-}
-
 app.get('/courses', async (c) => {
   const q = (c.req.query('q') ?? '').trim().slice(0, 100)
-  const { results: courses } = await db.prepare(
-    `SELECT c.id, c.code, c.title, c.color, c.created_at,
-            (SELECT group_concat(u.name, '、') FROM enrollments t JOIN users u ON u.id = t.user_id
-              WHERE t.course_id = c.id AND t.role = 'teacher') AS teachers,
-            (SELECT COUNT(*) FROM enrollments s WHERE s.course_id = c.id AND s.role = 'student') AS students,
-            (SELECT COUNT(*) FROM items i WHERE i.course_id = c.id) AS items
-     FROM courses c
-     WHERE ?1 = '' OR c.title LIKE ?2 OR c.code LIKE ?2
-     ORDER BY c.created_at DESC`,
-  )
-    .bind(q, `%${q}%`)
-    .all<CourseRow>()
+  const list = db
+    .select({
+      id: courses.id,
+      code: courses.code,
+      title: courses.title,
+      color: courses.color,
+      createdAt: courses.createdAt,
+      teachers: teacherNames(),
+      students: db.$count(enrollments, and(eq(enrollments.courseId, courses.id), eq(enrollments.role, 'student'))),
+      items: db.$count(items, eq(items.courseId, courses.id)),
+    })
+    .from(courses)
+    .where(q ? or(contains(courses.title, q), contains(courses.code, q)) : undefined)
+    .orderBy(desc(courses.createdAt))
+    .all()
 
   return c.render(
     <AdminShell tab="courses">
@@ -155,7 +151,7 @@ app.get('/courses', async (c) => {
         <CreateCourseButton />
       </div>
 
-      {courses.length === 0 ? (
+      {list.length === 0 ? (
         <EmptyState
           icon="book"
           title={q ? `「${q}」に一致するコースはありません` : 'まだコースがありません'}
@@ -172,7 +168,7 @@ app.get('/courses', async (c) => {
             { label: '操作', srOnly: true },
           ]}
         >
-          {courses.map((course) => (
+          {list.map((course) => (
             <tr>
               <td>
                 <Person
@@ -185,7 +181,7 @@ app.get('/courses', async (c) => {
               <td class="hide-sm muted">{course.teachers ?? '未設定'}</td>
               <td class="hide-sm muted">{course.students}</td>
               <td class="hide-sm muted">{course.items}</td>
-              <td class="hide-sm muted">{formatDate(course.created_at)}</td>
+              <td class="hide-sm muted">{formatDate(course.createdAt)}</td>
               <td>
                 <div class="row-actions">
                   <IconButton href={`/courses/${course.id}/participants`} icon="users" label={`${course.title} の参加者`} title="参加者" />

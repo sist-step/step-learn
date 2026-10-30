@@ -1,3 +1,4 @@
+import { and, eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { Script } from 'vite-ssr-components/hono'
 import { ItemIcon } from '../components/course'
@@ -8,8 +9,9 @@ import { Chip } from '../components/ui'
 import { requireAuth } from '../lib/auth'
 import { getCourseAccess } from '../lib/courses'
 import { intParam } from '../lib/http'
-import type { AppEnv, Item } from '../lib/types'
+import type { AppEnv } from '../lib/types'
 import { db } from '../lib/db'
+import { items } from '../lib/schema'
 
 const app = new Hono<AppEnv>()
 app.use(requireAuth)
@@ -20,10 +22,11 @@ app.get('/:id/items/:iid/screen', async (c) => {
   const iid = intParam(c, 'iid')
   const access = id && iid && (await getCourseAccess(c, id))
   if (!access) return c.notFound()
-  const item = await db
-    .prepare('SELECT id, title FROM items WHERE id = ? AND course_id = ? AND type = ?')
-    .bind(iid, id, 'screen')
-    .first<Pick<Item, 'id' | 'title'>>()
+  const item = db
+    .select({ id: items.id, title: items.title })
+    .from(items)
+    .where(and(eq(items.id, iid), eq(items.courseId, id), eq(items.type, 'screen')))
+    .get()
   if (!item) return c.notFound()
 
   return c.render(

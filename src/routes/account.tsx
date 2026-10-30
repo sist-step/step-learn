@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { AppShell } from '../components/layout'
 import { Styles } from '../components/style'
@@ -10,6 +11,7 @@ import { field, readForm, redirectWith } from '../lib/http'
 import { checkPassword, PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../lib/password'
 import { ROLE_LABELS, type AppEnv, type User } from '../lib/types'
 import { db } from '../lib/db'
+import { users } from '../lib/schema'
 
 const app = new Hono<AppEnv>()
 app.use(requireAuth)
@@ -74,7 +76,7 @@ app.post('/', async (c) => {
     c.status(422)
     return c.render(<AccountPage user={user} name={name} errors={{ name: '氏名を入力してください。' }} />, { title: 'アカウント' })
   }
-  await db.prepare('UPDATE users SET name = ? WHERE id = ?').bind(name, user.id).run()
+  db.update(users).set({ name }).where(eq(users.id, user.id)).run()
   return redirectWith(c, '/account', 'プロフィールを更新しました。')
 })
 
@@ -84,9 +86,9 @@ app.post('/password', async (c) => {
   const current = field(form, 'current', 200)
   const password = field(form, 'password', 200)
 
-  const row = await db.prepare('SELECT password_hash FROM users WHERE id = ?').bind(user.id).first<{ password_hash: string }>()
+  const row = db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, user.id)).get()
   const errors: Errors = {}
-  if (!row || !(await verifyPassword(current, row.password_hash))) errors.current = '現在のパスワードが正しくありません。'
+  if (!row || !(await verifyPassword(current, row.passwordHash))) errors.current = '現在のパスワードが正しくありません。'
   const passwordError = checkPassword(password, user)
   if (passwordError) errors.password = passwordError
   if (Object.keys(errors).length) {
@@ -94,7 +96,8 @@ app.post('/password', async (c) => {
     return c.render(<AccountPage user={user} errors={errors} />, { title: 'アカウント' })
   }
 
-  await db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').bind(await hashPassword(password), user.id).run()
+  const passwordHash = await hashPassword(password)
+  db.update(users).set({ passwordHash }).where(eq(users.id, user.id)).run()
   await destroyOtherSessions(c, user.id)
   return redirectWith(c, '/account', 'パスワードを変更しました。')
 })
