@@ -5,6 +5,7 @@ import { FileField, ImageField, SearchBox, SegmentedControl, SelectField, TextAr
 import { cx } from '../../components/cx'
 import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
+import { MarkdownEditor } from '../../components/markdown'
 import { Modal, Popover } from '../../components/overlay'
 import { Styles } from '../../components/style'
 import { Chip, CourseCard, EmptyState, PageHeader, TabPanel, type CourseCardData } from '../../components/ui'
@@ -177,7 +178,7 @@ const AddItemModal = ({ courseId, sections }: { courseId: number; sections: Sect
       <TextField label="タイトル" name="title" id="new-item-title" maxlength={200} placeholder="例：第1回 講義資料" required autofocus />
       <TextField label="URL" name="url" id="new-item-url" type="url" placeholder="https://" fieldClass="when-link" />
       <FileField label="ファイル" name="file" id="new-item-file" hint="最大 30MB。PDF・画像はブラウザでプレビューできます。" fieldClass="when-file" />
-      <TextAreaField
+      <MarkdownEditor
         label={
           <>
             <span class="when-page-inline">本文（任意）</span>
@@ -186,8 +187,8 @@ const AddItemModal = ({ courseId, sections }: { courseId: number; sections: Sect
         }
         name="body"
         id="new-item-body"
-        rows={3}
-        placeholder="Markdown が使えます。あとから編集画面でプレビューしながら書けます。"
+        rows={4}
+        placeholder="あとから編集画面でも書けます"
       />
       <div class="grid-2">
         <SelectField label="セクション" name="section_id" id="new-item-section" options={sections.map((s) => ({ value: String(s.id), label: s.title }))} />

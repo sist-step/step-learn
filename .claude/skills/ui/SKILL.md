@@ -5,7 +5,7 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 
 # UI の作り方
 
-方針は「SSR ＋ 小さなクライアント JS」。JavaScript は必須で、無効なときは renderer の noscript が案内だけを出すので、JS なしの代替は作らない。CSS は部品・画面ごとのファイルに分け、そのページで使う分だけを読み込む（下の「CSS の置き場所と読み込み」）。JS は `src/client.ts` の 1 ファイル。CSS フレームワークや UI ライブラリは入れない。
+方針は「SSR ＋ 小さなクライアント JS」。JavaScript は必須で、無効なときは renderer の noscript が案内だけを出すので、JS なしの代替は作らない。CSS は部品・画面ごとのファイルに分け、そのページで使う分だけを読み込む（下の「CSS の置き場所と読み込み」）。JS は `src/client.ts` の 1 ファイル（Markdown エディターの CodeMirror だけは重いので、`src/markdown-editor.ts` に分けて、エディターのある画面で `client.ts` が動的に読み込む）。CSS フレームワークや UI ライブラリは入れない。
 
 ## まず既存の部品を使う
 
@@ -41,6 +41,7 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 | `Input` / `Select` / `Textarea` / `FileInput` | ラベルなしの部品。表の中や横並びのフォームで使う（`aria-label` を付ける）。`compact` で小さくなる |
 | `SearchBox` | 一覧上部の検索欄（`/` キーでフォーカス） |
 | `SegmentedControl` | ラジオボタンの切り替え（`name` / `label` / `options`（`icon` 付き可）/ `value`） |
+| `MarkdownEditor`（`markdown.tsx`） | Markdown の入力欄。CodeMirror のエディターに書式ボタン（⌘B / ⌘I / ⌘K）と「書く / プレビュー」の切り替え、書き方の早見表が付く。`label` / `name` / `value` / `rows`（最低の高さ）/ `placeholder` / `error` / `hint`。送信されるのは中の `textarea`（`name`）の値。Markdown を受け取る入力欄では `TextAreaField` ではなくこれを使う |
 | `Switch` | オン・オフのスイッチ（`role="switch"` のボタン）。`label` / `checked` / `icon`。切り替えの処理は `data-*` を付けて `client.ts` に書く |
 
 各 `XxxField` の `fieldClass` は外側の `.field` に付くクラス（`when-link` などの出し分け用）。
@@ -100,6 +101,7 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 | `Breadcrumbs` | パンくず（`items`: `{ label, href? }[]`。最後は現在地なので `href` なし） |
 | `Person` | アバターと名前・補足を横に並べる（`avatar` / `name` / `meta` / `href`）。表の 1 列目など |
 | `EmptyState` | 一覧が空のとき（`icon` / `title` / `text` / `action`）。`page` で画面全体の空状態（404 など） |
+| `Markdown`（`markdown.tsx`） | Markdown を HTML にして `.prose` の見た目で出す（`source`）。`lib/markdown.ts` の変換を使うので生の HTML は通らない |
 | `Avatar` | 名前から色とイニシャルを作るアイコン |
 | `Progress` / `ProgressRing` | 進捗バー・リング（JS で更新できる `data-*` 付き） |
 | `CourseCard` | コース一覧のカード |

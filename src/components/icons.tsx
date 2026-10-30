@@ -8,6 +8,7 @@ import arrowUp from 'heroicons/24/outline/arrow-up.svg?raw'
 import upload from 'heroicons/24/outline/arrow-up-tray.svg?raw'
 import maximize from 'heroicons/24/outline/arrows-pointing-out.svg?raw'
 import menu from 'heroicons/24/outline/bars-3.svg?raw'
+import bold from 'heroicons/24/outline/bold.svg?raw'
 import book from 'heroicons/24/outline/book-open.svg?raw'
 import check from 'heroicons/24/outline/check.svg?raw'
 import checkCircle from 'heroicons/24/outline/check-circle.svg?raw'
@@ -15,6 +16,7 @@ import chevronDoubleLeft from 'heroicons/24/outline/chevron-double-left.svg?raw'
 import chevronDown from 'heroicons/24/outline/chevron-down.svg?raw'
 import chevronLeft from 'heroicons/24/outline/chevron-left.svg?raw'
 import chevronRight from 'heroicons/24/outline/chevron-right.svg?raw'
+import code from 'heroicons/24/outline/code-bracket.svg?raw'
 import monitor from 'heroicons/24/outline/computer-desktop.svg?raw'
 import file from 'heroicons/24/outline/document-arrow-down.svg?raw'
 import copy from 'heroicons/24/outline/document-duplicate.svg?raw'
@@ -23,11 +25,15 @@ import alert from 'heroicons/24/outline/exclamation-circle.svg?raw'
 import eye from 'heroicons/24/outline/eye.svg?raw'
 import eyeSlash from 'heroicons/24/outline/eye-slash.svg?raw'
 import globe from 'heroicons/24/outline/globe-alt.svg?raw'
+import heading from 'heroicons/24/outline/h2.svg?raw'
 import home from 'heroicons/24/outline/home.svg?raw'
 import info from 'heroicons/24/outline/information-circle.svg?raw'
+import italic from 'heroicons/24/outline/italic.svg?raw'
 import link from 'heroicons/24/outline/link.svg?raw'
+import listBullet from 'heroicons/24/outline/list-bullet.svg?raw'
 import search from 'heroicons/24/outline/magnifying-glass.svg?raw'
 import moon from 'heroicons/24/outline/moon.svg?raw'
+import listNumbered from 'heroicons/24/outline/numbered-list.svg?raw'
 import pencil from 'heroicons/24/outline/pencil.svg?raw'
 import photo from 'heroicons/24/outline/photo.svg?raw'
 import plus from 'heroicons/24/outline/plus.svg?raw'
@@ -78,6 +84,12 @@ const svgs = {
   maximize,
   moon,
   photo,
+  bold,
+  italic,
+  heading,
+  listBullet,
+  listNumbered,
+  code,
 } as const
 
 export type IconName = keyof typeof svgs
