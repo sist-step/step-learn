@@ -200,15 +200,24 @@ document.addEventListener('keydown', (e) => {
   }
 })
 
-// --- 開いた「アイテムを追加」の最初の入力にフォーカス
+// --- 開いたポップオーバーの最初の入力にフォーカス
 document.addEventListener(
   'toggle',
   (e) => {
     const d = e.target as HTMLDetailsElement
-    if (d.matches?.('[data-autofocus-details], .popover') && d.open) d.querySelector<HTMLElement>('input:not([type=hidden]):not([type=radio]), textarea')?.focus()
+    if (d.matches?.('.popover') && d.open) d.querySelector<HTMLElement>('input:not([type=hidden]):not([type=radio]), textarea')?.focus()
   },
   true,
 )
+
+// --- 「アイテムを追加」を押したセクションを、モーダルのセクション欄で選んでおく
+// セクションごとにモーダルを置かないのは、セクションの数だけ同じフォームが HTML に並ぶため
+document.addEventListener('click', (e) => {
+  const btn = (e.target as Element).closest<HTMLElement>('[data-add-item-section]')
+  const modal = btn && document.getElementById(btn.getAttribute('popovertarget') ?? '')
+  const select = modal?.querySelector<HTMLSelectElement>('select[name=section_id]')
+  if (btn && select) select.value = btn.dataset.addItemSection ?? ''
+})
 
 // --- ポップオーバーは外側クリックと Esc で閉じる
 document.addEventListener('click', (e) => {
