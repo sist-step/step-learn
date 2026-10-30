@@ -93,7 +93,8 @@ description: "StepLearn の見た目と UI の作り方（既存の UI 部品・
 | 部品 | 用途 |
 | --- | --- |
 | `PageHeader` | 画面上部の見出し（`eyebrow` / `title` / `description` / `actions`） |
-| `Tabs` | ページを切り替えるタブ（`label` / `items`（`{ href, label, active }[]`）/ `block` で横幅いっぱい） |
+| `Tabs` | ページを切り替えるタブ（`label` / `items`（`{ href, label, active }[]`）/ `block` で横幅いっぱい）。切り替えると選択中の背景が前のタブから滑る（`client.ts` の `markTabSwitch`） |
+| `TabPanel` | `Tabs` の下の中身を包む。タブを切り替えたとき、中身が切り替えた向きに少し流れて入れ替わる。`Tabs` を置いた画面では必ず使う |
 | `Chip` | 小さなラベル（`tone`: `default` / `accent` / `success` / `live`、`icon`） |
 | `Alert` | 帯状のメッセージ（`tone`: `error` / `info` / `success` / `warning`）。フォームのエラーなど |
 | `Breadcrumbs` | パンくず（`items`: `{ label, href? }[]`。最後は現在地なので `href` なし） |

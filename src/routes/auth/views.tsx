@@ -1,7 +1,7 @@
 import { AuthShell } from '../../components/layout'
 import { Button } from '../../components/button'
 import { TextField } from '../../components/form'
-import { Alert, Tabs } from '../../components/ui'
+import { Alert, TabPanel, Tabs } from '../../components/ui'
 import { PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../../lib/password'
 import { USERNAME_HINT, USERNAME_MAX_LENGTH } from '../../lib/username'
 
@@ -29,31 +29,33 @@ export const LoginPage = ({ login = '', next = '', errors = {} }: { login?: stri
       <h1>おかえりなさい</h1>
       <p class="muted">アカウントにログインして学習を続けましょう。</p>
       <AuthTabs current="login" next={next} />
-      <FormError message={errors.form} />
-      <form method="post" action="/login" class="stack" data-loading-form>
-        <input type="hidden" name="next" value={next} />
-        <TextField
-          label="メールアドレスまたはユーザー名"
-          name="login"
-          value={login}
-          autocomplete="username"
-          autocapitalize="none"
-          spellcheck={false}
-          required
-          autofocus={!login}
-        />
-        <TextField
-          label="パスワード"
-          name="password"
-          type="password"
-          autocomplete="current-password"
-          required
-          autofocus={!!login}
-        />
-        <Button type="submit" variant="primary" size="lg" block>
-          ログイン
-        </Button>
-      </form>
+      <TabPanel>
+        <FormError message={errors.form} />
+        <form method="post" action="/login" class="stack" data-loading-form>
+          <input type="hidden" name="next" value={next} />
+          <TextField
+            label="メールアドレスまたはユーザー名"
+            name="login"
+            value={login}
+            autocomplete="username"
+            autocapitalize="none"
+            spellcheck={false}
+            required
+            autofocus={!login}
+          />
+          <TextField
+            label="パスワード"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+            autofocus={!!login}
+          />
+          <Button type="submit" variant="primary" size="lg" block>
+            ログイン
+          </Button>
+        </form>
+      </TabPanel>
     </div>
   </AuthShell>
 )
@@ -64,14 +66,16 @@ export const RegisterPage = ({ email = '', next = '', errors = {} }: { email?: s
       <h1>アカウントを作成</h1>
       <p class="muted">メールアドレスに届くリンクから登録を完了してください。</p>
       <AuthTabs current="register" next={next} />
-      <FormError message={errors.form} />
-      <form method="post" action="/register" class="stack" data-loading-form>
-        <input type="hidden" name="next" value={next} />
-        <TextField label="メールアドレス" name="email" type="email" value={email} error={errors.email} autocomplete="email" required autofocus />
-        <Button type="submit" variant="primary" size="lg" block>
-          確認メールを送る
-        </Button>
-      </form>
+      <TabPanel>
+        <FormError message={errors.form} />
+        <form method="post" action="/register" class="stack" data-loading-form>
+          <input type="hidden" name="next" value={next} />
+          <TextField label="メールアドレス" name="email" type="email" value={email} error={errors.email} autocomplete="email" required autofocus />
+          <Button type="submit" variant="primary" size="lg" block>
+            確認メールを送る
+          </Button>
+        </form>
+      </TabPanel>
     </div>
   </AuthShell>
 )
