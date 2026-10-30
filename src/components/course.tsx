@@ -4,7 +4,7 @@ import { COURSE_COLORS, type Course, type ItemType } from '../lib/types'
 import { Button } from './button'
 import { Card } from './card'
 import { cx } from './cx'
-import { TextAreaField, TextField } from './form'
+import { TextAreaField, TextField, validateWith } from './form'
 import { Icon, type IconName } from './icons'
 import { Modal } from './overlay'
 import { Breadcrumbs, CourseIcon, ProgressRing, Tabs, courseInitials, type TabItem } from './ui'
@@ -80,8 +80,6 @@ const CourseFields = ({ values, errors = {} }: { values: CourseFormValues; error
           name="title"
           value={values.title}
           error={errors.title}
-          required
-          maxlength={120}
           placeholder="例：情報リテラシー入門"
           autofocus={!values.title}
         />
@@ -90,7 +88,6 @@ const CourseFields = ({ values, errors = {} }: { values: CourseFormValues; error
           name="code"
           value={values.code}
           error={errors.code}
-          maxlength={30}
           placeholder="例：INFO101"
           hint="一覧やカードに表示される短い識別名"
         />
@@ -137,7 +134,7 @@ export const CourseForm = ({
   submitLabel: string
   cancelHref: string
 }) => (
-  <Card as="form" id={id} method="post" action={action} class="stack course-form" data-loading-form>
+  <Card as="form" id={id} method="post" action={action} class="stack course-form" data-loading-form {...validateWith('course')}>
     <CourseFields values={values} errors={errors} />
     <div class="form-actions">
       <Button href={cancelHref} variant="ghost">
@@ -162,7 +159,7 @@ export const CreateCourseButton = () => (
       heading="コースを作成"
       description="作成後に参加者タブから教師と学生を追加します。基本情報はあとからいつでも変更できます。"
     >
-      <form method="post" action="/courses" class="stack" data-loading-form>
+      <form method="post" action="/courses" class="stack" data-loading-form {...validateWith('course')}>
         <CourseFields values={{}} />
         <div class="form-actions">
           <Button variant="ghost" popovertarget={CREATE_COURSE_MODAL} popovertargetaction="hide">

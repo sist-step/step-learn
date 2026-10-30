@@ -1,11 +1,10 @@
 import { AuthShell } from '../../components/layout'
 import { Button } from '../../components/button'
-import { TextField } from '../../components/form'
+import { TextField, validateWith } from '../../components/form'
 import { Alert, TabPanel, Tabs } from '../../components/ui'
-import { PASSWORD_HINT, PASSWORD_MIN_LENGTH } from '../../lib/password'
-import { USERNAME_HINT, USERNAME_MAX_LENGTH } from '../../lib/username'
-
-export type Errors = Partial<Record<'name' | 'username' | 'email' | 'password' | 'form', string>>
+import type { FieldErrors } from '../../lib/forms'
+import { PASSWORD_HINT } from '../../lib/password'
+import { USERNAME_HINT } from '../../lib/username'
 
 const FormError = ({ message }: { message?: string }) => (message ? <Alert>{message}</Alert> : null)
 
@@ -23,7 +22,7 @@ const AuthTabs = ({ current, next }: { current: 'login' | 'register'; next: stri
   )
 }
 
-export const LoginPage = ({ login = '', next = '', errors = {} }: { login?: string; next?: string; errors?: Errors }) => (
+export const LoginPage = ({ login = '', next = '', errors = {} }: { login?: string; next?: string; errors?: FieldErrors }) => (
   <AuthShell>
     <div class="auth-card">
       <h1>おかえりなさい</h1>
@@ -31,19 +30,26 @@ export const LoginPage = ({ login = '', next = '', errors = {} }: { login?: stri
       <AuthTabs current="login" next={next} />
       <TabPanel>
         <FormError message={errors.form} />
-        <form method="post" action="/login" class="stack" data-loading-form>
+        <form method="post" action="/login" class="stack" data-loading-form {...validateWith('login')}>
           <input type="hidden" name="next" value={next} />
           <TextField
             label="メールアドレスまたはユーザー名"
             name="login"
             value={login}
+            error={errors.login}
             autocomplete="username"
             autocapitalize="none"
             spellcheck={false}
-            required
             autofocus={!login}
           />
-          <TextField label="パスワード" name="password" type="password" autocomplete="current-password" required autofocus={!!login} />
+          <TextField
+            label="パスワード"
+            name="password"
+            type="password"
+            error={errors.password}
+            autocomplete="current-password"
+            autofocus={!!login}
+          />
           <Button type="submit" variant="primary" size="lg" block>
             ログイン
           </Button>
@@ -53,7 +59,7 @@ export const LoginPage = ({ login = '', next = '', errors = {} }: { login?: stri
   </AuthShell>
 )
 
-export const RegisterPage = ({ email = '', next = '', errors = {} }: { email?: string; next?: string; errors?: Errors }) => (
+export const RegisterPage = ({ email = '', next = '', errors = {} }: { email?: string; next?: string; errors?: FieldErrors }) => (
   <AuthShell>
     <div class="auth-card">
       <h1>アカウントを作成</h1>
@@ -61,18 +67,9 @@ export const RegisterPage = ({ email = '', next = '', errors = {} }: { email?: s
       <AuthTabs current="register" next={next} />
       <TabPanel>
         <FormError message={errors.form} />
-        <form method="post" action="/register" class="stack" data-loading-form>
+        <form method="post" action="/register" class="stack" data-loading-form {...validateWith('register')}>
           <input type="hidden" name="next" value={next} />
-          <TextField
-            label="メールアドレス"
-            name="email"
-            type="email"
-            value={email}
-            error={errors.email}
-            autocomplete="email"
-            required
-            autofocus
-          />
+          <TextField label="メールアドレス" name="email" type="email" value={email} error={errors.email} autocomplete="email" autofocus />
           <Button type="submit" variant="primary" size="lg" block>
             確認メールを送る
           </Button>
@@ -108,18 +105,18 @@ export const CompleteRegisterPage = ({
   email: string
   name?: string
   username?: string
-  errors?: Errors
+  errors?: FieldErrors
 }) => (
   <AuthShell>
     <div class="auth-card">
       <h1>登録を完了する</h1>
       <p class="muted">{email} で登録します。氏名・ユーザー名・パスワードを設定してください。</p>
       <FormError message={errors.form} />
-      <form method="post" action="/register/complete" class="stack" data-loading-form>
+      <form method="post" action="/register/complete" class="stack" data-loading-form {...validateWith('completeRegister')}>
         <input type="hidden" name="token" value={token} />
         {/* パスワードマネージャーがメールアドレスと組にして保存できるようにする */}
         <input type="hidden" name="email" value={email} autocomplete="username" />
-        <TextField label="氏名" name="name" value={name} error={errors.name} autocomplete="name" required autofocus maxlength={60} />
+        <TextField label="氏名" name="name" value={name} error={errors.name} autocomplete="name" autofocus />
         <TextField
           label="ユーザー名"
           name="username"
@@ -129,8 +126,6 @@ export const CompleteRegisterPage = ({
           autocomplete="off"
           autocapitalize="none"
           spellcheck={false}
-          required
-          maxlength={USERNAME_MAX_LENGTH}
         />
         <TextField
           label="パスワード"
@@ -139,8 +134,6 @@ export const CompleteRegisterPage = ({
           error={errors.password}
           hint={PASSWORD_HINT}
           autocomplete="new-password"
-          required
-          minlength={PASSWORD_MIN_LENGTH}
         />
         <Button type="submit" variant="primary" size="lg" block>
           登録してはじめる

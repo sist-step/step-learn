@@ -1,6 +1,6 @@
 import { and, desc, eq, isNotNull, or } from 'drizzle-orm'
 import type { Context } from 'hono'
-import type { CourseFormErrors, CourseFormValues } from '../../components/course'
+import type { CourseFormValues } from '../../components/course'
 import type { CourseCardData } from '../../components/ui'
 import { canCreateCourse } from '../../lib/auth'
 import {
@@ -13,26 +13,21 @@ import {
   type CourseImageKind,
 } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
-import { field, fileField, intParam, readForm, redirectWith, type Form } from '../../lib/http'
+import { firstError, validate } from '../../lib/forms'
+import { field, intParam, readForm, redirectWith, type Form } from '../../lib/http'
 import { imageName, putImage, serveImage } from '../../lib/images'
 import { completions, courses, enrollments, items, sections } from '../../lib/schema'
 import { isSharing } from '../../lib/screen-share'
 import { deleteCourseFiles, deleteKeys, inBackground } from '../../lib/storage'
-import { COURSE_COLORS, type AppEnv, type Course } from '../../lib/types'
+import type { AppEnv, Course } from '../../lib/types'
 import { CoursePage, CoursesPage, SettingsPage, type ItemLite } from './views'
 
-function parseCourseForm(form: Form) {
-  const color = field(form, 'color')
-  const values = {
-    title: field(form, 'title', 120),
-    code: field(form, 'code', 30),
-    summary: field(form, 'summary', 2000),
-    color: (COURSE_COLORS as readonly string[]).includes(color) ? color : 'cyan',
-  } satisfies CourseFormValues
-  const errors: CourseFormErrors = {}
-  if (!values.title) errors.title = 'コース名を入力してください。'
-  return { values, errors, ok: Object.keys(errors).length === 0 }
-}
+const courseFormValues = (form: Form): CourseFormValues => ({
+  title: field(form, 'title', 120),
+  code: field(form, 'code', 30),
+  summary: field(form, 'summary', 2000),
+  color: field(form, 'color', 20),
+})
 
 export async function list(c: Context<AppEnv>) {
   const user = c.var.user!
@@ -68,14 +63,14 @@ export async function list(c: Context<AppEnv>) {
 export async function create(c: Context<AppEnv>) {
   const user = c.var.user!
   if (!canCreateCourse(user)) return c.notFound()
-  const { values, errors, ok } = parseCourseForm(await readForm(c))
+  const result = validate('course', await readForm(c))
   // 入力欄の横にエラーを出さないのは、作成フォームが一覧画面のモーダルにあって描き直せないため
-  if (!ok) return redirectWith(c, '/courses', Object.values(errors)[0], 'error')
+  if (!result.ok) return redirectWith(c, '/courses', firstError(result.errors), 'error')
 
   const course = db.transaction((tx) => {
     const created = tx
       .insert(courses)
-      .values({ ...values, createdBy: user.id })
+      .values({ ...result.values, createdBy: user.id })
       .returning({ id: courses.id })
       .get()
     tx.insert(sections).values({ courseId: created.id, title: 'はじめに', position: 1 }).run()
@@ -164,12 +159,15 @@ export async function updateSettings(c: Context<AppEnv>) {
   const id = intParam(c, 'id')
   const access = id && (await getCourseAccess(c, id))
   if (!access || !access.canManage) return c.notFound()
-  const { values, errors, ok } = parseCourseForm(await readForm(c))
-  if (!ok) {
+  const form = await readForm(c)
+  const result = validate('course', form)
+  if (!result.ok) {
     c.status(422)
-    return c.render(<SettingsPage access={access} values={values} errors={errors} />, { title: `設定 - ${access.course.title}` })
+    return c.render(<SettingsPage access={access} values={courseFormValues(form)} errors={result.errors} />, {
+      title: `設定 - ${access.course.title}`,
+    })
   }
-  db.update(courses).set(values).where(eq(courses.id, id)).run()
+  db.update(courses).set(result.values).where(eq(courses.id, id)).run()
   return redirectWith(c, `/courses/${id}/settings`, '設定を保存しました。')
 }
 
@@ -200,9 +198,9 @@ export async function updateCourseImage(c: Context<AppEnv>) {
   const access = id && kind && (await getCourseAccess(c, id))
   if (!kind || !access || !access.canManage) return c.notFound()
   const back = `/courses/${id}/settings`
-  const file = fileField(await readForm(c), 'image')
-  if (!file) return redirectWith(c, back, '画像を選択してください。', 'error')
-  const result = await putImage(courseImagePrefix(id, kind), file)
+  const form = validate('image', await readForm(c))
+  if (!form.ok) return redirectWith(c, back, firstError(form.errors), 'error')
+  const result = await putImage(courseImagePrefix(id, kind), form.values.image)
   if ('error' in result) return redirectWith(c, back, result.error, 'error')
   db.update(courses).set(imageColumn(kind, result.key)).where(eq(courses.id, id)).run()
   inBackground(deleteKeys([currentImage(access.course, kind)]))

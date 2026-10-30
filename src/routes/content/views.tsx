@@ -4,11 +4,12 @@ import { Icon } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
 import { Button } from '../../components/button'
-import { FileInput, FormField, SegmentedControl, SelectField, TextField } from '../../components/form'
+import { FileInput, FormField, SegmentedControl, SelectField, TextField, validateWith } from '../../components/form'
 import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, DangerRow, LinkCard } from '../../components/card'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import type { CourseAccess } from '../../lib/courses'
+import type { FieldErrors } from '../../lib/forms'
 import { MAX_FILE_SIZE, formatBytes } from '../../lib/storage'
 import { ITEM_TYPE_LABELS, type Item, type Section } from '../../lib/types'
 
@@ -42,13 +43,13 @@ export const ItemEditPage = ({
   item,
   sections,
   values,
-  error,
+  errors = {},
 }: {
   access: CourseAccess
   item: Item
   sections: Section[]
   values?: Partial<ItemInput> & { hidden?: number; sectionId?: number }
-  error?: string
+  errors?: FieldErrors
 }) => {
   const courseId = access.course.id
   const base = `/courses/${courseId}/items/${item.id}`
@@ -82,15 +83,25 @@ export const ItemEditPage = ({
       </header>
 
       <div class="editor">
-        <form id="item-form" method="post" action={base} enctype="multipart/form-data" class="editor-form" data-loading-form>
+        <form
+          id="item-form"
+          method="post"
+          action={base}
+          enctype="multipart/form-data"
+          class="editor-form"
+          data-loading-form
+          {...validateWith('itemEdit')}
+        >
           <Card class="editor-main stack">
-            {error && <Alert>{error}</Alert>}
-            <TextField label="タイトル" name="title" value={v.title} required maxlength={200} class="editor-title" />
-            {item.type === 'link' && <TextField label="URL" name="url" type="url" value={v.url} required placeholder="https://" />}
+            <TextField label="タイトル" name="title" value={v.title} error={errors.title} class="editor-title" />
+            {item.type === 'link' && (
+              <TextField label="URL" name="url" type="url" value={v.url} error={errors.url} placeholder="https://" />
+            )}
             <MarkdownEditor
               label={item.type === 'page' ? '本文' : '説明（任意）'}
               name="body"
               value={v.body}
+              error={errors.body}
               rows={item.type === 'page' ? 18 : 5}
             />
           </Card>
@@ -123,6 +134,7 @@ export const ItemEditPage = ({
               <Card heading="ファイル">
                 <FormField
                   id="f-file"
+                  error={errors.file}
                   label="差し替えるファイル"
                   hint={`選ばなければ今のファイルのまま（最大 ${formatBytes(MAX_FILE_SIZE)}）`}
                 >
@@ -131,7 +143,12 @@ export const ItemEditPage = ({
                     <span class="truncate">{item.fileName}</span>
                     <span class="muted small">{formatBytes(item.fileSize ?? 0)}</span>
                   </div>
-                  <FileInput id="f-file" name="file" aria-describedby="f-file-desc" />
+                  <FileInput
+                    id="f-file"
+                    name="file"
+                    aria-invalid={errors.file ? 'true' : undefined}
+                    aria-describedby="f-file-error f-file-desc"
+                  />
                 </FormField>
               </Card>
             )}

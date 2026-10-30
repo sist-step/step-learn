@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 import {
+  USERNAME_TAKEN,
   createEmailVerification,
   createSession,
   createUser,
@@ -14,14 +15,13 @@ import {
 } from '../../lib/auth'
 import { config } from '../../lib/config'
 import { db } from '../../lib/db'
-import { clientIp, field, isEmail, readForm, redirectWith } from '../../lib/http'
+import { validate } from '../../lib/forms'
+import { clientIp, field, readForm, redirectWith } from '../../lib/http'
 import { mailer } from '../../lib/mail'
-import { checkPassword } from '../../lib/password'
 import { rateLimiter } from '../../lib/rate-limit'
 import { users } from '../../lib/schema'
 import type { AppEnv } from '../../lib/types'
-import { checkUsername, normalizeUsername } from '../../lib/username'
-import { CompleteRegisterPage, InvalidLinkPage, LoginPage, RegisterPage, RegisterSentPage, type Errors } from './views'
+import { CompleteRegisterPage, InvalidLinkPage, LoginPage, RegisterPage, RegisterSentPage } from './views'
 
 // IP ごとの上限を高めにしているのは、教室などで同じグローバル IP から大勢が一斉にアクセスするため
 const loginFailuresByIp = rateLimiter({ limit: 50, windowSec: 15 * 60 })
@@ -42,9 +42,14 @@ export function showLogin(c: Context<AppEnv>) {
 
 export async function submitLogin(c: Context<AppEnv>) {
   const form = await readForm(c)
-  const login = field(form, 'login', 254).toLowerCase()
-  const password = field(form, 'password', 200)
-  const next = field(form, 'next', 500)
+  const result = validate('login', form)
+  if (!result.ok) {
+    c.status(422)
+    return c.render(<LoginPage login={field(form, 'login', 254)} next={field(form, 'next', 500)} errors={result.errors} />, {
+      title: 'ログイン',
+    })
+  }
+  const { login, password, next } = result.values
 
   const ip = clientIp(c)
   const wait = Math.max(loginFailuresByIp.retryAfter(ip), loginFailuresByAccount.retryAfter(login))
@@ -91,15 +96,14 @@ export function showRegister(c: Context<AppEnv>) {
 
 export async function submitRegister(c: Context<AppEnv>) {
   const form = await readForm(c)
-  const email = field(form, 'email', 254).toLowerCase()
-  const next = field(form, 'next', 500)
-
-  if (!isEmail(email)) {
+  const result = validate('register', form)
+  if (!result.ok) {
     c.status(422)
-    return c.render(<RegisterPage email={email} next={next} errors={{ email: '有効なメールアドレスを入力してください。' }} />, {
+    return c.render(<RegisterPage email={field(form, 'email', 254)} next={field(form, 'next', 500)} errors={result.errors} />, {
       title: '新規登録',
     })
   }
+  const { email, next } = result.values
 
   const ip = clientIp(c)
   const wait = Math.max(registerByIp.retryAfter(ip), registerByEmail.retryAfter(email))
@@ -155,10 +159,6 @@ export async function showCompleteRegister(c: Context<AppEnv>) {
 export async function submitCompleteRegister(c: Context<AppEnv>) {
   const form = await readForm(c)
   const token = field(form, 'token', 100)
-  const name = field(form, 'name', 60)
-  const username = normalizeUsername(field(form, 'username', 100))
-  const password = field(form, 'password', 200)
-
   const verification = await findEmailVerification(token)
   if (!verification) {
     c.status(410)
@@ -166,28 +166,26 @@ export async function submitCompleteRegister(c: Context<AppEnv>) {
   }
   const { email, next } = verification
 
-  const errors: Errors = {}
-  if (!name) errors.name = '氏名を入力してください。'
-  const usernameError = checkUsername(username)
-  if (usernameError) errors.username = usernameError
-  const passwordError = checkPassword(password, { email, name, username })
-  if (passwordError) errors.password = passwordError
-  if (Object.keys(errors).length) {
+  // 送られてきたメールアドレスを使わないのは、画面の隠し欄は書き換えられるので、確認済みのものと違うかもしれないため
+  const result = validate('completeRegister', { ...form, email })
+  if (!result.ok) {
+    const values = { name: field(form, 'name', 60), username: field(form, 'username', 100) }
     c.status(422)
-    return c.render(<CompleteRegisterPage token={token} email={email} name={name} username={username} errors={errors} />, {
-      title: '新規登録',
-    })
+    return c.render(<CompleteRegisterPage token={token} email={email} {...values} errors={result.errors} />, { title: '新規登録' })
   }
+  const { name, username, password } = result.values
 
   const created = await createUser({ email, name, username, password })
   if ('taken' in created) {
     if (created.taken === 'email')
       return redirectWith(c, '/login', 'このメールアドレスはすでに登録されています。ログインしてください。', 'info')
     c.status(422)
-    const errors = { username: 'このユーザー名はすでに使われています。' }
-    return c.render(<CompleteRegisterPage token={token} email={email} name={name} username={username} errors={errors} />, {
-      title: '新規登録',
-    })
+    return c.render(
+      <CompleteRegisterPage token={token} email={email} name={name} username={username} errors={{ username: USERNAME_TAKEN }} />,
+      {
+        title: '新規登録',
+      },
+    )
   }
 
   await createSession(c, created.id)
