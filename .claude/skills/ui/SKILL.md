@@ -165,6 +165,7 @@ CSS は 1 ファイルにまとめず、使う部品・画面の隣に置く。�
 - 送信に時間がかかるフォームには `data-loading-form`（二重送信防止）
 - 取り消せない操作のフォームには `data-confirm="〜しますか？"`
 - `select` を変えたら即送信するフォームには `data-autosubmit`
+- 編集画面の保存ボタンには `data-save-shortcut`（⌘S / Ctrl+S で押される。フォームの外に置くときは `form="<id>"` を付ける）
 - 開閉は `<details>` / `<summary>` で作る（ボタンの下に出すパネルは `Popover` 部品）
 - モーダルは `Modal` 部品と `<Button popovertarget="...">` で作る（開閉・Esc・外側クリックをブラウザに任せられる。例は `components/course.tsx` の `CreateCourseButton`）。自前で書く場合も `popover` は値まで書く（真偽値で書くと hono が `popover="true"` と出力し、manual 扱いになって Esc や外側のクリックで閉じない）。`<dialog>` は開閉の処理を `client.ts` に書くことになるので使わない
 - 先読みさせたくないリンク（ログアウト・ダウンロードなど）は `data-no-prefetch`
