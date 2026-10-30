@@ -141,7 +141,7 @@ const unescapeXml = (s: string) =>
 
 export const storage: Storage = config.r2 ? new R2Storage(config.r2) : new LocalStorage(path.resolve(config.filesDir))
 
-const safeName = (name: string) => name.replace(/[\\/\x00-\x1f]/g, '_').slice(-120) || 'file'
+const safeName = (name: string) => name.replace(/[\\/\p{Cc}]/gu, '_').slice(-120) || 'file'
 
 export async function putCourseFile(courseId: number, file: File): Promise<StoredFile> {
   const name = safeName(file.name)

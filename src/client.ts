@@ -524,7 +524,7 @@ function render(doc: Document, scroll: () => void) {
   const root = document.documentElement
   if (tabSlide) root.dataset.tabSlide = tabSlide
   const transition = document.startViewTransition(swap)
-  transition.finished.finally(() => root.dataset.tabSlide === tabSlide && delete root.dataset.tabSlide)
+  void transition.finished.finally(() => root.dataset.tabSlide === tabSlide && delete root.dataset.tabSlide)
   return transition.updateCallbackDone
 }
 
@@ -577,7 +577,7 @@ document.addEventListener('click', (e) => {
   const link = linkUrl(e.target)
   if (!link) return
   e.preventDefault()
-  visit(link.url)
+  void visit(link.url)
 })
 
 document.addEventListener('submit', (e) => {
@@ -599,7 +599,7 @@ document.addEventListener('submit', (e) => {
     return visit(url)
   }
   const enctype = submitter?.hasAttribute('formenctype') ? submitter.formEnctype : form.enctype
-  visit(url, {
+  void visit(url, {
     method: 'POST',
     body: enctype === 'multipart/form-data' ? data : params,
     onFail: () => {
@@ -614,7 +614,7 @@ document.addEventListener('submit', (e) => {
 
 addEventListener('popstate', () => {
   const url = new URL(location.href)
-  if (urlKey(url) !== renderedKey) visit(url, { pop: true })
+  if (urlKey(url) !== renderedKey) void visit(url, { pop: true })
 })
 
 // --- ホバーしたリンクを先読みして、クリック後すぐに表示する
@@ -647,5 +647,3 @@ function initPage() {
   initMarkdownEditors()
 }
 initPage()
-
-export {}

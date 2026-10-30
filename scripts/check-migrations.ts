@@ -104,7 +104,7 @@ step('schema.ts とマイグレーションが一致している', () => {
     if (fs.readdirSync(out).length !== before)
       errors.push('schema.ts の変更に対応するマイグレーションがありません。npm run db:generate を実行してコミットしてください')
   } catch (e) {
-    errors.push(`drizzle-kit が失敗しました\n${(e as { stderr?: string }).stderr ?? e}`)
+    errors.push(`drizzle-kit が失敗しました\n${(e as { stderr?: string }).stderr ?? String(e)}`)
   }
 })
 
