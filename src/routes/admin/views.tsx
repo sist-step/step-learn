@@ -4,7 +4,7 @@ import { IconButton } from '../../components/button'
 import { SearchBox, Select } from '../../components/form'
 import { AppShell } from '../../components/layout'
 import { Stat, Stats, Table } from '../../components/card'
-import { Avatar, EmptyState, PageHeader, Person, Tabs, formatDate, userMeta } from '../../components/ui'
+import { Avatar, EmptyState, PageHeader, Person, TabPanel, Tabs, formatDate, userMeta } from '../../components/ui'
 import { ROLE_LABELS, type Role } from '../../lib/types'
 
 type Tab = 'users' | 'courses'
@@ -20,7 +20,7 @@ const AdminShell = ({ tab, children }: { tab: Tab; children: Child }) => (
   <AppShell>
     <PageHeader title="管理" description="ユーザーとコースをまとめて管理します。" />
     <Tabs label="管理メニュー" items={TABS.map((t) => ({ href: t.href, label: t.label, active: tab === t.tab }))} />
-    {children}
+    <TabPanel>{children}</TabPanel>
   </AppShell>
 )
 

@@ -1,0 +1,81 @@
+/* ===== Markdown の表示 */
+.prose { font-size: 15px; line-height: 1.85; color: var(--text-2); overflow-wrap: anywhere; }
+.prose > * + * { margin-top: 1em; }
+.prose h2, .prose h3, .prose h4 { color: var(--text); margin-top: 1.8em; }
+.prose h2 { font-size: 20px; }
+.prose h3 { font-size: 17px; }
+.prose h4 { font-size: 15px; }
+.prose ul, .prose ol { padding-left: 1.4em; }
+.prose li + li { margin-top: 0.3em; }
+.prose a { text-decoration: underline; text-underline-offset: 3px; }
+.prose code { font: 0.88em var(--mono); padding: 2px 6px; border-radius: 6px; background: var(--surface-3); }
+.prose pre { padding: 16px 18px; border-radius: var(--radius); background: #12131a; color: #e6e7ee; overflow-x: auto; font-size: 13.5px; line-height: 1.6; }
+.prose pre code { background: none; padding: 0; font-size: inherit; }
+.prose blockquote { margin: 1em 0 0; padding: 4px 0 4px 16px; border-left: 3px solid var(--accent); color: var(--muted); }
+.prose hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
+.prose strong { color: var(--text); }
+
+/* ===== Markdown エディター（CodeMirror は src/markdown-editor.ts） */
+.md-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.md-modes { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--border); }
+.md-modes button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.md-modes button:hover { color: var(--text); }
+.md-modes button[aria-pressed='true'] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+
+.md-editor-box {
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  background: var(--surface);
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.md-editor-box:hover { border-color: color-mix(in srgb, var(--text) 22%, var(--border-strong)); }
+.md-editor-box:focus-within { border-color: var(--primary); box-shadow: var(--ring); }
+.md-editor-box.has-error { border-color: var(--danger); }
+/* textarea 自身に枠を付けないのは、CodeMirror を読み込む前と後で枠の見た目が変わってしまうため */
+.md-editor-box .md-editor-source,
+.md-editor-box .md-editor-source:focus { border: 0; border-radius: 0; box-shadow: none; }
+
+.md-toolbar { display: flex; flex-wrap: wrap; gap: 2px; padding: 4px 6px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.md-toolbar .icon-btn { width: 30px; height: 30px; }
+
+.md-editor-host .cm-editor { background: none; color: var(--text); }
+.md-editor-host .cm-editor.cm-focused { outline: none; }
+.md-editor-host .cm-scroller { font: 14px/1.7 var(--font); }
+.md-editor-host .cm-content { min-height: calc(var(--md-rows) * 1.7em + 24px); padding: 12px 0; caret-color: var(--text); }
+.md-editor-host .cm-line { padding: 0 18px; }
+.md-editor-host .cm-cursor { border-left-color: var(--text); }
+.md-editor-host .cm-placeholder { color: color-mix(in srgb, var(--muted) 75%, transparent); }
+/* !important を使うのは、CodeMirror が差し込む選択範囲の色の指定が詳細度の高いセレクターで、クラスの組み合わせでは上書きできないため */
+.md-editor-host .cm-selectionBackground,
+.md-editor-host .cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--primary) 22%, transparent) !important; }
+.md-tok-heading { font-weight: 700; color: var(--text); }
+.md-tok-strong { font-weight: 700; }
+.md-tok-em { font-style: italic; }
+.md-tok-link { color: var(--primary-text); }
+.md-tok-code { font-family: var(--mono); font-size: 0.92em; }
+.md-tok-quote { color: var(--muted); }
+.md-tok-mark { color: var(--muted); }
+
+.md-preview { padding: 12px 18px; }
+.md-preview > :first-child { margin-top: 0; }
+
+.md-help summary { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12.5px; cursor: pointer; list-style: none; }
+.md-help summary::-webkit-details-marker { display: none; }
+.md-help summary:hover { color: var(--text); }
+.md-help dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 10px 0 0; padding: 12px 16px; border-radius: var(--radius); background: var(--surface-2); font-size: 12.5px; }
+.md-help dd { margin: 0; color: var(--muted); }
+.md-help code { font: 12px var(--mono); }
