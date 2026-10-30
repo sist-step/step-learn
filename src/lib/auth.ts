@@ -1,10 +1,12 @@
+import { and, eq, gt, lte, ne } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { deleteCookie, getCookie, getSignedCookie, setSignedCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
 import { parseSigned } from 'hono/utils/cookie'
-import type { AppEnv, NavCourse, Role, User } from './types'
+import type { AppEnv, Role, User } from './types'
 import { config } from './config'
 import { db } from './db'
+import { courses, emailVerifications, enrollments, sessions, users } from './schema'
 
 const SESSION_COOKIE = 'sid'
 const SESSION_TTL = 60 * 60 * 24 * 30 // 30日
@@ -80,61 +82,79 @@ async function readSessionToken(c: Context) {
 export async function createSession(c: Context<AppEnv>, userId: number) {
   const token = randomToken()
   const id = await sessionIdFromToken(token)
-  await db.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)')
-    .bind(id, userId, now() + SESSION_TTL)
-    .run()
+  db.insert(sessions).values({ id, userId, expiresAt: now() + SESSION_TTL }).run()
   await setSessionCookie(c, token)
 }
 
 export async function destroySession(c: Context<AppEnv>) {
   const token = await readSessionToken(c)
   if (token) {
-    await db.prepare('DELETE FROM sessions WHERE id = ?').bind(await sessionIdFromToken(token)).run()
+    const id = await sessionIdFromToken(token)
+    db.delete(sessions).where(eq(sessions.id, id)).run()
   }
   deleteCookie(c, SESSION_COOKIE, { path: '/' })
 }
 
-/** 作成できたらユーザー ID を、メールアドレスが登録済みなら null を返す */
-export async function createUser(user: { email: string; name: string; password: string; role?: Role }) {
-  const [inserted] = await db.batch([
-    // 事前の存在確認だけに頼らないのは、確認と INSERT の間に同じメールで登録されると UNIQUE 制約違反になるため
-    db.prepare('INSERT INTO users (email, name, password_hash, role) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING RETURNING id')
-      .bind(user.email, user.name, await hashPassword(user.password), user.role ?? 'student'),
-    db.prepare('DELETE FROM email_verifications WHERE email = ?').bind(user.email),
-  ])
-  return (inserted.results[0] as { id: number } | undefined)?.id ?? null
+/** 作成できたらユーザー ID を、メールアドレスかユーザー名が登録済みならどちらが重複したかを返す */
+export async function createUser(user: { email: string; name: string; username: string; password: string; role?: Role }) {
+  const passwordHash = await hashPassword(user.password)
+  return db.transaction((tx): { id: number } | { taken: 'email' | 'username' } => {
+    const inserted = tx
+      .insert(users)
+      .values({ email: user.email, name: user.name, username: user.username, passwordHash, role: user.role ?? 'student' })
+      // 事前の存在確認だけに頼らないのは、確認と INSERT の間に同じメールやユーザー名で登録されると UNIQUE 制約違反になるため
+      .onConflictDoNothing()
+      .returning({ id: users.id })
+      .get()
+    const emailTaken = !inserted && !!tx.select({ id: users.id }).from(users).where(eq(users.email, user.email)).get()
+    // ユーザー名の重複で確認用トークンを消さないのは、別のユーザー名で登録をやり直せるようにするため
+    if (inserted || emailTaken) tx.delete(emailVerifications).where(eq(emailVerifications.email, user.email)).run()
+    if (inserted) return { id: inserted.id }
+    return { taken: emailTaken ? 'email' : 'username' }
+  })
 }
 
 /** メール確認用のトークンを発行する。DB にはハッシュだけを保存し、平文はメールのリンクにだけ載せる */
 export async function createEmailVerification(email: string, next: string) {
   const token = randomToken()
   const t = now()
-  await db.batch([
-    db.prepare('DELETE FROM email_verifications WHERE expires_at <= ?').bind(t),
-    db.prepare('INSERT INTO email_verifications (token_hash, email, next, expires_at) VALUES (?, ?, ?, ?)')
-      .bind(await hashToken(token), email, next, t + EMAIL_VERIFICATION_TTL),
-  ])
+  const tokenHash = await hashToken(token)
+  db.transaction((tx) => {
+    tx.delete(emailVerifications).where(lte(emailVerifications.expiresAt, t)).run()
+    tx.insert(emailVerifications).values({ tokenHash, email, next, expiresAt: t + EMAIL_VERIFICATION_TTL }).run()
+  })
   return token
 }
 
 export async function findEmailVerification(token: string) {
   if (!token) return null
-  return db.prepare('SELECT email, next FROM email_verifications WHERE token_hash = ? AND expires_at > ?')
-    .bind(await hashToken(token), now())
-    .first<{ email: string; next: string }>()
+  const tokenHash = await hashToken(token)
+  const row = db
+    .select({ email: emailVerifications.email, next: emailVerifications.next })
+    .from(emailVerifications)
+    .where(and(eq(emailVerifications.tokenHash, tokenHash), gt(emailVerifications.expiresAt, now())))
+    .get()
+  return row ?? null
 }
 
 /** 現在のセッション以外を無効化する（パスワード変更時など） */
 export async function destroyOtherSessions(c: Context<AppEnv>, userId: number) {
   const token = await readSessionToken(c)
   const current = token ? await sessionIdFromToken(token) : ''
-  await db.prepare('DELETE FROM sessions WHERE user_id = ? AND id != ?').bind(userId, current).run()
+  db.delete(sessions).where(and(eq(sessions.userId, userId), ne(sessions.id, current))).run()
 }
 
-/**
- * セッションからユーザーを復元する。
- * GET のときはナビ用の受講コース一覧も同じ batch でまとめて取得する。
- */
+const userColumns = { id: users.id, email: users.email, name: users.name, username: users.username, role: users.role }
+
+const findSessionUser = (sid: string) =>
+  db
+    .select({ ...userColumns, expiresAt: sessions.expiresAt })
+    .from(sessions)
+    .innerJoin(users, eq(users.id, sessions.userId))
+    .where(and(eq(sessions.id, sid), gt(sessions.expiresAt, now())))
+    .get()
+
+/** セッションからユーザーを復元する。GET のときはナビ用の受講コース一覧も取得する */
 export const session = createMiddleware<AppEnv>(async (c, next) => {
   c.set('user', null)
   c.set('navCourses', [])
@@ -146,44 +166,31 @@ export const session = createMiddleware<AppEnv>(async (c, next) => {
   }
 
   const sid = await sessionIdFromToken(token)
-  const t = now()
-  const userQuery = db
-    .prepare(
-      `SELECT u.id, u.email, u.name, u.role, s.expires_at
-       FROM sessions s JOIN users u ON u.id = s.user_id
-       WHERE s.id = ? AND s.expires_at > ?`,
-    )
-    .bind(sid, t)
-
-  let row: (User & { expires_at: number }) | null
-  if (c.req.method === 'GET') {
-    const navQuery = db
-      .prepare(
-        `SELECT c.id, c.title, c.color
-         FROM sessions s
-         JOIN enrollments e ON e.user_id = s.user_id
-         JOIN courses c ON c.id = e.course_id
-         WHERE s.id = ? AND s.expires_at > ?
-         ORDER BY c.title LIMIT 12`,
-      )
-      .bind(sid, t)
-    const [u, nav] = await db.batch([userQuery, navQuery])
-    row = (u.results[0] as (User & { expires_at: number }) | undefined) ?? null
-    c.set('navCourses', nav.results as NavCourse[])
-  } else {
-    row = await userQuery.first()
-  }
-
+  const row = findSessionUser(sid)
   if (!row) {
     deleteCookie(c, SESSION_COOKIE, { path: '/' })
     return next()
   }
 
-  const { expires_at, ...user } = row
+  const { expiresAt, ...user } = row
   c.set('user', user)
+  if (c.req.method === 'GET') {
+    c.set(
+      'navCourses',
+      db
+        .select({ id: courses.id, title: courses.title, color: courses.color })
+        .from(enrollments)
+        .innerJoin(courses, eq(courses.id, enrollments.courseId))
+        .where(eq(enrollments.userId, user.id))
+        .orderBy(courses.title)
+        .limit(12)
+        .all(),
+    )
+  }
 
-  if (expires_at - t < SESSION_REFRESH_BELOW) {
-    await db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?').bind(t + SESSION_TTL, sid).run()
+  const t = now()
+  if (expiresAt - t < SESSION_REFRESH_BELOW) {
+    db.update(sessions).set({ expiresAt: t + SESSION_TTL }).where(eq(sessions.id, sid)).run()
     await setSessionCookie(c, token)
   }
 
@@ -195,14 +202,10 @@ export async function userFromCookieHeader(header: string | undefined) {
   if (!header) return null
   const token = (await parseSigned(header, config.sessionSecret, SESSION_COOKIE))[SESSION_COOKIE]
   if (typeof token !== 'string') return null
-  return db
-    .prepare(
-      `SELECT u.id, u.email, u.name, u.role
-       FROM sessions s JOIN users u ON u.id = s.user_id
-       WHERE s.id = ? AND s.expires_at > ?`,
-    )
-    .bind(await sessionIdFromToken(token), now())
-    .first<User>()
+  const row = findSessionUser(await sessionIdFromToken(token))
+  if (!row) return null
+  const { expiresAt, ...user } = row
+  return user
 }
 
 export const requireAuth = createMiddleware<AppEnv>(async (c, next) => {

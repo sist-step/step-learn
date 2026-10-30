@@ -1,9 +1,11 @@
 import type { IncomingHttpHeaders, Server as HttpServer } from 'node:http'
+import { and, eq } from 'drizzle-orm'
 import { Server, type Socket } from 'socket.io'
 import { userFromCookieHeader } from './auth'
 import { config } from './config'
 import { getCourseAccessFor } from './courses'
 import { db } from './db'
+import { items } from './schema'
 import {
   MAX_FRAME_BYTES,
   MAX_HEIGHT,
@@ -71,7 +73,7 @@ const isMode = (m: unknown): m is ShareMode => m === 'present' || m === 'view'
 const isId = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n > 0
 
 const isScreenItem = async (courseId: number, itemId: number) =>
-  !!(await db.prepare('SELECT 1 FROM items WHERE id = ? AND course_id = ? AND type = ?').bind(itemId, courseId, 'screen').first())
+  !!db.select({ id: items.id }).from(items).where(and(eq(items.id, itemId), eq(items.courseId, courseId), eq(items.type, 'screen'))).get()
 
 const isDimension = (n: unknown, max: number): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0 && n <= max
 

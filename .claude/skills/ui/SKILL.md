@@ -137,10 +137,10 @@ CSS は 1 ファイルにまとめず、使う部品・画面の隣に置く。�
 | --- | --- | --- |
 | `src/styles/base.css` | デザイントークン・リセット・共通ユーティリティ（`stack` `row` `muted` `form-actions` `toolbar` `row-actions` など）・アニメーション | 常に |
 | `src/components/<部品>.css` | その `.tsx` の部品の見た目（`button.css` なら `Button` / `IconButton`） | 部品が描かれたとき |
-| `src/routes/<画面>.css` | その画面だけで使うクラス（`courses.css` ならセクションやアイテムの行） | 画面が `<Styles use={[...]} />` で登録したとき |
+| `src/routes/<ルート>/<ルート>.css` | その画面だけで使うクラス（`courses/courses.css` ならセクションやアイテムの行） | 画面が `<Styles use={[...]} />` で登録したとき |
 
 - 部品は描画時に `useStyle('/src/components/button.css')` で自分の CSS を登録する（`src/components/style.tsx`）。新しい部品を作ったら、使う CSS をこれで登録する
-- 画面専用の CSS は、その画面のマークアップの先頭に `<Styles use={['/src/routes/courses.css']} />` を置いて登録する
+- 画面専用の CSS は、その画面の `views.tsx` のマークアップの先頭に `<Styles use={['/src/routes/courses/courses.css']} />` を置いて登録する
 - CSS ファイルを足したら、`src/components/style.tsx` の `STYLESHEETS` に追加する。並びがカスケードの順（同じ詳細度なら後ろが勝つ）なので、上書きしたいファイルより後ろに置く。パスは型で決まるので、登録し忘れや書き間違いは型チェックで分かる
 - ビルドでは `src/**/*.css` がすべてクライアント側の入力になる（`vite.config.ts`）。追加の設定は要らない
 - 再読み込みなしの画面遷移では、移動先に必要で未読み込みの CSS を、読み込み終わってから本文を差し替える（`client.ts` の `loadStyles`）。読み込み済みの CSS は外さない

@@ -1,6 +1,9 @@
+import { and, eq, max, sql, type SQL } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/sqlite-core'
 import type { Context } from 'hono'
 import type { AppEnv, Course, CourseRole, User } from './types'
 import { db } from './db'
+import { courses, enrollments, items, sections, users } from './schema'
 
 export type CourseAccess = {
   course: Course
@@ -13,44 +16,50 @@ export type CourseAccess = {
 export const getCourseAccess = (c: Context<AppEnv>, courseId: number) => getCourseAccessFor(c.var.user!, courseId)
 
 export async function getCourseAccessFor(user: User, courseId: number): Promise<CourseAccess | null> {
-  const row = await db.prepare(
-    `SELECT c.*, e.role AS my_role
-     FROM courses c LEFT JOIN enrollments e ON e.course_id = c.id AND e.user_id = ?
-     WHERE c.id = ?`,
-  )
-    .bind(user.id, courseId)
-    .first<Course & { my_role: CourseRole | null }>()
+  const row = db
+    .select({ course: courses, role: enrollments.role })
+    .from(courses)
+    .leftJoin(enrollments, and(eq(enrollments.courseId, courses.id), eq(enrollments.userId, user.id)))
+    .where(eq(courses.id, courseId))
+    .get()
   if (!row) return null
 
-  const { my_role, ...course } = row
-  const canManage = user.role === 'admin' || my_role === 'teacher'
+  const canManage = user.role === 'admin' || row.role === 'teacher'
   // 参加していないコースは存在しないものとして扱う
-  if (!canManage && !my_role) return null
-  return { course, role: my_role, canManage }
+  if (!canManage && !row.role) return null
+  return { course: row.course, role: row.role, canManage }
 }
 
-/**
- * position を持つ行を1つ上下に動かす。並びを 1..n に正規化し、変化した行だけ更新する。
- * table / scope は呼び出し側の固定文字列のみを渡すこと。
- */
-export async function moveRow(
-  table: 'sections' | 'items',
-  scope: 'course_id' | 'section_id',
-  scopeId: number,
-  id: number,
-  dir: 'up' | 'down',
-) {
-  const { results } = await db
-    .prepare(`SELECT id, position FROM ${table} WHERE ${scope} = ? ORDER BY position, id`)
-    .bind(scopeId)
-    .all<{ id: number; position: number }>()
-  const i = results.findIndex((r) => r.id === id)
+/** courses を FROM に含むクエリで使う、コースの参加者数 */
+export const memberCount = () => db.$count(enrollments, eq(enrollments.courseId, courses.id))
+
+/** courses を FROM に含むクエリで使う、コースの教師の名前を「、」でつないだもの */
+export function teacherNames() {
+  const t = alias(enrollments, 't')
+  return sql<string | null>`(${db
+    .select({ names: sql`group_concat(${users.name}, '、')` })
+    .from(t)
+    .innerJoin(users, eq(users.id, t.userId))
+    .where(and(eq(t.courseId, courses.id), eq(t.role, 'teacher')))})`
+}
+
+type Ordered = typeof sections | typeof items
+
+/** 末尾に足すときの position */
+export function nextPosition(table: Ordered, scope: SQL) {
+  const row = db.select({ last: max(table.position) }).from(table).where(scope).get()
+  return (row?.last ?? 0) + 1
+}
+
+/** position を持つ行を1つ上下に動かす。並びを 1..n に正規化し、変化した行だけ更新する */
+export function moveRow(table: Ordered, scope: SQL, id: number, dir: 'up' | 'down') {
+  const rows = db.select({ id: table.id, position: table.position }).from(table).where(scope).orderBy(table.position, table.id).all()
+  const i = rows.findIndex((r) => r.id === id)
   const j = dir === 'up' ? i - 1 : i + 1
-  if (i < 0 || j < 0 || j >= results.length) return
-  ;[results[i], results[j]] = [results[j], results[i]]
-  const updates = results
-    .map((r, idx) => ({ ...r, next: idx + 1 }))
-    .filter((r) => r.position !== r.next)
-    .map((r) => db.prepare(`UPDATE ${table} SET position = ? WHERE id = ?`).bind(r.next, r.id))
-  if (updates.length) await db.batch(updates)
+  if (i < 0 || j < 0 || j >= rows.length) return
+  ;[rows[i], rows[j]] = [rows[j], rows[i]]
+  const updates = rows.map((r, idx) => ({ ...r, next: idx + 1 })).filter((r) => r.position !== r.next)
+  db.transaction((tx) => {
+    for (const r of updates) tx.update(table).set({ position: r.next }).where(eq(table.id, r.id)).run()
+  })
 }
