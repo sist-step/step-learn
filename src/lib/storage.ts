@@ -9,6 +9,8 @@ import { config } from './config'
 
 export const MAX_FILE_SIZE = 30 * 1024 * 1024 // 30MB
 
+export const FILE_TOO_LARGE = `ファイルサイズは ${formatBytes(MAX_FILE_SIZE)} までです。`
+
 export type StoredFile = { key: string; name: string; size: number; type: string }
 export type ServeOptions = { filename: string; contentType: string; inline: boolean }
 

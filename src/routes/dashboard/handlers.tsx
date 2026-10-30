@@ -1,10 +1,10 @@
-import { and, desc, eq } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 import type { CourseCardData } from '../../components/ui'
 import { canCreateCourse } from '../../lib/auth'
-import { memberCount } from '../../lib/courses'
+import { memberCount, visibleDoneCount, visibleItemCount } from '../../lib/courses'
 import { db } from '../../lib/db'
-import { completions, courses, enrollments, items } from '../../lib/schema'
+import { courses, enrollments } from '../../lib/schema'
 import type { AppEnv } from '../../lib/types'
 import { DashboardPage } from './views'
 
@@ -17,9 +17,10 @@ export async function show(c: Context<AppEnv>) {
       title: courses.title,
       summary: courses.summary,
       color: courses.color,
+      iconImage: courses.iconImage,
       role: enrollments.role,
-      total: db.$count(items, eq(items.courseId, courses.id)),
-      done: db.$count(completions, and(eq(completions.userId, user.id), eq(completions.courseId, courses.id))),
+      total: visibleItemCount(courses.id),
+      done: visibleDoneCount(user.id, courses.id),
       members: memberCount(),
     })
     .from(enrollments)

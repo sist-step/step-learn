@@ -1,12 +1,13 @@
 import type { Child } from 'hono/jsx'
-import type { CourseAccess } from '../lib/courses'
+import { courseImageUrl, type CourseAccess } from '../lib/courses'
 import { COURSE_COLORS, type Course, type ItemType } from '../lib/types'
 import { Button } from './button'
 import { Card } from './card'
+import { cx } from './cx'
 import { TextAreaField, TextField } from './form'
 import { Icon, type IconName } from './icons'
 import { Modal } from './overlay'
-import { Breadcrumbs, ProgressRing, Tabs, type TabItem } from './ui'
+import { Breadcrumbs, CourseIcon, ProgressRing, Tabs, courseInitials, type TabItem } from './ui'
 import { useStyle } from './style'
 
 type Tab = 'content' | 'participants' | 'settings'
@@ -14,30 +15,27 @@ type Tab = 'content' | 'participants' | 'settings'
 export const CourseHeader = ({
   access,
   tab,
-  meta,
   progress,
   actions,
 }: {
   access: CourseAccess
   tab?: Tab
-  meta?: Child
   progress?: { done: number; total: number }
   actions?: Child
 }) => {
   useStyle('/src/components/course.css')
   const { course, canManage } = access
   const base = `/courses/${course.id}`
+  const hero = courseImageUrl(course.id, 'hero', course.heroImage)
   return (
     <>
       <Breadcrumbs items={[{ href: '/courses', label: 'コース' }, { label: course.code || course.title }]} />
-      <section class={`course-hero tone-${course.color}`}>
-        <span class="course-hero-mono" aria-hidden="true">
-          {[...(course.code || course.title)].slice(0, 2).join('')}
-        </span>
+      {hero && <img class="course-hero-cover" src={hero} alt="" />}
+      <section class={cx('course-hero', `tone-${course.color}`, hero && 'has-cover')}>
+        <CourseIcon course={course} text={courseInitials(course)} class="course-hero-mono" />
         <div class="course-hero-body">
           <h1>{course.title}</h1>
           {course.summary && <p class="course-hero-summary">{course.summary}</p>}
-          {meta && <div class="course-hero-meta">{meta}</div>}
         </div>
         {(actions || (progress && progress.total > 0)) && (
           <div class="course-hero-side">
@@ -101,19 +99,21 @@ const CourseFields = ({ values, errors = {} }: { values: CourseFormValues; error
 }
 
 export const CourseForm = ({
+  id,
   action,
   values,
   errors,
   submitLabel,
   cancelHref,
 }: {
+  id?: string
   action: string
   values: CourseFormValues
   errors?: CourseFormErrors
   submitLabel: string
   cancelHref: string
 }) => (
-  <Card as="form" method="post" action={action} class="stack course-form" data-loading-form>
+  <Card as="form" id={id} method="post" action={action} class="stack course-form" data-loading-form>
     <CourseFields values={values} errors={errors} />
     <div class="form-actions">
       <Button href={cancelHref} variant="ghost">

@@ -258,6 +258,44 @@ document.addEventListener('change', (e) => {
   if (title && !title.value) title.value = input.files[0].name.replace(/\.[^.]+$/, '')
 })
 
+// --- 選んだ画像をプレビューに出す（上限を超えていたら送信前に選択を取り消し、保存済みの画像に戻す）
+document.addEventListener('change', (e) => {
+  const input = e.target as HTMLInputElement
+  if (!input.matches('[data-image-input]')) return
+  let file = input.files?.[0]
+  if (file && file.size > Number(input.dataset.maxSize)) {
+    input.value = ''
+    file = undefined
+    toast(input.dataset.tooLarge ?? '', 'error')
+  }
+  const preview = input.closest('.image-field')?.querySelector<HTMLImageElement>('[data-image-preview]')
+  if (!preview) return
+  if (preview.src.startsWith('blob:')) URL.revokeObjectURL(preview.src)
+  const src = file ? URL.createObjectURL(file) : preview.dataset.saved
+  // 空文字を src に入れないのは、ページ自身の URL として読み込みが走るため
+  if (src) preview.src = src
+  else preview.removeAttribute('src')
+  preview.hidden = !src
+})
+
+// --- 目次（data-toc）で、いま表示している節のリンクを強調する
+function updateToc() {
+  const toc = document.querySelector('[data-toc]')
+  if (!toc) return
+  const links = $$<HTMLAnchorElement>('a[href^="#"]', toc)
+  const offset = parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0
+  let current = links[0]
+  for (const a of links) {
+    const section = document.getElementById(a.hash.slice(1))
+    if (section && section.getBoundingClientRect().top - offset <= 8) current = a
+  }
+  // 末尾まで来たら最後の節にしないと、短い節は上端まで届かず一度も強調されない
+  if (innerHeight + scrollY >= document.documentElement.scrollHeight - 2) current = links.find((a) => a.hash === location.hash) ?? links.at(-1)!
+  links.forEach((a) => a.classList.toggle('active', a === current))
+}
+addEventListener('scroll', updateToc, { passive: true })
+addEventListener('hashchange', updateToc)
+
 // --- 参加者を追加するモーダルのユーザー検索
 let userSearchTimer = 0
 let userSearchController: AbortController | null = null
@@ -546,6 +584,7 @@ function initPage() {
   $$('[data-toast]').forEach((el) => dismissLater(el, 5000))
   restoreCollapsed()
   applyEditMode(readEditMode())
+  updateToc()
 }
 initPage()
 

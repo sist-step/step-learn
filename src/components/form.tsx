@@ -1,4 +1,5 @@
 import type { Child, JSX } from 'hono/jsx'
+import { IMAGE_ACCEPT, IMAGE_TOO_LARGE, MAX_IMAGE_SIZE } from '../lib/images'
 import { cx } from './cx'
 import { Icon, type IconName } from './icons'
 import { useStyle } from './style'
@@ -176,6 +177,44 @@ export const FileField = ({
   return (
     <FormField id={id} label={label} error={error} hint={hint} class={fieldClass}>
       <FileInput id={id} name={name} aria-describedby={error || hint ? `${id}-desc` : undefined} {...rest} />
+    </FormField>
+  )
+}
+
+export const ImageField = ({
+  label,
+  name,
+  id = `f-${name}`,
+  src,
+  aspect = '16 / 9',
+  width,
+  error,
+  hint,
+  fieldClass,
+  ...rest
+}: LabeledProps & { src?: string | null; aspect?: string; width?: number } & Omit<
+  JSX.IntrinsicElements['input'],
+  'id' | 'name' | 'type' | 'src' | 'width'
+>) => {
+  useStyle('/src/components/form.css')
+  return (
+    <FormField id={id} label={label} error={error} hint={hint} class={fieldClass}>
+      <div class="image-field">
+        <div class="image-preview" style={`aspect-ratio: ${aspect};${width ? ` width: ${width}px;` : ''}`}>
+          <Icon name="photo" size={28} />
+          <img src={src ?? undefined} alt="" hidden={!src} data-image-preview data-saved={src ?? undefined} />
+        </div>
+        <FileInput
+          id={id}
+          name={name}
+          accept={IMAGE_ACCEPT}
+          aria-describedby={error || hint ? `${id}-desc` : undefined}
+          data-image-input
+          data-max-size={String(MAX_IMAGE_SIZE)}
+          data-too-large={IMAGE_TOO_LARGE}
+          {...rest}
+        />
+      </div>
     </FormField>
   )
 }
