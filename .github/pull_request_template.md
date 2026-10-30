@@ -31,6 +31,7 @@
 
 - [ ] `npm run build` が通る
 - [ ] 型チェックが通る（`npm run typecheck`）
+- [ ] lint とフォーマットが通る（`npm run lint`・`npm run format:check`）
 - [ ] 影響する画面をブラウザで確認した
 - [ ] 権限ごと（管理者 / 教師 / 学生 / 未ログイン）の挙動を確認した
 
