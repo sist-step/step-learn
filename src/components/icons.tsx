@@ -10,6 +10,7 @@ import maximize from 'heroicons/24/outline/arrows-pointing-out.svg?raw'
 import menu from 'heroicons/24/outline/bars-3.svg?raw'
 import book from 'heroicons/24/outline/book-open.svg?raw'
 import check from 'heroicons/24/outline/check.svg?raw'
+import checkCircle from 'heroicons/24/outline/check-circle.svg?raw'
 import chevronDoubleLeft from 'heroicons/24/outline/chevron-double-left.svg?raw'
 import chevronDown from 'heroicons/24/outline/chevron-down.svg?raw'
 import chevronLeft from 'heroicons/24/outline/chevron-left.svg?raw'
@@ -30,7 +31,6 @@ import pencil from 'heroicons/24/outline/pencil.svg?raw'
 import plus from 'heroicons/24/outline/plus.svg?raw'
 import shield from 'heroicons/24/outline/shield-check.svg?raw'
 import layers from 'heroicons/24/outline/square-3-stack-3d.svg?raw'
-import sun from 'heroicons/24/outline/sun.svg?raw'
 import trash from 'heroicons/24/outline/trash.svg?raw'
 import user from 'heroicons/24/outline/user.svg?raw'
 import users from 'heroicons/24/outline/users.svg?raw'
@@ -51,6 +51,7 @@ const svgs = {
   chevronDoubleLeft,
   x,
   check,
+  checkCircle,
   chevronDown,
   chevronRight,
   chevronLeft,
@@ -73,7 +74,6 @@ const svgs = {
   monitor,
   maximize,
   moon,
-  sun,
 } as const
 
 export type IconName = keyof typeof svgs

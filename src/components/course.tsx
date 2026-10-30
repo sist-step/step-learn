@@ -1,8 +1,13 @@
 import type { Child } from 'hono/jsx'
 import type { CourseAccess } from '../lib/courses'
 import { COURSE_COLORS, type Course, type ItemType } from '../lib/types'
+import { Button } from './button'
+import { Card } from './card'
+import { TextAreaField, TextField } from './form'
 import { Icon, type IconName } from './icons'
-import { Field, ProgressRing, TextArea } from './ui'
+import { Modal } from './overlay'
+import { Breadcrumbs, ProgressRing, Tabs, type TabItem } from './ui'
+import { useStyle } from './style'
 
 type Tab = 'content' | 'participants' | 'settings'
 
@@ -19,15 +24,12 @@ export const CourseHeader = ({
   progress?: { done: number; total: number }
   actions?: Child
 }) => {
+  useStyle('/src/components/course.css')
   const { course, canManage } = access
   const base = `/courses/${course.id}`
   return (
     <>
-      <nav class="crumbs" aria-label="パンくず">
-        <a href="/courses">コース</a>
-        <Icon name="chevronRight" size={14} />
-        <span>{course.code || course.title}</span>
-      </nav>
+      <Breadcrumbs items={[{ href: '/courses', label: 'コース' }, { label: course.code || course.title }]} />
       <section class={`course-hero tone-${course.color}`}>
         <span class="course-hero-mono" aria-hidden="true">
           {[...(course.code || course.title)].slice(0, 2).join('')}
@@ -52,27 +54,16 @@ export const CourseHeader = ({
         )}
       </section>
       {tab && (
-        <nav class="tabs" aria-label="コースメニュー">
-          <a href={base} class={tab === 'content' ? 'tab active' : 'tab'} aria-current={tab === 'content' ? 'page' : undefined}>
-            コンテンツ
-          </a>
-          <a
-            href={`${base}/participants`}
-            class={tab === 'participants' ? 'tab active' : 'tab'}
-            aria-current={tab === 'participants' ? 'page' : undefined}
-          >
-            参加者
-          </a>
-          {canManage && (
-            <a
-              href={`${base}/settings`}
-              class={tab === 'settings' ? 'tab active' : 'tab'}
-              aria-current={tab === 'settings' ? 'page' : undefined}
-            >
-              設定
-            </a>
-          )}
-        </nav>
+        <Tabs
+          label="コースメニュー"
+          items={(
+            [
+              { href: base, label: 'コンテンツ', active: tab === 'content' },
+              { href: `${base}/participants`, label: '参加者', active: tab === 'participants' },
+              canManage && { href: `${base}/settings`, label: '設定', active: tab === 'settings' },
+            ] satisfies (TabItem | false)[]
+          ).filter((t) => t !== false)}
+        />
       )}
     </>
   )
@@ -81,30 +72,33 @@ export const CourseHeader = ({
 export type CourseFormValues = Partial<Pick<Course, 'title' | 'code' | 'summary' | 'color'>>
 export type CourseFormErrors = Partial<Record<'title' | 'code' | 'summary', string>>
 
-const CourseFields = ({ values, errors = {} }: { values: CourseFormValues; errors?: CourseFormErrors }) => (
-  <>
-    <div class="grid-2">
-      <Field label="コース名" name="title" value={values.title} error={errors.title} required maxlength={120} placeholder="例：情報リテラシー入門" autofocus={!values.title} />
-      <Field label="コースコード（任意）" name="code" value={values.code} error={errors.code} maxlength={30} placeholder="例：INFO101" hint="一覧やカードに表示される短い識別名" />
-    </div>
-    <TextArea label="概要" name="summary" value={values.summary} error={errors.summary} rows={3} placeholder="このコースで学べることを簡潔に" />
-
-    <fieldset class="field">
-      <legend>カラー</legend>
-      <div class="swatches">
-        {COURSE_COLORS.map((color) => (
-          <label class={`swatch tone-${color}`} title={color}>
-            <input type="radio" name="color" value={color} checked={(values.color ?? 'cyan') === color} />
-            <span class="swatch-dot">
-              <Icon name="check" size={14} />
-            </span>
-            <span class="sr-only">{color}</span>
-          </label>
-        ))}
+const CourseFields = ({ values, errors = {} }: { values: CourseFormValues; errors?: CourseFormErrors }) => {
+  useStyle('/src/components/course.css')
+  return (
+    <>
+      <div class="grid-2">
+        <TextField label="コース名" name="title" value={values.title} error={errors.title} required maxlength={120} placeholder="例：情報リテラシー入門" autofocus={!values.title} />
+        <TextField label="コースコード（任意）" name="code" value={values.code} error={errors.code} maxlength={30} placeholder="例：INFO101" hint="一覧やカードに表示される短い識別名" />
       </div>
-    </fieldset>
-  </>
-)
+      <TextAreaField label="概要" name="summary" value={values.summary} error={errors.summary} rows={3} placeholder="このコースで学べることを簡潔に" />
+
+      <fieldset class="field">
+        <legend>カラー</legend>
+        <div class="swatches">
+          {COURSE_COLORS.map((color) => (
+            <label class={`swatch tone-${color}`} title={color}>
+              <input type="radio" name="color" value={color} checked={(values.color ?? 'cyan') === color} />
+              <span class="swatch-dot">
+                <Icon name="check" size={14} />
+              </span>
+              <span class="sr-only">{color}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+    </>
+  )
+}
 
 export const CourseForm = ({
   action,
@@ -119,56 +113,53 @@ export const CourseForm = ({
   submitLabel: string
   cancelHref: string
 }) => (
-  <form method="post" action={action} class="card stack course-form" data-loading-form>
+  <Card as="form" method="post" action={action} class="stack course-form" data-loading-form>
     <CourseFields values={values} errors={errors} />
     <div class="form-actions">
-      <a href={cancelHref} class="btn btn-ghost">
+      <Button href={cancelHref} variant="ghost">
         キャンセル
-      </a>
-      <button type="submit" class="btn btn-primary">
+      </Button>
+      <Button type="submit" variant="primary">
         {submitLabel}
-      </button>
+      </Button>
     </div>
-  </form>
+  </Card>
 )
 
 const CREATE_COURSE_MODAL = 'create-course'
 
-// <dialog> を使わないのは、外側のクリックで閉じる処理や開くための showModal() を client.ts に書かずに済ませるため
 export const CreateCourseButton = () => (
   <>
-    <button type="button" class="btn btn-primary" popovertarget={CREATE_COURSE_MODAL}>
-      <Icon name="plus" /> コースを作成
-    </button>
-    <div id={CREATE_COURSE_MODAL} popover="auto" class="modal" role="dialog" aria-labelledby={`${CREATE_COURSE_MODAL}-title`}>
+    <Button variant="primary" icon="plus" popovertarget={CREATE_COURSE_MODAL}>
+      コースを作成
+    </Button>
+    <Modal
+      id={CREATE_COURSE_MODAL}
+      heading="コースを作成"
+      description="作成後に参加者タブから教師と学生を追加します。基本情報はあとからいつでも変更できます。"
+    >
       <form method="post" action="/courses" class="stack" data-loading-form>
-        <div class="modal-head">
-          <div>
-            <h2 id={`${CREATE_COURSE_MODAL}-title`}>コースを作成</h2>
-            <p class="muted small">作成後に参加者タブから教師と学生を追加します。基本情報はあとからいつでも変更できます。</p>
-          </div>
-          <button type="button" class="icon-btn" popovertarget={CREATE_COURSE_MODAL} popovertargetaction="hide" aria-label="閉じる" title="閉じる">
-            <Icon name="x" />
-          </button>
-        </div>
         <CourseFields values={{}} />
         <div class="form-actions">
-          <button type="button" class="btn btn-ghost" popovertarget={CREATE_COURSE_MODAL} popovertargetaction="hide">
+          <Button variant="ghost" popovertarget={CREATE_COURSE_MODAL} popovertargetaction="hide">
             キャンセル
-          </button>
-          <button type="submit" class="btn btn-primary">
+          </Button>
+          <Button type="submit" variant="primary">
             コースを作成
-          </button>
+          </Button>
         </div>
       </form>
-    </div>
+    </Modal>
   </>
 )
 
 const ITEM_ICONS: Record<ItemType, IconName> = { page: 'page', link: 'link', file: 'file', screen: 'monitor' }
 
-export const ItemIcon = ({ type }: { type: ItemType }) => (
-  <span class={`item-icon kind-${type}`}>
-    <Icon name={ITEM_ICONS[type]} size={16} />
-  </span>
-)
+export const ItemIcon = ({ type }: { type: ItemType }) => {
+  useStyle('/src/components/course.css')
+  return (
+    <span class={`item-icon kind-${type}`}>
+      <Icon name={ITEM_ICONS[type]} size={16} />
+    </span>
+  )
+}

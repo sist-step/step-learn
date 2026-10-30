@@ -1,6 +1,7 @@
 import { raw } from 'hono/html'
 import { jsxRenderer } from 'hono/jsx-renderer'
-import { Link, Script, ViteClient } from 'vite-ssr-components/hono'
+import { Script, ViteClient } from 'vite-ssr-components/hono'
+import { StyleLinks, StyleLinksResolver } from './components/style'
 import { getTheme } from './lib/http'
 
 declare module 'hono' {
@@ -22,7 +23,7 @@ export const renderer = jsxRenderer(({ children, title }, c) => {
         <link rel="icon" href="/favicon.png" type="image/png" sizes="160x160" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <ViteClient />
-        <Link href="/src/style.css" rel="stylesheet" />
+        <StyleLinks />
         <Script src="/src/client.ts" />
         <noscript>
           <style>{raw('body > :not(noscript) { display: none !important; }')}</style>
@@ -30,6 +31,7 @@ export const renderer = jsxRenderer(({ children, title }, c) => {
       </head>
       <body>
         {children}
+        <StyleLinksResolver />
         <noscript>
           <div class="noscript">
             <img src="/favicon.png" alt="" width={48} height={48} />

@@ -1,9 +1,11 @@
 import { Hono } from 'hono'
 import type { Child } from 'hono/jsx'
 import { CreateCourseButton } from '../components/course'
-import { Icon } from '../components/icons'
+import { IconButton } from '../components/button'
+import { SearchBox, Select } from '../components/form'
 import { AppShell } from '../components/layout'
-import { Avatar, EmptyState, PageHeader, formatDate } from '../components/ui'
+import { Stat, Stats, Table } from '../components/card'
+import { Avatar, EmptyState, PageHeader, Person, Tabs, formatDate } from '../components/ui'
 import { requireAuth, requireRole } from '../lib/auth'
 import { field, intParam, readForm, redirectWith } from '../lib/http'
 import { ROLE_LABELS, type AppEnv, type Role } from '../lib/types'
@@ -19,16 +21,12 @@ const TABS: { tab: Tab; href: string; label: string }[] = [
   { tab: 'courses', href: '/admin/courses', label: 'コース' },
 ]
 
+const ROLE_OPTIONS = (['student', 'teacher', 'admin'] as Role[]).map((r) => ({ value: r, label: ROLE_LABELS[r] }))
+
 const AdminShell = ({ tab, children }: { tab: Tab; children: Child }) => (
   <AppShell>
     <PageHeader title="管理" description="ユーザーとコースをまとめて管理します。" />
-    <nav class="tabs" aria-label="管理メニュー">
-      {TABS.map((t) => (
-        <a href={t.href} class={tab === t.tab ? 'tab active' : 'tab'} aria-current={tab === t.tab ? 'page' : undefined}>
-          {t.label}
-        </a>
-      ))}
-    </nav>
+    <Tabs label="管理メニュー" items={TABS.map((t) => ({ href: t.href, label: t.label, active: tab === t.tab }))} />
     {children}
   </AppShell>
 )
@@ -58,69 +56,51 @@ app.get('/', async (c) => {
 
   return c.render(
     <AdminShell tab="users">
-      <div class="stats">
+      <Stats>
         {(['admin', 'teacher', 'student'] as Role[]).map((r) => (
-          <div class="stat">
-            <span class="stat-label">{ROLE_LABELS[r]}</span>
-            <span class="stat-value">{byRole[r] ?? 0}</span>
-          </div>
+          <Stat label={ROLE_LABELS[r]} value={byRole[r] ?? 0} />
         ))}
-      </div>
+      </Stats>
 
       <form method="get" class="toolbar">
-        <label class="search">
-          <Icon name="search" />
-          <input type="search" name="q" value={q} placeholder="名前・メールで検索" data-search aria-label="ユーザーを検索" />
-          <kbd>/</kbd>
-        </label>
+        <SearchBox label="ユーザーを検索" value={q} placeholder="名前・メールで検索" />
       </form>
 
       {users.length === 0 ? (
         <EmptyState icon="users" title="ユーザーが見つかりません" text="検索条件を変えてお試しください。" />
       ) : (
-        <div class="table-card">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>ユーザー</th>
-                <th class="hide-sm">登録日</th>
-                <th class="hide-sm">コース</th>
-                <th>ロール</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr>
-                  <td>
-                    <div class="person">
-                      <Avatar name={u.name} />
-                      <div class="person-meta">
-                        <span class="strong truncate">
-                          {u.name}
-                          {u.id === me.id && <span class="muted small">（あなた）</span>}
-                        </span>
-                        <span class="muted small truncate">{u.email}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td class="hide-sm muted">{formatDate(u.created_at)}</td>
-                  <td class="hide-sm muted">{u.courses}</td>
-                  <td>
-                    <form method="post" action={`/admin/users/${u.id}/role`} data-autosubmit>
-                      <select name="role" class="select-sm" aria-label={`${u.name} のロール`} disabled={u.id === me.id}>
-                        {(['student', 'teacher', 'admin'] as Role[]).map((r) => (
-                          <option value={r} selected={u.role === r}>
-                            {ROLE_LABELS[r]}
-                          </option>
-                        ))}
-                      </select>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table columns={[{ label: 'ユーザー' }, { label: '登録日', class: 'hide-sm' }, { label: 'コース', class: 'hide-sm' }, { label: 'ロール' }]}>
+          {users.map((u) => (
+            <tr>
+              <td>
+                <Person
+                  avatar={<Avatar name={u.name} />}
+                  name={
+                    <>
+                      {u.name}
+                      {u.id === me.id && <span class="muted small">（あなた）</span>}
+                    </>
+                  }
+                  meta={u.email}
+                />
+              </td>
+              <td class="hide-sm muted">{formatDate(u.created_at)}</td>
+              <td class="hide-sm muted">{u.courses}</td>
+              <td>
+                <form method="post" action={`/admin/users/${u.id}/role`} data-autosubmit>
+                  <Select
+                    name="role"
+                    compact
+                    options={ROLE_OPTIONS}
+                    value={u.role}
+                    aria-label={`${u.name} のロール`}
+                    disabled={u.id === me.id}
+                  />
+                </form>
+              </td>
+            </tr>
+          ))}
+        </Table>
       )}
     </AdminShell>,
     { title: 'ユーザー - 管理' },
@@ -170,11 +150,7 @@ app.get('/courses', async (c) => {
     <AdminShell tab="courses">
       <div class="toolbar">
         <form method="get" class="toolbar-grow">
-          <label class="search">
-            <Icon name="search" />
-            <input type="search" name="q" value={q} placeholder="コース名・コードで検索" data-search aria-label="コースを検索" />
-            <kbd>/</kbd>
-          </label>
+          <SearchBox label="コースを検索" value={q} placeholder="コース名・コードで検索" />
         </form>
         <CreateCourseButton />
       </div>
@@ -186,51 +162,39 @@ app.get('/courses', async (c) => {
           text={q ? '別のキーワードで検索してみてください。' : '「コースを作成」から最初のコースを作りましょう。'}
         />
       ) : (
-        <div class="table-card">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>コース</th>
-                <th class="hide-sm">教師</th>
-                <th class="hide-sm">学生</th>
-                <th class="hide-sm">アイテム</th>
-                <th class="hide-sm">作成日</th>
-                <th>
-                  <span class="sr-only">操作</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {courses.map((course) => (
-                <tr>
-                  <td>
-                    <a href={`/courses/${course.id}`} class="person">
-                      <span class={`dot tone-${course.color}`}>{[...course.title][0]}</span>
-                      <span class="person-meta">
-                        <span class="strong truncate">{course.title}</span>
-                        {course.code && <span class="muted small truncate">{course.code}</span>}
-                      </span>
-                    </a>
-                  </td>
-                  <td class="hide-sm muted">{course.teachers ?? '未設定'}</td>
-                  <td class="hide-sm muted">{course.students}</td>
-                  <td class="hide-sm muted">{course.items}</td>
-                  <td class="hide-sm muted">{formatDate(course.created_at)}</td>
-                  <td>
-                    <div class="row-actions">
-                      <a href={`/courses/${course.id}/participants`} class="icon-btn" aria-label={`${course.title} の参加者`} title="参加者">
-                        <Icon name="users" size={16} />
-                      </a>
-                      <a href={`/courses/${course.id}/settings`} class="icon-btn" aria-label={`${course.title} の設定`} title="設定">
-                        <Icon name="sliders" size={16} />
-                      </a>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table
+          columns={[
+            { label: 'コース' },
+            { label: '教師', class: 'hide-sm' },
+            { label: '学生', class: 'hide-sm' },
+            { label: 'アイテム', class: 'hide-sm' },
+            { label: '作成日', class: 'hide-sm' },
+            { label: '操作', srOnly: true },
+          ]}
+        >
+          {courses.map((course) => (
+            <tr>
+              <td>
+                <Person
+                  href={`/courses/${course.id}`}
+                  avatar={<span class={`dot tone-${course.color}`}>{[...course.title][0]}</span>}
+                  name={course.title}
+                  meta={course.code}
+                />
+              </td>
+              <td class="hide-sm muted">{course.teachers ?? '未設定'}</td>
+              <td class="hide-sm muted">{course.students}</td>
+              <td class="hide-sm muted">{course.items}</td>
+              <td class="hide-sm muted">{formatDate(course.created_at)}</td>
+              <td>
+                <div class="row-actions">
+                  <IconButton href={`/courses/${course.id}/participants`} icon="users" label={`${course.title} の参加者`} title="参加者" />
+                  <IconButton href={`/courses/${course.id}/settings`} icon="sliders" label={`${course.title} の設定`} title="設定" />
+                </div>
+              </td>
+            </tr>
+          ))}
+        </Table>
       )}
     </AdminShell>,
     { title: 'コース - 管理' },

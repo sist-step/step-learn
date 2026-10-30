@@ -1,0 +1,149 @@
+/* ==========================================================================
+   アプリシェル
+   ========================================================================== */
+
+.app {
+  min-height: 100dvh;
+  padding-top: var(--topbar-h);
+  background:
+    radial-gradient(50% 40% at 100% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 70%) fixed,
+    radial-gradient(40% 35% at 0% 100%, color-mix(in srgb, var(--info) 6%, transparent), transparent 70%) fixed,
+    var(--bg);
+}
+
+/* sticky にしないのは、Mac で上端を越えて引っ張ったときにヘッダーだけが下がり、fixed のレールと重なるため */
+.topbar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: var(--topbar-h);
+  padding: 0 24px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: saturate(1.6) blur(12px);
+}
+.topbar-start { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.topbar-end { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; }
+.topbar-avatar { display: block; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface); cursor: pointer; transition: box-shadow 0.15s; }
+.topbar-avatar::-webkit-details-marker { display: none; }
+.topbar-avatar:hover, .user-menu[open] > .topbar-avatar { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--border-strong); }
+.topbar-avatar:focus-visible { border-radius: 50%; }
+.nav-open-btn { display: none !important; }
+
+.rail {
+  position: fixed;
+  top: var(--topbar-h);
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  width: var(--rail-w);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px calc((var(--rail-w) - 48px) / 2) 20px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  transition: width 0.2s var(--ease), background 0.2s;
+}
+.rail-head, .rail-heading { display: none; }
+.rail-nav { display: flex; flex-direction: column; gap: 8px; }
+.rail-nav + .rail-nav { margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--border-strong); }
+.rail-foot { display: flex; flex-direction: column; gap: 8px; margin-top: auto; padding-top: 12px; }
+.rail-foot form { display: contents; }
+.rail-link {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  width: 100%;
+  height: 48px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 16px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  white-space: nowrap;
+  text-align: left;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.rail-link > :first-child { justify-self: center; }
+.rail-link:hover { background: var(--surface); color: var(--text); text-decoration: none; }
+.rail-link.active { background: var(--primary); color: var(--on-primary); }
+.rail-link.active .dot { box-shadow: 0 0 0 2px var(--primary), 0 0 0 3.5px color-mix(in srgb, var(--on-primary) 70%, transparent); }
+.rail-label { padding-right: 14px; font-weight: 500; opacity: 0; transition: opacity 0.15s; }
+@media (min-width: 901px) {
+  .rail-nav, .rail-foot { max-width: calc(var(--rail-w-open) - var(--rail-w) + 48px); }
+  .rail:has(:focus-visible) {
+    width: calc(var(--rail-w-open) + var(--rail-fade));
+    background: inherit;
+    mask-image: linear-gradient(to right, #000 calc(100% - var(--rail-fade)), transparent);
+  }
+  .rail:has(:focus-visible) .rail-label { opacity: 1; }
+}
+/* 少し待ってから広げるのは、本文へ向かうカーソルがレールを横切っただけで開閉するのを避けるため */
+@media (min-width: 901px) and (hover: hover) {
+  /* 白や半透明にしないのは、本文の上に浮いた別の面に見えたり、後ろのカードが透けて濁ったりするため。.app と同じ固定背景を引き継いで地続きに見せる */
+  .rail:hover,
+  .rail.is-held {
+    width: calc(var(--rail-w-open) + var(--rail-fade));
+    background: inherit;
+    mask-image: linear-gradient(to right, #000 calc(100% - var(--rail-fade)), transparent);
+    transition-delay: 0.1s;
+  }
+  .rail:hover .rail-label,
+  .rail.is-held .rail-label { opacity: 1; transition-delay: 0.15s; }
+}
+
+.content { max-width: calc(1120px + var(--rail-w)); margin: 0 auto; padding: 16px 32px 80px calc(var(--rail-w) + 8px); }
+.content-wide { max-width: calc(1280px + var(--rail-w)); }
+.backdrop { display: none; }
+
+@media (max-width: 900px) {
+  :root { --topbar-h: 64px; }
+  .topbar { padding: 0 12px; gap: 8px; }
+  .topbar .brand { font-size: 17px; }
+  .topbar .brand-mark { width: 30px; height: 30px; }
+  .nav-open-btn { display: inline-grid !important; width: 40px; height: 40px; }
+  .rail {
+    top: 0;
+    width: 280px;
+    max-width: calc(100vw - 40px);
+    align-items: stretch;
+    gap: 16px;
+    padding: 16px 12px 12px;
+    background: var(--surface);
+    transform: translateX(-100%);
+    transition: transform 0.25s var(--ease);
+  }
+  .nav-open .rail { transform: none; box-shadow: var(--shadow-lg); }
+  .rail-nav + .rail-nav { margin-top: 0; padding-top: 12px; border-top-color: var(--border); }
+  .rail-head { display: flex; align-items: center; justify-content: space-between; padding-left: 6px; }
+  .rail-heading { display: block; padding: 0 10px 4px; font-size: 12px; font-weight: 650; color: var(--muted); }
+  .rail-nav, .rail-foot { align-items: stretch; gap: 2px; }
+  .rail-foot { border-top: 1px solid var(--border); }
+  .rail-link { display: flex; justify-content: flex-start; gap: 12px; width: 100%; height: 44px; padding: 0 10px; border-radius: 12px; color: var(--text-2); text-align: left; }
+  .rail-link:hover { background: var(--surface-2); }
+  .rail-link.active { font-weight: 600; }
+  .rail-label { padding-right: 0; font-weight: inherit; opacity: 1; }
+  .nav-open .backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: rgb(0 0 0 / 0.4);
+    backdrop-filter: blur(2px);
+    animation: fade 0.2s;
+  }
+  .content { padding: 12px 16px 64px; }
+}
+
+.user-menu-panel { width: min(280px, calc(100vw - 24px)); padding: 6px; }
+.user-menu-head { padding: 10px 10px 12px; }
+.user-menu-group { display: flex; flex-direction: column; gap: 2px; padding-top: 6px; margin-top: 6px; border-top: 1px solid var(--border); }

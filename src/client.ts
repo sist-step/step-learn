@@ -22,6 +22,7 @@ document.addEventListener('click', (e) => {
   e.preventDefault()
   const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'
   document.documentElement.dataset.theme = theme
+  $$('[data-theme-toggle]').forEach((el) => el.setAttribute('aria-checked', String(theme === 'dark')))
   document.querySelector('meta[name=color-scheme]')?.setAttribute('content', theme)
   document.cookie = `theme=${theme}; path=/; max-age=31536000; samesite=lax`
 })
@@ -55,23 +56,24 @@ document.addEventListener('click', (e) => {
 // --- トースト
 function toast(message: string, type: 'success' | 'error' | 'info' = 'success') {
   const host = document.querySelector('.toasts')
-  if (!host) return
-  const el = document.createElement('div')
-  el.className = `toast toast-${type}`
-  el.setAttribute('role', 'status')
-  el.textContent = message
+  const template = document.querySelector<HTMLTemplateElement>(`template[data-toast-template="${type}"]`)
+  const el = template?.content.firstElementChild?.cloneNode(true)
+  if (!host || !(el instanceof HTMLElement)) return
+  el.querySelector('[data-toast-message]')!.textContent = message
   host.appendChild(el)
   dismissLater(el)
 }
+function dismiss(el: Element) {
+  if (el.classList.contains('leaving')) return
+  el.classList.add('leaving')
+  el.addEventListener('animationend', () => el.remove(), { once: true })
+}
 function dismissLater(el: Element, ms = 4000) {
-  setTimeout(() => {
-    el.classList.add('leaving')
-    el.addEventListener('animationend', () => el.remove(), { once: true })
-  }, ms)
+  setTimeout(() => dismiss(el), ms)
 }
 document.addEventListener('click', (e) => {
-  const btn = (e.target as Element).closest('[data-toast-close]')
-  btn?.closest('.toast')?.remove()
+  const toastEl = (e.target as Element).closest('[data-toast-close]')?.closest('.toast')
+  if (toastEl) dismiss(toastEl)
 })
 
 // --- パスワード表示切り替え
@@ -207,10 +209,17 @@ document.addEventListener(
   true,
 )
 
-// --- ポップオーバーは外側クリックで閉じる
+// --- ポップオーバーは外側クリックと Esc で閉じる
 document.addEventListener('click', (e) => {
   $$<HTMLDetailsElement>('details.popover[open]').forEach((d) => {
     if (!d.contains(e.target as Node)) d.open = false
+  })
+})
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return
+  $$<HTMLDetailsElement>('details.popover[open]').forEach((d) => {
+    d.open = false
+    d.querySelector('summary')?.focus()
   })
 })
 
@@ -299,18 +308,95 @@ function prefetch(url: URL) {
 }
 
 const assetSignature = (doc: Document) =>
-  $$<HTMLScriptElement | HTMLLinkElement>('script[src], link[rel=stylesheet]', doc.head)
-    .map((el) => el.getAttribute('src') ?? el.getAttribute('href'))
+  $$<HTMLScriptElement>('script[src]', doc.head)
+    .map((el) => el.getAttribute('src'))
     .join()
-// 差し替えた body の script は実行されないので、専用スクリプトを持つページや、デプロイで CSS/JS が変わったときは読み込み直す
+// 差し替えた body の script は実行されないので、専用スクリプトを持つページや、デプロイで JS が変わったときは読み込み直す
 const needsFullLoad = (doc: Document) => doc.body.querySelector('script') !== null || assetSignature(doc) !== assetSignature(document)
+
+// --- 遷移しても残す部分（data-persist）
+// body を丸ごと差し替えないのは、カーソルを乗せて開いているサイドバーが DOM から一度外れ、閉じてから開き直して見えるため
+// ページ全体を差分で更新しないのは、入力途中のフォームの値などが新しいページに持ち越されるため
+function syncAttributes(from: Element, to: Element) {
+  ;[...from.attributes].forEach((a) => to.hasAttribute(a.name) || from.removeAttribute(a.name))
+  ;[...to.attributes].forEach((a) => from.getAttribute(a.name) !== a.value && from.setAttribute(a.name, a.value))
+}
+
+function patch(from: Element, to: Element, persist: boolean) {
+  syncAttributes(from, to)
+  const olds = [...from.childNodes]
+  const news = [...to.childNodes]
+  news.forEach((node, i) => {
+    const cur = olds[i]
+    if (!cur) return from.append(node)
+    if (cur.nodeName !== node.nodeName) return cur.replaceWith(node)
+    if (!(cur instanceof Element) || !(node instanceof Element)) {
+      if (persist) return cur.nodeValue !== node.nodeValue && (cur.nodeValue = node.nodeValue)
+      return cur.replaceWith(node)
+    }
+    const inner = persist || cur.hasAttribute('data-persist')
+    if (inner || cur.querySelector('[data-persist]')) return patch(cur, node, inner)
+    cur.replaceWith(node)
+  })
+  olds.slice(news.length).forEach((n) => n.remove())
+}
+
+function swapBody(next: HTMLElement) {
+  const kept = $$('[data-persist]').some((el) => el.id && next.querySelector(`#${CSS.escape(el.id)}[data-persist]`))
+  kept ? patch(document.body, next, false) : document.body.replaceWith(next)
+}
+
+// --- 開いているサイドバーを遷移中も開いたままにする
+// :hover だけに任せないのは、遷移アニメーション中は画面がスナップショットの層で覆われてホバーが外れ、一瞬閉じてから開き直すため
+let railHeld = false
+function holdRail() {
+  const rail = document.getElementById('rail')
+  if (!railHeld && !rail?.matches(':hover')) return
+  railHeld = true
+  rail?.classList.add('is-held')
+}
+document.addEventListener('pointermove', (e) => {
+  if (!railHeld) return
+  const rail = document.getElementById('rail')
+  const r = rail?.getBoundingClientRect()
+  // 要素で判定しないのは、遷移アニメーション中のポインターイベントがサイドバーではなく画面全体に届くため
+  if (r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return
+  railHeld = false
+  rail?.classList.remove('is-held')
+})
+
+// --- ページごとのスタイルシート（components/style.tsx が data-style-order 付きで出す）
+// 差し替えたあとに読み込まないのは、新しい本文が見た目の付かないまま一瞬表示されるため
+// 読み込み済みのものを外さないのは、別のページへ戻るたびに取り直すことになるため
+function loadStyles(doc: Document) {
+  const order = (el: HTMLLinkElement) => Number(el.dataset.styleOrder)
+  const loaded = $$<HTMLLinkElement>('link[data-style-order]', document.head)
+  const pending = $$<HTMLLinkElement>('link[data-style-order]', doc.head)
+    .filter((next) => !loaded.some((el) => el.getAttribute('href') === next.getAttribute('href')))
+    .map((next) => {
+      const link = document.importNode(next)
+      // 同じ順番の古いもの（デプロイで中身が変わったもの）の直後に置くのは、読み込みが終わるまで古い見た目を残すため
+      const stale = loaded.find((el) => order(el) === order(next))
+      const later = loaded.find((el) => order(el) > order(next))
+      if (stale) stale.after(link)
+      else if (later) later.before(link)
+      else (loaded.at(-1) ?? document.head.lastElementChild)?.after(link)
+      return new Promise<void>((resolve) => {
+        link.addEventListener('load', () => (stale?.remove(), resolve()), { once: true })
+        link.addEventListener('error', () => resolve(), { once: true })
+      })
+    })
+  return Promise.all(pending)
+}
 
 function render(doc: Document, scroll: () => void) {
   // DOMParser はスクリプト無効として解析し noscript の中身を要素にするので、そのまま差し込むと表示されるブラウザがある
   $$('noscript', doc.body).forEach((el) => el.remove())
+  holdRail()
   const swap = () => {
     document.title = doc.title
-    document.body.replaceWith(doc.body)
+    swapBody(doc.body)
+    holdRail()
     initPage()
     document.querySelector<HTMLElement>('[autofocus]')?.focus()
     scroll()
@@ -335,6 +421,8 @@ async function visit(url: URL, { method = 'GET', body, pop = false, onFail }: Vi
     if (!page.isHtml) return location.assign(page.url)
     const doc = new DOMParser().parseFromString(page.html, 'text/html')
     if (needsFullLoad(doc)) return location.assign(page.url)
+    await loadStyles(doc)
+    if (controller.signal.aborted) return
 
     const next = new URL(page.url)
     if (!page.redirected) next.hash = url.hash

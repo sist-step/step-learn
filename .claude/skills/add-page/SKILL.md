@@ -12,15 +12,17 @@ StepLearn は MPA。サーバーで HTML を返し、操作はすべて `<form m
 - 既存の機能領域に入るものは、該当する `src/routes/*.tsx` に足す
   - `courses.tsx`（コース本体・設定）、`content.tsx`（セクション・アイテム）、`participants.tsx`（参加者）、`account.tsx`、`admin.tsx`、`auth.tsx`
 - 新しい領域なら `src/routes/<name>.tsx` を作り、`src/index.tsx` で `app.route('/<prefix>', <name>)` する
-- ナビゲーションに出す画面は `src/components/layout.tsx` の `links` に足す（ヘッダーのピルと左のアイコンレールの両方に出る。権限で出し分ける）
+- ナビゲーションに出す画面は `src/components/layout.tsx` の `links` に足す（左のアイコンレールに出る。権限で出し分ける）
 - 複数の画面で使う部品は `src/components/`、コース関連の部品は `components/course.tsx`
 
 ## ファイルの骨組み
 
 ```tsx
 import { Hono } from 'hono'
+import { Button } from '../components/button'
+import { TextField } from '../components/form'
 import { AppShell } from '../components/layout'
-import { Field, PageHeader } from '../components/ui'
+import { PageHeader } from '../components/ui'
 import { requireAuth } from '../lib/auth'
 import { getCourseAccess } from '../lib/courses'
 import { field, intParam, readForm, redirectWith } from '../lib/http'
@@ -36,11 +38,11 @@ const NotePage = ({ values, errors = {} }: { values: { title?: string }; errors?
   <AppShell>
     <PageHeader title="ノート" description="..." />
     <form method="post" class="stack" data-loading-form>
-      <Field label="タイトル" name="title" value={values.title} error={errors.title} required maxlength={120} />
+      <TextField label="タイトル" name="title" value={values.title} error={errors.title} required maxlength={120} />
       <div class="form-actions">
-        <button type="submit" class="btn btn-primary">
+        <Button type="submit" variant="primary">
           保存
-        </button>
+        </Button>
       </div>
     </form>
   </AppShell>

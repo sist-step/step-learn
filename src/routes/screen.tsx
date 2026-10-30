@@ -1,7 +1,10 @@
 import { Hono } from 'hono'
 import { Script } from 'vite-ssr-components/hono'
 import { ItemIcon } from '../components/course'
+import { Button } from '../components/button'
 import { Icon } from '../components/icons'
+import { Styles } from '../components/style'
+import { Chip } from '../components/ui'
 import { requireAuth } from '../lib/auth'
 import { getCourseAccess } from '../lib/courses'
 import { intParam } from '../lib/http'
@@ -25,6 +28,7 @@ app.get('/:id/items/:iid/screen', async (c) => {
 
   return c.render(
     <div class="screen-page" data-screen-share={item.id} data-course={id} data-can-present={access.canManage ? '1' : undefined}>
+      <Styles use={['/src/routes/screen.css']} />
       <header class="screen-head">
         <div class="screen-title">
           <ItemIcon type="screen" />
@@ -33,22 +37,20 @@ app.get('/:id/items/:iid/screen', async (c) => {
             <span class="muted small truncate">{access.course.title}</span>
           </div>
         </div>
-        <span class="chip" data-screen-state>
-          待機中
-        </span>
+        <Chip data-screen-state>待機中</Chip>
         {access.canManage && <span class="muted small truncate screen-stats" data-screen-stats />}
         <div class="screen-actions">
-          <button type="button" class="btn btn-sm btn-ghost" data-screen-fullscreen hidden>
-            <Icon name="maximize" size={16} /> 全画面
-          </button>
+          <Button variant="ghost" size="sm" icon="maximize" data-screen-fullscreen hidden>
+            全画面
+          </Button>
           {access.canManage && (
             <>
-              <button type="button" class="btn btn-sm btn-primary" data-screen-start hidden>
-                <Icon name="monitor" size={16} /> 共有を開始
-              </button>
-              <button type="button" class="btn btn-sm btn-danger" data-screen-stop hidden>
-                <Icon name="x" size={16} /> 共有を停止
-              </button>
+              <Button variant="primary" size="sm" icon="monitor" data-screen-start hidden>
+                共有を開始
+              </Button>
+              <Button variant="danger" size="sm" icon="x" data-screen-stop hidden>
+                共有を停止
+              </Button>
             </>
           )}
         </div>

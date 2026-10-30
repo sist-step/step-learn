@@ -1,12 +1,18 @@
 import { Hono } from 'hono'
 import { CourseForm, CourseHeader, CreateCourseButton, ItemIcon, type CourseFormErrors, type CourseFormValues } from '../components/course'
+import { Button, IconButton } from '../components/button'
+import { Bento, Card, DangerRow, Tile } from '../components/card'
+import { FileField, SearchBox, SegmentedControl, TextAreaField, TextField } from '../components/form'
 import { Icon, type IconName } from '../components/icons'
 import { AppShell } from '../components/layout'
-import { CourseCard, EmptyState, PageHeader, Progress, type CourseCardData } from '../components/ui'
+import { Popover } from '../components/overlay'
+import { Styles } from '../components/style'
+import { Chip, CourseCard, CourseRow, EmptyState, PageHeader, Progress, ProgressRing, type CourseCardData } from '../components/ui'
 import { canCreateCourse, requireAuth } from '../lib/auth'
 import { getCourseAccess, type CourseAccess } from '../lib/courses'
 import { field, intParam, readForm, redirectWith, type Form } from '../lib/http'
 import { isSharing } from '../lib/screen-share'
+import { randomTip } from '../lib/tips'
 import { deleteCourseFiles, formatBytes, inBackground } from '../lib/storage'
 import { COURSE_COLORS, ITEM_TYPE_LABELS, type AppEnv, type Item, type ItemType, type Section } from '../lib/types'
 import { db } from '../lib/db'
@@ -55,11 +61,7 @@ app.get('/', async (c) => {
         actions={canCreateCourse(user) && <CreateCourseButton />}
       />
       <form method="get" class="toolbar">
-        <label class="search">
-          <Icon name="search" />
-          <input type="search" name="q" value={q} placeholder="コース名・コード・概要で検索" data-search aria-label="コースを検索" />
-          <kbd>/</kbd>
-        </label>
+        <SearchBox label="コースを検索" value={q} placeholder="コース名・コード・概要で検索" />
       </form>
       {results.length === 0 ? (
         <EmptyState
@@ -70,9 +72,7 @@ app.get('/', async (c) => {
           }
           action={
             q && (
-              <a href="/courses" class="btn">
-                検索をクリア
-              </a>
+              <Button href="/courses">検索をクリア</Button>
             )
           }
         />
@@ -155,30 +155,15 @@ const ItemRow = ({
           <span class="item-title">{item.title}</span>
           <span class="item-meta truncate">{meta}</span>
         </span>
-        {item.type === 'screen' && isSharing(item.id) && <span class="chip chip-live">配信中</span>}
+        {item.type === 'screen' && isSharing(item.id) && <Chip tone="live">配信中</Chip>}
         {newTab && <Icon name="external" size={14} class="item-ext" />}
       </a>
       {manage && (
         <div class="row-actions edit-only">
-          <a href={`${base}/edit`} class="icon-btn" aria-label="編集" title="編集">
-            <Icon name="pencil" size={16} />
-          </a>
-          <form method="post" action={`${base}/move`}>
-            <input type="hidden" name="dir" value="up" />
-            <button class="icon-btn" aria-label="上へ" title="上へ">
-              <Icon name="arrowUp" size={16} />
-            </button>
-          </form>
-          <form method="post" action={`${base}/move`}>
-            <input type="hidden" name="dir" value="down" />
-            <button class="icon-btn" aria-label="下へ" title="下へ">
-              <Icon name="arrowDown" size={16} />
-            </button>
-          </form>
+          <IconButton href={`${base}/edit`} icon="pencil" label="編集" />
+          <MoveButtons action={`${base}/move`} />
           <form method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`}>
-            <button class="icon-btn danger" aria-label="削除" title="削除">
-              <Icon name="trash" size={16} />
-            </button>
+            <IconButton type="submit" icon="trash" label="削除" danger />
           </form>
         </div>
       )}
@@ -194,6 +179,7 @@ const ItemRow = ({
 }
 
 const ADD_ITEM_ICONS: Record<ItemType, IconName> = { page: 'page', link: 'link', file: 'upload', screen: 'monitor' }
+const ADD_ITEM_OPTIONS = (['page', 'link', 'file', 'screen'] as const).map((t) => ({ value: t, label: ITEM_TYPE_LABELS[t], icon: ADD_ITEM_ICONS[t] }))
 
 const AddItemForm = ({ courseId, sectionId }: { courseId: number; sectionId: number }) => (
   <details class="add-item" data-autofocus-details>
@@ -202,85 +188,61 @@ const AddItemForm = ({ courseId, sectionId }: { courseId: number; sectionId: num
     </summary>
     <form method="post" action={`/courses/${courseId}/items`} enctype="multipart/form-data" class="stack item-form" data-loading-form>
       <input type="hidden" name="section_id" value={String(sectionId)} />
-      <div class="segmented" role="radiogroup" aria-label="種類">
-        {(['page', 'link', 'file', 'screen'] as const).map((t, i) => (
-          <label>
-            <input type="radio" name="type" value={t} checked={i === 0} />
-            <span>
-              <Icon name={ADD_ITEM_ICONS[t]} size={15} /> {ITEM_TYPE_LABELS[t]}
-            </span>
-          </label>
-        ))}
-      </div>
-      <div class="field">
-        <label for={`t-${sectionId}`}>タイトル</label>
-        <input id={`t-${sectionId}`} name="title" maxlength={200} placeholder="例：第1回 講義資料" required />
-      </div>
-      <div class="field when-link">
-        <label for={`u-${sectionId}`}>URL</label>
-        <input id={`u-${sectionId}`} name="url" type="url" placeholder="https://" />
-      </div>
-      <div class="field when-file">
-        <label for={`f-${sectionId}`}>ファイル</label>
-        <input id={`f-${sectionId}`} name="file" type="file" class="file-input" />
-        <p class="field-hint">最大 30MB。PDF・画像はブラウザでプレビューできます。</p>
-      </div>
-      <div class="field">
-        <label for={`b-${sectionId}`}>
-          <span class="when-page-inline">本文</span>
-          <span class="when-other-inline">説明（任意）</span>
-        </label>
-        <textarea id={`b-${sectionId}`} name="body" rows={4} placeholder="Markdown が使えます（# 見出し、**太字**、- 箇条書き、[リンク](https://…)）" />
-      </div>
+      <SegmentedControl name="type" label="種類" options={ADD_ITEM_OPTIONS} />
+      <TextField label="タイトル" name="title" id={`t-${sectionId}`} maxlength={200} placeholder="例：第1回 講義資料" required />
+      <TextField label="URL" name="url" id={`u-${sectionId}`} type="url" placeholder="https://" fieldClass="when-link" />
+      <FileField label="ファイル" name="file" id={`f-${sectionId}`} hint="最大 30MB。PDF・画像はブラウザでプレビューできます。" fieldClass="when-file" />
+      <TextAreaField
+        label={
+          <>
+            <span class="when-page-inline">本文</span>
+            <span class="when-other-inline">説明（任意）</span>
+          </>
+        }
+        name="body"
+        id={`b-${sectionId}`}
+        placeholder="Markdown が使えます（# 見出し、**太字**、- 箇条書き、[リンク](https://…)）"
+      />
       <div class="form-actions">
-        <button type="submit" class="btn btn-primary btn-sm">
+        <Button type="submit" variant="primary" size="sm">
           追加
-        </button>
+        </Button>
       </div>
     </form>
   </details>
+)
+
+const MoveButtons = ({ action }: { action: string }) => (
+  <>
+    <form method="post" action={action}>
+      <input type="hidden" name="dir" value="up" />
+      <IconButton type="submit" icon="arrowUp" label="上へ" />
+    </form>
+    <form method="post" action={action}>
+      <input type="hidden" name="dir" value="down" />
+      <IconButton type="submit" icon="arrowDown" label="下へ" />
+    </form>
+  </>
 )
 
 const SectionEditBar = ({ courseId, section }: { courseId: number; section: Section }) => {
   const base = `/courses/${courseId}/sections/${section.id}`
   return (
     <div class="row-actions edit-only">
-      <details class="popover">
-        <summary class="icon-btn" aria-label="セクションを編集" title="編集">
-          <Icon name="pencil" size={16} />
-        </summary>
-        <form method="post" action={base} class="popover-panel stack">
-          <div class="field">
-            <label for={`st-${section.id}`}>セクション名</label>
-            <input id={`st-${section.id}`} name="title" value={section.title} maxlength={120} required />
-          </div>
-          <div class="field">
-            <label for={`ss-${section.id}`}>説明</label>
-            <textarea id={`ss-${section.id}`} name="summary" rows={3}>
-              {section.summary}
-            </textarea>
-          </div>
+      <Popover trigger={<IconButton as="summary" icon="pencil" label="セクションを編集" title="編集" />}>
+        <form method="post" action={base} class="stack">
+          <TextField label="セクション名" name="title" id={`st-${section.id}`} value={section.title} maxlength={120} required />
+          <TextAreaField label="説明" name="summary" id={`ss-${section.id}`} value={section.summary ?? undefined} rows={3} />
           <div class="form-actions">
-            <button class="btn btn-primary btn-sm">保存</button>
+            <Button type="submit" variant="primary" size="sm">
+              保存
+            </Button>
           </div>
         </form>
-      </details>
-      <form method="post" action={`${base}/move`}>
-        <input type="hidden" name="dir" value="up" />
-        <button class="icon-btn" aria-label="上へ" title="上へ">
-          <Icon name="arrowUp" size={16} />
-        </button>
-      </form>
-      <form method="post" action={`${base}/move`}>
-        <input type="hidden" name="dir" value="down" />
-        <button class="icon-btn" aria-label="下へ" title="下へ">
-          <Icon name="arrowDown" size={16} />
-        </button>
-      </form>
+      </Popover>
+      <MoveButtons action={`${base}/move`} />
       <form method="post" action={`${base}/delete`} data-confirm={`セクション「${section.title}」と中のアイテムをすべて削除しますか？`}>
-        <button class="icon-btn danger" aria-label="削除" title="削除">
-          <Icon name="trash" size={16} />
-        </button>
+        <IconButton type="submit" icon="trash" label="削除" danger />
       </form>
     </div>
   )
@@ -334,6 +296,7 @@ app.get('/:id', async (c) => {
 
   return c.render(
     <AppShell editable={manage}>
+      <Styles use={['/src/routes/courses.css']} />
       <CourseHeader
         access={access}
         tab="content"
@@ -369,9 +332,9 @@ app.get('/:id', async (c) => {
                     </span>
                   </span>
                   {isStudent && list.length > 0 && doneCount === list.length && (
-                    <span class="chip chip-success">
-                      <Icon name="check" size={12} /> 完了
-                    </span>
+                    <Chip tone="success" icon="check">
+                      完了
+                    </Chip>
                   )}
                   <Icon name="chevronDown" class="section-caret" />
                 </summary>
@@ -396,10 +359,10 @@ app.get('/:id', async (c) => {
       {manage && (
         <form method="post" action={`/courses/${id}/sections`} class="add-section edit-only" data-loading-form>
           <Icon name="plus" />
-          <input name="title" placeholder="新しいセクション名（例：第2週 データの扱い方）" maxlength={120} required aria-label="新しいセクション名" />
-          <button type="submit" class="btn btn-primary btn-sm">
+          <input class="add-section-input" name="title" placeholder="新しいセクション名（例：第2週 データの扱い方）" maxlength={120} required aria-label="新しいセクション名" />
+          <Button type="submit" variant="primary" size="sm">
             セクションを追加
-          </button>
+          </Button>
         </form>
       )}
     </AppShell>,
@@ -436,32 +399,24 @@ const SettingsPage = ({ access, values, errors }: { access: CourseAccess; values
       <div class="stack-lg">
         <CourseForm action={`/courses/${id}/settings`} values={values} errors={errors} submitLabel="変更を保存" cancelHref={`/courses/${id}`} />
 
-        <section class="card danger-zone">
-          <div class="card-head">
-            <h2>危険な操作</h2>
-            <p class="muted">これらの操作は取り消せません。</p>
-          </div>
+        <Card tone="danger" heading="危険な操作" description="これらの操作は取り消せません。">
           {access.role && (
-            <div class="danger-row">
-              <div>
-                <div class="strong">コースから退出</div>
-                <p class="muted small">自分の登録と進捗を削除します。</p>
-              </div>
+            <DangerRow heading="コースから退出" description="自分の登録と進捗を削除します。">
               <form method="post" action={`/courses/${id}/leave`} data-confirm="このコースから退出しますか？">
-                <button class="btn btn-danger-outline">退出</button>
+                <Button type="submit" variant="danger-outline">
+                  退出
+                </Button>
               </form>
-            </div>
+            </DangerRow>
           )}
-          <div class="danger-row">
-            <div>
-              <div class="strong">コースを削除</div>
-              <p class="muted small">セクション・教材・ファイル・参加者の登録がすべて削除されます。</p>
-            </div>
+          <DangerRow heading="コースを削除" description="セクション・教材・ファイル・参加者の登録がすべて削除されます。">
             <form method="post" action={`/courses/${id}/delete`} data-confirm={`「${access.course.title}」を完全に削除しますか？`}>
-              <button class="btn btn-danger">コースを削除</button>
+              <Button type="submit" variant="danger">
+                コースを削除
+              </Button>
             </form>
-          </div>
-        </section>
+          </DangerRow>
+        </Card>
       </div>
     </AppShell>
   )
@@ -535,69 +490,81 @@ dashboard.get('/', async (c) => {
   const doneItems = learning.reduce((n, r) => n + (r.done ?? 0), 0)
   const next = learning.find((r) => (r.total ?? 0) > (r.done ?? 0))
 
+  const members = teaching.reduce((n, r) => n + (r.members ?? 0), 0)
+
   return c.render(
     <AppShell>
-      <PageHeader
-        eyebrow={new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())}
-        title={`${greeting()}、${user.name}さん`}
-        description="今日も一歩ずつ進めましょう。"
-        actions={canCreateCourse(user) && <CreateCourseButton />}
-      />
-
-      {learning.length > 0 && (
-        <div class="stats">
-          <div class="stat">
-            <span class="stat-label">受講中のコース</span>
-            <span class="stat-value">{learning.length}</span>
+      <Styles use={['/src/routes/dashboard.css']} />
+      <Bento>
+        <Tile span={2} class="tile-welcome">
+          <div class="eyebrow">
+            {new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())}
           </div>
-          <div class="stat">
-            <span class="stat-label">完了したアイテム</span>
-            <span class="stat-value">
-              {doneItems}
-              <small> / {totalItems}</small>
-            </span>
-          </div>
-          <div class="stat">
-            <span class="stat-label">全体の進捗</span>
-            <Progress done={doneItems} total={totalItems} />
-          </div>
-          {next && (
-            <a href={`/courses/${next.id}`} class={`stat stat-next tone-${next.color}`}>
-              <span class="stat-label">続きから学習</span>
-              <span class="strong truncate">{next.title}</span>
-              <Icon name="chevronRight" class="stat-arrow" />
-            </a>
+          <h1>{`${greeting()}、${user.name}さん`}</h1>
+          <p class="tile-tip">{randomTip()}</p>
+          {canCreateCourse(user) && (
+            <div class="tile-actions">
+              <CreateCourseButton />
+            </div>
           )}
-        </div>
-      )}
-
-      {teaching.length > 0 && (
-        <section class="block">
-          <h2 class="block-title">担当しているコース</h2>
-          <div class="course-grid">
-            {teaching.map((course) => (
-              <CourseCard course={course} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section class="block">
-        <h2 class="block-title">受講中のコース</h2>
+        </Tile>
         {learning.length > 0 ? (
-          <div class="course-grid">
-            {learning.map((course) => (
-              <CourseCard course={course} showProgress />
-            ))}
-          </div>
+          <>
+            <Tile class="tile-stat">
+              <span class="stat-label">全体の進捗</span>
+              <ProgressRing done={doneItems} total={totalItems} />
+            </Tile>
+            <Tile class="tile-stat">
+              <span class="stat-label">完了したアイテム</span>
+              <span class="stat-value">
+                {doneItems}
+                <small> / {totalItems}</small>
+              </span>
+            </Tile>
+          </>
         ) : (
-          <EmptyState
-            icon="book"
-            title="まだ受講中のコースはありません"
-            text="コースに追加されると、ここに表示されます。"
-          />
+          <>
+            <Tile class="tile-stat">
+              <span class="stat-label">担当しているコース</span>
+              <span class="stat-value">{teaching.length}</span>
+            </Tile>
+            <Tile class="tile-stat">
+              <span class="stat-label">参加者（延べ）</span>
+              <span class="stat-value">{members}</span>
+            </Tile>
+          </>
         )}
-      </section>
+        {next && (
+          <Tile href={`/courses/${next.id}`} rows={2} class={`tile-feature tone-${next.color}`}>
+            <span class="tile-feature-label">続きから学習</span>
+            <span class="course-mono">{[...(next.code || next.title)].slice(0, 2).join('')}</span>
+            <strong class="tile-feature-title">{next.title}</strong>
+            <Progress done={next.done ?? 0} total={next.total ?? 0} />
+            <span class="tile-feature-cta">
+              学習を再開 <Icon name="chevronRight" size={16} />
+            </span>
+          </Tile>
+        )}
+        <Tile span={next ? 3 : 4} rows={next ? 2 : 1} class="tile-courses">
+          <div class="tile-head">
+            <h2>
+              マイコース <span class="count">{results.length}</span>
+            </h2>
+            <a href="/courses" class="tile-link">
+              すべて見る <Icon name="chevronRight" size={14} />
+            </a>
+          </div>
+          {results.length > 0 ? (
+            <div class="course-rows">
+              {results.map((course) => (
+                <CourseRow course={course} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState icon="book" title="まだ参加しているコースはありません" text="コースに追加されると、ここに表示されます。" />
+          )}
+        </Tile>
+      </Bento>
     </AppShell>,
     { title: 'ダッシュボード' },
   )

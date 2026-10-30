@@ -1,0 +1,2 @@
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
+.profile-row { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; padding: 14px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border); }
