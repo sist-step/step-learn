@@ -55,6 +55,10 @@
 .course-hero-progress { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding-right: 20px; border-right: 1px solid var(--border); }
 .course-hero-progress:last-child { padding-right: 0; border-right: 0; }
 
+.course-tabs { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 20px 0 24px; }
+.course-tabs .tabs { margin: 0; }
+.course-tabs-actions { display: flex; gap: 8px; margin-left: auto; }
+
 @media (max-width: 760px) {
   .course-hero { flex-wrap: wrap; }
   .course-hero-body { flex-basis: calc(100% - 64px); }
