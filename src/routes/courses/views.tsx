@@ -11,7 +11,6 @@ import {
 import { Button, IconButton } from '../../components/button'
 import { Card, DangerRow } from '../../components/card'
 import {
-  FieldError,
   FileField,
   ImageField,
   SearchBox,
@@ -282,6 +281,24 @@ const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sect
   </Modal>
 )
 
+const ADD_SECTION_MODAL = 'add-section'
+
+const AddSectionModal = ({ courseId }: { courseId: number }) => (
+  <Modal id={ADD_SECTION_MODAL} heading="セクションを追加" description="コースの最後に追加されます。">
+    <form method="post" action={`/courses/${courseId}/sections`} class="stack" data-loading-form {...validateWith('section')}>
+      <TextField label="セクション名" name="title" id="new-section-title" placeholder="例：第2週 データの扱い方" autofocus />
+      <div class="form-actions">
+        <Button variant="ghost" popovertarget={ADD_SECTION_MODAL} popovertargetaction="hide">
+          キャンセル
+        </Button>
+        <Button type="submit" variant="primary">
+          追加
+        </Button>
+      </div>
+    </form>
+  </Modal>
+)
+
 const MoveButtons = ({ action }: { action: string }) => (
   <>
     <form method="post" action={action}>
@@ -355,6 +372,13 @@ export const CoursePage = ({
         access={access}
         tab="content"
         progress={isStudent ? { done: trackedItems.filter((it) => done.has(it.id)).length, total: trackedItems.length } : undefined}
+        tabActions={
+          manage && (
+            <Button variant="primary" icon="plus" class="edit-only" popovertarget={ADD_SECTION_MODAL}>
+              セクションを追加
+            </Button>
+          )
+        }
       />
       <TabPanel>
         {visibleSections.length === 0 && (
@@ -415,31 +439,7 @@ export const CoursePage = ({
           </div>
         )}
 
-        {manage && (
-          <form
-            method="post"
-            action={`/courses/${id}/sections`}
-            class="field add-section-form edit-only"
-            data-loading-form
-            {...validateWith('section')}
-          >
-            <div class="add-section">
-              <Icon name="plus" />
-              <input
-                id="new-section-title"
-                class="add-section-input"
-                name="title"
-                placeholder="新しいセクション名（例：第2週 データの扱い方）"
-                aria-label="新しいセクション名"
-                aria-describedby="new-section-title-error"
-              />
-              <Button type="submit" variant="primary" size="sm">
-                セクションを追加
-              </Button>
-            </div>
-            <FieldError id="new-section-title" />
-          </form>
-        )}
+        {manage && <AddSectionModal courseId={id} />}
         {manage && sectionList.length > 0 && <AddItemModal courseId={id} sections={sectionList} tracking={tracking} />}
       </TabPanel>
       <CourseLiveSync courseId={id} revision={revision} />

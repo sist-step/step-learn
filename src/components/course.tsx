@@ -18,11 +18,13 @@ export const CourseHeader = ({
   tab,
   progress,
   actions,
+  tabActions,
 }: {
   access: CourseAccess
   tab?: Tab
   progress?: { done: number; total: number }
   actions?: Child
+  tabActions?: Child
 }) => {
   useStyle('/src/components/course.css')
   const { course, canManage } = access
@@ -53,16 +55,19 @@ export const CourseHeader = ({
         )}
       </section>
       {tab && (
-        <Tabs
-          label="コースメニュー"
-          items={(
-            [
-              { href: base, label: 'コンテンツ', active: tab === 'content' },
-              { href: `${base}/participants`, label: '参加者', active: tab === 'participants' },
-              canManage && { href: `${base}/settings`, label: '設定', active: tab === 'settings' },
-            ] satisfies (TabItem | false)[]
-          ).filter((t) => t !== false)}
-        />
+        <div class="course-tabs">
+          <Tabs
+            label="コースメニュー"
+            items={(
+              [
+                { href: base, label: 'コンテンツ', active: tab === 'content' },
+                { href: `${base}/participants`, label: '参加者', active: tab === 'participants' },
+                canManage && { href: `${base}/settings`, label: '設定', active: tab === 'settings' },
+              ] satisfies (TabItem | false)[]
+            ).filter((t) => t !== false)}
+          />
+          {tabActions && <div class="course-tabs-actions">{tabActions}</div>}
+        </div>
       )}
     </>
   )
