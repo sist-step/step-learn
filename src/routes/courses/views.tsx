@@ -285,7 +285,14 @@ const ADD_SECTION_MODAL = 'add-section'
 
 const AddSectionModal = ({ courseId }: { courseId: number }) => (
   <Modal id={ADD_SECTION_MODAL} heading="セクションを追加" description="コースの最後に追加されます。">
-    <form method="post" action={`/courses/${courseId}/sections`} class="stack" data-loading-form {...validateWith('section')}>
+    <form
+      method="post"
+      action={`/courses/${courseId}/sections`}
+      class="stack"
+      data-loading-form
+      data-add-section
+      {...validateWith('section')}
+    >
       <TextField label="セクション名" name="title" id="new-section-title" placeholder="例：第2週 データの扱い方" autofocus />
       <div class="form-actions">
         <Button variant="ghost" popovertarget={ADD_SECTION_MODAL} popovertargetaction="hide">
