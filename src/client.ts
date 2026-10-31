@@ -494,6 +494,140 @@ async function searchUsers(input: HTMLInputElement) {
   }
 }
 
+// --- 追加したセクションへ、モーダルに入力した名前を飛ばし、ほかの部品を周りから集める
+type TextStyle = Pick<CSSStyleDeclaration, 'fontSize' | 'fontWeight' | 'color' | 'letterSpacing'>
+type Flight = { left: number; centerY: number; style: TextStyle; known: Set<string> }
+
+const EASE_IN_OUT = 'cubic-bezier(0.65, 0, 0.35, 1)'
+const easeInOut = (t: number) => (t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2)
+const GATHER_PARTS = '.section-num, .section-title-wrap > .small, .section-head > .chip, .section-caret, .row-actions .icon-btn, .add-item'
+const GATHER_DISTANCE = 56
+
+let pendingFlight: Flight | null = null
+
+const textStyle = (el: Element): TextStyle => {
+  const s = getComputedStyle(el)
+  return { fontSize: s.fontSize, fontWeight: s.fontWeight, color: s.color, letterSpacing: s.letterSpacing }
+}
+
+document.addEventListener('submit', (e) => {
+  const form = e.target as HTMLFormElement
+  const input = form.matches('[data-add-section]') ? form.querySelector<HTMLInputElement>('input[name=title]') : null
+  pendingFlight = null
+  if (e.defaultPrevented || !input || matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const r = input.getBoundingClientRect()
+  const s = getComputedStyle(input)
+  pendingFlight = {
+    left: r.left + parseFloat(s.borderLeftWidth) + parseFloat(s.paddingLeft) - input.scrollLeft,
+    centerY: r.top + r.height / 2,
+    style: textStyle(input),
+    known: new Set($$('.section-card').map((el) => el.id)),
+  }
+})
+
+function takeFlight() {
+  const flight = pendingFlight
+  pendingFlight = null
+  return flight
+}
+
+function arrivalScrollY(el: Element) {
+  const r = el.getBoundingClientRect()
+  const top = document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0
+  if (r.top >= top && r.bottom <= innerHeight) return scrollY
+  const offset = Math.max(16, (innerHeight - top - r.height) / 2)
+  return Math.min(document.documentElement.scrollHeight - innerHeight, Math.max(0, scrollY + r.top - top - offset))
+}
+
+// scrollTo の smooth に任せないのは、速さの曲線と終わる時刻を、名前が飛ぶアニメーションと揃えられないため
+function easeScrollTo(y: number, duration: number) {
+  const from = scrollY
+  const start = performance.now()
+  const step = (now: number) => {
+    const t = Math.min(1, (now - start) / duration)
+    scrollTo(0, from + (y - from) * easeInOut(t))
+    if (t < 1) requestAnimationFrame(step)
+  }
+  requestAnimationFrame(step)
+}
+
+function gatherParts(card: HTMLElement, title: HTMLElement) {
+  const t = title.getBoundingClientRect()
+  const origin = { x: t.left + t.width / 2, y: t.top + t.height / 2 }
+  const parts = $$<HTMLElement>(GATHER_PARTS, card)
+    .filter((el) => el.getClientRects().length > 0)
+    .map((el) => {
+      const r = el.getBoundingClientRect()
+      const dx = r.left + r.width / 2 - origin.x
+      const dy = r.top + r.height / 2 - origin.y
+      return { el, dx, dy, distance: Math.hypot(dx, dy) || 1 }
+    })
+    .sort((a, b) => a.distance - b.distance)
+  const head = card.querySelector('.section-head')
+  const frame = getComputedStyle(card)
+  const animations = [
+    card.animate(
+      [
+        { borderColor: 'transparent', backgroundColor: 'transparent', boxShadow: 'none' },
+        { borderColor: frame.borderTopColor, backgroundColor: frame.backgroundColor, boxShadow: frame.boxShadow },
+      ],
+      { duration: 600, easing: 'ease-out', fill: 'backwards' },
+    ),
+    ...(head
+      ? [
+          head.animate([{ borderBottomColor: 'transparent' }, { borderBottomColor: getComputedStyle(head).borderBottomColor }], {
+            duration: 600,
+            fill: 'backwards',
+          }),
+        ]
+      : []),
+    ...parts.map(({ el, dx, dy, distance }, i) =>
+      el.animate(
+        [
+          { opacity: 0, transform: `translate(${(dx / distance) * GATHER_DISTANCE}px, ${(dy / distance) * GATHER_DISTANCE}px) scale(0.6)` },
+          { opacity: 1, transform: 'none' },
+        ],
+        { duration: 520, delay: i * 40, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)', fill: 'backwards' },
+      ),
+    ),
+  ]
+  animations.forEach((a) => a.pause())
+  return animations
+}
+
+// 追加したセクションをリダイレクト先の #section-ID で探さないのは、fetch の応答の URL からはフラグメントが落ちるため
+function prepareArrival(flight: Flight) {
+  const card = $$<HTMLElement>('.section-card').find((el) => !flight.known.has(el.id))
+  const title = card?.querySelector<HTMLElement>('.section-title')
+  if (!card || !title) return null
+  const ghost = document.createElement('span')
+  ghost.className = 'section-title-flight'
+  ghost.textContent = title.textContent
+  Object.assign(ghost.style, { left: `${flight.left}px`, top: `${flight.centerY}px`, ...flight.style })
+  document.body.append(ghost)
+  title.style.visibility = 'hidden'
+  const gathering = gatherParts(card, title)
+  return () => {
+    const target = arrivalScrollY(card)
+    const delta = target - scrollY
+    const duration = Math.min(900, 520 + Math.abs(delta) * 0.4)
+    const to = title.getBoundingClientRect()
+    const flying = ghost.animate(
+      [
+        { left: `${flight.left}px`, top: `${flight.centerY}px`, ...flight.style },
+        { left: `${to.left}px`, top: `${to.top + to.height / 2 - delta}px`, ...textStyle(title) },
+      ],
+      { duration, easing: EASE_IN_OUT, fill: 'forwards' },
+    )
+    easeScrollTo(target, duration)
+    gathering.forEach((a) => a.play())
+    flying.onfinish = () => {
+      ghost.remove()
+      title.style.removeProperty('visibility')
+    }
+  }
+}
+
 // --- ページ遷移を再読み込みなしで行う（JS がなければ通常のリンク・フォーム送信で遷移する）
 type Page = { url: string; redirected: boolean; isHtml: boolean; html: string }
 type Visit = { method?: 'GET' | 'POST'; body?: FormData | URLSearchParams; pop?: boolean; onFail?: () => void }
@@ -648,7 +782,7 @@ function slideTabIndicator() {
   to.style.setProperty('--tab-from-right', `${t.right - f.right}px`)
 }
 
-function render(doc: Document, scroll: () => void) {
+function render(doc: Document, scroll: () => void, settled?: () => void) {
   // DOMParser はスクリプト無効として解析し noscript の中身を要素にするので、そのまま差し込むと表示されるブラウザがある
   $$('noscript', doc.body).forEach((el) => el.remove())
   liveBase = cloneMain(doc)
@@ -663,11 +797,17 @@ function render(doc: Document, scroll: () => void) {
     document.querySelector<HTMLElement>('[autofocus]')?.focus()
     scroll()
   }
-  if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) return swap()
+  if (!document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    swap()
+    return settled?.()
+  }
   const root = document.documentElement
   if (tabSlide) root.dataset.tabSlide = tabSlide
   const transition = document.startViewTransition(swap)
-  void transition.finished.finally(() => root.dataset.tabSlide === tabSlide && delete root.dataset.tabSlide)
+  void transition.finished.finally(() => {
+    if (root.dataset.tabSlide === tabSlide) delete root.dataset.tabSlide
+    settled?.()
+  })
   return transition.updateCallbackDone
 }
 
@@ -701,7 +841,18 @@ async function visit(url: URL, { method = 'GET', body, pop = false, onFail }: Vi
     renderedKey = urlKey(new URL(location.href))
     const keepScroll = method === 'POST' && sameUrl && !next.hash
     const y = scrollY
-    await render(doc, () => (pop ? scrollTo(0, history.state?.scrollY ?? 0) : keepScroll ? scrollTo(0, y) : scrollToHash(next.hash)))
+    const flight = method === 'POST' && page.redirected ? takeFlight() : null
+    let arrive: (() => void) | null = null
+    await render(
+      doc,
+      () => {
+        arrive = flight && prepareArrival(flight)
+        if (arrive) return scrollTo(0, y)
+        if (pop) return scrollTo(0, history.state?.scrollY ?? 0)
+        keepScroll ? scrollTo(0, y) : scrollToHash(next.hash)
+      },
+      () => arrive?.(),
+    )
   } catch {
     if (controller.signal.aborted) return
     if (method === 'GET') return location.assign(url)

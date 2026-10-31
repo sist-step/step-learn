@@ -77,6 +77,7 @@
 .section-title-wrap { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.35; }
 .section-title { font-weight: 600; font-size: 15px; transition: color 0.15s; }
 .section-caret { flex: none; color: var(--muted); transition: transform 0.2s var(--ease); }
+.section-title-flight { position: fixed; z-index: 50; translate: 0 -50%; line-height: 1.35; white-space: nowrap; pointer-events: none; }
 .section-card:not([open]) .section-caret { transform: rotate(-90deg); }
 .section-card > .row-actions { position: absolute; top: 17px; right: 56px; }
 :root[data-edit-mode] .section-card:has(> .row-actions) .section-caret { margin-left: 180px; }
