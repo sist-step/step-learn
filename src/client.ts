@@ -447,6 +447,18 @@ function initMarkdownEditors() {
     .catch(() => toast('エディターを読み込めませんでした。', 'error'))
 }
 
+// --- ログイン画面の 3D アニメーション（components/layout.tsx の AuthShell）
+// ここに直接 import しないのは、three.js が大きく、ログイン後の画面でも毎回読み込むことになるため
+let authArt: Promise<typeof import('./auth-art')> | null = null
+function initAuthArt() {
+  const host = document.querySelector<HTMLElement>('[data-auth-art]')
+  // 隠れているとき（スマホ幅）に読み込まないのは、見えない絵のために three.js を取りに行くことになるため
+  if (!authArt && !host?.offsetWidth) return
+  authArt ??= import('./auth-art')
+  // 失敗してもトーストを出さないのは、飾りが出ないだけで操作には困らないため
+  authArt.then(({ showAuthArt }) => showAuthArt(host)).catch(() => {})
+}
+
 // --- ⌘S / Ctrl+S で保存（data-save-shortcut のボタンを押す）
 document.addEventListener('keydown', (e) => {
   if (e.key !== 's' || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return
@@ -916,6 +928,7 @@ function initPage() {
   $$('[data-toast]').forEach((el) => dismissLater(el, 5000))
   initContent()
   watchLive()
+  initAuthArt()
 }
 
 function initContent() {
