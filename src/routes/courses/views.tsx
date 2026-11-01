@@ -203,79 +203,101 @@ const AddItemButton = ({ sectionId }: { sectionId: number }) => (
   </button>
 )
 
+const ITEM_TYPES = ['page', 'link', 'file', 'screen'] as const
+
+const KindOptionBody = ({ type }: { type: ItemType }) => (
+  <>
+    <ItemIcon type={type} />
+    <span class="kind-option-text">
+      <span class="strong">{ITEM_TYPE_LABELS[type]}</span>
+      <span class="muted small">{ITEM_TYPE_DESCRIPTIONS[type]}</span>
+    </span>
+  </>
+)
+
+// 種類の選択と設定を別のフォームにしないのは、設定まで進んでから種類を選び直しても入力した値を残すため
 const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sections: Section[]; tracking: boolean }) => (
-  <Modal id={ADD_ITEM_MODAL} heading="アイテムを追加" description="種類を選んで、最初の設定をしてください。内容はあとから編集できます。">
+  <Modal id={ADD_ITEM_MODAL} heading="アイテムを追加" description="種類を選んでから、最初の設定をします。内容はあとから編集できます。">
     <form
       method="post"
       action={`/courses/${courseId}/items`}
       enctype="multipart/form-data"
-      class="stack item-form"
+      class="item-form item-steps"
       data-loading-form
+      data-item-steps
+      data-step="kind"
+      data-kind="page"
       {...validateWith('item')}
     >
-      <fieldset class="field">
-        <legend>種類</legend>
-        <div class="kind-options">
-          {(['page', 'link', 'file', 'screen'] as const).map((t) => (
-            <label class="kind-option">
-              <input type="radio" name="type" value={t} checked={t === 'page'} />
-              <ItemIcon type={t} />
-              <span class="kind-option-text">
-                <span class="strong">{ITEM_TYPE_LABELS[t]}</span>
-                <span class="muted small">{ITEM_TYPE_DESCRIPTIONS[t]}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <TextField label="タイトル" name="title" id="new-item-title" placeholder="例：第1回 講義資料" autofocus />
-      <TextField label="URL" name="url" id="new-item-url" type="url" placeholder="https://" fieldClass="when-link" />
-      <FileField
-        label="ファイル"
-        name="file"
-        id="new-item-file"
-        hint="最大 30MB。PDF・画像はブラウザでプレビューできます。"
-        fieldClass="when-file"
-      />
-      <MarkdownEditor
-        label={
-          <>
-            <span class="when-page-inline">本文（任意）</span>
-            <span class="when-other-inline">説明（任意）</span>
-          </>
-        }
-        name="body"
-        id="new-item-body"
-        rows={4}
-        placeholder="あとから編集画面でも書けます"
-      />
-      <div class="grid-2">
-        <SelectField
-          label="セクション"
-          name="section_id"
-          id="new-item-section"
-          options={sections.map((s) => ({ value: String(s.id), label: s.title }))}
-        />
-        <fieldset class="field">
-          <legend>学生への表示</legend>
-          <SegmentedControl
-            name="hidden"
-            label="学生への表示"
-            options={[
-              { value: '0', label: '表示', icon: 'eye' },
-              { value: '1', label: '非表示', icon: 'eyeSlash' },
-            ]}
-          />
-        </fieldset>
+      <input type="hidden" name="type" value="page" />
+      <div class="item-step kind-picker" role="group" aria-label="種類">
+        {ITEM_TYPES.map((t) => (
+          <button type="button" class="kind-option" data-pick-kind={t}>
+            <KindOptionBody type={t} />
+            <Icon name="chevronRight" size={16} />
+          </button>
+        ))}
       </div>
-      {tracking && <CompletionField id="new-item-completion" />}
-      <div class="form-actions">
-        <Button type="submit" name="then" value="view">
-          追加して表示
-        </Button>
-        <Button type="submit" variant="primary">
-          追加
-        </Button>
+      <div class="item-step kind-settings stack">
+        <div class="kind-summary">
+          {ITEM_TYPES.map((t) => (
+            <span class="kind-summary-body" data-kind-summary={t}>
+              <KindOptionBody type={t} />
+            </span>
+          ))}
+          <Button size="sm" variant="ghost" icon="chevronLeft" data-kind-back>
+            種類を変える
+          </Button>
+        </div>
+        <TextField label="タイトル" name="title" id="new-item-title" placeholder="例：第1回 講義資料" />
+        <TextField label="URL" name="url" id="new-item-url" type="url" placeholder="https://" fieldClass="when-link" />
+        <FileField
+          label="ファイル"
+          name="file"
+          id="new-item-file"
+          hint="最大 30MB。PDF・画像はブラウザでプレビューできます。"
+          fieldClass="when-file"
+        />
+        <MarkdownEditor
+          label={
+            <>
+              <span class="when-page-inline">本文（任意）</span>
+              <span class="when-other-inline">説明（任意）</span>
+            </>
+          }
+          name="body"
+          id="new-item-body"
+          rows={4}
+          placeholder="あとから編集画面でも書けます"
+        />
+        <div class="grid-2">
+          <SelectField
+            label="セクション"
+            name="section_id"
+            id="new-item-section"
+            options={sections.map((s) => ({ value: String(s.id), label: s.title }))}
+          />
+          <fieldset class="field">
+            <legend>学生への表示</legend>
+            <SegmentedControl
+              name="hidden"
+              label="学生への表示"
+              options={[
+                { value: '0', label: '表示', icon: 'eye' },
+                { value: '1', label: '非表示', icon: 'eyeSlash' },
+              ]}
+            />
+          </fieldset>
+        </div>
+        {tracking && <CompletionField id="new-item-completion" />}
+        <div class="form-actions">
+          <Button type="submit" name="then" value="view">
+            追加して表示
+          </Button>
+          <Button type="submit" variant="primary">
+            追加
+          </Button>
+        </div>
       </div>
     </form>
   </Modal>
