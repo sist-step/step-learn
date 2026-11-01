@@ -250,7 +250,7 @@ export const CourseCard = ({ course, showProgress }: { course: CourseCardData; s
   const hero = courseImageUrl(course.id, 'hero', course.heroImage)
   return (
     <a href={`/courses/${course.id}`} class={`course-card tone-${course.color}`}>
-      <div class={cx('course-cover', hero && 'has-image')}>
+      <div class="course-cover">
         {hero && <img class="course-cover-img" src={hero} alt="" loading="lazy" />}
         <CourseIcon course={course} text={courseInitials(course)} class="course-mono" />
         <div class="course-cover-badges">
