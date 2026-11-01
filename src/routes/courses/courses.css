@@ -16,7 +16,7 @@
 }
 .settings-toc a:hover { background: var(--surface); color: var(--text); text-decoration: none; }
 .settings-toc a.is-danger { color: var(--danger); }
-.settings-toc a.active { background: var(--primary); color: var(--on-primary); font-weight: 600; }
+.settings-toc a.active { background: var(--c-soft); color: var(--c-ink); font-weight: 600; }
 @media (prefers-reduced-motion: no-preference) {
   html:has(.settings-toc) { scroll-behavior: smooth; }
 }
@@ -59,7 +59,7 @@
   user-select: none;
 }
 .section-head::-webkit-details-marker { display: none; }
-.section-head:hover .section-title { color: var(--primary-text); }
+.section-head:hover .section-title { color: var(--c-ink); }
 .section-card:not([open]) > .section-head { border-bottom: 0; }
 .section-num {
   display: grid;
@@ -68,8 +68,8 @@
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: var(--surface-2);
-  color: var(--text-2);
+  background: var(--c-soft);
+  color: var(--c-ink);
   font-weight: 600;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
