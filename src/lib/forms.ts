@@ -67,16 +67,20 @@ const login = z.object({
   next: hidden(500),
 })
 
-const register = z.object({
-  email: z.pipe(
+const email = () =>
+  z.pipe(
     z.pipe(
       text('メールアドレス', 254, { required: true }),
       z.transform((s: string) => s.toLowerCase()),
     ),
     z.string().check(rule((s: string) => (isEmail(s) ? null : '有効なメールアドレスを入力してください。'))),
-  ),
-  next: hidden(500),
-})
+  )
+
+const register = z.object({ email: email(), next: hidden(500) })
+
+const forgotPassword = z.object({ email: email() })
+
+const resetPassword = z.object({ token: hidden(100), password: newPassword() })
 
 const completeRegister = z
   .object({
@@ -159,7 +163,20 @@ const itemEdit = z
 
 const image = z.object({ image: file('画像を選択してください。') })
 
-export const FORMS = { login, register, completeRegister, profile, password, course, section, item, itemEdit, image }
+export const FORMS = {
+  login,
+  register,
+  completeRegister,
+  forgotPassword,
+  resetPassword,
+  profile,
+  password,
+  course,
+  section,
+  item,
+  itemEdit,
+  image,
+}
 
 export type FormName = keyof typeof FORMS
 
