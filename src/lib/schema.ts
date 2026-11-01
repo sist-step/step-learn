@@ -48,6 +48,19 @@ export const emailVerifications = sqliteTable(
   (t) => [index('email_verifications_email').on(t.email)],
 )
 
+export const passwordResets = sqliteTable(
+  'password_resets',
+  {
+    tokenHash: text('token_hash').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    expiresAt: integer('expires_at').notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [index('password_resets_user').on(t.userId)],
+)
+
 export const courses = sqliteTable('courses', {
   id: integer('id').primaryKey(),
   code: text('code').notNull().default(''),
