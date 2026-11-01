@@ -46,9 +46,16 @@ export async function hashPassword(password: string) {
   return `pbkdf2$${PBKDF2_ITERATIONS}$${toB64(salt)}$${toB64(hash)}`
 }
 
+/** パスワードを設定していないユーザー（Moodle から移行した直後など）のハッシュ。どのパスワードとも一致しない */
+export const NO_PASSWORD = 'none'
+
 export async function verifyPassword(password: string, stored: string) {
   const [scheme, iter, salt, hash] = stored.split('$')
-  if (scheme !== 'pbkdf2' || !iter || !salt || !hash) return false
+  // すぐに false を返さないのは、パスワードを設定していないユーザーがいることを応答時間から知られないようにするため
+  if (scheme !== 'pbkdf2' || !iter || !salt || !hash) {
+    await dummyVerify(password)
+    return false
+  }
   const derived = await pbkdf2(password, fromB64(salt), Number(iter))
   return timingSafeEqual(new Uint8Array(derived), fromB64(hash))
 }
