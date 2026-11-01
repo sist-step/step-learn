@@ -6,7 +6,7 @@ import { parseSigned } from 'hono/utils/cookie'
 import type { AppEnv, Role, User } from './types'
 import { config } from './config'
 import { db } from './db'
-import { courses, emailVerifications, enrollments, sessions, users } from './schema'
+import { courses, emailVerifications, enrollments, passwordResets, sessions, users } from './schema'
 
 const SESSION_COOKIE = 'sid'
 const SESSION_TTL = 60 * 60 * 24 * 30 // 30日
@@ -16,6 +16,9 @@ const SESSION_REFRESH_BELOW = SESSION_TTL / 2
 const PBKDF2_ITERATIONS = 600_000
 
 const EMAIL_VERIFICATION_TTL = 60 * 60 * 24 // 24時間
+
+// 確認メールより短いのは、リンクが漏れるとアカウントを乗っ取られるため
+const PASSWORD_RESET_TTL = 60 * 60 // 1時間
 
 const enc = new TextEncoder()
 
@@ -148,6 +151,42 @@ export async function findEmailVerification(token: string) {
     .where(and(eq(emailVerifications.tokenHash, tokenHash), gt(emailVerifications.expiresAt, now())))
     .get()
   return row ?? null
+}
+
+/** パスワード再設定用のトークンを発行する。DB にはハッシュだけを保存し、平文はメールのリンクにだけ載せる */
+export async function createPasswordReset(userId: number) {
+  const token = randomToken()
+  const t = now()
+  const tokenHash = await hashToken(token)
+  db.transaction((tx) => {
+    tx.delete(passwordResets).where(lte(passwordResets.expiresAt, t)).run()
+    tx.insert(passwordResets)
+      .values({ tokenHash, userId, expiresAt: t + PASSWORD_RESET_TTL })
+      .run()
+  })
+  return token
+}
+
+export async function findPasswordReset(token: string) {
+  if (!token) return null
+  const tokenHash = await hashToken(token)
+  const row = db
+    .select(userColumns)
+    .from(passwordResets)
+    .innerJoin(users, eq(users.id, passwordResets.userId))
+    .where(and(eq(passwordResets.tokenHash, tokenHash), gt(passwordResets.expiresAt, now())))
+    .get()
+  return row ?? null
+}
+
+/** パスワードを置き換え、再設定用のトークンとすべてのセッションを無効化する */
+export async function resetPassword(userId: number, password: string) {
+  const passwordHash = await hashPassword(password)
+  db.transaction((tx) => {
+    tx.update(users).set({ passwordHash }).where(eq(users.id, userId)).run()
+    tx.delete(passwordResets).where(eq(passwordResets.userId, userId)).run()
+    tx.delete(sessions).where(eq(sessions.userId, userId)).run()
+  })
 }
 
 /** 現在のセッション以外を無効化する（パスワード変更時など） */

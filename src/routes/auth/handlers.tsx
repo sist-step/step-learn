@@ -3,31 +3,48 @@ import type { Context } from 'hono'
 import {
   USERNAME_TAKEN,
   createEmailVerification,
+  createPasswordReset,
   createSession,
   createUser,
   destroySession,
   dummyVerify,
   findEmailVerification,
+  findPasswordReset,
   hashPassword,
   needsRehash,
+  resetPassword,
   safeNext,
   verifyPassword,
 } from '../../lib/auth'
 import { config } from '../../lib/config'
 import { db } from '../../lib/db'
-import { validate } from '../../lib/forms'
+import { type FieldErrors, validate } from '../../lib/forms'
 import { clientIp, field, readForm, redirectWith } from '../../lib/http'
 import { mailer } from '../../lib/mail'
+import { checkPassword } from '../../lib/password'
 import { rateLimiter } from '../../lib/rate-limit'
 import { users } from '../../lib/schema'
 import type { AppEnv } from '../../lib/types'
-import { CompleteRegisterPage, InvalidLinkPage, LoginPage, RegisterPage, RegisterSentPage } from './views'
+import {
+  CompleteRegisterPage,
+  ForgotPasswordPage,
+  ForgotPasswordSentPage,
+  InvalidLinkPage,
+  LoginPage,
+  RegisterPage,
+  RegisterSentPage,
+  ResetPasswordPage,
+} from './views'
 
 // IP ごとの上限を高めにしているのは、教室などで同じグローバル IP から大勢が一斉にアクセスするため
 const loginFailuresByIp = rateLimiter({ limit: 50, windowSec: 15 * 60 })
 const loginFailuresByAccount = rateLimiter({ limit: 10, windowSec: 15 * 60 })
 const registerByIp = rateLimiter({ limit: 100, windowSec: 60 * 60 })
 const registerByEmail = rateLimiter({ limit: 3, windowSec: 60 * 60 })
+const forgotByIp = rateLimiter({ limit: 100, windowSec: 60 * 60 })
+const forgotByEmail = rateLimiter({ limit: 3, windowSec: 60 * 60 })
+
+const appOrigin = (c: Context) => config.appOrigin ?? new URL(c.req.url).origin
 
 function tooManyRequests(c: Context, retryAfter: number) {
   c.status(429)
@@ -114,7 +131,7 @@ export async function submitRegister(c: Context<AppEnv>) {
   registerByEmail.hit(email)
 
   // 登録済みかどうかは画面に出さず、メールの内容だけを変える（画面からの登録有無の列挙を防ぐ）
-  const origin = config.appOrigin ?? new URL(c.req.url).origin
+  const origin = appOrigin(c)
   const exists = db.select({ id: users.id }).from(users).where(eq(users.email, email)).get()
   const mail = exists
     ? {
@@ -151,7 +168,7 @@ export async function showCompleteRegister(c: Context<AppEnv>) {
   const verification = await findEmailVerification(token)
   if (!verification) {
     c.status(410)
-    return c.render(<InvalidLinkPage />, { title: '新規登録' })
+    return c.render(<InvalidLinkPage retry="register" />, { title: '新規登録' })
   }
   return c.render(<CompleteRegisterPage token={token} email={verification.email} />, { title: '新規登録' })
 }
@@ -162,7 +179,7 @@ export async function submitCompleteRegister(c: Context<AppEnv>) {
   const verification = await findEmailVerification(token)
   if (!verification) {
     c.status(410)
-    return c.render(<InvalidLinkPage />, { title: '新規登録' })
+    return c.render(<InvalidLinkPage retry="register" />, { title: '新規登録' })
   }
   const { email, next } = verification
 
@@ -190,6 +207,84 @@ export async function submitCompleteRegister(c: Context<AppEnv>) {
 
   await createSession(c, created.id)
   return redirectWith(c, safeNext(next), `ようこそ、${name}さん！`)
+}
+
+export function showForgotPassword(c: Context<AppEnv>) {
+  if (c.var.user) return c.redirect('/account')
+  return c.render(<ForgotPasswordPage />, { title: 'パスワードの再設定' })
+}
+
+export async function submitForgotPassword(c: Context<AppEnv>) {
+  const form = await readForm(c)
+  const result = validate('forgotPassword', form)
+  if (!result.ok) {
+    c.status(422)
+    return c.render(<ForgotPasswordPage email={field(form, 'email', 254)} errors={result.errors} />, { title: 'パスワードの再設定' })
+  }
+  const { email } = result.values
+
+  const ip = clientIp(c)
+  const wait = Math.max(forgotByIp.retryAfter(ip), forgotByEmail.retryAfter(email))
+  if (wait) {
+    return c.render(<ForgotPasswordPage email={email} errors={{ form: tooManyRequests(c, wait) }} />, { title: 'パスワードの再設定' })
+  }
+  forgotByIp.hit(ip)
+  forgotByEmail.hit(email)
+
+  // 未登録のアドレスに「登録がない」と知らせるメールを送らないのは、入力さえすれば誰にでもメールを送れてしまうため
+  const user = db.select({ id: users.id }).from(users).where(eq(users.email, email)).get()
+  if (user) {
+    const mail = {
+      subject: '【STEP Learn】パスワードの再設定',
+      text: [
+        'STEP Learn で、パスワードの再設定が求められました。',
+        '次の URL を開いて、1時間以内に新しいパスワードを設定してください。',
+        '',
+        `${appOrigin(c)}/password/reset?token=${await createPasswordReset(user.id)}`,
+        '',
+        '心当たりがない場合は、このメールを破棄してください。パスワードは変わりません。',
+      ].join('\n'),
+    }
+    // 送信を待たないのは、SMTP の応答時間や失敗の有無から登録済みかどうかを推測されないようにするため
+    mailer.send({ to: email, ...mail }).catch((err) => console.error('[mail] 送信に失敗しました', err))
+  }
+
+  return c.render(<ForgotPasswordSentPage email={email} />, { title: 'パスワードの再設定' })
+}
+
+export async function showResetPassword(c: Context<AppEnv>) {
+  const token = c.req.query('token') ?? ''
+  const user = await findPasswordReset(token)
+  if (!user) {
+    c.status(410)
+    return c.render(<InvalidLinkPage retry="reset" />, { title: 'パスワードの再設定' })
+  }
+  return c.render(<ResetPasswordPage token={token} email={user.email} />, { title: 'パスワードの再設定' })
+}
+
+export async function submitResetPassword(c: Context<AppEnv>) {
+  const form = await readForm(c)
+  const token = field(form, 'token', 100)
+  const user = await findPasswordReset(token)
+  if (!user) {
+    c.status(410)
+    return c.render(<InvalidLinkPage retry="reset" />, { title: 'パスワードの再設定' })
+  }
+
+  const result = validate('resetPassword', form)
+  // スキーマで確かめないのは、パスワードに含めてはいけない氏名やユーザー名がこのフォームの入力にないため
+  const passwordError = result.ok ? checkPassword(result.values.password, user) : null
+  if (!result.ok || passwordError) {
+    const errors: FieldErrors = result.ok ? { password: passwordError! } : result.errors
+    c.status(422)
+    return c.render(<ResetPasswordPage token={token} email={user.email} errors={errors} />, { title: 'パスワードの再設定' })
+  }
+
+  await resetPassword(user.id, result.values.password)
+  // 先に今のセッションを消すのは、別のアカウントでログインしたままリンクを開いた場合に、そのセッションを残さないため
+  await destroySession(c)
+  await createSession(c, user.id)
+  return redirectWith(c, '/dashboard', 'パスワードを設定しました。')
 }
 
 export async function logout(c: Context<AppEnv>) {
