@@ -33,8 +33,8 @@ export const CourseHeader = ({
   return (
     <>
       <Breadcrumbs items={[{ href: '/courses', label: 'コース' }, { label: course.code || course.title }]} />
-      {hero && <img class="course-hero-cover" src={hero} alt="" />}
-      <section class={cx('course-hero', `tone-${course.color}`, hero && 'has-cover')}>
+      {hero ? <img class="course-hero-cover" src={hero} alt="" /> : <div class={`course-hero-cover tone-${course.color}`} />}
+      <section class={`course-hero tone-${course.color}`}>
         <CourseIcon course={course} text={courseInitials(course)} class="course-hero-mono" />
         <div class="course-hero-body">
           <h1>{course.title}</h1>
