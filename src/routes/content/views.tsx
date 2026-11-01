@@ -51,7 +51,7 @@ export const ItemEditPage = ({
   const section = sections.find((s) => s.id === item.sectionId)
   const typeLabel = ITEM_TYPE_LABELS[item.type]
   return (
-    <AppShell wide>
+    <AppShell wide tone={access.course.color}>
       <Styles use={['/src/routes/content/content.css']} />
       <Breadcrumbs
         items={[
@@ -214,7 +214,7 @@ export const ItemPage = ({
   const isHidden = (o: OutlineItem) => !!o.hidden || hiddenSections.has(o.sectionId)
 
   return (
-    <AppShell wide>
+    <AppShell wide tone={access.course.color}>
       <Styles use={['/src/routes/content/content.css']} />
       <div class="reader">
         <article class="reader-main">
