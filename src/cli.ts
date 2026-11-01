@@ -7,11 +7,25 @@ import { isEmail } from './lib/forms'
 import { checkPassword } from './lib/password'
 import { ROLE_LABELS, type Role } from './lib/types'
 import { checkUsername, normalizeUsername } from './lib/username'
+import { openBackup } from './moodle/archive'
+import { readBackup } from './moodle/backup'
+import { PARTICIPANT_LIMIT, planImport, printPreview, runImport } from './moodle/import'
 
-const USAGE = `使い方: npm run user:create -- --email <メールアドレス> --name <氏名> --username <ユーザー名> [--role admin|teacher|student]
+const USER_CREATE_USAGE = `使い方: npm run user:create -- --email <メールアドレス> --name <氏名> --username <ユーザー名> [--role admin|teacher|student]
 
 ユーザーを作成します。ロールを省略すると管理者になります。
 パスワードは対話的に入力します（パイプで渡した場合は 1 行目を使います）。`
+
+const MOODLE_IMPORT_USAGE = `使い方: npm run moodle:import -- <バックアップ.mbz または展開したディレクトリ> [--dry-run] [--yes] [--verbose]
+
+Moodle のコースバックアップから、コース・セクション・アイテム・参加者を取り込みます。
+取り込む前に内容のプレビューを表示し、確認してから書き込みます。
+
+  --dry-run   プレビューだけを表示して、何も書き込まずに終了する
+  --yes, -y   確認せずに取り込む（パイプやスクリプトから実行するとき）
+  --verbose   プレビューで学生をすべて表示する（既定は ${PARTICIPANT_LIMIT} 人まで）`
+
+const USAGE = `${USER_CREATE_USAGE}\n\n${MOODLE_IMPORT_USAGE}`
 
 function fail(message: string): never {
   console.error(message)
@@ -61,6 +75,16 @@ async function readPassword() {
   }
 }
 
+async function confirm(question: string) {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+  try {
+    const answer = await rl.question(question).catch(() => '')
+    return /^y(es)?$/i.test(answer.trim())
+  } finally {
+    rl.close()
+  }
+}
+
 async function createUserCommand(args: string[]) {
   const { values } = parseArgs({
     args,
@@ -94,9 +118,56 @@ async function createUserCommand(args: string[]) {
   console.log(`${ROLE_LABELS[role]}「${name}」（@${username}、${email}）を作成しました。`)
 }
 
+async function moodleImportCommand(args: string[]) {
+  const { values, positionals } = parseArgs({
+    args,
+    allowPositionals: true,
+    options: {
+      'dry-run': { type: 'boolean', default: false },
+      yes: { type: 'boolean', short: 'y', default: false },
+      verbose: { type: 'boolean', default: false },
+    },
+  })
+  if (positionals.length !== 1) fail(MOODLE_IMPORT_USAGE)
+  const [source] = positionals
+
+  console.log(`${source} を読み込んでいます…`)
+  const { dir, cleanup } = await openBackup(source)
+  // fail() を使わずに throw するのは、process.exit() だと finally が動かず、展開した一時ファイルが残るため
+  try {
+    const plan = await planImport(readBackup(dir))
+    printPreview(plan, source, { verbose: values.verbose })
+
+    if (values['dry-run']) {
+      console.log('--dry-run のため、何も書き込まずに終了します。')
+      return
+    }
+    if (!values.yes) {
+      if (!process.stdin.isTTY) throw new Error('確認の入力ができないため中止しました。確認せずに取り込むには --yes を付けてください。')
+      if (!(await confirm('この内容で取り込みますか？ [y/N] '))) {
+        console.log('取り込みを中止しました。')
+        return
+      }
+    }
+
+    const tty = process.stdout.isTTY
+    const result = await runImport(plan, (message) => (tty ? process.stdout.write(`\r\x1b[K${message}`) : console.log(message)))
+    if (tty) process.stdout.write('\r\x1b[K')
+    console.log(
+      [
+        `コース「${plan.backup.course.title}」を作成しました（/courses/${result.courseId}）。`,
+        `セクション ${result.sections}・アイテム ${result.items}・参加者 ${result.enrolled} 人（うち新規ユーザー ${result.createdUsers} 人）`,
+      ].join('\n'),
+    )
+  } finally {
+    await cleanup()
+  }
+}
+
 const [command, ...rest] = process.argv.slice(2)
 try {
   if (command === 'user:create') await createUserCommand(rest)
+  else if (command === 'moodle:import') await moodleImportCommand(rest)
   else fail(USAGE)
 } catch (err) {
   fail(err instanceof Error ? err.message : String(err))
