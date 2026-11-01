@@ -349,6 +349,137 @@ document.addEventListener('click', (e) => {
   if (btn && select) select.value = btn.dataset.addItemSection ?? ''
 })
 
+// --- アイテムの追加: 種類を選ぶと設定へ進み、選んだ種類のカードが設定の上の見出しに移る
+type ItemStep = 'kind' | 'settings'
+type StepMotion = { animations: Animation[]; settle: () => void }
+
+const STEP_DURATION = 360
+const STEP_EASE = 'cubic-bezier(0.2, 0.7, 0.2, 1)'
+let stepMotion: StepMotion | null = null
+
+function settleStepMotion() {
+  const motion = stepMotion
+  stepMotion = null
+  motion?.animations.forEach((a) => a.cancel())
+  motion?.settle()
+}
+
+// transform の scale で縮めないのは、カードと見出しで縦横比が違い、文字が潰れて見えるため
+function morphFrom(el: HTMLElement, from: DOMRect) {
+  const to = el.getBoundingClientRect()
+  return el.animate(
+    [
+      { transform: `translate(${from.left - to.left}px, ${from.top - to.top}px)`, width: `${from.width}px`, height: `${from.height}px` },
+      { transform: 'none', width: `${to.width}px`, height: `${to.height}px` },
+    ],
+    { duration: STEP_DURATION, easing: STEP_EASE },
+  )
+}
+
+const keepHidden = (el: Element) => el.animate([{ opacity: 0 }, { opacity: 0 }], { duration: STEP_DURATION })
+
+const fadeOut = (el: Element) =>
+  el.animate([{ opacity: 1 }, { opacity: 0, transform: 'scale(0.96)' }], { duration: 180, easing: 'ease-out', fill: 'forwards' })
+
+const riseIn = (el: Element, delay: number) =>
+  el.animate(
+    [
+      { opacity: 0, transform: 'translateY(14px)' },
+      { opacity: 1, transform: 'none' },
+    ],
+    {
+      duration: 280,
+      delay,
+      easing: STEP_EASE,
+      fill: 'backwards',
+    },
+  )
+
+const visibleChildren = (el: Element, skip?: Element) =>
+  [...el.children].filter((child) => child !== skip && child.getClientRects().length > 0)
+
+function setItemKind(form: HTMLFormElement, kind: string) {
+  const input = form.elements.namedItem('type')
+  form.dataset.kind = kind
+  if (!(input instanceof HTMLInputElement) || input.value === kind) return
+  input.value = kind
+  input.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+function goToItemStep(form: HTMLFormElement, step: ItemStep, kind?: string) {
+  settleStepMotion()
+  const picker = form.querySelector<HTMLElement>('.kind-picker')
+  const settings = form.querySelector<HTMLElement>('.kind-settings')
+  const summary = form.querySelector<HTMLElement>('.kind-summary')
+  if (!picker || !settings || !summary) return
+  if (kind) setItemKind(form, kind)
+  const chosen = form.querySelector<HTMLElement>(`[data-pick-kind="${form.dataset.kind}"]`)
+  const forward = step === 'settings'
+  const fromHeight = form.offsetHeight
+  const fromBox = (forward ? chosen : summary)?.getBoundingClientRect()
+  form.dataset.step = step
+  const focusTarget = forward ? form.querySelector<HTMLElement>('input[name=title]') : chosen
+  focusTarget?.focus({ preventScroll: true })
+  if (!chosen || !fromBox || matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+  const leaving = forward ? picker : settings
+  leaving.classList.add('is-leaving')
+  form.classList.add('is-switching')
+  const height = form.animate([{ height: `${fromHeight}px` }, { height: `${form.offsetHeight}px` }], {
+    duration: STEP_DURATION,
+    easing: STEP_EASE,
+  })
+  const others = $$<HTMLElement>('[data-pick-kind]', picker).filter((el) => el !== chosen)
+  const animations = forward
+    ? [
+        height,
+        keepHidden(chosen),
+        ...others.map(fadeOut),
+        morphFrom(summary, fromBox),
+        ...$$('.kind-summary > .btn', settings).map((el) => riseIn(el, 200)),
+        ...visibleChildren(settings, summary).map((el, i) => riseIn(el, 90 + i * 30)),
+      ]
+    : [
+        height,
+        keepHidden(summary),
+        ...visibleChildren(settings, summary).map(fadeOut),
+        morphFrom(chosen, fromBox),
+        ...others.map((el, i) => riseIn(el, 120 + i * 40)),
+      ]
+  const motion: StepMotion = {
+    animations,
+    settle: () => {
+      leaving.classList.remove('is-leaving')
+      form.classList.remove('is-switching')
+    },
+  }
+  stepMotion = motion
+  void Promise.all(animations.map((a) => a.finished)).then(
+    () => stepMotion === motion && settleStepMotion(),
+    () => {},
+  )
+}
+
+document.addEventListener('click', (e) => {
+  const target = e.target as Element
+  const pick = target.closest<HTMLElement>('[data-pick-kind]')
+  const back = target.closest('[data-kind-back]')
+  const form = (pick ?? back)?.closest<HTMLFormElement>('[data-item-steps]')
+  if (form) goToItemStep(form, pick ? 'settings' : 'kind', pick?.dataset.pickKind)
+})
+
+// 開き直したときに入力した値までは消さないのは、うっかり閉じただけで書きかけが失われないようにするため
+document.addEventListener(
+  'beforetoggle',
+  (e) => {
+    const form = (e as ToggleEvent).newState === 'open' ? (e.target as Element).querySelector?.<HTMLFormElement>('[data-item-steps]') : null
+    if (!form) return
+    settleStepMotion()
+    form.dataset.step = 'kind'
+  },
+  true,
+)
+
 // --- ポップオーバーは外側クリックと Esc で閉じる
 document.addEventListener('click', (e) => {
   $$<HTMLDetailsElement>('details.popover[open]').forEach((d) => {

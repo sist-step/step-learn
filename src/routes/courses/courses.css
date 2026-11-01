@@ -27,12 +27,12 @@
   .settings-toc a { flex: none; }
 }
 
-/* 種類に応じて入力欄を出し分け（JS 不要） */
+/* 種類に応じて入力欄を出し分け */
 .item-form .when-link, .item-form .when-file, .item-form .when-other-inline { display: none; }
-.item-form:has(input[value='link']:checked) .when-link,
-.item-form:has(input[value='file']:checked) .when-file { display: flex; }
-.item-form:not(:has(input[value='page']:checked)) .when-other-inline { display: inline; }
-.item-form:not(:has(input[value='page']:checked)) .when-page-inline { display: none; }
+.item-form[data-kind='link'] .when-link,
+.item-form[data-kind='file'] .when-file { display: flex; }
+.item-form:not([data-kind='page']) .when-other-inline { display: inline; }
+.item-form:not([data-kind='page']) .when-page-inline { display: none; }
 
 :root:not([data-edit-mode]) .edit-only,
 :root[data-edit-mode] .view-only { display: none; }
@@ -144,24 +144,53 @@
 }
 .add-item:hover { color: var(--primary-text); border-color: var(--primary); background: var(--primary-soft); }
 
-.kind-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+/* アイテムの追加: 種類を選ぶ → 設定する */
+.item-steps { position: relative; }
+.item-steps.is-switching { overflow: clip; }
+.item-steps[data-step='kind'] .kind-settings, .item-steps[data-step='settings'] .kind-picker { display: none; }
+.item-steps .item-step.is-leaving { display: flex; position: absolute; inset: 0 0 auto; pointer-events: none; }
+.item-steps .kind-picker.is-leaving { display: grid; }
+
+.kind-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .kind-option {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
-.kind-option:hover { border-color: var(--border-strong); }
-.kind-option input { position: absolute; opacity: 0; }
-.kind-option:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); }
-.kind-option:has(input:focus-visible) { box-shadow: var(--ring); }
-.kind-option .item-icon { flex: none; }
+.kind-option:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.kind-option:focus-visible { outline: none; box-shadow: var(--ring); }
+.kind-option > .icon { flex: none; margin-left: auto; color: var(--muted); transition: transform 0.15s var(--ease); }
+.kind-option:hover > .icon { transform: translateX(2px); color: var(--text-2); }
+.kind-option .item-icon, .kind-summary .item-icon { flex: none; }
 .kind-option-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.4; }
+
+.kind-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 14px;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius);
+  background: var(--primary-soft);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+.kind-summary-body { display: none; align-items: center; gap: 12px; min-width: 0; }
+.item-form[data-kind='page'] [data-kind-summary='page'],
+.item-form[data-kind='link'] [data-kind-summary='link'],
+.item-form[data-kind='file'] [data-kind-summary='file'],
+.item-form[data-kind='screen'] [data-kind-summary='screen'] { display: flex; }
+.kind-summary > .btn { flex: none; margin-left: auto; }
 @media (max-width: 640px) {
-  .kind-option-text .small { display: none; }
+  .kind-picker { grid-template-columns: minmax(0, 1fr); }
+  .kind-summary .kind-option-text .small { display: none; }
 }
