@@ -76,7 +76,7 @@
 }
 .rail-link > :first-child { justify-self: center; }
 .rail-link:hover { background: var(--surface); color: var(--text); text-decoration: none; }
-.rail-link.active { background: var(--primary); color: var(--on-primary); }
+.rail-link.active { background: var(--c-soft); color: var(--c-ink); }
 .rail-course.active { background: none; color: var(--text); }
 .rail-course.active .dot { box-shadow: 0 0 0 3px var(--current-ring), 0 0 0 4px var(--border-strong); }
 .rail-label { padding-right: 14px; font-weight: 500; opacity: 0; transition: opacity 0.15s; }

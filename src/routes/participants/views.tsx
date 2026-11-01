@@ -163,7 +163,7 @@ export const ParticipantsPage = ({
 }) => {
   const props = { courseId: access.course.id, meId, manage: access.canManage, totalItems }
   return (
-    <AppShell wide>
+    <AppShell wide tone={access.course.color}>
       <Styles use={['/src/routes/participants/participants.css']} />
       <CourseHeader access={access} tab="participants" />
       <TabPanel>
