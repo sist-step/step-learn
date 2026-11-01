@@ -373,7 +373,7 @@ export const CoursePage = ({
   const trackedItems = itemList.filter((it) => !it.hidden && sectionNumber.has(it.sectionId) && isTracked(it))
 
   return (
-    <AppShell wide editable={manage}>
+    <AppShell wide editable={manage} tone={access.course.color}>
       <Styles use={['/src/routes/courses/courses.css']} />
       <CourseHeader
         access={access}
@@ -521,7 +521,7 @@ const SETTINGS_SECTIONS: { id: string; label: string; icon: IconName; danger?: b
 export const SettingsPage = ({ access, values, errors }: { access: CourseAccess; values: CourseFormValues; errors?: CourseFormErrors }) => {
   const id = access.course.id
   return (
-    <AppShell wide>
+    <AppShell wide tone={access.course.color}>
       <Styles use={['/src/routes/courses/courses.css']} />
       <CourseHeader access={access} tab="settings" />
       <TabPanel>

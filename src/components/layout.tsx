@@ -93,7 +93,7 @@ const UserMenu = ({ editable }: { editable?: boolean }) => {
   )
 }
 
-export const AppShell = ({ children, wide, editable }: { children: Child; wide?: boolean; editable?: boolean }) => {
+export const AppShell = ({ children, wide, editable, tone }: { children: Child; wide?: boolean; editable?: boolean; tone?: string }) => {
   useStyle('/src/components/layout.css')
   const c = useRequestContext<AppEnv>()
   const user = c.var.user!
@@ -169,7 +169,7 @@ export const AppShell = ({ children, wide, editable }: { children: Child; wide?:
       </aside>
       <div class="backdrop" data-nav-toggle />
 
-      <main class={wide ? 'content content-wide' : 'content'}>{children}</main>
+      <main class={cx('content', wide && 'content-wide', tone && `tone-${tone}`)}>{children}</main>
       <Toast />
     </div>
   )

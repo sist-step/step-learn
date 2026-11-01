@@ -211,7 +211,7 @@ a.person:hover .strong { color: var(--primary-text); }
   transition: color 0.15s;
 }
 .tab:hover { color: var(--text); text-decoration: none; }
-.tab.active { color: var(--on-primary); }
+.tab.active { color: var(--c-ink); }
 /* 背景をタブ自身に塗らないのは、切り替え時に隣のタブの文字の下をくぐらせて滑らせるため */
 .tab.active::before {
   content: '';
@@ -219,15 +219,14 @@ a.person:hover .strong { color: var(--primary-text); }
   inset: 0;
   z-index: -1;
   border-radius: inherit;
-  background: var(--primary);
-  box-shadow: var(--shadow-sm);
+  background: var(--c-soft);
 }
 .tab.is-entering { animation: tab-text-in 0.25s var(--ease); }
 .tab.is-entering::before { animation: tab-slide 0.25s var(--ease); }
 .tab.is-leaving { animation: tab-text-out 0.25s var(--ease); }
 @keyframes tab-slide { from { left: var(--tab-from-left); right: var(--tab-from-right); } }
 @keyframes tab-text-in { from { color: var(--muted); } }
-@keyframes tab-text-out { from { color: var(--on-primary); } }
+@keyframes tab-text-out { from { color: var(--c-ink); } }
 
 /* 名前を常に付けないのは、タブの切り替え以外の遷移（別のコースへ移るなど）でも中身が動いてしまうため */
 :root[data-tab-slide] .tab-panel { view-transition-name: tab-panel; }
