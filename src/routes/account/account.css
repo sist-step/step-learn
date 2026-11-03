@@ -1,2 +1,10 @@
-.settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
-.profile-row { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; padding: 14px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border); }
+.account-layout { display: flex; flex-direction: column; gap: 16px; max-width: 760px; }
+.account-hero { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 4px; }
+.account-hero .person { gap: 16px; }
+.account-hero .person-meta > .strong { font-size: var(--fs-xl); font-weight: 650; }
+.account-hero .person-sub { margin-top: 2px; }
+.account-hero > .chip { flex: none; }
+@media (max-width: 640px) {
+  .account-hero .person-sub { flex-direction: column; }
+  .account-hero .person-sub > span + span::before { content: none; }
+}

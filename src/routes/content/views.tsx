@@ -1,4 +1,4 @@
-import { CompletionField, CompletionStatus, CourseLiveSync, ItemIcon } from '../../components/course'
+import { CompletionField, CompletionStatus, CourseLiveSync, ITEM_ICONS, ItemIcon } from '../../components/course'
 import { cx } from '../../components/cx'
 import { Icon } from '../../components/icons'
 import { AppShell } from '../../components/layout'
@@ -23,6 +23,14 @@ export type OutlineSection = Pick<Section, 'id' | 'title' | 'hidden'>
 export const TEXT_PREVIEW_MAX = 200 * 1024
 
 export const editUrl = (courseId: number, sectionId?: number) => `/courses/${courseId}${sectionId ? `#section-${sectionId}` : ''}`
+
+const hostName = (url: string) => {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return url
+  }
+}
 
 export const ItemEditPage = ({
   access,
@@ -51,14 +59,15 @@ export const ItemEditPage = ({
   const section = sections.find((s) => s.id === item.sectionId)
   const typeLabel = ITEM_TYPE_LABELS[item.type]
   return (
-    <AppShell wide tone={access.course.color}>
+    <AppShell tone={access.course.color}>
       <Styles use={['/src/routes/content/content.css']} />
       <Breadcrumbs
         items={[
-          { href: '/courses', label: 'コース' },
-          { href: editUrl(courseId, item.sectionId), label: access.course.code || access.course.title },
-          { label: section?.title },
-        ]}
+          { href: '/courses', label: 'コース一覧' },
+          { href: `/courses/${courseId}`, label: access.course.title },
+          section && { href: editUrl(courseId, section.id), label: section.title },
+          { href: base, label: item.title },
+        ].filter((b) => !!b)}
       />
       <header class="editor-head">
         <ItemIcon type={item.type} />
@@ -212,14 +221,29 @@ export const ItemPage = ({
   const navHref = (o: OutlineItem) => `${base}/${o.id}`
   const hiddenSections = new Set(sections.filter((s) => s.hidden).map((s) => s.id))
   const isHidden = (o: OutlineItem) => !!o.hidden || hiddenSections.has(o.sectionId)
+  const siblings = outline.filter((o) => o.sectionId === item.sectionId)
+  const position = siblings.findIndex((o) => o.id === item.id) + 1
+  const outlineSections = sections
+    .map((s) => ({ section: s, items: outline.filter((o) => o.sectionId === s.id) }))
+    .filter((s) => access.canManage || s.items.length > 0)
 
   return (
-    <AppShell wide tone={access.course.color}>
+    <AppShell tone={access.course.color}>
       <Styles use={['/src/routes/content/content.css']} />
+      <Breadcrumbs
+        items={[
+          { href: '/courses', label: 'コース一覧' },
+          { href: `/courses/${id}`, label: access.course.title },
+        ]}
+      />
       <div class="reader">
         <article class="reader-main">
-          <Breadcrumbs items={[{ href: `/courses/${id}`, label: access.course.title }, { label: section?.title }]} />
           <header class="reader-head">
+            {section && position > 0 && (
+              <span class="eyebrow">
+                <a href={editUrl(id, section.id)}>{section.title}</a> · {position} / {siblings.length}
+              </span>
+            )}
             <ItemIcon type={item.type} />
             <h1>{item.title}</h1>
             {access.canManage && (
@@ -237,19 +261,40 @@ export const ItemPage = ({
           )}
 
           {item.type === 'link' && (
-            <LinkCard href={item.url} icon="link" target="_blank" rel="noopener noreferrer" data-no-prefetch {...onOpen(item)}>
-              <span class="truncate">{item.url}</span>
-              <Button as="span" variant="primary" size="sm" iconEnd="external">
+            <LinkCard
+              href={item.url}
+              icon="link"
+              class={`link-card-lg kind-${item.type}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-no-prefetch
+              {...onOpen(item)}
+            >
+              <span class="file-name">
+                <span class="strong">外部サイトを開く</span>
+                <span class="muted small truncate">{hostName(item.url)}</span>
+              </span>
+              <Button as="span" variant="primary" iconEnd="external">
                 開く
               </Button>
             </LinkCard>
           )}
 
           {item.type === 'screen' && (
-            <LinkCard href={`${base}/${item.id}/screen`} icon="monitor" target="_blank" rel="noopener" data-no-prefetch>
-              <span class="truncate">別のタブで画面共有を開きます</span>
+            <LinkCard
+              href={`${base}/${item.id}/screen`}
+              icon="monitor"
+              class={`link-card-lg kind-${item.type}`}
+              target="_blank"
+              rel="noopener"
+              data-no-prefetch
+            >
+              <span class="file-name">
+                <span class="strong">画面共有を開く</span>
+                <span class="muted small truncate">別のタブで開きます</span>
+              </span>
               {sharing && <Chip tone="live">配信中</Chip>}
-              <Button as="span" variant="primary" size="sm" iconEnd="external">
+              <Button as="span" variant="primary" iconEnd="external">
                 開く
               </Button>
             </LinkCard>
@@ -257,12 +302,15 @@ export const ItemPage = ({
 
           {item.type === 'file' && (
             <>
-              <LinkCard icon="file">
+              <LinkCard icon="file" class={`link-card-lg kind-${item.type}`}>
                 <span class="file-name">
-                  <span class="truncate strong">{item.fileName}</span>
-                  <span class="muted small">{formatBytes(item.fileSize ?? 0)}</span>
+                  <span class="strong">ファイルをダウンロード</span>
+                  <span class="file-meta muted small">
+                    <span class="truncate">{item.fileName}</span>
+                    <span>{formatBytes(item.fileSize ?? 0)}</span>
+                  </span>
                 </span>
-                <Button href={fileUrl} variant="primary" size="sm" icon="download" data-no-prefetch download {...onOpen(item)}>
+                <Button href={fileUrl} variant="primary" icon="download" data-no-prefetch download {...onOpen(item)}>
                   ダウンロード
                 </Button>
               </LinkCard>
@@ -299,7 +347,9 @@ export const ItemPage = ({
             </>
           )}
 
-          {item.body ? <Markdown source={item.body} /> : item.type === 'page' && <p class="muted">本文はまだありません。</p>}
+          {(item.body || item.type === 'page') && (
+            <div class="reader-sheet">{item.body ? <Markdown source={item.body} /> : <p class="muted">本文はまだありません。</p>}</div>
+          )}
 
           {waitsFor(item, 'view') && opensOnView && <span hidden data-complete-on-view={completeUrl(item)} />}
 
@@ -313,42 +363,43 @@ export const ItemPage = ({
             <form method="post" action={completeUrl(item)} class="complete-bar" data-complete>
               <Button
                 type="submit"
-                variant={isDone ? 'success' : 'primary'}
+                variant={isDone ? 'success' : next ? 'default' : 'primary'}
                 size="lg"
                 icon="check"
                 aria-pressed={isDone ? 'true' : 'false'}
+                data-complete-secondary={!isDone && next ? '' : undefined}
               >
                 <span data-complete-label>{isDone ? '完了済み' : '完了にする'}</span>
               </Button>
+              {!isDone && next && (
+                <Button type="submit" variant="primary" size="lg" iconEnd="chevronRight" data-complete-then={navHref(next)}>
+                  完了して次へ
+                </Button>
+              )}
             </form>
           )}
 
           <nav class="pager" aria-label="前後のアイテム">
-            {prev ? (
-              <a href={navHref(prev)} class="pager-link">
-                <span class="muted small">
-                  <Icon name="chevronLeft" size={14} /> 前へ
+            {prev && (
+              <a href={navHref(prev)} class="pager-link pager-prev">
+                <span class="pager-arrow">
+                  <Icon name="chevronLeft" size={18} />
                 </span>
-                <span class="truncate">{prev.title}</span>
-              </a>
-            ) : (
-              <span />
-            )}
-            {next ? (
-              <a href={navHref(next)} class="pager-link pager-next">
-                <span class="muted small">
-                  次へ <Icon name="chevronRight" size={14} />
+                <span class="pager-text">
+                  <span class="pager-label muted small">前へ</span>
+                  <span class="pager-title truncate">{prev.title}</span>
                 </span>
-                <span class="truncate">{next.title}</span>
-              </a>
-            ) : (
-              <a href={`/courses/${id}`} class="pager-link pager-next">
-                <span class="muted small">
-                  コースへ <Icon name="chevronRight" size={14} />
-                </span>
-                <span class="truncate">{access.course.title}</span>
               </a>
             )}
+            <a href={next ? navHref(next) : `/courses/${id}`} class="pager-link pager-next">
+              <span class="pager-text">
+                <span class="pager-label muted small">{next ? '次へ' : 'コースへ'}</span>
+                <span class="pager-title truncate">{next ? next.title : access.course.title}</span>
+              </span>
+              <span class="pager-arrow">
+                <Icon name="chevronRight" size={18} />
+              </span>
+            </a>
           </nav>
         </article>
 
@@ -363,16 +414,16 @@ export const ItemPage = ({
               </span>
             )}
           </div>
-          {sections.map((s) => (
-            <div class="outline-section">
+          {outlineSections.map(({ section: s, items }) => (
+            <div class={cx('outline-section', items.length === 0 && 'is-empty')}>
               <div class={cx('outline-title', !!s.hidden && 'is-hidden')}>
                 {s.title}
                 {!!s.hidden && <Icon name="eyeSlash" size={12} />}
+                {items.length === 0 && <span class="outline-count">0</span>}
               </div>
-              <ul>
-                {outline
-                  .filter((o) => o.sectionId === s.id)
-                  .map((o) => (
+              {items.length > 0 && (
+                <ul>
+                  {items.map((o) => (
                     <li>
                       <a
                         href={o.type === 'link' ? o.url : o.type === 'screen' ? `${navHref(o)}/screen` : navHref(o)}
@@ -383,15 +434,20 @@ export const ItemPage = ({
                         aria-current={o.id === item.id ? 'page' : undefined}
                         {...(o.type === 'link' ? onOpen(o) : {})}
                       >
-                        <span class={cx('outline-dot', isTracked(o) ? done.has(o.id) && 'done' : 'is-untracked')} data-outline-dot={o.id}>
-                          {isTracked(o) && done.has(o.id) && <Icon name="check" size={10} />}
-                        </span>
+                        {isTracked(o) ? (
+                          <span class={cx('outline-dot', done.has(o.id) && 'done')} data-outline-dot={o.id}>
+                            {done.has(o.id) && <Icon name="check" size={10} />}
+                          </span>
+                        ) : (
+                          <Icon name={ITEM_ICONS[o.type]} size={14} class="outline-kind" />
+                        )}
                         <span class="truncate">{o.title}</span>
                         {!!o.hidden && <Icon name="eyeSlash" size={12} class="outline-hidden" />}
                       </a>
                     </li>
                   ))}
-              </ul>
+                </ul>
+              )}
             </div>
           ))}
         </aside>

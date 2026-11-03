@@ -1,7 +1,7 @@
 /* ===== 設定の目次 */
 .settings-layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 32px; align-items: start; }
 .settings-toc { position: sticky; top: calc(var(--topbar-h) + 24px); display: flex; flex-direction: column; gap: 2px; }
-.settings-toc-title { padding: 6px 10px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.settings-toc-title { padding: 6px 10px; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); }
 .settings-toc a {
   display: flex;
   align-items: center;
@@ -9,22 +9,41 @@
   padding: 8px 10px;
   border-radius: 10px;
   color: var(--text-2);
-  font-size: 13.5px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   white-space: nowrap;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
-.settings-toc a:hover { background: var(--surface); color: var(--text); text-decoration: none; }
-.settings-toc a.is-danger { color: var(--danger); }
+.settings-toc a.is-danger { color: var(--danger-text); }
 .settings-toc a.active { background: var(--c-soft); color: var(--c-ink); font-weight: 600; }
+@media (hover: hover) {
+  .settings-toc a:hover { background: var(--surface); color: var(--text); text-decoration: none; }
+  .settings-toc a.active:hover { background: var(--c-soft); color: var(--c-ink); }
+}
 @media (prefers-reduced-motion: no-preference) {
   html:has(.settings-toc) { scroll-behavior: smooth; }
 }
+/* 狭い画面で目次を static に戻さないのは、長いフォームを下へ進むと項目の間を移る手段がなくなるため */
 @media (max-width: 900px) {
   .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  .settings-toc { position: static; flex-direction: row; overflow-x: auto; scrollbar-width: none; }
+  .settings-toc {
+    position: sticky;
+    top: var(--topbar-h);
+    z-index: 5;
+    flex-direction: row;
+    gap: 6px;
+    margin: 0 -16px;
+    padding: 8px 40px 8px 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: blur(12px);
+    mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+  }
   .settings-toc-title { display: none; }
-  .settings-toc a { flex: none; }
+  .settings-toc a { flex: none; min-height: var(--tap); padding: 0 14px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--card-border); }
+  .settings-toc a.active { box-shadow: none; }
+  html:has(.settings-toc) { scroll-padding-top: calc(var(--topbar-h) + 72px); }
 }
 
 /* 種類に応じて入力欄を出し分け */
@@ -43,15 +62,16 @@
   background: var(--surface);
   border: 1px solid var(--card-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   overflow: clip;
 }
-.section-card:target { border-color: var(--primary); box-shadow: var(--ring); }
+.section-card:target { border-color: var(--focus); box-shadow: var(--ring); }
 .section-card:has(.popover[open]) { overflow: visible; }
 .section-head {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 18px;
+  padding: 14px 12px;
   margin: 0 8px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
@@ -59,90 +79,116 @@
   user-select: none;
 }
 .section-head::-webkit-details-marker { display: none; }
-.section-head:hover .section-title { color: var(--c-ink); }
+/* outline を外側に出さないのは、.section-card が overflow: clip なので切れて見えなくなるため */
+.section-head:focus-visible { outline-offset: -2px; border-radius: 16px; }
 .section-card:not([open]) > .section-head { border-bottom: 0; }
 .section-num {
   display: grid;
   place-items: center;
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--c-soft);
   color: var(--c-ink);
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
 .section-title-wrap { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.35; }
-.section-title { font-weight: 600; font-size: 15px; transition: color 0.15s; }
+.section-title { font-weight: 650; font-size: var(--fs-md); word-break: auto-phrase; overflow-wrap: anywhere; transition: color 0.15s; }
 .section-caret { flex: none; color: var(--muted); transition: transform 0.2s var(--ease); }
 .section-title-flight { position: fixed; z-index: 50; translate: 0 -50%; line-height: 1.35; white-space: nowrap; pointer-events: none; }
 .section-card:not([open]) .section-caret { transform: rotate(-90deg); }
-.section-card > .row-actions { position: absolute; top: 17px; right: 56px; }
-:root[data-edit-mode] .section-card:has(> .row-actions) .section-caret { margin-left: 180px; }
+.section-card > .row-actions { position: absolute; top: 17px; right: 52px; }
+:root[data-edit-mode] .section-card:has(> .row-actions) .section-caret { margin-left: 88px; }
+:root[data-edit-mode] .item-row:has(> .row-actions) .item-ext { display: none; }
 .section-card.is-hidden { border-style: dashed; background: color-mix(in srgb, var(--surface) 60%, transparent); }
-.section-card.is-hidden .section-title, .item-row.is-hidden .item-link { opacity: 0.6; }
+.section-card.is-hidden .section-title, .item-row.is-hidden .item-title { color: var(--muted); }
+.item-row.is-hidden .item-icon { color: var(--muted); }
 .item-link .chip { flex: none; }
+:is(.section-card.is-empty, :root:not([data-edit-mode]) .section-card.is-empty-view) { background: transparent; box-shadow: none; border: 1px dashed var(--border-strong); }
+:is(.section-card.is-empty, :root:not([data-edit-mode]) .section-card.is-empty-view) > .section-head { padding: 10px 12px; border-bottom: 0; cursor: default; }
+:is(.section-card.is-empty, :root:not([data-edit-mode]) .section-card.is-empty-view) .section-caret { display: none; }
+:is(.section-card.is-empty, :root:not([data-edit-mode]) .section-card.is-empty-view) .section-num { width: 24px; height: 24px; margin-inline: 4px; background: var(--surface-2); color: var(--muted); }
+:is(.section-card.is-empty, :root:not([data-edit-mode]) .section-card.is-empty-view) .section-title { font-weight: 500; color: var(--text-2); }
+:is(.section-card.is-empty, :root:not([data-edit-mode]) .section-card.is-empty-view) > .items { display: none; }
 
-/* 狭い画面で右に重ねたままにしないのは、タイトルの幅がなくなり 1 文字ずつ折り返されるため */
-@media (max-width: 640px) {
-  .section-card > .row-actions { position: static; justify-content: flex-end; padding: 6px 14px 0; }
-  :root[data-edit-mode] .section-card:has(> .row-actions) .section-caret { margin-left: 0; }
-  :root[data-edit-mode] .item-row:has(> .row-actions) { flex-wrap: wrap; }
-  .item-row > .row-actions { width: 100%; justify-content: flex-end; padding-bottom: 4px; }
+.menu-sep { height: 1px; margin: 4px 2px; background: var(--border); }
+
+@media (min-width: 641px) {
+  :root[data-edit-mode] .item-row:has(> .row-actions) { padding-right: 44px; }
 }
-.section-summary { padding: 12px 16px 0 54px; color: var(--muted); font-size: 13px; white-space: pre-line; }
-.section-empty { padding: 14px 16px 16px 54px; }
+.row-actions .icon-btn { color: var(--muted); }
+
+@media (max-width: 640px) {
+  :root[data-edit-mode] .section-card:has(> .row-actions) .section-caret { display: none; }
+  :root[data-edit-mode] .section-card > .row-actions { right: 8px; }
+  :root[data-edit-mode] .section-card:has(> .row-actions) > .section-head { padding-right: 96px; }
+  :root[data-edit-mode] .item-row:has(> .row-actions) { padding-right: 0; }
+}
+.section-summary { padding: 12px 20px 0 64px; color: var(--muted); font-size: var(--fs-sm); white-space: pre-line; }
 
 .items { list-style: none; margin: 0; padding: 6px 8px 8px; }
 .item-row { display: flex; align-items: center; gap: 8px; border-radius: 14px; padding-right: 8px; transition: background 0.15s; }
-.item-row:hover { background: var(--surface-2); }
-.item-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 8px; color: var(--text); }
-.item-link:hover { text-decoration: none; }
+.item-link { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: inherit; color: var(--text); }
 
 .item-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.35; }
-.item-title { font-weight: 500; font-size: 13.5px; }
-.item-meta { font-size: 12.5px; color: var(--muted); }
-.item-ext { color: var(--muted); margin-left: auto; }
+.item-title { font-weight: 500; font-size: var(--fs-base); word-break: auto-phrase; overflow-wrap: anywhere; transition: color 0.15s; }
+.item-meta { font-size: var(--fs-xs); color: var(--muted); }
+.item-ext { color: var(--muted); margin-left: auto; transition: color 0.15s; }
 .item-row.is-done .item-title { color: var(--muted); }
+@media (hover: hover) {
+  .section-head:hover .section-title { color: var(--c-ink); }
+  .row-actions .icon-btn:hover { color: var(--text); }
+  .item-row:hover { background: var(--surface-2); }
+  .item-link:hover { text-decoration: none; }
+  .item-row:hover .item-title, .item-row:hover .item-ext { color: var(--c-ink); }
+}
 
 .check {
+  position: relative;
   display: grid;
   place-items: center;
   width: 20px;
   height: 20px;
   padding: 0;
-  border: 1.5px solid var(--border-strong);
+  border: 1.5px solid var(--field-border);
   border-radius: 5px;
   background: var(--surface);
   color: transparent;
   transition: all 0.2s var(--ease);
 }
-.check:hover { border-color: var(--primary); color: color-mix(in srgb, var(--primary) 50%, transparent); }
-.check[aria-pressed='true'], .check-auto[data-done='true'] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); animation: pop 0.3s var(--ease); }
+.check::after { content: ''; position: absolute; inset: -12px; }
+.check[aria-pressed='true'], .check-auto[data-done='true'] { background: var(--success-strong); border-color: var(--success-strong); color: var(--on-strong); animation: pop 0.3s var(--ease); }
 .check-auto { flex: none; border-style: dashed; }
-.check-auto:hover { border-color: var(--border-strong); color: transparent; }
-.check-auto[data-done='true']:hover { border-color: var(--primary); color: var(--on-primary); }
+@media (hover: hover) {
+  .check:hover { border-color: var(--success); color: color-mix(in srgb, var(--success) 50%, transparent); }
+  .check-auto:hover { border-color: var(--field-border); color: transparent; }
+  .check-auto[data-done='true']:hover { border-color: var(--success-strong); color: var(--on-strong); }
+}
 
 .add-item {
   display: flex;
   align-items: center;
   gap: 8px;
   width: calc(100% - 16px);
-  margin: 0 8px 10px;
-  padding: 8px 10px;
+  margin: 8px 8px 10px;
+  padding: 8px 12px;
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius);
   background: none;
   color: var(--muted);
   font: inherit;
   font-weight: 500;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
-.add-item:hover { color: var(--primary-text); border-color: var(--primary); background: var(--primary-soft); }
+@media (hover: hover) {
+  .add-item:hover { color: var(--primary-text); border-color: var(--primary); background: var(--primary-soft); }
+}
+.items + .add-item { margin-top: 0; }
 
 /* アイテムの追加: 種類を選ぶ → 設定する */
 .item-steps { position: relative; }
@@ -167,10 +213,12 @@
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
-.kind-option:hover { border-color: var(--border-strong); background: var(--surface-2); }
 .kind-option:focus-visible { outline: none; box-shadow: var(--ring); }
 .kind-option > .icon { flex: none; margin-left: auto; color: var(--muted); transition: transform 0.15s var(--ease); }
-.kind-option:hover > .icon { transform: translateX(2px); color: var(--text-2); }
+@media (hover: hover) {
+  .kind-option:hover { border-color: var(--border-strong); background: var(--surface-2); }
+  .kind-option:hover > .icon { transform: translateX(2px); color: var(--text-2); }
+}
 .kind-option .item-icon, .kind-summary .item-icon { flex: none; }
 .kind-option-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.4; }
 
@@ -193,4 +241,11 @@
 @media (max-width: 640px) {
   .kind-picker { grid-template-columns: minmax(0, 1fr); }
   .kind-summary .kind-option-text .small { display: none; }
+}
+
+/* ===== 設定の画像カード */
+form:has(.file-picker:not([data-has-file])) .image-save { display: none; }
+.image-delete { margin-right: auto; --btn-fg: var(--danger-text); }
+@media (min-width: 641px) {
+  .image-delete { margin-left: -18px; }
 }

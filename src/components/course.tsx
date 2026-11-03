@@ -5,13 +5,15 @@ import { COMPLETION_LABELS, COMPLETIONS, COURSE_COLORS, type Completion, type Co
 import { Button } from './button'
 import { Card } from './card'
 import { cx } from './cx'
-import { SegmentedControl, SelectField, TextAreaField, TextField, validateWith } from './form'
+import { SegmentedControl, SelectField, Switch, TextAreaField, TextField, validateWith } from './form'
 import { Icon, type IconName } from './icons'
 import { Modal } from './overlay'
-import { Breadcrumbs, CourseIcon, ProgressRing, Tabs, courseInitials, type TabItem } from './ui'
+import { CourseIcon, ProgressRing, Tabs, courseInitials, type TabItem } from './ui'
 import { useStyle } from './style'
 
 type Tab = 'content' | 'participants' | 'settings'
+
+export const nextActionLabel = (done: number) => (done > 0 ? '続きから' : '学習を始める')
 
 export const CourseHeader = ({
   access,
@@ -30,11 +32,16 @@ export const CourseHeader = ({
   const { course, canManage } = access
   const base = `/courses/${course.id}`
   const hero = courseImageUrl(course.id, 'hero', course.heroImage)
+  const editSwitch = tab === 'content' && canManage
+  const compact = tab === 'participants' || tab === 'settings'
   return (
     <>
-      <Breadcrumbs items={[{ href: '/courses', label: 'コース' }, { label: course.code || course.title }]} />
-      {hero ? <img class="course-hero-cover" src={hero} alt="" /> : <div class={`course-hero-cover tone-${course.color}`} />}
-      <section class={`course-hero tone-${course.color}`}>
+      <a href="/courses" class="back-link">
+        <Icon name="chevronLeft" size={16} />
+        コース一覧
+      </a>
+      {!compact && (hero ? <img class="course-hero-cover" src={hero} alt="" /> : <div class={`course-hero-cover tone-${course.color}`} />)}
+      <section class={cx('course-hero', `tone-${course.color}`, compact && 'is-compact')}>
         <CourseIcon course={course} text={courseInitials(course)} class="course-hero-mono" />
         <div class="course-hero-body">
           <h1>{course.title}</h1>
@@ -60,13 +67,18 @@ export const CourseHeader = ({
             label="コースメニュー"
             items={(
               [
-                { href: base, label: 'コンテンツ', active: tab === 'content' },
+                { href: base, label: '教材', active: tab === 'content' },
                 { href: `${base}/participants`, label: '参加者', active: tab === 'participants' },
                 canManage && { href: `${base}/settings`, label: '設定', active: tab === 'settings' },
               ] satisfies (TabItem | false)[]
             ).filter((t) => t !== false)}
           />
-          {tabActions && <div class="course-tabs-actions">{tabActions}</div>}
+          {(editSwitch || tabActions) && (
+            <div class="course-tabs-actions">
+              {editSwitch && <Switch class="course-edit-switch" icon="pencil" label="編集モード" checked={false} data-edit-mode-toggle />}
+              {tabActions}
+            </div>
+          )}
         </div>
       )}
     </>
@@ -75,6 +87,18 @@ export const CourseHeader = ({
 
 export type CourseFormValues = Partial<Pick<Course, 'title' | 'code' | 'summary' | 'color' | 'completionEnabled'>>
 export type CourseFormErrors = Partial<Record<'title' | 'code' | 'summary', string>>
+
+const COLOR_LABELS: Record<(typeof COURSE_COLORS)[number], string> = {
+  cyan: 'シアン',
+  indigo: 'インディゴ',
+  sky: 'スカイ',
+  emerald: 'エメラルド',
+  amber: 'アンバー',
+  rose: 'ローズ',
+  violet: 'バイオレット',
+  teal: 'ティール',
+  slate: 'スレート',
+}
 
 const CourseFields = ({ values, errors = {} }: { values: CourseFormValues; errors?: CourseFormErrors }) => {
   useStyle('/src/components/course.css')
@@ -111,12 +135,12 @@ const CourseFields = ({ values, errors = {} }: { values: CourseFormValues; error
         <legend>カラー</legend>
         <div class="swatches">
           {COURSE_COLORS.map((color) => (
-            <label class={`swatch tone-${color}`} title={color}>
+            <label class={`swatch tone-${color}`} title={COLOR_LABELS[color]}>
               <input type="radio" name="color" value={color} checked={(values.color ?? 'cyan') === color} />
               <span class="swatch-dot">
                 <Icon name="check" size={14} />
               </span>
-              <span class="sr-only">{color}</span>
+              <span class="sr-only">{COLOR_LABELS[color]}</span>
             </label>
           ))}
         </div>
@@ -133,6 +157,8 @@ export const CourseForm = ({
   errors,
   submitLabel,
   cancelHref,
+  heading,
+  description,
 }: {
   id?: string
   action: string
@@ -140,8 +166,20 @@ export const CourseForm = ({
   errors?: CourseFormErrors
   submitLabel: string
   cancelHref: string
+  heading?: Child
+  description?: Child
 }) => (
-  <Card as="form" id={id} method="post" action={action} class="stack course-form" data-loading-form {...validateWith('course')}>
+  <Card
+    as="form"
+    id={id}
+    method="post"
+    action={action}
+    class="stack course-form"
+    heading={heading}
+    description={description}
+    data-loading-form
+    {...validateWith('course')}
+  >
     <CourseFields values={values} errors={errors} />
     <div class="form-actions">
       <Button href={cancelHref} variant="ghost">
@@ -181,7 +219,7 @@ export const CreateCourseButton = () => (
   </>
 )
 
-const ITEM_ICONS: Record<ItemType, IconName> = { page: 'page', link: 'link', file: 'file', screen: 'monitor' }
+export const ITEM_ICONS: Record<ItemType, IconName> = { page: 'page', link: 'link', file: 'file', screen: 'monitor' }
 
 export const ItemIcon = ({ type }: { type: ItemType }) => {
   useStyle('/src/components/course.css')
