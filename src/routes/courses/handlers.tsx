@@ -9,6 +9,8 @@ import {
   getCourseAccess,
   memberCount,
   teacherNames,
+  trackedDoneCount,
+  trackedItemCount,
   visibleItem,
   type CourseImageKind,
 } from '../../lib/courses'
@@ -48,6 +50,8 @@ export async function list(c: Context<AppEnv>) {
       heroImage: courses.heroImage,
       iconImage: courses.iconImage,
       role: enrollments.role,
+      total: trackedItemCount(courses.id),
+      done: trackedDoneCount(user.id, courses.id),
       members: memberCount(),
       teachers: teacherNames(),
     })

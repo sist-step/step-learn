@@ -8,7 +8,7 @@ import { cx } from './cx'
 import { Switch } from './form'
 import { MenuItem, Popover } from './overlay'
 import { useStyle } from './style'
-import { Avatar, Chip, CourseIcon, Person } from './ui'
+import { Avatar, CourseIcon, Person } from './ui'
 
 type ToastType = Flash['type']
 
@@ -51,6 +51,8 @@ const Toast = () => {
 
 type NavItem = { href: string; icon: IconName; label: string; active: boolean }
 
+const navCurrent = (path: string, l: NavItem) => (path === l.href ? 'page' : l.active ? 'location' : undefined)
+
 export const Brand = () => (
   <a href="/" class="brand">
     <img src="/favicon.png" alt="" class="brand-mark" width={32} height={32} />
@@ -67,7 +69,7 @@ const UserMenu = ({ editable }: { editable?: boolean }) => {
       panelClass="user-menu-panel"
       trigger={
         <summary class="topbar-avatar" aria-label="ユーザーメニュー" title={user.name}>
-          <Avatar name={user.name} size={40} />
+          <Avatar name={user.name} size={36} />
         </summary>
       }
     >
@@ -93,7 +95,7 @@ const UserMenu = ({ editable }: { editable?: boolean }) => {
   )
 }
 
-export const AppShell = ({ children, wide, editable, tone }: { children: Child; wide?: boolean; editable?: boolean; tone?: string }) => {
+export const AppShell = ({ children, editable, tone }: { children: Child; editable?: boolean; tone?: string }) => {
   useStyle('/src/components/layout.css')
   const c = useRequestContext<AppEnv>()
   const user = c.var.user!
@@ -104,7 +106,12 @@ export const AppShell = ({ children, wide, editable, tone }: { children: Child; 
   const links = (
     [
       { href: '/dashboard', icon: 'home', label: 'ダッシュボード', active: path === '/dashboard' },
-      { href: '/courses', icon: 'book', label: 'コース一覧', active: path === '/courses' },
+      {
+        href: '/courses',
+        icon: 'book',
+        label: 'コース一覧',
+        active: path === '/courses' || (currentCourse !== null && !navCourses.some((nc) => nc.id === currentCourse)),
+      },
       user.role === 'admin' && { href: '/admin', icon: 'shield', label: '管理', active: path.startsWith('/admin') },
     ] satisfies (NavItem | false)[]
   ).filter((l) => l !== false)
@@ -118,9 +125,18 @@ export const AppShell = ({ children, wide, editable, tone }: { children: Child; 
         </div>
         <div class="topbar-end">
           {editable && (
-            <Chip tone="accent" icon="pencil" class="topbar-edit-mode">
-              編集モード
-            </Chip>
+            <button
+              type="button"
+              role="switch"
+              aria-checked="false"
+              class="chip chip-accent topbar-edit-mode"
+              data-edit-mode-toggle
+              title="編集モードを終了"
+            >
+              <Icon name="pencil" size={14} />
+              <span>編集モード</span>
+              <Icon name="x" size={14} />
+            </button>
           )}
           <UserMenu editable={editable} />
         </div>
@@ -134,7 +150,7 @@ export const AppShell = ({ children, wide, editable, tone }: { children: Child; 
 
         <nav class="rail-nav" aria-label="メイン">
           {links.map((l) => (
-            <a href={l.href} class={l.active ? 'rail-link active' : 'rail-link'} aria-current={l.active ? 'page' : undefined}>
+            <a href={l.href} class={l.active ? 'rail-link active' : 'rail-link'} aria-current={navCurrent(path, l)}>
               <Icon name={l.icon} size={20} />
               <span class="rail-label">{l.label}</span>
             </a>
@@ -148,7 +164,7 @@ export const AppShell = ({ children, wide, editable, tone }: { children: Child; 
               <a
                 href={`/courses/${nc.id}`}
                 class={cx('rail-link rail-course', currentCourse === nc.id && 'active')}
-                aria-current={currentCourse === nc.id ? 'page' : undefined}
+                aria-current={currentCourse === nc.id ? (path === `/courses/${nc.id}` ? 'page' : 'location') : undefined}
                 title={nc.title}
               >
                 <CourseIcon course={nc} text={[...nc.title][0]} class={`dot tone-${nc.color}`} />
@@ -169,7 +185,7 @@ export const AppShell = ({ children, wide, editable, tone }: { children: Child; 
       </aside>
       <div class="backdrop" data-nav-toggle />
 
-      <main class={cx('content', wide && 'content-wide', tone && `tone-${tone}`)}>{children}</main>
+      <main class={cx('content', tone && `tone-${tone}`)}>{children}</main>
       <Toast />
     </div>
   )

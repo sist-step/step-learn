@@ -17,9 +17,9 @@
   align-items: flex-start;
   gap: 12px;
   padding: 14px 12px 14px 16px;
-  border: 1px solid color-mix(in srgb, var(--toast-c) 20%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--toast-c) 20%, var(--overlay-border));
   border-radius: 14px;
-  background: linear-gradient(100deg, color-mix(in srgb, var(--toast-c) 14%, var(--surface)), var(--surface) 55%);
+  background: linear-gradient(100deg, color-mix(in srgb, var(--toast-c) 14%, var(--surface-raised)), var(--surface-raised) 55%);
   box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--toast-c) 35%, transparent), var(--shadow-sm);
   color: var(--text);
   animation: toast-in 0.3s var(--ease);
@@ -28,10 +28,9 @@
 .toast-error { --toast-c: var(--danger); }
 .toast-icon { display: grid; flex: none; color: var(--toast-c); }
 .toast-body { flex: 1; min-width: 0; }
-.toast-title { display: block; font-size: 14px; font-weight: 650; line-height: 22px; }
-.toast-message { margin-top: 2px; font-size: 13px; color: var(--muted); line-height: 1.55; overflow-wrap: anywhere; word-break: auto-phrase; }
-.toast-close { display: grid; place-items: center; flex: none; width: 26px; height: 26px; border: 0; border-radius: 8px; background: none; color: var(--muted); }
-.toast-close:hover { background: var(--surface-2); color: var(--text); }
+.toast-title { display: block; font-size: var(--fs-base); font-weight: 650; line-height: 22px; }
+.toast-message { margin-top: 2px; font-size: var(--fs-sm); color: var(--muted); line-height: 1.55; overflow-wrap: anywhere; word-break: auto-phrase; }
+.toast-close { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; color: var(--muted); }
 .toast.leaving { overflow: hidden; pointer-events: none; animation: toast-out 0.8s forwards; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(12px) scale(0.98); } }
 /* 区間ごとにイージングを変えるのは、引いて・はじいて・詰めるの 3 つの動きに、それぞれ別の勢いを持たせるため */
@@ -61,4 +60,11 @@
 }
 @media (max-width: 640px) {
   .toasts { right: 16px; bottom: 16px; left: 16px; width: auto; }
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .toast-close { width: 40px; height: 40px; }
+}
+
+@media (hover: hover) {
+  .toast-close:hover { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
 }

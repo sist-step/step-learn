@@ -167,9 +167,27 @@ export const TextAreaField = ({
   )
 }
 
-export const FileInput = ({ class: cls, ...rest }: Omit<JSX.IntrinsicElements['input'], 'type'> & { class?: string }) => {
-  useStyle('/src/components/form.css')
-  return <input type="file" class={cx('file-input', cls)} {...rest} />
+// ブラウザ標準の見た目のままにしないのは、ボタンと「選択されていません」がブラウザの言語で出て、ほかの部品とも形がそろわないため
+export const FileInput = ({
+  id,
+  buttonLabel = 'ファイルを選択',
+  emptyLabel = '選択されていません',
+  class: cls,
+  ...rest
+}: { id: string; buttonLabel?: string; emptyLabel?: string; class?: string } & Omit<JSX.IntrinsicElements['input'], 'type' | 'id'>) => {
+  useStyle('/src/components/form.css', '/src/components/button.css')
+  return (
+    <span class="file-picker">
+      <input type="file" id={id} class={cx('file-input', cls)} {...rest} />
+      <label for={id} class="btn btn-sm">
+        <Icon name="upload" size={16} />
+        {buttonLabel}
+      </label>
+      <span class="file-picker-name truncate" data-file-name data-empty={emptyLabel}>
+        {emptyLabel}
+      </span>
+    </span>
+  )
 }
 
 export const FileField = ({
@@ -196,11 +214,12 @@ export const ImageField = ({
   src,
   aspect = '16 / 9',
   width,
+  emptyLabel,
   error,
   hint,
   fieldClass,
   ...rest
-}: LabeledProps & { src?: string | null; aspect?: string; width?: number } & Omit<
+}: LabeledProps & { src?: string | null; aspect?: string; width?: number; emptyLabel?: string } & Omit<
     JSX.IntrinsicElements['input'],
     'id' | 'name' | 'type' | 'src' | 'width'
   >) => {
@@ -208,13 +227,15 @@ export const ImageField = ({
   return (
     <FormField id={id} label={label} error={error} hint={hint} class={fieldClass}>
       <div class="image-field">
-        <div class="image-preview" style={`aspect-ratio: ${aspect};${width ? ` width: ${width}px;` : ''}`}>
+        <label for={id} class="image-preview" style={`aspect-ratio: ${aspect};${width ? ` width: ${width}px;` : ''}`}>
           <Icon name="photo" size={28} />
           <img src={src ?? undefined} alt="" hidden={!src} data-image-preview data-saved={src ?? undefined} />
-        </div>
+        </label>
         <FileInput
           id={id}
           name={name}
+          buttonLabel="画像を選択"
+          emptyLabel={emptyLabel}
           accept={IMAGE_ACCEPT}
           aria-invalid={error ? 'true' : undefined}
           aria-describedby={describedBy(id, hint)}

@@ -15,7 +15,7 @@
 }
 .screen-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .screen-title-text { display: flex; flex-direction: column; min-width: 0; }
-.screen-title h1 { font-size: 15px; font-weight: 650; }
+.screen-title h1 { font-size: var(--fs-md); font-weight: 650; }
 .screen-stats { flex: 1; min-width: 0; font-variant-numeric: tabular-nums; }
 .screen-actions { display: flex; gap: 8px; flex: none; margin-left: auto; }
 .screen-stage {
@@ -33,7 +33,7 @@
   max-width: 420px;
   padding: 24px;
   color: var(--media-text);
-  font-size: 13.5px;
+  font-size: var(--fs-sm);
   text-align: center;
   line-height: 1.6;
 }
@@ -45,9 +45,9 @@
   padding: 8px 14px;
   transform: translateX(-50%);
   border-radius: var(--radius);
-  background: var(--danger);
-  color: var(--on-primary);
-  font-size: 13.5px;
+  background: var(--danger-strong);
+  color: var(--on-strong);
+  font-size: var(--fs-sm);
   box-shadow: var(--shadow-lg);
 }
 @media (max-width: 640px) {

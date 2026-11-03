@@ -55,23 +55,34 @@ app.route('/courses', screen)
 app.route('/account', account)
 app.route('/admin', admin)
 
-const NotFound = () => (
+const NotFound = ({ loggedIn }: { loggedIn: boolean }) => (
   <EmptyState
     page
-    icon="globe"
+    icon="search"
     title="ページが見つかりません"
     text="URL が間違っているか、閲覧する権限がありません。"
     action={
-      <Button href="/" variant="primary">
-        ホームへ戻る
-      </Button>
+      loggedIn ? (
+        <div class="row">
+          <Button href="/courses" icon="book">
+            コース一覧
+          </Button>
+          <Button href="/" variant="primary">
+            ホームへ戻る
+          </Button>
+        </div>
+      ) : (
+        <Button href="/" variant="primary">
+          ホームへ戻る
+        </Button>
+      )
     }
   />
 )
 
 app.notFound((c) => {
   c.status(404)
-  return c.render(c.var.user ? <AppShell>{<NotFound />}</AppShell> : <AuthShell>{<NotFound />}</AuthShell>, {
+  return c.render(c.var.user ? <AppShell>{<NotFound loggedIn />}</AppShell> : <AuthShell>{<NotFound loggedIn={false} />}</AuthShell>, {
     title: '見つかりません',
   })
 })

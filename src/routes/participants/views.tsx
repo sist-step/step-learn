@@ -3,9 +3,9 @@ import { Button, IconButton } from '../../components/button'
 import { Block, Table } from '../../components/card'
 import { Input, SegmentedControl, Select } from '../../components/form'
 import { AppShell } from '../../components/layout'
-import { Modal } from '../../components/overlay'
+import { MenuItem, Modal, Popover } from '../../components/overlay'
 import { Styles } from '../../components/style'
-import { Avatar, Chip, Person, Progress, TabPanel, formatDate, userMeta } from '../../components/ui'
+import { Avatar, Chip, EmptyState, Person, Progress, TabPanel, formatDate, userMeta } from '../../components/ui'
 import type { CourseAccess } from '../../lib/courses'
 import { COURSE_ROLE_LABELS, type CourseRole } from '../../lib/types'
 
@@ -60,7 +60,7 @@ export const Candidates = ({ q, users }: { q: string; users: Candidate[] }) => {
 }
 
 const AddParticipant = ({ courseId }: { courseId: number }) => (
-  <div class="participants-toolbar">
+  <>
     <Button variant="primary" icon="plus" popovertarget={ADD_MODAL}>
       参加者を追加
     </Button>
@@ -83,12 +83,12 @@ const AddParticipant = ({ courseId }: { courseId: number }) => (
         </form>
       </div>
     </Modal>
-  </div>
+  </>
 )
 
-type TableProps = { courseId: number; meId: number; manage: boolean; totalItems: number }
+type TableProps = { courseId: number; meId: number; manage: boolean; totalItems: number; progress: boolean }
 
-const ParticipantRow = ({ p, courseId, meId, manage, totalItems }: TableProps & { p: Participant }) => (
+const ParticipantRow = ({ p, courseId, meId, manage, totalItems, progress }: TableProps & { p: Participant }) => (
   <tr>
     <td>
       <Person
@@ -102,25 +102,29 @@ const ParticipantRow = ({ p, courseId, meId, manage, totalItems }: TableProps & 
         meta={userMeta(manage ? p : { username: p.username })}
       />
     </td>
-    {manage && (
-      <td class="hide-sm progress-cell">
+    {progress && (
+      <td class="hide-sm col-progress">
         {p.role === 'student' && totalItems > 0 ? <Progress done={p.done} total={totalItems} /> : <span class="muted">—</span>}
       </td>
     )}
-    <td class="hide-sm muted">{formatDate(p.createdAt)}</td>
-    <td>
+    <td class="hide-sm muted col-date">{formatDate(p.createdAt)}</td>
+    <td class="col-actions">
       {manage ? (
         <div class="row-actions">
           <form method="post" action={`/courses/${courseId}/participants/${p.id}/role`} data-autosubmit>
             <Select name="role" compact options={ROLE_OPTIONS} value={p.role} aria-label={`${p.name} のロール`} />
           </form>
-          <form
-            method="post"
-            action={`/courses/${courseId}/participants/${p.id}/remove`}
-            data-confirm={`${p.name} さんをコースから外しますか？`}
-          >
-            <IconButton type="submit" icon="x" label="コースから外す" danger />
-          </form>
+          <Popover class="row-menu" panelClass="row-menu-panel" trigger={<IconButton as="summary" icon="ellipsis" label="その他の操作" />}>
+            <form
+              method="post"
+              action={`/courses/${courseId}/participants/${p.id}/remove`}
+              data-confirm={`${p.name} さんをコースから外しますか？`}
+            >
+              <MenuItem type="submit" icon="userMinus" class="is-danger">
+                コースから外す
+              </MenuItem>
+            </form>
+          </Popover>
         </div>
       ) : (
         <Chip tone={p.role === 'teacher' ? 'accent' : 'default'}>{COURSE_ROLE_LABELS[p.role]}</Chip>
@@ -132,14 +136,25 @@ const ParticipantRow = ({ p, courseId, meId, manage, totalItems }: TableProps & 
 const ParticipantTable = ({ heading, list, ...props }: TableProps & { heading: string; list: Participant[] }) => (
   <Block heading={heading} count={list.length}>
     {list.length === 0 ? (
-      <p class="muted small">まだいません。</p>
+      <EmptyState
+        icon="users"
+        title={`${heading}はまだいません`}
+        text={props.manage ? '「参加者を追加」からユーザーを検索して追加できます。' : 'まだ登録されていません。'}
+        action={
+          props.manage && (
+            <Button size="sm" icon="plus" popovertarget={ADD_MODAL}>
+              参加者を追加
+            </Button>
+          )
+        }
+      />
     ) : (
       <Table
         columns={[
           { label: '名前' },
-          props.manage && { label: '進捗', class: 'hide-sm' },
-          { label: '参加日', class: 'hide-sm' },
-          { label: props.manage ? '操作' : 'ロール' },
+          props.progress && { label: '進捗', class: 'hide-sm col-progress' },
+          { label: '参加日', class: 'hide-sm col-date' },
+          { label: 'ロール', class: 'col-actions' },
         ]}
       >
         {list.map((p) => (
@@ -163,13 +178,17 @@ export const ParticipantsPage = ({
 }) => {
   const props = { courseId: access.course.id, meId, manage: access.canManage, totalItems }
   return (
-    <AppShell wide tone={access.course.color}>
+    <AppShell tone={access.course.color}>
       <Styles use={['/src/routes/participants/participants.css']} />
-      <CourseHeader access={access} tab="participants" />
+      <CourseHeader access={access} tab="participants" tabActions={access.canManage && <AddParticipant courseId={access.course.id} />} />
       <TabPanel>
-        {access.canManage && <AddParticipant courseId={access.course.id} />}
-        <ParticipantTable heading="教師" list={people.filter((p) => p.role === 'teacher')} {...props} />
-        <ParticipantTable heading="学生" list={people.filter((p) => p.role === 'student')} {...props} />
+        <ParticipantTable heading="教師" list={people.filter((p) => p.role === 'teacher')} {...props} progress={false} />
+        <ParticipantTable
+          heading="学生"
+          list={people.filter((p) => p.role === 'student')}
+          {...props}
+          progress={access.canManage && totalItems > 0}
+        />
       </TabPanel>
     </AppShell>
   )

@@ -4,9 +4,13 @@ import { cx } from './cx'
 import { Icon, type IconName } from './icons'
 import { useStyle } from './style'
 
+// 和文を 2 文字にしないのは、漢字やかなは 1 文字で欧文 2 文字分の幅があり、円の中で詰まって小さくなるため
+const CJK_START = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u
+
 export const initials = (name: string) => {
   const t = name.trim()
   if (!t) return '?'
+  if (CJK_START.test(t)) return [...t][0]
   const parts = t.split(/\s+/)
   return parts.length > 1 ? (parts[0][0] + parts[1][0]).toUpperCase() : [...t].slice(0, 2).join('').toUpperCase()
 }
@@ -15,13 +19,11 @@ const hue = (s: string) => [...s].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) 
 
 export const Avatar = ({ name, size = 32 }: { name: string; size?: number }) => {
   useStyle('/src/components/ui.css')
+  const text = initials(name)
+  const fontSize = Math.round(size * ([...text].length > 1 ? 0.36 : 0.44))
   return (
-    <span
-      class="avatar"
-      style={`--h:${hue(name)};width:${size}px;height:${size}px;font-size:${Math.round(size * 0.4)}px`}
-      aria-hidden="true"
-    >
-      {initials(name)}
+    <span class="avatar" style={`--h:${hue(name)};width:${size}px;height:${size}px;font-size:${fontSize}px`} aria-hidden="true">
+      {text}
     </span>
   )
 }
@@ -76,9 +78,9 @@ export const EmptyState = ({
   )
 }
 
-/** Person の meta に出す「@ユーザー名 · メールアドレス」。メールアドレスを見せない画面では email を渡さない */
+/** Person の meta に出す「@ユーザー名」と「メールアドレス」。メールアドレスを見せない画面では email を渡さない */
 export const userMeta = (u: { username: string | null; email?: string }) =>
-  [u.username && `@${u.username}`, u.email].filter(Boolean).join(' · ')
+  [u.username && `@${u.username}`, u.email].filter((m): m is string => !!m)
 
 export const Person = ({
   avatar,
@@ -89,7 +91,7 @@ export const Person = ({
 }: {
   avatar: Child
   name: Child
-  meta?: Child
+  meta?: Child | string[]
   href?: string
   class?: string
 }) => {
@@ -99,7 +101,15 @@ export const Person = ({
       {avatar}
       <span class="person-meta">
         <span class="strong truncate">{name}</span>
-        {meta && <span class="muted small truncate">{meta}</span>}
+        {Array.isArray(meta)
+          ? meta.length > 0 && (
+              <span class="person-sub muted small">
+                {meta.map((m) => (
+                  <span class="truncate">{m}</span>
+                ))}
+              </span>
+            )
+          : meta && <span class="muted small truncate">{meta}</span>}
       </span>
     </>
   )
@@ -253,23 +263,25 @@ export const CourseCard = ({ course, showProgress }: { course: CourseCardData; s
       <div class="course-cover">
         {hero && <img class="course-cover-img" src={hero} alt="" loading="lazy" />}
         <CourseIcon course={course} text={courseInitials(course)} class="course-mono" />
-        <div class="course-cover-badges">
-          {course.role === 'teacher' && <Chip tone="accent">担当</Chip>}
-          {course.role === 'student' && !showProgress && <Chip tone="success">受講中</Chip>}
-        </div>
+        <div class="course-cover-badges">{course.role === 'teacher' && <Chip tone="accent">担当</Chip>}</div>
       </div>
       <div class="course-body">
-        {course.code && <div class="course-code">{course.code}</div>}
         <h3 class="course-title">{course.title}</h3>
-        {course.summary ? <p class="course-summary">{course.summary}</p> : <p class="course-summary muted">説明はありません</p>}
+        {course.code && <div class="course-code">{course.code}</div>}
+        {course.summary && <p class="course-summary">{course.summary}</p>}
       </div>
       <div class="course-foot">
         {showProgress && course.role === 'student' ? (
           <Progress done={course.done ?? 0} total={course.total ?? 0} />
         ) : (
           <span class="meta">
-            <Icon name="users" size={14} /> {course.members ?? 0}人{course.teachers && <span class="meta-sep">·</span>}
-            {course.teachers && <span class="truncate">{course.teachers}</span>}
+            <Icon name="users" size={14} /> {course.members ?? 0}人
+            {course.teachers && (
+              <>
+                <span class="meta-sep">·</span>
+                <span class="truncate">担当 {course.teachers}</span>
+              </>
+            )}
           </span>
         )}
       </div>
@@ -286,12 +298,12 @@ export const CourseRow = ({ course }: { course: CourseCardData }) => {
         <span class="strong truncate">{course.title}</span>
         {course.code && <span class="muted small truncate">{course.code}</span>}
       </span>
-      {course.role !== 'student' ? (
+      {course.role === 'teacher' ? (
         <Chip tone="accent">担当</Chip>
-      ) : course.total ? (
+      ) : course.role === 'student' && course.total ? (
         <Progress done={course.done ?? 0} total={course.total} />
       ) : (
-        <Chip tone="success">受講中</Chip>
+        <Icon name="chevronRight" size={16} class="muted" />
       )}
     </a>
   )
