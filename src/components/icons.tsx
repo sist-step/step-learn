@@ -21,6 +21,7 @@ import monitor from 'heroicons/24/outline/computer-desktop.svg?raw'
 import file from 'heroicons/24/outline/document-arrow-down.svg?raw'
 import copy from 'heroicons/24/outline/document-duplicate.svg?raw'
 import page from 'heroicons/24/outline/document-text.svg?raw'
+import ellipsis from 'heroicons/24/outline/ellipsis-horizontal.svg?raw'
 import alert from 'heroicons/24/outline/exclamation-circle.svg?raw'
 import eye from 'heroicons/24/outline/eye.svg?raw'
 import eyeSlash from 'heroicons/24/outline/eye-slash.svg?raw'
@@ -41,6 +42,7 @@ import shield from 'heroicons/24/outline/shield-check.svg?raw'
 import layers from 'heroicons/24/outline/square-3-stack-3d.svg?raw'
 import trash from 'heroicons/24/outline/trash.svg?raw'
 import user from 'heroicons/24/outline/user.svg?raw'
+import userMinus from 'heroicons/24/outline/user-minus.svg?raw'
 import users from 'heroicons/24/outline/users.svg?raw'
 import x from 'heroicons/24/outline/x-mark.svg?raw'
 
@@ -53,6 +55,7 @@ const svgs = {
   book,
   users,
   user,
+  userMinus,
   sliders,
   logout,
   menu,
@@ -65,6 +68,7 @@ const svgs = {
   chevronLeft,
   arrowUp,
   arrowDown,
+  ellipsis,
   link,
   external,
   page,

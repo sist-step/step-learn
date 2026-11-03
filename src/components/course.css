@@ -12,72 +12,133 @@
   background: var(--c1);
   transition: transform 0.15s var(--ease), box-shadow 0.15s;
 }
-.swatch:hover .swatch-dot { transform: scale(1.08); }
-.swatch input:checked + .swatch-dot { color: var(--c-on, #fff); box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--c1); }
-.swatch input:focus-visible + .swatch-dot { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--primary); }
+.swatch input:checked + .swatch-dot { color: var(--c-on, var(--on-strong)); box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--c1); }
+.swatch input:focus-visible + .swatch-dot { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--focus); }
+.swatch input:checked:focus-visible + .swatch-dot { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--c1), 0 0 0 7px var(--focus); }
+@media (hover: hover) {
+  .swatch:hover .swatch-dot { transform: scale(1.08); }
+}
+
+@media (max-width: 640px) {
+  /* 1 行に詰めないのは、幅によって最後の 1 色だけが次の行に落ち、はみ出したように見えるため */
+  .swatches { display: grid; grid-template-columns: repeat(5, max-content); }
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .swatches { gap: 8px; }
+  .swatch { display: grid; place-items: center; width: var(--tap); height: var(--tap); }
+  .swatch-dot { width: 36px; height: 36px; }
+}
 
 .course-hero {
   display: flex;
   align-items: flex-start;
   gap: 16px;
   margin-top: 14px;
-  padding: 0 20px;
+  padding: 0;
 }
+/* 高さを画像の縦横比に任せないのは、コンテンツタブではタブ行の位置を動かさないため。参加者・設定ではカバー自体を出さない */
 .course-hero-cover {
   display: block;
   width: 100%;
-  aspect-ratio: 4 / 1;
+  height: clamp(112px, 13vw, 176px);
   margin-top: 12px;
   object-fit: cover;
   border-radius: var(--radius-lg);
   background: var(--surface-2);
 }
-div.course-hero-cover { aspect-ratio: auto; height: 120px; background: linear-gradient(150deg, var(--c2), var(--c1)); }
+div.course-hero-cover { background: linear-gradient(150deg, var(--c2), var(--c1)); }
 .course-hero-mono {
   display: grid;
   place-items: center;
   flex: none;
-  min-width: 52px;
-  height: 52px;
-  margin-top: -40px;
+  min-width: 64px;
+  height: 64px;
+  margin-top: -36px;
+  margin-left: 20px;
   padding: 0 8px;
-  border-radius: 16px;
-  box-shadow: 0 0 0 4px var(--bg);
-  background: var(--c1);
-  color: var(--c-on, #fff);
+  border-radius: 18px;
+  box-shadow: 0 0 0 4px var(--bg), var(--shadow-sm);
+  background: var(--c-deep, var(--c1));
+  color: var(--c-on, var(--on-strong));
   font-weight: 700;
-  font-size: 16px;
+  font-size: var(--fs-lg);
   text-transform: uppercase;
 }
-.course-hero-body { min-width: 0; flex: 1; }
-.course-hero h1 { font-size: 28px; font-weight: 600; letter-spacing: -0.03em; }
-.course-hero-summary { margin-top: 4px; max-width: 680px; color: var(--muted); font-size: 13.5px; }
-.course-hero-side { display: flex; align-items: center; gap: 20px; flex: none; }
-.course-hero-actions { display: flex; gap: 8px; }
+.course-hero-body { min-width: 0; flex: 1; padding-top: 10px; }
+.course-hero h1 { font-size: var(--fs-3xl); font-weight: 650; letter-spacing: 0; }
+.course-hero-summary { margin-top: 4px; max-width: 680px; color: var(--muted); font-size: var(--fs-sm); word-break: auto-phrase; }
+.course-hero-side { display: flex; align-items: center; align-self: center; gap: 20px; flex: none; padding-top: 10px; }
+.course-hero-actions { display: flex; gap: 8px; min-width: 0; }
+.course-next { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: 280px; min-width: 0; }
+.course-next-meta { max-width: 100%; }
 .course-hero-progress { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding-right: 20px; border-right: 1px solid var(--border); }
 .course-hero-progress:last-child { padding-right: 0; border-right: 0; }
 
+.course-hero.is-compact { align-items: center; margin-top: 12px; }
+.course-hero.is-compact .course-hero-mono { min-width: 48px; height: 48px; margin: 0; border-radius: 14px; box-shadow: var(--shadow-sm); font-size: var(--fs-md); }
+.course-hero.is-compact .course-hero-body { padding-top: 0; flex-basis: auto; }
+.course-hero.is-compact h1 { font-size: var(--fs-2xl); }
+.course-hero.is-compact .course-hero-summary { display: none; }
+
 .course-tabs { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 20px 0 24px; }
 .course-tabs .tabs { margin: 0; }
-.course-tabs-actions { display: flex; gap: 8px; margin-left: auto; }
+.course-tabs-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 
-@media (max-width: 760px) {
-  .course-hero { flex-wrap: wrap; }
-  .course-hero-body { flex-basis: calc(100% - 64px); }
-  .course-hero h1 { font-size: 21px; }
-  .course-hero-cover { aspect-ratio: 5 / 2; }
-  div.course-hero-cover { height: 80px; }
-  .course-hero { padding: 0 12px; }
+.course-edit-switch {
+  height: var(--control-h);
+  padding: 0 10px 0 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong), var(--shadow-sm);
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.course-edit-switch[aria-checked='true'] {
+  background: var(--c-soft);
+  color: var(--c-ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-ink) 25%, transparent);
+}
+.course-edit-switch[aria-checked='true'] .switch-track { background: var(--c-deep, var(--primary)); }
+
+@media (max-width: 900px) {
+  .course-hero:not(.is-compact) { flex-wrap: wrap; }
+  .course-hero-body { flex-basis: calc(100% - 100px); }
   .course-hero-side { width: 100%; justify-content: space-between; }
+  .course-next { align-items: stretch; max-width: none; flex: 1; text-align: center; }
+}
+@media (max-width: 640px) {
+  .course-hero-cover { height: 80px; }
+  .course-hero { margin-top: 10px; gap: 12px; }
+  .course-hero-mono { min-width: 48px; height: 48px; margin-top: -26px; margin-left: 12px; border-radius: 13px; box-shadow: 0 0 0 3px var(--bg), var(--shadow-sm); }
+  .course-hero-body { flex-basis: calc(100% - 80px); padding-top: 6px; }
+  .course-hero h1 { font-size: var(--fs-2xl); }
+  .course-hero-summary { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .course-hero-actions, .course-hero-actions > .btn { flex: 1; }
+  .course-tabs { flex-direction: column; align-items: stretch; gap: 12px; margin: 16px 0 20px; }
+  .course-tabs .tabs { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+  .course-tabs-actions { margin-left: 0; justify-content: space-between; }
+  .course-tabs-actions > .btn { flex: 1; }
 }
 
-.item-icon { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 10px; color: #fff; }
-.kind-page { background: var(--primary); color: var(--on-primary); }
-.kind-link { background: var(--info); }
-.kind-file { background: var(--warning); }
-.kind-screen { background: var(--success); }
+.item-icon {
+  --kind: var(--muted);
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: color-mix(in srgb, var(--kind) 80%, var(--text));
+}
+.kind-page { --kind: var(--c1, var(--accent)); }
+.kind-link { --kind: var(--info); }
+.kind-file { --kind: var(--warning); }
+.kind-screen { --kind: var(--success); }
 
 /* ===== 自動で付く完了の状態（アイテム画面） */
-.completion-status { display: inline-flex; align-items: center; gap: 8px; min-height: var(--control-h-lg); padding: 0 20px; border: 1px dashed var(--border-strong); border-radius: 999px; color: var(--muted); font-size: 14px; font-weight: 500; }
-.completion-status.is-done { border: 1px solid var(--success); background: var(--success-soft); color: var(--success); }
+.completion-status { display: inline-flex; align-items: center; gap: 8px; min-height: var(--control-h-lg); padding: 0 20px; border: 1px dashed var(--border-strong); border-radius: 999px; color: var(--muted); font-size: var(--fs-base); font-weight: 500; }
+.completion-status.is-done { border: 1px solid var(--success); background: var(--success-soft); color: var(--success-text); }
 .completion-status.is-done .icon { animation: pop 0.35s var(--ease); }

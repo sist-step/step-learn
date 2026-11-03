@@ -34,7 +34,7 @@
 .auth-main:has(.tab-panel) { align-items: flex-start; padding-top: max(48px, calc((var(--auth-frame-h) - 396px) / 2)); }
 .auth-column { width: 100%; max-width: 360px; animation: rise 0.35s var(--ease); }
 .auth-column > .brand { margin-bottom: 28px; }
-.auth-card h1 { font-size: 22px; font-weight: 650; }
+.auth-card h1 { font-size: var(--fs-2xl); font-weight: 650; }
 .auth-card > p { min-height: 2lh; margin: 6px 0 24px; word-break: auto-phrase; }
 .auth-card .alert { margin-bottom: 18px; }
 .auth-card form { gap: 16px; }
@@ -43,7 +43,7 @@
 .auth-card .btn-block { margin-top: 8px; }
 .auth-card .tab-panel form { min-height: 223px; }
 .auth-card .tab-panel .btn-block { margin-top: auto; }
-.auth-switch { margin-top: 24px; text-align: center; font-size: 13.5px; color: var(--muted); }
+.auth-switch { margin-top: 24px; text-align: center; font-size: var(--fs-sm); color: var(--muted); }
 .auth-switch a { font-weight: 600; }
 .auth .empty-page { padding-top: 0; }
 

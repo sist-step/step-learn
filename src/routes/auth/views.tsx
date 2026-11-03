@@ -70,7 +70,16 @@ export const RegisterPage = ({ email = '', next = '', errors = {} }: { email?: s
         <FormError message={errors.form} />
         <form method="post" action="/register" class="stack" data-loading-form {...validateWith('register')}>
           <input type="hidden" name="next" value={next} />
-          <TextField label="メールアドレス" name="email" type="email" value={email} error={errors.email} autocomplete="email" autofocus />
+          <TextField
+            label="メールアドレス"
+            name="email"
+            type="email"
+            value={email}
+            error={errors.email}
+            hint="届いたメールのリンクから、氏名とパスワードを設定して登録を完了します。"
+            autocomplete="email"
+            autofocus
+          />
           <Button type="submit" variant="primary" size="lg" block>
             確認メールを送る
           </Button>

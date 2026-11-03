@@ -1,11 +1,28 @@
-.progress-cell { width: 200px; }
-
-.participants-toolbar { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+/* width ではなく min-width にするのは、1 列目の width: 100% が先に幅を取り、width の指定が効かないため。table-layout: fixed も、固定幅の列の合計で表がはみ出すので使わない */
+@media (min-width: 641px) {
+  .col-progress { min-width: 160px; }
+  .col-date { min-width: 150px; }
+  .col-actions { min-width: 160px; }
+}
+@media (min-width: 901px) {
+  .col-progress { min-width: 200px; }
+  .col-date { min-width: 160px; }
+  .col-actions { min-width: 180px; }
+}
 
 .candidates-box { min-height: 120px; max-height: min(360px, 50dvh); overflow-y: auto; }
 .candidates { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .candidate { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; }
-.candidate:hover { background: var(--surface-2); }
 .candidate > .person { flex: 1; }
 .candidate > :last-child { flex: none; }
 .candidates-note { padding: 8px 10px; }
+
+.block .empty { padding: 28px 24px; }
+
+@media (max-width: 640px) {
+  .col-actions { width: 1%; white-space: nowrap; }
+}
+
+@media (hover: hover) {
+  .candidate:hover { background: var(--surface-2); }
+}

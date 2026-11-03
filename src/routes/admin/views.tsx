@@ -2,6 +2,7 @@ import type { Child } from 'hono/jsx'
 import { CreateCourseButton } from '../../components/course'
 import { IconButton } from '../../components/button'
 import { SearchBox, Select } from '../../components/form'
+import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Stat, Stats, Table } from '../../components/card'
 import { Avatar, EmptyState, PageHeader, Person, TabPanel, Tabs, formatDate, userMeta } from '../../components/ui'
@@ -15,6 +16,8 @@ const TABS: { tab: Tab; href: string; label: string }[] = [
 ]
 
 const ROLE_OPTIONS = (['student', 'teacher', 'admin'] as Role[]).map((r) => ({ value: r, label: ROLE_LABELS[r] }))
+
+const ROLE_ICONS: Record<Role, IconName> = { admin: 'shield', teacher: 'book', student: 'users' }
 
 const AdminShell = ({ tab, children }: { tab: Tab; children: Child }) => (
   <AppShell>
@@ -48,9 +51,19 @@ export const UsersPage = ({
   meId: number
 }) => (
   <AdminShell tab="users">
-    <Stats>
+    <Stats compact>
       {(['admin', 'teacher', 'student'] as Role[]).map((r) => (
-        <Stat label={ROLE_LABELS[r]} value={byRole[r] ?? 0} />
+        <Stat
+          label={
+            <>
+              <span class="stat-icon">
+                <Icon name={ROLE_ICONS[r]} size={16} />
+              </span>
+              {ROLE_LABELS[r]}
+            </>
+          }
+          value={byRole[r] ?? 0}
+        />
       ))}
     </Stats>
 
@@ -62,7 +75,12 @@ export const UsersPage = ({
       <EmptyState icon="users" title="ユーザーが見つかりません" text="検索条件を変えてお試しください。" />
     ) : (
       <Table
-        columns={[{ label: 'ユーザー' }, { label: '登録日', class: 'hide-sm' }, { label: 'コース', class: 'hide-sm' }, { label: 'ロール' }]}
+        columns={[
+          { label: 'ユーザー' },
+          { label: '登録日', class: 'hide-sm' },
+          { label: 'コース', class: 'hide-sm num' },
+          { label: 'ロール' },
+        ]}
       >
         {list.map((u) => (
           <tr>
@@ -79,7 +97,7 @@ export const UsersPage = ({
               />
             </td>
             <td class="hide-sm muted">{formatDate(u.createdAt)}</td>
-            <td class="hide-sm muted">{u.courses}</td>
+            <td class="hide-sm muted num">{u.courses}</td>
             <td>
               <form method="post" action={`/admin/users/${u.id}/role`} data-autosubmit>
                 <Select
@@ -132,8 +150,8 @@ export const CoursesPage = ({ q, list }: { q: string; list: CourseRow[] }) => (
         columns={[
           { label: 'コース' },
           { label: '教師', class: 'hide-sm' },
-          { label: '学生', class: 'hide-sm' },
-          { label: 'アイテム', class: 'hide-sm' },
+          { label: '学生', class: 'hide-sm num' },
+          { label: 'アイテム', class: 'hide-sm num' },
           { label: '作成日', class: 'hide-sm' },
           { label: '操作', srOnly: true },
         ]}
@@ -148,9 +166,11 @@ export const CoursesPage = ({ q, list }: { q: string; list: CourseRow[] }) => (
                 meta={course.code}
               />
             </td>
-            <td class="hide-sm muted">{course.teachers ?? '未設定'}</td>
-            <td class="hide-sm muted">{course.students}</td>
-            <td class="hide-sm muted">{course.items}</td>
+            <td class="hide-sm muted">
+              <span class="wrap">{course.teachers ?? '未設定'}</span>
+            </td>
+            <td class="hide-sm muted num">{course.students}</td>
+            <td class="hide-sm muted num">{course.items}</td>
             <td class="hide-sm muted">{formatDate(course.createdAt)}</td>
             <td>
               <div class="row-actions">
