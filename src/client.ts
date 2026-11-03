@@ -25,8 +25,14 @@ document.addEventListener('click', (e) => {
   document.documentElement.dataset.theme = theme
   $$('[data-theme-toggle]').forEach((el) => el.setAttribute('aria-checked', String(theme === 'dark')))
   document.querySelector('meta[name=color-scheme]')?.setAttribute('content', theme)
+  syncThemeColor()
   document.cookie = `theme=${theme}; path=/; max-age=31536000; samesite=lax`
 })
+
+function syncThemeColor() {
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', bg)
+}
 
 // --- 編集モード（端末ごと）
 // サーバーに伝えないのは、編集用の部品は管理できる人にだけ描いてあり、ここでは見せるかどうかを切り替えるだけで済むため
@@ -209,7 +215,8 @@ type CompleteResult = { completed: boolean; done: number; total: number }
 
 async function handleComplete(e: SubmitEvent, form: HTMLFormElement) {
   e.preventDefault()
-  const btn = form.querySelector('button')!
+  const btn = form.querySelector('button[aria-pressed]')!
+  const then = e.submitter?.getAttribute('data-complete-then')
   const next = btn.getAttribute('aria-pressed') !== 'true'
   setCompleteUI(form, next) // 楽観的更新
   try {
@@ -218,6 +225,7 @@ async function handleComplete(e: SubmitEvent, form: HTMLFormElement) {
     const data: CompleteResult = await res.json()
     setCompleteUI(form, data.completed)
     showProgress(data)
+    if (then && data.completed) void visit(new URL(then, location.href))
   } catch {
     setCompleteUI(form, !next)
     toast('更新できませんでした。通信状況を確認してください。', 'error')
@@ -225,15 +233,16 @@ async function handleComplete(e: SubmitEvent, form: HTMLFormElement) {
 }
 
 function setCompleteUI(form: HTMLFormElement, done: boolean) {
-  const btn = form.querySelector('button')!
+  const btn = form.querySelector('button[aria-pressed]')!
   btn.setAttribute('aria-pressed', String(done))
   btn.setAttribute('aria-label', done ? '未完了に戻す' : '完了にする')
   const label = form.querySelector('[data-complete-label]')
   if (label) {
     label.textContent = done ? '完了済み' : '完了にする'
     btn.classList.toggle('btn-success', done)
-    btn.classList.toggle('btn-primary', !done)
+    if (!btn.hasAttribute('data-complete-secondary')) btn.classList.toggle('btn-primary', !done)
   }
+  form.querySelector('[data-complete-then]')?.toggleAttribute('hidden', done)
   setItemDone(completeItemId(form.action), done)
 }
 
@@ -549,6 +558,17 @@ document.addEventListener('change', (e) => {
   preview.hidden = !src
 })
 
+// --- 選んだファイル名をファイル選択の横に出す（components/form.tsx の FileInput）
+// 画像のプレビューより前に登録しないのは、上限を超えて選択を取り消したあとの状態を出すため
+document.addEventListener('change', (e) => {
+  const input = e.target as HTMLInputElement
+  if (input.type !== 'file') return
+  const picker = input.closest('.file-picker')
+  const name = picker?.querySelector<HTMLElement>('[data-file-name]')
+  if (name) name.textContent = input.files?.[0]?.name ?? name.dataset.empty ?? '選択されていません'
+  picker?.toggleAttribute('data-has-file', !!input.files?.length)
+})
+
 // --- 目次（data-toc）で、いま表示している節のリンクを強調する
 function updateToc() {
   const toc = document.querySelector('[data-toc]')
@@ -563,7 +583,18 @@ function updateToc() {
   // 末尾まで来たら最後の節にしないと、短い節は上端まで届かず一度も強調されない
   if (innerHeight + scrollY >= document.documentElement.scrollHeight - 2)
     current = links.find((a) => a.hash === location.hash) ?? links.at(-1)!
+  const changed = !current.classList.contains('active')
   links.forEach((a) => a.classList.toggle('active', a === current))
+  if (changed && toc.scrollWidth > toc.clientWidth) revealTocLink(toc, current)
+}
+// scrollIntoView を使わないのは、目次だけでなくページも縦にスクロールしてしまうため
+function revealTocLink(toc: Element, link: HTMLElement) {
+  const fade = 48
+  const left = link.offsetLeft - 16
+  const right = link.offsetLeft + link.offsetWidth + fade - toc.clientWidth
+  const target = toc.scrollLeft > left ? left : toc.scrollLeft < right ? right : null
+  if (target === null) return
+  toc.scrollTo({ left: target, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
 }
 addEventListener('scroll', updateToc, { passive: true })
 addEventListener('hashchange', updateToc)
@@ -1208,6 +1239,7 @@ document.addEventListener('visibilitychange', () => {
 // --- 表示のたびに行う初期化（最初の表示と再読み込みなしの遷移の両方）
 function initPage() {
   $$('[data-toast]').forEach((el) => dismissLater(el, 5000))
+  syncThemeColor()
   initContent()
   watchLive()
   initAuthArt()

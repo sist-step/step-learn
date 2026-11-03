@@ -5,6 +5,7 @@ import {
   CourseLiveSync,
   CreateCourseButton,
   ItemIcon,
+  nextActionLabel,
   type CourseFormErrors,
   type CourseFormValues,
 } from '../../components/course'
@@ -24,7 +25,7 @@ import { cx } from '../../components/cx'
 import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { MarkdownEditor } from '../../components/markdown'
-import { Modal, Popover } from '../../components/overlay'
+import { MenuItem, Modal, Popover } from '../../components/overlay'
 import { Styles } from '../../components/style'
 import { Chip, CourseCard, EmptyState, PageHeader, TabPanel, type CourseCardData } from '../../components/ui'
 import { courseImageUrl, type CourseAccess, type CourseImageKind } from '../../lib/courses'
@@ -72,7 +73,7 @@ export const CoursesPage = ({
     ) : (
       <div class="course-grid">
         {results.map((course) => (
-          <CourseCard course={course} />
+          <CourseCard course={course} showProgress={course.role === 'student' && (course.total ?? 0) > 0} />
         ))}
       </div>
     )}
@@ -138,16 +139,12 @@ const ItemRow = ({
           </Chip>
         )}
         {sharing && <Chip tone="live">配信中</Chip>}
-        {newTab && <Icon name="external" size={14} class="item-ext" />}
+        {newTab ? <Icon name="external" size={14} class="item-ext" /> : <Icon name="chevronRight" size={16} class="item-ext" />}
       </a>
       {manage && (
         <div class="row-actions edit-only">
           <IconButton href={`${base}/edit`} icon="pencil" label="編集" />
-          <VisibilityButton action={`${base}/visibility`} hidden={!!item.hidden} />
-          <MoveButtons action={`${base}/move`} />
-          <form method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`}>
-            <IconButton type="submit" icon="trash" label="削除" danger />
-          </form>
+          <RowMenu base={base} moveAction={`${base}/move`} hidden={!!item.hidden} confirm={`「${item.title}」を削除しますか？`} />
         </div>
       )}
       {isStudent && tracked && completion !== 'manual' && (
@@ -181,11 +178,34 @@ const ItemRow = ({
 
 const HiddenChip = () => <Chip icon="eyeSlash">学生に非表示</Chip>
 
-const VisibilityButton = ({ action, hidden }: { action: string; hidden: boolean }) => (
-  <form method="post" action={action}>
-    <input type="hidden" name="hidden" value={hidden ? '0' : '1'} />
-    <IconButton type="submit" icon={hidden ? 'eye' : 'eyeSlash'} label={hidden ? '学生に表示する' : '学生に非表示にする'} />
-  </form>
+const RowMenu = ({ base, moveAction, hidden, confirm }: { base: string; moveAction: string; hidden: boolean; confirm: string }) => (
+  <Popover class="row-menu" panelClass="row-menu-panel" trigger={<IconButton as="summary" icon="ellipsis" label="その他の操作" />}>
+    <form method="post" action={moveAction}>
+      <input type="hidden" name="dir" value="up" />
+      <MenuItem type="submit" icon="arrowUp">
+        上へ移動
+      </MenuItem>
+    </form>
+    <form method="post" action={moveAction}>
+      <input type="hidden" name="dir" value="down" />
+      <MenuItem type="submit" icon="arrowDown">
+        下へ移動
+      </MenuItem>
+    </form>
+    <div class="menu-sep" role="separator" />
+    <form method="post" action={`${base}/visibility`}>
+      <input type="hidden" name="hidden" value={hidden ? '0' : '1'} />
+      <MenuItem type="submit" icon={hidden ? 'eye' : 'eyeSlash'}>
+        {hidden ? '学生に表示する' : '学生に非表示にする'}
+      </MenuItem>
+    </form>
+    <div class="menu-sep" role="separator" />
+    <form method="post" action={`${base}/delete`} data-confirm={confirm}>
+      <MenuItem type="submit" icon="trash" class="is-danger">
+        削除
+      </MenuItem>
+    </form>
+  </Popover>
 )
 
 const ADD_ITEM_MODAL = 'add-item'
@@ -328,19 +348,6 @@ const AddSectionModal = ({ courseId }: { courseId: number }) => (
   </Modal>
 )
 
-const MoveButtons = ({ action }: { action: string }) => (
-  <>
-    <form method="post" action={action}>
-      <input type="hidden" name="dir" value="up" />
-      <IconButton type="submit" icon="arrowUp" label="上へ" />
-    </form>
-    <form method="post" action={action}>
-      <input type="hidden" name="dir" value="down" />
-      <IconButton type="submit" icon="arrowDown" label="下へ" />
-    </form>
-  </>
-)
-
 const SectionEditBar = ({ courseId, section }: { courseId: number; section: Section }) => {
   const base = `/courses/${courseId}/sections/${section.id}`
   return (
@@ -356,11 +363,12 @@ const SectionEditBar = ({ courseId, section }: { courseId: number; section: Sect
           </div>
         </form>
       </Popover>
-      <VisibilityButton action={`${base}/visibility`} hidden={!!section.hidden} />
-      <MoveButtons action={`${base}/move`} />
-      <form method="post" action={`${base}/delete`} data-confirm={`セクション「${section.title}」と中のアイテムをすべて削除しますか？`}>
-        <IconButton type="submit" icon="trash" label="削除" danger />
-      </form>
+      <RowMenu
+        base={base}
+        moveAction={`${base}/move`}
+        hidden={!!section.hidden}
+        confirm={`セクション「${section.title}」と中のアイテムをすべて削除しますか？`}
+      />
     </div>
   )
 }
@@ -393,14 +401,28 @@ export const CoursePage = ({
   const tracking = !!access.course.completionEnabled
   const isTracked = (it: ItemLite) => tracking && it.completion !== 'none'
   const trackedItems = itemList.filter((it) => !it.hidden && sectionNumber.has(it.sectionId) && isTracked(it))
+  const ordered = visibleSections.flatMap((s) => (bySection.get(s.id) ?? []).filter((it) => !it.hidden))
+  const doneCount = trackedItems.filter((it) => done.has(it.id)).length
+  const nextItem = ordered.find((it) => isTracked(it) && !done.has(it.id)) ?? (trackedItems.length === 0 ? ordered[0] : undefined)
 
   return (
-    <AppShell wide editable={manage} tone={access.course.color}>
+    <AppShell editable={manage} tone={access.course.color}>
       <Styles use={['/src/routes/courses/courses.css']} />
       <CourseHeader
         access={access}
         tab="content"
-        progress={isStudent ? { done: trackedItems.filter((it) => done.has(it.id)).length, total: trackedItems.length } : undefined}
+        progress={isStudent ? { done: doneCount, total: trackedItems.length } : undefined}
+        actions={
+          isStudent &&
+          nextItem && (
+            <div class="course-next">
+              <Button href={`/courses/${id}/items/${nextItem.id}`} variant="primary" iconEnd="chevronRight">
+                {nextActionLabel(doneCount)}
+              </Button>
+              <span class="course-next-meta muted small truncate">次: {nextItem.title}</span>
+            </div>
+          )
+        }
         tabActions={
           manage && (
             <Button variant="primary" icon="plus" class="edit-only" popovertarget={ADD_SECTION_MODAL}>
@@ -412,7 +434,38 @@ export const CoursePage = ({
       <TabPanel>
         {visibleSections.length === 0 && (
           <div class="view-only">
-            <EmptyState icon="layers" title="まだ教材がありません" text="教師が教材を追加するとここに表示されます。" />
+            {manage ? (
+              <EmptyState
+                icon="layers"
+                title={sectionList.length > 0 ? '学生に表示している教材はありません' : 'まだ教材がありません'}
+                text={
+                  sectionList.length > 0
+                    ? 'すべてのセクションが非表示です。編集モードで表示を切り替えられます。'
+                    : '編集モードにして、最初のセクションを追加しましょう。'
+                }
+                action={
+                  <Button variant="primary" icon="pencil" role="switch" aria-checked="false" data-edit-mode-toggle>
+                    編集を始める
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState icon="layers" title="まだ教材がありません" text="教師が教材を追加するとここに表示されます。" />
+            )}
+          </div>
+        )}
+        {manage && sectionList.length === 0 && (
+          <div class="edit-only">
+            <EmptyState
+              icon="layers"
+              title="最初のセクションを追加しましょう"
+              text="セクションは「第1回」「第2週」のような教材のまとまりです。"
+              action={
+                <Button variant="primary" icon="plus" popovertarget={ADD_SECTION_MODAL}>
+                  セクションを追加
+                </Button>
+              }
+            />
           </div>
         )}
         {sectionList.length > 0 && (
@@ -422,21 +475,31 @@ export const CoursePage = ({
               const shown = list.filter((it) => !it.hidden)
               const hiddenCount = list.length - shown.length
               const shownTracked = shown.filter(isTracked)
-              const doneCount = shownTracked.filter((it) => done.has(it.id)).length
+              const sectionDone = shownTracked.filter((it) => done.has(it.id)).length
+              const empty = !manage && shown.length === 0
+              const emptyView = manage && shown.length === 0
               return (
-                <details class={cx('section-card', !!s.hidden && 'is-hidden edit-only')} id={`section-${s.id}`} open>
+                <details
+                  class={cx('section-card', !!s.hidden && 'is-hidden edit-only', empty && 'is-empty', emptyView && 'is-empty-view')}
+                  id={`section-${s.id}`}
+                  open
+                >
                   <summary class="section-head">
                     <span class="section-num">{sectionNumber.get(s.id) ?? <Icon name="eyeSlash" size={14} />}</span>
                     <span class="section-title-wrap">
                       <span class="section-title">{s.title}</span>
-                      <span class="muted small">
-                        {shown.length} アイテム
-                        {isStudent && shownTracked.length > 0 && ` · ${doneCount} 完了`}
-                        {hiddenCount > 0 && <span class="edit-only">{` · 非表示 ${hiddenCount}`}</span>}
-                      </span>
+                      {!empty && (
+                        <span class="muted small">
+                          {emptyView && <span class="view-only">{hiddenCount > 0 ? `非表示 ${hiddenCount}` : 'アイテムなし'}</span>}
+                          <span class={emptyView ? 'edit-only' : undefined}>{`${shown.length} アイテム`}</span>
+                          {isStudent && shownTracked.length > 0 && ` · ${sectionDone} 完了`}
+                          {hiddenCount > 0 && <span class="edit-only">{` · 非表示 ${hiddenCount}`}</span>}
+                        </span>
+                      )}
                     </span>
+                    {empty && <Chip>準備中</Chip>}
                     {s.hidden ? <HiddenChip /> : null}
-                    {isStudent && shownTracked.length > 0 && doneCount === shownTracked.length && (
+                    {isStudent && shownTracked.length > 0 && sectionDone === shownTracked.length && (
                       <Chip tone="success" icon="check">
                         完了
                       </Chip>
@@ -460,7 +523,6 @@ export const CoursePage = ({
                       ))}
                     </ul>
                   )}
-                  {shown.length === 0 && <p class="muted small section-empty view-only">このセクションにはまだアイテムがありません。</p>}
                   {manage && <AddItemButton sectionId={s.id} />}
                 </details>
               )
@@ -490,8 +552,8 @@ const COURSE_IMAGE_FIELDS: Record<CourseImageKind, { heading: string; descriptio
     hero: {
       heading: 'ヒーロー画像',
       description: 'コースページの上部と、コース一覧のカードに表示されます。',
-      hint: '横長の画像が向いています（推奨 1600×400px）。',
-      aspect: '4 / 1',
+      hint: '横長の画像が向いています（推奨 1600×400px）。表示する場所に合わせて端が切り取られるので、大事な部分は中央に置いてください。',
+      aspect: '5 / 1',
     },
   }
 
@@ -499,37 +561,35 @@ const CourseImageCard = ({ courseId, kind, imageKey }: { courseId: number; kind:
   const f = COURSE_IMAGE_FIELDS[kind]
   const action = `/courses/${courseId}/${kind}`
   return (
-    <Card
-      id={`settings-${kind}`}
-      heading={f.heading}
-      description={f.description}
-      actions={
-        imageKey && (
-          <form method="post" action={`${action}/delete`} data-confirm={`${f.heading}を削除しますか？`}>
-            <Button type="submit" variant="danger-outline" size="sm" icon="trash">
-              削除
+    <>
+      <Card id={`settings-${kind}`} heading={f.heading} description={f.description}>
+        <form method="post" action={action} enctype="multipart/form-data" class="stack" data-loading-form {...validateWith('image')}>
+          <ImageField
+            label="画像ファイル"
+            name="image"
+            id={`f-${kind}-image`}
+            src={courseImageUrl(courseId, kind, imageKey)}
+            aspect={f.aspect}
+            width={f.width}
+            emptyLabel={imageKey ? '現在の画像を使用中' : undefined}
+            hint={`${f.hint}PNG・JPEG・WebP・GIF、最大 ${formatBytes(MAX_IMAGE_SIZE)}。`}
+          />
+          <div class="form-actions">
+            {imageKey && (
+              <Button type="submit" form={`${kind}-delete`} variant="ghost" icon="trash" class="image-delete">
+                画像を削除
+              </Button>
+            )}
+            <Button type="submit" icon="check" class="image-save">
+              この画像を保存
             </Button>
-          </form>
-        )
-      }
-    >
-      <form method="post" action={action} enctype="multipart/form-data" class="stack" data-loading-form {...validateWith('image')}>
-        <ImageField
-          label="画像ファイル"
-          name="image"
-          id={`f-${kind}-image`}
-          src={courseImageUrl(courseId, kind, imageKey)}
-          aspect={f.aspect}
-          width={f.width}
-          hint={`${f.hint}PNG・JPEG・WebP・GIF、最大 ${formatBytes(MAX_IMAGE_SIZE)}。`}
-        />
-        <div class="form-actions">
-          <Button type="submit" variant="primary" icon="upload">
-            {imageKey ? '画像を差し替える' : '画像を設定'}
-          </Button>
-        </div>
-      </form>
-    </Card>
+          </div>
+        </form>
+      </Card>
+      {imageKey && (
+        <form id={`${kind}-delete`} method="post" action={`${action}/delete`} data-confirm={`${f.heading}を削除しますか？`} hidden />
+      )}
+    </>
   )
 }
 
@@ -543,7 +603,7 @@ const SETTINGS_SECTIONS: { id: string; label: string; icon: IconName; danger?: b
 export const SettingsPage = ({ access, values, errors }: { access: CourseAccess; values: CourseFormValues; errors?: CourseFormErrors }) => {
   const id = access.course.id
   return (
-    <AppShell wide tone={access.course.color}>
+    <AppShell tone={access.course.color}>
       <Styles use={['/src/routes/courses/courses.css']} />
       <CourseHeader access={access} tab="settings" />
       <TabPanel>
@@ -560,6 +620,8 @@ export const SettingsPage = ({ access, values, errors }: { access: CourseAccess;
           <div class="stack-lg">
             <CourseForm
               id="settings-basic"
+              heading="基本情報"
+              description="一覧やコースページに表示される名前・説明・カラーと、完了ステータスの設定です。"
               action={`/courses/${id}/settings`}
               values={values}
               errors={errors}

@@ -1,23 +1,24 @@
 /* ===== Markdown の表示 */
-.prose { font-size: 15px; line-height: 1.85; color: var(--text-2); overflow-wrap: anywhere; }
+.prose { font-size: var(--fs-md); line-height: 1.85; color: var(--text-2); overflow-wrap: anywhere; }
 .prose > * + * { margin-top: 1em; }
+.prose > :first-child { margin-top: 0; }
 .prose h2, .prose h3, .prose h4 { color: var(--text); margin-top: 1.8em; }
-.prose h2 { font-size: 20px; }
-.prose h3 { font-size: 17px; }
-.prose h4 { font-size: 15px; }
+.prose h2 { font-size: var(--fs-xl); }
+.prose h3 { font-size: var(--fs-lg); }
+.prose h4 { font-size: var(--fs-md); }
 .prose ul, .prose ol { padding-left: 1.4em; }
 .prose li + li { margin-top: 0.3em; }
-.prose a { text-decoration: underline; text-underline-offset: 3px; }
-.prose code { font: 0.88em var(--mono); padding: 2px 6px; border-radius: 6px; background: var(--surface-3); }
-.prose pre { padding: 16px 18px; border-radius: var(--radius); background: #12131a; color: #e6e7ee; overflow-x: auto; font-size: 13.5px; line-height: 1.6; }
+.prose a { color: var(--c-ink); text-decoration: underline; text-underline-offset: 3px; }
+.prose code { font: 0.88em var(--mono); padding: 2px 6px; border-radius: 6px; background: color-mix(in srgb, var(--text) 7%, transparent); }
+.prose pre { padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--code-bg); color: var(--code-text); overflow-x: auto; font-size: var(--fs-sm); line-height: 1.6; }
 .prose pre code { background: none; padding: 0; font-size: inherit; }
-.prose blockquote { margin: 1em 0 0; padding: 4px 0 4px 16px; border-left: 3px solid var(--accent); color: var(--muted); }
+.prose blockquote { margin: 1em 0 0; padding: 4px 0 4px 16px; border-left: 3px solid color-mix(in srgb, var(--c1, var(--accent)) 60%, transparent); color: var(--muted); }
 .prose hr { border: 0; border-top: 1px solid var(--border); margin: 2em 0; }
 .prose strong { color: var(--text); }
 
 /* ===== Markdown エディター（CodeMirror は src/markdown-editor.ts） */
 .md-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.md-modes { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--border); }
+.md-modes { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--track); box-shadow: inset 0 0 0 1px var(--track-border); }
 .md-modes button {
   display: inline-flex;
   align-items: center;
@@ -28,22 +29,27 @@
   background: none;
   color: var(--muted);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
-.md-modes button:hover { color: var(--text); }
-.md-modes button[aria-pressed='true'] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+@media (hover: hover) {
+  .md-modes button:hover { color: var(--text); }
+}
+.md-modes button[aria-pressed='true'] { background: var(--thumb); color: var(--text); box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--card-border); }
 
 .md-editor-box {
-  border: 1px solid var(--border-strong);
-  border-radius: 18px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-field);
   background: var(--surface);
   overflow: hidden;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-.md-editor-box:hover { border-color: color-mix(in srgb, var(--text) 22%, var(--border-strong)); }
-.md-editor-box:focus-within { border-color: var(--primary); box-shadow: var(--ring); }
+@media (hover: hover) {
+  .md-editor-box:hover { border-color: color-mix(in srgb, var(--text) 55%, var(--field-border)); }
+}
+.md-editor-box:focus-within { border-color: var(--focus); box-shadow: var(--ring-field); }
 .has-error .md-editor-box { border-color: var(--danger); }
 /* textarea 自身に枠を付けないのは、CodeMirror を読み込む前と後で枠の見た目が変わってしまうため */
 .md-editor-box .md-editor-source,
@@ -54,11 +60,13 @@
 
 .md-editor-host .cm-editor { background: none; color: var(--text); }
 .md-editor-host .cm-editor.cm-focused { outline: none; }
-.md-editor-host .cm-scroller { font: 14px/1.7 var(--font); }
+/* 全体の :focus-visible の枠を中に出さないのは、外側の .md-editor-box が枠の色とリングでフォーカスを示しているため */
+.md-editor-host .cm-content:focus-visible { outline: none; }
+.md-editor-host .cm-scroller { font: var(--fs-base)/1.7 var(--font); }
 .md-editor-host .cm-content { min-height: calc(var(--md-rows) * 1.7em + 24px); padding: 12px 0; caret-color: var(--text); }
-.md-editor-host .cm-line { padding: 0 18px; }
+.md-editor-host .cm-line { padding: 0 14px; }
 .md-editor-host .cm-cursor { border-left-color: var(--text); }
-.md-editor-host .cm-placeholder { color: color-mix(in srgb, var(--muted) 75%, transparent); }
+.md-editor-host .cm-placeholder { color: var(--muted); }
 /* !important を使うのは、CodeMirror が差し込む選択範囲の色の指定が詳細度の高いセレクターで、クラスの組み合わせでは上書きできないため */
 .md-editor-host .cm-selectionBackground,
 .md-editor-host .cm-focused .cm-selectionBackground { background: color-mix(in srgb, var(--primary) 22%, transparent) !important; }
@@ -70,12 +78,24 @@
 .md-tok-quote { color: var(--muted); }
 .md-tok-mark { color: var(--muted); }
 
-.md-preview { padding: 12px 18px; }
+.md-preview { padding: 12px 14px; }
 .md-preview > :first-child { margin-top: 0; }
 
-.md-help summary { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12.5px; cursor: pointer; list-style: none; }
+.md-help summary { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: var(--fs-xs); cursor: pointer; list-style: none; }
 .md-help summary::-webkit-details-marker { display: none; }
-.md-help summary:hover { color: var(--text); }
-.md-help dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 10px 0 0; padding: 12px 16px; border-radius: var(--radius); background: var(--surface-2); font-size: 12.5px; }
+@media (hover: hover) {
+  .md-help summary:hover { color: var(--text); }
+}
+.md-help dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 10px 0 0; padding: 12px 16px; border-radius: var(--radius); background: var(--surface-2); font-size: var(--fs-xs); }
 .md-help dd { margin: 0; color: var(--muted); }
-.md-help code { font: 12px var(--mono); }
+.md-help code { font: var(--fs-xs) var(--mono); }
+
+/* スマホ幅で 14px のままにしないのは、iOS の Safari が 16px 未満の入力欄にフォーカスすると画面を拡大するため */
+@media (max-width: 640px) {
+  .md-editor-host .cm-scroller { font-size: 16px; }
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .md-toolbar .icon-btn { width: 40px; height: 40px; }
+  .md-modes button { min-height: 38px; padding-inline: 14px; }
+  .md-help summary { display: flex; align-items: center; min-height: var(--tap); }
+}

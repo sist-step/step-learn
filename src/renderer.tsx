@@ -18,6 +18,7 @@ export const renderer = jsxRenderer(({ children, title }, c) => {
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content={theme} />
+        <meta name="theme-color" content="" />
         <title>{title ? `${title} | STEP Learn` : 'STEP Learn'}</title>
         <link rel="icon" href="/favicon.ico" sizes="32x32" />
         <link rel="icon" href="/favicon.png" type="image/png" sizes="160x160" />
