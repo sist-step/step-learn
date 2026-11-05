@@ -21,7 +21,8 @@ src/routes/<name>/
 
 - 既存の機能領域に入るものは、該当するフォルダーに足す
   - `courses/`（コース一覧・作成・コースページ・設定）、`dashboard/`、`content/`（セクション・アイテム）、`participants/`（参加者）、`account/`、`admin/`、`auth/`、`screen/`（画面共有）
-- 新しい領域なら `src/routes/<name>/` を作り、`src/index.tsx` で `app.route('/<prefix>', <name>)` する
+- 新しい領域なら `src/routes/<name>/` を作り、`src/app.tsx` で `app.route('/<prefix>', <name>)` する
+- Moodle モード（`MOODLE_URL` を設定したとき）は `src/moodle-mode/` の別のアプリで動き、`src/routes/` のハンドラは使わない。`src/routes/` のビューや `src/components/` の部品を変えるときは、Moodle モードの画面（`src/moodle-mode/views.tsx` と、使い回している `CoursesPage` / `DashboardPage`）も崩れないか確かめる。Moodle モードから `src/lib/db.ts` を（間接的にも）読み込むと起動時にエラーになる
 - ナビゲーションに出す画面は `src/components/layout.tsx` の `links` に足す（左のアイコンレールに出る。権限で出し分ける）
 - 複数のルートで使う部品は `src/components/`、コース関連の部品は `components/course.tsx`。複数のルートで使う DB の処理は `src/lib/`（`lib/courses.ts` など）
 - handlers と views の両方で使う型・定数（一覧の行の型、件数の上限など）は views.tsx から export する

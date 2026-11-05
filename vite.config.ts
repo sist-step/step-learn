@@ -23,6 +23,9 @@ export default defineConfig(({ command }) => ({
         const httpServer = server.httpServer
         // ここで直接 import しないのは、アプリとは別のモジュールインスタンスになり、ページ側から配信中かどうかを参照できなくなるため
         httpServer?.once('listening', async () => {
+          // Moodle モードで読み込まないのは、画面共有を使わないうえ、読み込むと step-learn.db を開いてしまうため
+          const { config } = await server.ssrLoadModule('/src/lib/config.ts')
+          if (config.moodle) return
           const { attachScreenShare } = await server.ssrLoadModule('/src/lib/screen-share.ts')
           attachScreenShare(httpServer)
         })
@@ -41,7 +44,12 @@ export default defineConfig(({ command }) => ({
         copyPublicDir: false,
         rollupOptions: {
           input: { index: 'src/server.ts', cli: 'src/cli.ts' },
-          output: { entryFileNames: '[name].js' },
+          output: {
+            entryFileNames: '[name].js',
+            // 既定のままにしないのは、共有のチャンク（lib/db.ts を含む auth など）を補助コードのために読み込んだだけで、そのチャンクの
+            // モジュールの本体まで動き、Moodle モードでも step-learn.db を開こうとするため。使うモジュールの本体だけを動かす
+            strictExecutionOrder: true,
+          },
         },
       },
     },

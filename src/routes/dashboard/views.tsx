@@ -5,7 +5,7 @@ import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
 import { CourseIcon, CourseRow, EmptyState, courseInitials, Progress, ProgressRing, type CourseCardData } from '../../components/ui'
-import { courseImageUrl } from '../../lib/courses'
+import { courseImageUrl } from '../../lib/course-images'
 import { randomTip } from '../../lib/tips'
 
 const greeting = () => {

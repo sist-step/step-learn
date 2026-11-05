@@ -1,5 +1,6 @@
 import type { Child } from 'hono/jsx'
-import { courseImageUrl, type CourseAccess } from '../lib/courses'
+import { courseImageUrl } from '../lib/course-images'
+import type { CourseAccess } from '../lib/courses'
 import { completionChoices } from '../lib/forms'
 import { COMPLETION_LABELS, COMPLETIONS, COURSE_COLORS, type Completion, type Course, type ItemType } from '../lib/types'
 import { Button } from './button'

@@ -7,6 +7,10 @@ description: "STEP Learn の DB スキーマ変更とマイグレーション生
 
 SQLite（better-sqlite3、WAL）。スキーマ定義・マイグレーション・クエリのすべてを Drizzle で書く。`lib/db.ts` の `db` が Drizzle のインスタンスで、生 SQL の文字列でクエリを書かない。
 
+## Moodle モードの DB
+
+Moodle モード（`MOODLE_URL` を設定したとき）は `data/moodle-mode.db` という別の DB を使い、`step-learn.db` は開かない。スキーマは `src/moodle-mode/schema.ts`、マイグレーションは `migrations-moodle/`。変えたら `npm run db:generate:moodle` で生成し、`npm run db:check:moodle` で確かめる。完全移行のあとは消すので、ここに残すデータは捨ててよいもの（ユーザーの写し・セッション）だけにする。
+
 ## スキーマを変える手順
 
 1. `src/lib/schema.ts` を編集する

@@ -1,0 +1,32 @@
+name: step-learn-moodle
+
+# STEP Learn の Moodle モードを手元で確かめるための Moodle 5.1。本番には使わない
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: moodle
+      POSTGRES_PASSWORD: moodle
+      POSTGRES_DB: moodle
+    volumes:
+      - db:/var/lib/postgresql/data
+
+  moodle:
+    image: moodlehq/moodle-php-apache:8.3
+    depends_on:
+      - db
+    ports:
+      - '127.0.0.1:8080:80'
+    # STEP Learn（ホストの開発サーバー）にログアウトを知らせるため
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - ./.moodle/moodle:/var/www/html
+      - ./apache.conf:/etc/apache2/sites-enabled/000-default.conf:ro
+      - ../local_steplearn:/var/www/html/public/local/steplearn
+      - ./:/opt/steplearn-dev:ro
+      - moodledata:/var/www/moodledata
+
+volumes:
+  db:
+  moodledata:

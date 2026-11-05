@@ -1,4 +1,5 @@
 migrations/
+migrations-moodle/
 dist/
 data/
 public/

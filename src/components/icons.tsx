@@ -1,4 +1,5 @@
 import { raw } from 'hono/html'
+import academicCap from 'heroicons/24/outline/academic-cap.svg?raw'
 import sliders from 'heroicons/24/outline/adjustments-horizontal.svg?raw'
 import arrowDown from 'heroicons/24/outline/arrow-down.svg?raw'
 import download from 'heroicons/24/outline/arrow-down-tray.svg?raw'
@@ -34,6 +35,7 @@ import link from 'heroicons/24/outline/link.svg?raw'
 import listBullet from 'heroicons/24/outline/list-bullet.svg?raw'
 import search from 'heroicons/24/outline/magnifying-glass.svg?raw'
 import moon from 'heroicons/24/outline/moon.svg?raw'
+import lock from 'heroicons/24/outline/lock-closed.svg?raw'
 import listNumbered from 'heroicons/24/outline/numbered-list.svg?raw'
 import pencil from 'heroicons/24/outline/pencil.svg?raw'
 import photo from 'heroicons/24/outline/photo.svg?raw'
@@ -94,6 +96,8 @@ const svgs = {
   listBullet,
   listNumbered,
   code,
+  lock,
+  academicCap,
 } as const
 
 export type IconName = keyof typeof svgs
