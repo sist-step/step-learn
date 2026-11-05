@@ -80,7 +80,7 @@ npm start            # = node dist/server/index.js
 - `TRUST_PROXY`：リバースプロキシの後ろで動かす場合は `1` にしてください。`X-Forwarded-For` からクライアントの IP を取ってレート制限に使います（未設定だと全員がプロキシの IP として扱われます）
 - 画面共有は `/socket.io/` で WebSocket を使います。リバースプロキシでは WebSocket の Upgrade を通してください（nginx なら `proxy_http_version 1.1;` と `Upgrade` / `Connection` ヘッダーの転送）。通らない場合は HTTP のロングポーリングに切り替わって動きますが、遅延と負荷が増えます
 - 配信中の状態はプロセスのメモリに持つため、複数のプロセスやサーバーに分散させないでください
-- 実行時に必要なのは `dist/`・`migrations/`・`.env` と、`better-sqlite3` を入れた `node_modules` です（`npm ci --omit=dev` で入ります）。起動したディレクトリを基準に読み込みます
+- 実行時に必要なのは `dist/`・`migrations/`・`migrations-moodle/`（Moodle モードのとき）・`.env` と、`better-sqlite3` を入れた `node_modules` です（`npm ci --omit=dev` で入ります）。起動したディレクトリを基準に読み込みます
 - SQLite・セッション署名鍵・（ローカル保存時の）教材ファイルは、起動したディレクトリの `data/` に保存されます（変更はできません）。**このディレクトリをバックアップ対象にしてください**
 
 ### ユーザーを CLI で作成する
@@ -121,6 +121,32 @@ npm run moodle:import -- backup.mbz             # プレビューを表示し、
 - 同じメールアドレスのユーザーがすでにいれば、そのユーザーを参加者に加えます。いなければ作成します（Moodle のユーザー名が規則に合い、空いていれば引き継ぎます）
 - Moodle のパスワードは引き継げません。新しく作ったユーザーには、ログイン画面の「パスワードを忘れた場合」からパスワードを設定してもらってください（SMTP の設定が必要です）
 - 学生の完了状況や評定は取り込みません
+
+### Moodle モード（完全移行までの一時的な運用）
+
+`MOODLE_URL` を設定すると、STEP Learn を Moodle 5.1 のフロントエンドとして動かします。データはすべて Moodle にあり、STEP Learn は画面だけを受け持ちます。
+
+- ログインは Moodle のログイン画面で行います（ログイン画面の「旧STEP Learnでログイン」から移動）。手動のアカウントでも Microsoft アカウントでもログインでき、ログインすると STEP Learn と Moodle の両方でログインした状態になります
+- ログアウトすると Moodle からもログアウトします。Moodle の画面でログアウトしたときも、STEP Learn から抜けます（`MOODLE_BACKCHANNEL_SECRET` を設定した場合）
+- STEP Learn の画面で扱うのは URL とファイルの活動だけです。課題・小テストなどのほかの活動は「Moodle で開く」から Moodle の画面で使います（ラベルは本文をセクションの中に表示します）
+- 教師は、セクション・リンク・ファイルの追加・編集・並べ替え・表示の切り替え・削除を STEP Learn の画面でできます。参加者・コースの設定・アカウント設定・管理は Moodle の同じ画面に移ります
+- STEP Learn にしかない機能（新規登録・パスワードの再設定・Markdown のページ・画面共有・CLI）は使えません
+- STEP Learn 側の DB は `data/moodle-mode.db`（ユーザーの写し・セッション・暗号化したトークンだけ）で、`data/step-learn.db` は作りも開きもしません。完全移行のときに引き継ぐ必要はありません
+
+Moodle 側には、このリポジトリの `moodle/local_steplearn/` のプラグインを入れて設定します。手順は [moodle/README.md](moodle/README.md) を参照してください。
+
+| 環境変数 | 内容 |
+| --- | --- |
+| `MOODLE_URL` | Moodle の URL（例 `https://moodle.example.ac.jp`）。設定すると Moodle モードになります |
+| `MOODLE_EXCHANGE_TOKEN` | ログインのコードを交換する専用アカウントのトークン（必須） |
+| `MOODLE_BACKCHANNEL_SECRET` | Moodle でのログアウトの通知を検証する鍵（32 文字以上。プラグインの設定と同じ値）。未設定なら通知を受け付けません |
+
+完全移行して Moodle モードを使わなくなったら、次を削除します。
+
+- `src/moodle-mode/`・`migrations-moodle/`・`drizzle.moodle.config.ts`・`moodle/`
+- `src/index.tsx` のモードの切り替え（`./app` だけを読み込む形に戻す）と、`src/server.ts`・`vite.config.ts` の `config.moodle` の分岐
+- `src/lib/config.ts` の `moodle` / `moodleDatabasePath`、`src/lib/db.ts` の Moodle モードのガード、`src/components/style.tsx` の `moodle-mode.css`
+- `package.json` の `db:generate:moodle` / `db:check:moodle`、CI の「Check Moodle mode migrations」、`Dockerfile` の `migrations-moodle`、`.dockerignore` の `moodle`
 
 ### Docker で動かす
 
@@ -164,13 +190,17 @@ CI はチェックだけを行い、デプロイはしません。Actions の画
 
 ```
 migrations/          drizzle-kit が生成するマイグレーション（起動時に未適用のものを自動で適用）
-src/index.tsx        Hono アプリ本体（ミドルウェア、ルーティング）
+migrations-moodle/   Moodle モードの DB（data/moodle-mode.db）のマイグレーション
+src/index.tsx        MOODLE_URL の有無で、通常モード（src/app.tsx）と Moodle モード（src/moodle-mode/app.tsx）を切り替える
+src/app.tsx          Hono アプリ本体（ミドルウェア、ルーティング）
 src/server.ts        本番用 Node.js エントリ（静的ファイル配信、起動）
 src/renderer.tsx     HTML の外枠
 src/client.ts        クライアント側の小さな拡張（再読み込みなしの画面遷移、トースト、確認ダイアログ、完了トグルなど）
 src/styles/base.css  デザイントークンと共通スタイル（ダークモード対応）。部品・画面ごとの CSS は各 .tsx の隣に置き、使うページでだけ読み込む
 src/lib/             設定・DB・認証・HTTP ヘルパー・Markdown・ストレージ・画像アップロード・コースの権限
 src/moodle/          Moodle のバックアップの展開・読み取り・取り込み（CLI の moodle:import）
+src/moodle-mode/     Moodle モード（MOODLE_URL を設定したときだけ使う。完全移行のあとは削除する）
+moodle/              Moodle モード用の Moodle プラグイン（local_steplearn）と検証用の Moodle（moodle/dev）
 src/components/      レイアウトと UI 部品
 src/routes/<ルート>/ auth / account / admin / dashboard / courses / content / participants / screen。
                      ルートごとに index.ts（ルーティング）・handlers.tsx（処理）・views.tsx（画面）・<ルート>.css に分ける

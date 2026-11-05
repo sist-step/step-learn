@@ -23,6 +23,7 @@ export const STYLESHEETS = [
   '/src/routes/content/content.css',
   '/src/routes/account/account.css',
   '/src/routes/screen/screen.css',
+  '/src/moodle-mode/moodle-mode.css',
 ] as const
 
 export type StyleSheet = (typeof STYLESHEETS)[number]

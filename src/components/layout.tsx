@@ -86,7 +86,8 @@ const UserMenu = ({ editable }: { editable?: boolean }) => {
         <Switch class="menu-item" icon="moon" label="ダークモード" checked={getTheme(c) === 'dark'} data-theme-toggle />
         {editable && <Switch class="menu-item" icon="pencil" label="編集モード" checked={false} data-edit-mode-toggle />}
       </div>
-      <form method="post" action="/logout" class="user-menu-group">
+      {/* 再読み込みなしの遷移にしないのは、Moodle モードではログアウトのあと Moodle（別オリジン）に移り、fetch では追えないため */}
+      <form method="post" action="/logout" class="user-menu-group" data-reload>
         <MenuItem type="submit" icon="logout">
           ログアウト
         </MenuItem>
@@ -175,7 +176,7 @@ export const AppShell = ({ children, editable, tone }: { children: Child; editab
         )}
 
         <div class="rail-foot">
-          <form method="post" action="/logout">
+          <form method="post" action="/logout" data-reload>
             <button type="submit" class="rail-link">
               <Icon name="logout" size={20} />
               <span class="rail-label">ログアウト</span>

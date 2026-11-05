@@ -1,0 +1,215 @@
+import { config } from '../lib/config'
+
+const moodle = config.moodle!
+
+const TIMEOUT = 15_000
+
+/** Moodle が返した例外。errorcode で見分ける */
+export class MoodleError extends Error {
+  constructor(
+    readonly errorcode: string,
+    message: string,
+  ) {
+    super(message)
+  }
+}
+
+// 存在を知らせないよう、権限がない場合もまとめて 404 として扱う
+const NOT_FOUND_CODES = new Set([
+  'notfound',
+  'invalidrecord',
+  'invalidrecordunknown',
+  'invalidcoursemodule',
+  'invalidcourseid',
+  'requireloginerror',
+  'nopermissions',
+  'accessexception',
+  'invalidparameter',
+])
+
+export const isNotFound = (e: unknown) => e instanceof MoodleError && NOT_FOUND_CODES.has(e.errorcode)
+
+/** トークンの期限切れ・削除。ログインし直せば直る */
+export const isTokenError = (e: unknown) => e instanceof MoodleError && e.errorcode === 'invalidtoken'
+
+/** Moodle に接続できない（停止中・タイムアウトなど） */
+export const isUnavailable = (e: unknown) => e instanceof MoodleError && e.errorcode === 'unavailable'
+
+type Param = string | number | boolean | Param[] | { [key: string]: Param }
+
+// URLSearchParams に値をそのまま渡さないのは、Moodle の REST が配列や入れ子を ids[0]=1 や options[0][name]=x の形でしか受け取らないため
+function flatten(params: Record<string, Param>, prefix = '', out = new URLSearchParams()) {
+  for (const [key, value] of Object.entries(params)) {
+    const name = prefix ? `${prefix}[${key}]` : key
+    if (Array.isArray(value)) flatten(Object.fromEntries(value.map((v, i) => [String(i), v])), name, out)
+    else if (typeof value === 'object') flatten(value, name, out)
+    else out.append(name, typeof value === 'boolean' ? (value ? '1' : '0') : String(value))
+  }
+  return out
+}
+
+async function send(url: string, init: RequestInit) {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT) })
+  } catch (e) {
+    console.error('[moodle]', e)
+    throw new MoodleError('unavailable', 'Moodle に接続できません')
+  }
+}
+
+export async function call<T>(token: string, wsfunction: string, params: Record<string, Param> = {}): Promise<T> {
+  const body = flatten(params)
+  body.set('wstoken', token)
+  body.set('wsfunction', wsfunction)
+  const res = await send(`${moodle.url}/webservice/rest/server.php?moodlewsrestformat=json`, { method: 'POST', body })
+  if (!res.ok) throw new MoodleError('unavailable', `Moodle が ${res.status} を返しました`)
+  const data = (await res.json()) as unknown
+  if (data && typeof data === 'object' && 'exception' in data) {
+    const { errorcode, message } = data as { errorcode?: string; message?: string }
+    throw new MoodleError(errorcode ?? 'unknown', message ?? '')
+  }
+  return data as T
+}
+
+// Moodle 以外の URL にトークンを付けないのは、教材の URL が書き換えられたときにトークンを外部に漏らさないため
+function withToken(fileUrl: string, token: string) {
+  const url = URL.parse(fileUrl)
+  if (!url || url.origin !== new URL(moodle.url).origin || !url.pathname.includes('/webservice/pluginfile.php/')) return null
+  url.searchParams.delete('forcedownload')
+  url.searchParams.set('token', token)
+  return url
+}
+
+/** webservice/pluginfile.php のファイルを取得する。Moodle 以外の URL には null を返す */
+export async function fetchFile(token: string, fileUrl: string, range?: string) {
+  const url = withToken(fileUrl, token)
+  if (!url) return null
+  return send(url.href, { headers: range ? { Range: range } : {} })
+}
+
+/** ファイルを利用者の下書き領域に上げ、その itemid を返す */
+export async function uploadDraft(token: string, file: File) {
+  const body = new FormData()
+  body.set('token', token)
+  body.set('filearea', 'draft')
+  body.set('itemid', '0')
+  body.set('file_1', file, file.name)
+  const res = await send(`${moodle.url}/webservice/upload.php`, { method: 'POST', body })
+  type Uploaded = { itemid?: number; error?: string; errorcode?: string }
+  const data = (await res.json()) as Uploaded[] | Uploaded
+  const first = Array.isArray(data) ? data[0] : data
+  if (!first?.itemid) throw new MoodleError(first?.errorcode ?? 'uploadfailed', first?.error ?? '')
+  return first.itemid
+}
+
+export type Exchanged = {
+  token: string
+  validuntil: number
+  sidhash: string
+  userid: number
+  username: string
+  fullname: string
+  email: string
+  siteadmin: boolean
+}
+
+export const exchangeCode = (code: string, verifier: string) =>
+  call<Exchanged>(moodle.exchangeToken, 'local_steplearn_exchange_code', { code, verifier })
+
+export type MoodleCourse = {
+  id: number
+  shortname: string
+  fullname: string
+  summary: string
+  summaryformat: number
+  visible: boolean
+  completionenabled: boolean
+  role: '' | 'teacher' | 'student'
+  canmanage: boolean
+  total: number
+  done: number
+  members: number
+  teachers: string[]
+  imageurl: string
+}
+
+export type MoodleModule = {
+  id: number
+  url?: string
+  name: string
+  instance: number
+  visible: number
+  uservisible: boolean
+  visibleoncoursepage: number
+  modname: string
+  availabilityinfo?: string
+  description?: string
+  completion?: number
+  completiondata?: {
+    state: number
+    isautomatic: boolean
+    istrackeduser: boolean
+    details: { rulename: string }[]
+  }
+  contents?: { type: string; filename: string; fileurl: string; filesize: number; mimetype?: string }[]
+}
+
+export type MoodleSection = {
+  id: number
+  name: string
+  visible?: number
+  summary: string
+  summaryformat: number
+  section: number
+  uservisible?: boolean
+  component?: string | null
+  modules: MoodleModule[]
+}
+
+export type StateAction =
+  'cm_move' | 'cm_hide' | 'cm_show' | 'cm_delete' | 'section_move_after' | 'section_hide' | 'section_show' | 'section_delete'
+
+/** トークンを持つ利用者として Moodle を呼ぶ関数 */
+export const api = (token: string) => ({
+  myCourses: () => call<MoodleCourse[]>(token, 'local_steplearn_get_my_courses'),
+  course: (courseid: number) => call<MoodleCourse>(token, 'local_steplearn_get_course', { courseid }),
+  contents: (courseid: number) => call<MoodleSection[]>(token, 'core_course_get_contents', { courseid }),
+  viewCourse: (courseid: number) => call<unknown>(token, 'core_course_view_course', { courseid }),
+  setManualCompletion: (cmid: number, completed: boolean) =>
+    call<unknown>(token, 'core_completion_update_activity_completion_status_manually', { cmid, completed }),
+  viewUrl: (urlid: number) => call<unknown>(token, 'mod_url_view_url', { urlid }),
+  viewResource: (resourceid: number) => call<unknown>(token, 'mod_resource_view_resource', { resourceid }),
+  updateCourse: (courseid: number, action: StateAction, ids: number[], target: { sectionid?: number; cmid?: number } = {}) =>
+    call<string>(token, 'core_courseformat_update_course', {
+      action,
+      courseid,
+      ids,
+      ...(target.sectionid ? { targetsectionid: target.sectionid } : {}),
+      ...(target.cmid ? { targetcmid: target.cmid } : {}),
+    }),
+  createSection: (courseid: number, name: string) => call<number>(token, 'local_steplearn_create_section', { courseid, name }),
+  updateSection: (courseid: number, sectionid: number, name: string, summary: string) =>
+    call<null>(token, 'local_steplearn_update_section', { courseid, sectionid, name, summary }),
+  saveUrl: (p: {
+    courseid: number
+    cmid: number
+    sectionid: number
+    name: string
+    externalurl: string
+    completion: string
+    visible: boolean
+  }) => call<number>(token, 'local_steplearn_save_url', p),
+  saveResource: (p: {
+    courseid: number
+    cmid: number
+    sectionid: number
+    name: string
+    draftitemid: number
+    completion: string
+    visible: boolean
+  }) => call<number>(token, 'local_steplearn_save_resource', p),
+})
+
+export type Api = ReturnType<typeof api>
+
+export const moodleUrl = (path: string) => `${moodle.url}${path}`

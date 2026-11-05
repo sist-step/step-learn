@@ -25,6 +25,7 @@ ENV NODE_ENV=production \
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY migrations ./migrations
+COPY migrations-moodle ./migrations-moodle
 RUN mkdir -p data && chown node:node data
 USER node
 EXPOSE 3000
