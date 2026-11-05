@@ -5,7 +5,6 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import app from './index'
 import { config } from './lib/config'
-import { attachScreenShare } from './lib/screen-share'
 
 const server = new Hono()
 
@@ -25,9 +24,10 @@ server.route('/', app)
 const httpServer = serve({ fetch: server.fetch, port: config.port }, (info) => {
   console.log(`STEP Learn listening on http://localhost:${info.port}`)
 })
-const io = attachScreenShare(httpServer as HttpServer)
+// Moodle モードで読み込まないのは、画面共有を使わないうえ、読み込むと step-learn.db を開いてしまうため
+const io = config.moodle ? null : (await import('./lib/screen-share')).attachScreenShare(httpServer as HttpServer)
 
 // httpServer.close だけにしないのは、開いたままの socket.io の接続が残って終了できなくなるため
-const shutdown = () => io.close(() => process.exit(0))
+const shutdown = () => (io ? io.close(() => process.exit(0)) : httpServer.close(() => process.exit(0)))
 process.on('SIGINT', shutdown)
 process.on('SIGTERM', shutdown)

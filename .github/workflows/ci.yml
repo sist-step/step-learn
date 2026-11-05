@@ -62,3 +62,7 @@ jobs:
         env:
           BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
         run: npm run db:check -- "$BASE_REF"
+      - name: Check Moodle mode migrations
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+        run: npm run db:check:moodle -- "$BASE_REF"

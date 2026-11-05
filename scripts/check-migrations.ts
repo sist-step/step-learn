@@ -8,7 +8,11 @@ import { readMigrationFiles } from 'drizzle-orm/migrator'
 
 type JournalEntry = { idx: number; version: string; when: number; tag: string; breakpoints: boolean }
 
-const DIR = 'migrations'
+const args = process.argv.slice(2)
+const moodle = args.includes('--moodle')
+const DIR = moodle ? 'migrations-moodle' : 'migrations'
+const SCHEMA = moodle ? './src/moodle-mode/schema.ts' : './src/lib/schema.ts'
+const GENERATE = moodle ? 'npm run db:generate:moodle' : 'npm run db:generate'
 const JOURNAL = `${DIR}/meta/_journal.json`
 const work = path.resolve('node_modules/.cache/check-migrations')
 const errors: string[] = []
@@ -31,7 +35,7 @@ function step(title: string, fn: () => void) {
   console.log(`${errors.length === before ? '✓' : '✗'} ${title}`)
 }
 
-const baseArg = process.argv[2] ?? 'origin/master'
+const baseArg = args.find((a) => !a.startsWith('--')) ?? 'origin/master'
 const base = git('merge-base', baseArg, 'HEAD').trim()
 const baseJournal = readJournal(showAt(base, JOURNAL))
 const headJournal = readJournal(fs.existsSync(JOURNAL) ? fs.readFileSync(JOURNAL, 'utf8') : null)
@@ -63,17 +67,17 @@ step('journal は既存エントリを保ったまま末尾に追加されてい
     // migrator は最後に適用した when より新しいものだけを適用するため、古い when は本番で黙ってスキップされる
     if (e.when <= Math.max(lastWhen, prev?.when ?? 0)) {
       errors.push(
-        `${e.tag} の作成日時が既存のマイグレーションより古いため、適用済みの DB では実行されません。ベースブランチを取り込んでから npm run db:generate で作り直してください`,
+        `${e.tag} の作成日時が既存のマイグレーションより古いため、適用済みの DB では実行されません。ベースブランチを取り込んでから ${GENERATE} で作り直してください`,
       )
     }
   })
 })
 
-step('migrations/ の SQL がすべて journal に載っている', () => {
+step(`${DIR}/ の SQL がすべて journal に載っている`, () => {
   const tags = new Set(headJournal.map((e) => e.tag))
   for (const f of fs.readdirSync(DIR).filter((f) => f.endsWith('.sql'))) {
     if (!tags.has(f.replace(/\.sql$/, '')))
-      errors.push(`${DIR}/${f} が journal にないため適用されません。手で作らず npm run db:generate で生成してください`)
+      errors.push(`${DIR}/${f} が journal にないため適用されません。手で作らず ${GENERATE} で生成してください`)
   }
   for (const e of headJournal) {
     if (!fs.existsSync(`${DIR}/${e.tag}.sql`)) errors.push(`${DIR}/${e.tag}.sql がありません`)
@@ -87,22 +91,19 @@ fs.mkdirSync(work, { recursive: true })
 const kit = (configFile: string, command: string) =>
   execFileSync('npx', ['drizzle-kit', command, '--config', configFile], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
 
-step('schema.ts とマイグレーションが一致している', () => {
+step(`${SCHEMA} とマイグレーションが一致している`, () => {
   // 作業ツリーを汚さないよう、コピーした migrations/ に対して generate する
   const out = path.join(work, 'generate')
   fs.cpSync(DIR, out, { recursive: true })
   const config = path.join(work, 'drizzle.config.ts')
   // drizzle-kit は out の先頭に ./ を付けて解決するため、絶対パスでは渡せない
-  fs.writeFileSync(
-    config,
-    `export default ${JSON.stringify({ dialect: 'sqlite', schema: './src/lib/schema.ts', out: path.relative('.', out) })}\n`,
-  )
+  fs.writeFileSync(config, `export default ${JSON.stringify({ dialect: 'sqlite', schema: SCHEMA, out: path.relative('.', out) })}\n`)
   try {
     kit(config, 'check')
     const before = fs.readdirSync(out).length
     kit(config, 'generate')
     if (fs.readdirSync(out).length !== before)
-      errors.push('schema.ts の変更に対応するマイグレーションがありません。npm run db:generate を実行してコミットしてください')
+      errors.push(`${SCHEMA} の変更に対応するマイグレーションがありません。${GENERATE} を実行してコミットしてください`)
   } catch (e) {
     errors.push(`drizzle-kit が失敗しました\n${(e as { stderr?: string }).stderr ?? String(e)}`)
   }
