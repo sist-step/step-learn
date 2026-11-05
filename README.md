@@ -164,18 +164,26 @@ docker compose up -d --build   # http://127.0.0.1:3000
 
 ### 自動デプロイ（GitHub Actions のセルフホストランナー）
 
-`master` への push で CI（`.github/workflows/ci.yml`）が成功すると、`.github/workflows/deploy.yml` がセルフホストランナー上で `docker compose build` → `docker compose up -d` を実行して入れ替えます。
-CI はチェックだけを行い、デプロイはしません。Actions の画面から手動で再デプロイすることもできます（`master` のみ）。
+`master` への push で CI（`.github/workflows/ci.yml`）が成功すると、`.github/workflows/deploy.yml` が 2 つのサーバーのセルフホストランナー上で `docker compose build` → `docker compose up -d` を実行して入れ替えます。
+CI はチェックだけを行い、デプロイはしません。Actions の画面から手動で再デプロイすることもできます（`master` のみ。両方のサーバーに出ます）。
+
+| デプロイ | ランナーのラベル | Environment | Compose のプロジェクト（ボリューム） |
+| --- | --- | --- | --- |
+| production | `production` | `production` | `step-learn`（`step-learn_data`） |
+| beta | `beta` | `beta` | `step-learn-beta`（`step-learn-beta_data`） |
+
+片方が失敗しても、もう片方のデプロイは続きます。
 
 サーバー側の準備：
 
-1. Docker（Compose v2.24 以上）を入れ、ラベル `self-hosted` / `linux` のランナーを登録する（ランナーのユーザーが `docker` を実行できること）
-2. GitHub の Environment `production` に設定値を登録する。デプロイのたびに、ここから `.env` をランナーの一時ディレクトリに書き出してコンテナに渡し、終わったら消します
-   - Secrets：`SESSION_SECRET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `SMTP_PASS`
-   - Variables：`APP_ORIGIN` / `TRUST_PROXY` / `R2_ACCOUNT_ID` / `R2_BUCKET` / `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `MAIL_FROM`
+1. Docker（Compose v2.24 以上）を入れ、ラベル `self-hosted` / `linux` と、上の表のラベル（`production` か `beta`）を付けたランナーを登録する（ランナーのユーザーが `docker` を実行できること）
+2. GitHub の Environment（`production` / `beta`）に設定値を登録する。デプロイのたびに、ここから `.env` をランナーの一時ディレクトリに書き出してコンテナに渡し、終わったら消します
+   - Secrets：`SESSION_SECRET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `SMTP_PASS` / `MOODLE_EXCHANGE_TOKEN` / `MOODLE_BACKCHANNEL_SECRET`
+   - Variables：`APP_ORIGIN` / `TRUST_PROXY` / `R2_ACCOUNT_ID` / `R2_BUCKET` / `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `MAIL_FROM` / `MOODLE_URL`
    - 使わない項目は登録しなくてかまいません。値に `'` と改行は使えません
-3. ホスト側のポートを変える場合は変数 `DEPLOY_HOST_PORT` を、公開するアドレスを変える場合は変数 `DEPLOY_HOST_BIND` を設定する（リポジトリと Environment `production` のどちらでもかまいません）
-4. 必要に応じて、GitHub の Environment `production` に承認者などの保護ルールを設定する
+   - Moodle モードで動かすサーバーの Environment にだけ `MOODLE_URL` などを登録します
+3. ホスト側のポートを変える場合は変数 `DEPLOY_HOST_PORT` を、公開するアドレスを変える場合は変数 `DEPLOY_HOST_BIND` を、それぞれの Environment に設定する（両方のサーバーで同じ値ならリポジトリに設定してもかまいません）。2 つのランナーが同じホストにある場合は、`DEPLOY_HOST_PORT` を別々にしてください
+4. 必要に応じて、それぞれの Environment に承認者などの保護ルールを設定する
 
 ### 教材ファイルを Cloudflare R2 に保存する
 
