@@ -1,0 +1,16 @@
+/* ===== Moodle モード（完全移行のあとはこのファイルごと消す） */
+.kind-moodle { --kind: var(--c1, var(--accent)); }
+
+.item-row.is-locked .item-title, .item-row.is-locked .item-icon { color: var(--muted); }
+.item-row.is-locked .item-link { cursor: default; }
+@media (hover: hover) {
+  .item-row.is-locked:hover { background: none; }
+  .item-row.is-locked:hover .item-title { color: var(--muted); }
+}
+
+.item-label { padding: 8px 12px 8px 56px; }
+.item-label > .item-text { flex: 1; }
+.item-label .prose { font-size: var(--fs-sm); color: var(--text-2); }
+.item-label.is-hidden .prose { color: var(--muted); }
+
+.moodle-note { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: var(--fs-sm); }

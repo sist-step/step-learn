@@ -41,6 +41,17 @@ function loadSmtp() {
   }
 }
 
+function loadMoodle() {
+  if (!env.MOODLE_URL) return null
+  if (!env.MOODLE_EXCHANGE_TOKEN) throw new Error('MOODLE_URL を設定する場合は MOODLE_EXCHANGE_TOKEN も設定してください')
+  const backchannelSecret = env.MOODLE_BACKCHANNEL_SECRET || null
+  if (backchannelSecret && backchannelSecret.length < 32) throw new Error('MOODLE_BACKCHANNEL_SECRET は 32 文字以上にしてください')
+  const url = URL.parse(env.MOODLE_URL)
+  if (!url || (url.protocol !== 'https:' && url.protocol !== 'http:'))
+    throw new Error('MOODLE_URL は http(s):// で始まる URL にしてください')
+  return { url: url.href.replace(/\/+$/, ''), exchangeToken: env.MOODLE_EXCHANGE_TOKEN, backchannelSecret }
+}
+
 export const config = {
   port: Number(env.PORT ?? 3000),
   /** 公開 URL のオリジン。リバースプロキシ配下では CSRF 検証に必須（例: https://lms.example.com） */
@@ -50,6 +61,8 @@ export const config = {
   /** セッション Cookie の HMAC 署名鍵。未設定なら data/session-secret を生成して使う */
   sessionSecret: loadSessionSecret(),
   databasePath: path.join(dataDir, 'step-learn.db'),
+  /** Moodle モードで使う DB。step-learn.db とは別にして、完全移行のときに持ち込まないようにする */
+  moodleDatabasePath: path.join(dataDir, 'moodle-mode.db'),
   filesDir: path.join(dataDir, 'files'),
   /** R2 の 4 項目がすべて設定されていれば R2、なければローカルディスクに保存 */
   r2:
@@ -63,4 +76,6 @@ export const config = {
       : null,
   /** SMTP_HOST が設定されていれば SMTP で送信、なければメール本文をサーバーログに出す */
   smtp: loadSmtp(),
+  /** MOODLE_URL が設定されていれば Moodle モード（Moodle をバックエンドにして、STEP Learn は画面だけを受け持つ） */
+  moodle: loadMoodle(),
 }

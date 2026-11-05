@@ -19,6 +19,9 @@ node_modules/
 # local data (SQLite / uploaded files)
 data/
 
+# Moodle source for the Moodle mode dev environment (moodle/dev)
+moodle/dev/.moodle/
+
 # env
 .env
 !.env.example
