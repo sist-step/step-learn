@@ -7,3 +7,5 @@ data
 .env.*
 *.log
 .DS_Store
+# Moodle のプラグインと検証環境（アプリのイメージには要らない）
+moodle
