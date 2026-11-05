@@ -1,5 +1,5 @@
 import type { Child, JSX } from 'hono/jsx'
-import { courseImageUrl } from '../lib/courses'
+import { courseImageUrl } from '../lib/course-images'
 import { cx } from './cx'
 import { Icon, type IconName } from './icons'
 import { useStyle } from './style'

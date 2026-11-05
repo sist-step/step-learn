@@ -4,7 +4,6 @@ import type { CourseFormValues } from '../../components/course'
 import type { CourseCardData } from '../../components/ui'
 import { canCreateCourse } from '../../lib/auth'
 import {
-  courseImagePrefix,
   courseRevision,
   getCourseAccess,
   memberCount,
@@ -12,8 +11,8 @@ import {
   trackedDoneCount,
   trackedItemCount,
   visibleItem,
-  type CourseImageKind,
 } from '../../lib/courses'
+import { courseImagePrefix, type CourseImageKind } from '../../lib/course-images'
 import { contains, db } from '../../lib/db'
 import { firstError, validate, type FormValues } from '../../lib/forms'
 import { field, intParam, readForm, redirectWith, type Form } from '../../lib/http'
