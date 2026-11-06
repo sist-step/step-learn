@@ -514,7 +514,7 @@ document.addEventListener('keydown', (e) => {
   })
 })
 
-// --- セクションの開閉状態を記憶（端末ごと）
+// --- セクションの開閉状態を記憶（端末ごと。Moodle モードの折りたたみ型トピックは data-collapse-url に送って Moodle に記録する）
 const KEY = 'sl:collapsed'
 const readCollapsed = (): string[] => {
   try {
@@ -524,15 +524,51 @@ const readCollapsed = (): string[] => {
   }
 }
 const collapsed = new Set(readCollapsed())
+const collapseUrlOf = (d: HTMLDetailsElement) => d.parentElement?.closest<HTMLElement>('[data-collapse-url]')?.dataset.collapseUrl
+const hashTarget = () => (location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null)
 const restoreCollapsed = () =>
-  $$<HTMLDetailsElement>('details.section-card').forEach((d) => {
-    if (collapsed.has(d.id) && location.hash !== `#${d.id}`) d.open = false
+  $$<HTMLDetailsElement>('details.section-card:not(.is-fixed)').forEach((d) => {
+    if (!collapseUrlOf(d) && collapsed.has(d.id) && location.hash !== `#${d.id}`) d.open = false
   })
+// 内容の差し替えのたびに開かないのは、URL の # のセクションを利用者が閉じても、確認のたびに開き直してしまうため
+const openHashTarget = () => {
+  const target = hashTarget()?.closest<HTMLDetailsElement>('details.section-card')
+  if (target) target.open = true
+}
+addEventListener('hashchange', openHashTarget)
+
+const pendingToggles = new Map<string, Map<string, boolean>>()
+let toggleTimer = 0
+// 失敗しても元に戻さないのは、開閉は画面には反映済みで、記録できなくても次に開いたときの状態が変わるだけのため
+function flushToggles() {
+  clearTimeout(toggleTimer)
+  for (const [url, states] of pendingToggles) {
+    const ids = (open: boolean) => [...states].filter(([, v]) => v === open).map(([id]) => id)
+    void fetch(url, {
+      method: 'POST',
+      body: new URLSearchParams({ open: ids(true).join(','), closed: ids(false).join(',') }),
+      headers: { Accept: 'application/json' },
+      keepalive: true,
+    }).catch(() => {})
+  }
+  pendingToggles.clear()
+}
+addEventListener('pagehide', flushToggles)
+
 document.addEventListener(
   'toggle',
   (e) => {
     const d = e.target as HTMLDetailsElement
-    if (!d.matches?.('details.section-card')) return
+    if (!d.matches?.('details.section-card:not(.is-fixed)')) return
+    const url = collapseUrlOf(d)
+    if (url && d.dataset.section) {
+      const states = pendingToggles.get(url) ?? new Map<string, boolean>()
+      pendingToggles.set(url, states.set(d.dataset.section, d.open))
+      clearTimeout(toggleTimer)
+      // まとめて送るのは、「すべて開く」や同時に 1 つだけ開く設定で、一度に多くのセクションが切り替わるため
+      toggleTimer = window.setTimeout(flushToggles, 500)
+      return
+    }
     d.open ? collapsed.delete(d.id) : collapsed.add(d.id)
     try {
       localStorage.setItem(KEY, JSON.stringify([...collapsed].slice(-200)))
@@ -540,6 +576,15 @@ document.addEventListener(
   },
   true,
 )
+
+document.addEventListener('click', (e) => {
+  const summary = (e.target as Element).closest('summary')
+  if (summary?.parentElement?.matches('details.section-card.is-fixed')) e.preventDefault()
+  const btn = (e.target as Element).closest<HTMLElement>('[data-sections-toggle]')
+  if (!btn) return
+  const open = btn.dataset.sectionsToggle === 'open'
+  $$<HTMLDetailsElement>('details.section-card:not(.is-fixed)').forEach((d) => (d.open = open))
+})
 
 // --- ファイル選択時にタイトルが空なら自動入力
 document.addEventListener('change', (e) => {
@@ -1252,6 +1297,7 @@ function initPage() {
   $$('[data-toast]').forEach((el) => dismissLater(el, 5000))
   syncThemeColor()
   initContent()
+  openHashTarget()
   watchLive()
   initAuthArt()
 }
