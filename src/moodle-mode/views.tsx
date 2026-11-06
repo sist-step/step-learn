@@ -441,6 +441,8 @@ type CardOptions = {
   current?: boolean
   summaryInHead?: boolean
   subtiles?: boolean
+  /** タイルの下に開いたセクションの閉じるボタン */
+  closable?: boolean
 }
 
 const SectionCard = ({
@@ -463,7 +465,7 @@ const SectionCard = ({
   const hiddenCount = contents.length - shown.length
   const empty = !manage && shown.length === 0
   const emptyView = manage && shown.length === 0
-  const { open = true, fixed = false, group, current = false, summaryInHead = false, subtiles = false } = options
+  const { open = true, fixed = false, group, current = false, summaryInHead = false, subtiles = false, closable = false } = options
   return (
     <details
       class={cx(
@@ -502,6 +504,7 @@ const SectionCard = ({
           </Chip>
         )}
         {!fixed && <Icon name="chevronDown" class="section-caret" />}
+        {closable && <IconButton icon="x" label="閉じる" class="section-close" data-tile-close />}
       </summary>
       {manage && <SectionEditBar courseId={courseId} section={s} />}
       {!summaryInHead && s.summary && <p class="section-summary">{s.summary}</p>}
@@ -583,12 +586,14 @@ const TileCard = ({
   layout,
   courseId,
   isStudent,
+  open,
 }: {
   s: MSection
   o: CourseOutline
   layout: TilesLayout
   courseId: number
   isStudent: boolean
+  open: boolean
 }) => {
   const tile = layout.tiles.get(s.id)
   const icon = tile?.icon || layout.defaultIcon
@@ -640,11 +645,18 @@ const TileCard = ({
     </>
   )
   return (
-    <li class={cx('sec-tile-cell', s.hidden && 'edit-only')} id={`section-${s.id}`}>
+    <li class={cx('sec-tile-cell', s.hidden && 'edit-only')} id={`tile-${s.id}`}>
       {locked || empty ? (
         <span class={cx('sec-tile', locked && 'is-locked', empty && 'is-empty')}>{body}</span>
       ) : (
-        <a href={tileHref(courseId, s)} class={cx('sec-tile', s.hidden && 'is-hidden', isStudent && complete && 'is-done')}>
+        <a
+          href={tileHref(courseId, s)}
+          class={cx('sec-tile', s.hidden && 'is-hidden', isStudent && complete && 'is-done')}
+          data-tile={s.id}
+          data-no-prefetch
+          aria-expanded={String(open)}
+          aria-controls={`tile-panel-${s.id}`}
+        >
           {body}
         </a>
       )}
@@ -652,47 +664,27 @@ const TileCard = ({
   )
 }
 
+// 開いたセクションをタイルの直後に置くのは、grid-auto-flow: dense で同じ行の残りのタイルを前に詰め、パネルをその行のすぐ下に出すため（列数に合わせて差し込む位置を JS で計算しなくて済む）
 const TilesSections = ({ o, layout, openSection, ...rest }: SectionsProps & { layout: TilesLayout; openSection?: number }) => {
   const general = o.topSections.find((s) => s.number === 0)
   const tiles = o.topSections.filter((s) => s.number !== 0)
-  const opened = tiles.find((s) => s.id === openSection && (rest.manage || (!s.hidden && !s.locked)))
-  if (opened) {
-    const nav = tiles.filter((s) => (rest.manage ? true : !s.hidden && !s.locked))
-    const i = nav.findIndex((s) => s.id === opened.id)
-    const prev = nav[i - 1]
-    const next = nav[i + 1]
-    return (
-      <div class="stack">
-        <a href={`/courses/${rest.courseId}#section-${opened.id}`} class="back-link">
-          <Icon name="chevronLeft" size={16} />
-          すべてのタイル
-        </a>
-        <SectionCard s={opened} o={o} {...rest} options={{ fixed: true, subtiles: layout.subtiles }} />
-        {(prev || next) && (
-          <nav class="sec-tile-pager" aria-label="前後のセクション">
-            {prev && (
-              <Button href={tileHref(rest.courseId, prev)} variant="ghost" icon="chevronLeft" class="sec-tile-pager-prev">
-                <span class="truncate">{prev.title}</span>
-              </Button>
-            )}
-            {next && (
-              <Button href={tileHref(rest.courseId, next)} variant="ghost" iconEnd="chevronRight" class="sec-tile-pager-next">
-                <span class="truncate">{next.title}</span>
-              </Button>
-            )}
-          </nav>
-        )}
-      </div>
-    )
-  }
+  const openable = (s: MSection) => !rest.isStudent || (!s.locked && o.statsOf(s.id).shown.length > 0)
   return (
     <div class="stack">
       {general && <SectionCard s={general} o={o} {...rest} options={{ fixed: true, subtiles: layout.subtilesZero }} />}
       {tiles.length > 0 && (
         <ul class="sec-tiles">
-          {tiles.map((s) => (
-            <TileCard s={s} o={o} layout={layout} courseId={rest.courseId} isStudent={rest.isStudent} />
-          ))}
+          {tiles.flatMap((s) => {
+            const open = s.id === openSection && openable(s)
+            const tile = <TileCard s={s} o={o} layout={layout} courseId={rest.courseId} isStudent={rest.isStudent} open={open} />
+            if (!openable(s)) return [tile]
+            return [
+              tile,
+              <li class={cx('sec-tile-panel', s.hidden && 'edit-only')} id={`tile-panel-${s.id}`} hidden={!open}>
+                <SectionCard s={s} o={o} {...rest} options={{ fixed: true, subtiles: layout.subtiles, closable: true }} />
+              </li>,
+            ]
+          })}
         </ul>
       )}
     </div>
