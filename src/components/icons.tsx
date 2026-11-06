@@ -3,6 +3,7 @@ import academicCap from 'heroicons/24/outline/academic-cap.svg?raw'
 import sliders from 'heroicons/24/outline/adjustments-horizontal.svg?raw'
 import arrowDown from 'heroicons/24/outline/arrow-down.svg?raw'
 import download from 'heroicons/24/outline/arrow-down-tray.svg?raw'
+import arrowPath from 'heroicons/24/outline/arrow-path.svg?raw'
 import logout from 'heroicons/24/outline/arrow-right-start-on-rectangle.svg?raw'
 import external from 'heroicons/24/outline/arrow-top-right-on-square.svg?raw'
 import arrowUp from 'heroicons/24/outline/arrow-up.svg?raw'
@@ -102,6 +103,7 @@ const svgs = {
   academicCap,
   calendar,
   folder,
+  arrowPath,
 } as const
 
 export type IconName = keyof typeof svgs
