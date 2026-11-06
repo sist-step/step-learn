@@ -131,7 +131,6 @@ a.tile { transition: border-color 0.15s, box-shadow 0.2s, transform 0.2s var(--e
 .table tr:last-child td { border-bottom: 0; }
 
 @media (max-width: 640px) {
-  .hide-sm { display: none; }
   .table th, .table td { padding: 10px 12px; }
   .table td { padding-block: 12px; }
   .table :is(th, td):last-child { padding-right: 8px; }

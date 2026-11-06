@@ -321,6 +321,7 @@ kbd {
 
 @media (max-width: 640px) {
   :root { --control-h: 44px; --control-h-sm: 40px; --control-h-lg: 48px; }
+  .hide-sm { display: none; }
   .form-actions > .btn { flex: 1; }
   .toolbar { flex-wrap: wrap; gap: 8px; }
   .toolbar-grow { flex: 1 1 100%; }
