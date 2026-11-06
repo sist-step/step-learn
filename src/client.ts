@@ -586,6 +586,39 @@ document.addEventListener('click', (e) => {
   $$<HTMLDetailsElement>('details.section-card:not(.is-fixed)').forEach((d) => (d.open = open))
 })
 
+// --- タイルのセクションをタイルの下に開く（同時に 1 つだけ）
+// pushState にしないのは、タイルを開け閉めするたびに履歴が積まれ、戻るでコースの前の画面に戻れなくなるため
+function showTile(id: string | null) {
+  $$<HTMLElement>('.sec-tile-panel').forEach((panel) => (panel.hidden = panel.id !== `tile-panel-${id}`))
+  $$<HTMLElement>('a[data-tile]').forEach((a) => a.setAttribute('aria-expanded', String(a.dataset.tile === id)))
+  const url = new URL(location.href)
+  if (id) url.searchParams.set('section', id)
+  else url.searchParams.delete('section')
+  url.hash = ''
+  history.replaceState(history.state, '', url)
+}
+
+document.addEventListener('click', (e) => {
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+  const target = e.target as Element
+  const closing = target.closest('[data-tile-close]')?.closest<HTMLElement>('.sec-tile-panel')
+  const tile = closing
+    ? document.querySelector<HTMLAnchorElement>(`a[data-tile="${closing.id.replace('tile-panel-', '')}"]`)
+    : target.closest<HTMLAnchorElement>('a[data-tile]')
+  const panel = tile && document.getElementById(`tile-panel-${tile.dataset.tile}`)
+  if (!tile || !panel) return
+  e.preventDefault()
+  const opening = panel.hidden
+  const before = tile.getBoundingClientRect().top
+  showTile(opening ? tile.dataset.tile! : null)
+  scrollBy(0, tile.getBoundingClientRect().top - before)
+  if (!opening) return tile.focus()
+  const rect = panel.getBoundingClientRect()
+  const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+  if (rect.top > innerHeight * 0.6) panel.scrollIntoView({ block: 'start', behavior })
+  else if (rect.bottom > innerHeight && rect.height < innerHeight) panel.scrollIntoView({ block: 'nearest', behavior })
+})
+
 // --- ファイル選択時にタイトルが空なら自動入力
 document.addEventListener('change', (e) => {
   const input = e.target as HTMLInputElement
