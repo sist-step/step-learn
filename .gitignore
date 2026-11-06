@@ -22,6 +22,9 @@ data/
 # Moodle source for the Moodle mode dev environment (moodle/dev)
 moodle/dev/.moodle/
 
+# Moodle plugin package built from moodle/local_steplearn (see moodle/README.md)
+moodle/local_steplearn.zip
+
 # env
 .env
 !.env.example
