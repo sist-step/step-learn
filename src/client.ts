@@ -587,9 +587,36 @@ document.addEventListener('click', (e) => {
 })
 
 // --- タイルのセクションをタイルの下に開く（同時に 1 つだけ）
+const tileSlides = new WeakMap<HTMLElement, Animation>()
+
+// CSS の transition にしないのは、hidden（display: none）と height: auto の間は transition で補間できないため
+function slideTilePanel(panel: HTMLElement, open: boolean, animate: boolean) {
+  const now = getComputedStyle(panel)
+  const from = panel.hidden
+    ? { height: '0px', marginTop: '0px', opacity: 0 }
+    : { height: now.height, marginTop: now.marginTop, opacity: Number(now.opacity) }
+  tileSlides.get(panel)?.cancel()
+  panel.classList.remove('is-sliding')
+  if (panel.hidden && !open) return
+  panel.hidden = false
+  const rest = getComputedStyle(panel)
+  const to = open ? { height: rest.height, marginTop: rest.marginTop, opacity: 1 } : { height: '0px', marginTop: '0px', opacity: 0 }
+  if (!animate || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    panel.hidden = !open
+    return
+  }
+  panel.classList.add('is-sliding')
+  const slide = panel.animate([from, to], { duration: 280, easing: STEP_EASE })
+  tileSlides.set(panel, slide)
+  slide.onfinish = () => {
+    panel.classList.remove('is-sliding')
+    panel.hidden = !open
+  }
+  return slide
+}
+
 // pushState にしないのは、タイルを開け閉めするたびに履歴が積まれ、戻るでコースの前の画面に戻れなくなるため
-function showTile(id: string | null) {
-  $$<HTMLElement>('.sec-tile-panel').forEach((panel) => (panel.hidden = panel.id !== `tile-panel-${id}`))
+function markTile(id: string | null) {
   $$<HTMLElement>('a[data-tile]').forEach((a) => a.setAttribute('aria-expanded', String(a.dataset.tile === id)))
   const url = new URL(location.href)
   if (id) url.searchParams.set('section', id)
@@ -597,6 +624,74 @@ function showTile(id: string | null) {
   url.hash = ''
   history.replaceState(history.state, '', url)
 }
+
+function revealTilePanel(tile: HTMLElement, panel: HTMLElement) {
+  const rect = panel.getBoundingClientRect()
+  const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+  if (tile.getBoundingClientRect().top < parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop))
+    tile.scrollIntoView({ block: 'start', behavior })
+  else if (rect.top > innerHeight * 0.6) panel.scrollIntoView({ block: 'start', behavior })
+  else if (rect.bottom > innerHeight && rect.height < innerHeight) panel.scrollIntoView({ block: 'nearest', behavior })
+}
+
+const setTransitionName = (el: HTMLElement, name: string | null) =>
+  name ? el.style.setProperty('view-transition-name', name) : el.style.removeProperty('view-transition-name')
+
+function nameTileParts(panel: HTMLElement, on: boolean) {
+  const card = panel.querySelector<HTMLElement>('.section-card')
+  if (!card) return
+  const counts = new Map<string, number>()
+  for (const part of [...card.children] as HTMLElement[]) {
+    const key = part.classList[0] ?? part.tagName.toLowerCase()
+    const n = counts.get(key) ?? 0
+    counts.set(key, n + 1)
+    setTransitionName(part, on ? `tile-part-${key}-${n}` : null)
+    if (on) part.style.setProperty('view-transition-class', 'tile-part')
+    else part.style.removeProperty('view-transition-class')
+  }
+  setTransitionName(card, on ? 'tile-panel' : null)
+}
+
+// 別の行へ移るときにパネルを動かさないのは、下へ移るパネルと上へ詰めるタイルが行き違い、重なって見えるため
+function nameSwitchingPanel(panel: HTMLElement, sameRow: boolean, role: 'out' | 'in' | null) {
+  if (sameRow) nameTileParts(panel, role !== null)
+  else setTransitionName(panel, role && `tile-panel-${role}`)
+}
+
+// 閉じてから開き直さないのは、パネルが一度消えて下のタイルが上下に揺れ、どこからどこへ移ったのか追いにくいため
+function switchTilePanel(tile: HTMLAnchorElement, from: HTMLElement, to: HTMLElement) {
+  const root = document.documentElement
+  const tiles = $$<HTMLAnchorElement>('a[data-tile]')
+  const fromTile = tiles.find((a) => a.getAttribute('aria-expanded') === 'true')
+  const direction = fromTile && tiles.indexOf(tile) < tiles.indexOf(fromTile) ? 'prev' : 'next'
+  const sameRow = !!fromTile && Math.round(fromTile.getBoundingClientRect().top) === Math.round(tile.getBoundingClientRect().top)
+  const cells = $$<HTMLElement>('.sec-tile-cell')
+  root.dataset.tileSwitch = direction
+  cells.forEach((cell) => {
+    setTransitionName(cell, cell.id)
+    cell.style.setProperty('view-transition-class', 'tile-cell')
+  })
+  nameSwitchingPanel(from, sameRow, 'out')
+  const transition = document.startViewTransition(() => {
+    nameSwitchingPanel(from, sameRow, null)
+    from.hidden = true
+    to.hidden = false
+    nameSwitchingPanel(to, sameRow, 'in')
+    markTile(tile.dataset.tile!)
+  })
+  void transition.finished.finally(() => {
+    cells.forEach((cell) => {
+      setTransitionName(cell, null)
+      cell.style.removeProperty('view-transition-class')
+    })
+    nameSwitchingPanel(to, sameRow, null)
+    if (root.dataset.tileSwitch === direction) delete root.dataset.tileSwitch
+    revealTilePanel(tile, to)
+  })
+}
+
+const canSwitchTile = (from: HTMLElement) =>
+  !!document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches && tileSlides.get(from)?.playState !== 'running'
 
 document.addEventListener('click', (e) => {
   if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
@@ -608,15 +703,20 @@ document.addEventListener('click', (e) => {
   const panel = tile && document.getElementById(`tile-panel-${tile.dataset.tile}`)
   if (!tile || !panel) return
   e.preventDefault()
-  const opening = panel.hidden
+  const opening = tile.getAttribute('aria-expanded') !== 'true'
+  const shown = $$<HTMLElement>('.sec-tile-panel').filter((p) => !p.hidden)
+  if (opening && shown.length === 1 && shown[0] !== panel && canSwitchTile(shown[0])) return switchTilePanel(tile, shown[0], panel)
   const before = tile.getBoundingClientRect().top
-  showTile(opening ? tile.dataset.tile! : null)
+  // タイルより上のパネルを縮めて閉じないのは、縮むあいだ押したタイルが上へずれていき、押した場所を見失うため
+  $$<HTMLElement>('.sec-tile-panel').forEach((other) => {
+    if (other !== panel && !other.hidden) slideTilePanel(other, false, other.getBoundingClientRect().top > before)
+  })
+  const slide = slideTilePanel(panel, opening, true)
+  markTile(opening ? tile.dataset.tile! : null)
   scrollBy(0, tile.getBoundingClientRect().top - before)
   if (!opening) return tile.focus()
-  const rect = panel.getBoundingClientRect()
-  const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
-  if (rect.top > innerHeight * 0.6) panel.scrollIntoView({ block: 'start', behavior })
-  else if (rect.bottom > innerHeight && rect.height < innerHeight) panel.scrollIntoView({ block: 'nearest', behavior })
+  if (!slide) return revealTilePanel(tile, panel)
+  slide.finished.then(() => revealTilePanel(tile, panel)).catch(() => {})
 })
 
 // --- ファイル選択時にタイトルが空なら自動入力
