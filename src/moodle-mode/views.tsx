@@ -3,7 +3,7 @@ import { Button, IconButton } from '../components/button'
 import { Card, DangerRow, LinkCard } from '../components/card'
 import { cx } from '../components/cx'
 import { FileField, FileInput, FormField, SegmentedControl, SelectField, TextAreaField, TextField, validateWith } from '../components/form'
-import { Icon } from '../components/icons'
+import { Icon, type IconName } from '../components/icons'
 import { AppShell, AuthShell } from '../components/layout'
 import { Markdown } from '../components/markdown'
 import { MenuItem, Modal, Popover } from '../components/overlay'
@@ -998,4 +998,79 @@ export const ItemEditPage = ({
       </div>
     </AppShell>
   )
+}
+
+// ---------------------------------------------------------------- エラー
+
+export type ErrorContent = { icon: IconName; title: string; text: string }
+
+const SERVER_ERROR: ErrorContent = {
+  icon: 'alert',
+  title: 'エラーが発生しました',
+  text: '時間をおいて再度お試しください。問題が続く場合は、管理者にお問い合わせください。',
+}
+
+const ERRORS: Partial<Record<number, ErrorContent>> = {
+  400: { icon: 'alert', title: 'リクエストが正しくありません', text: 'URL や入力した内容を確かめて、もう一度お試しください。' },
+  403: { icon: 'lock', title: 'この操作は受け付けられませんでした', text: 'ページを開き直してから、もう一度お試しください。' },
+  404: { icon: 'search', title: 'ページが見つかりません', text: 'URL が間違っているか、閲覧する権限がありません。' },
+  500: SERVER_ERROR,
+  502: {
+    icon: 'alert',
+    title: '旧STEP Learn でエラーが発生しました',
+    text: '旧STEP Learn が処理できませんでした。時間をおいて再度お試しください。',
+  },
+  503: {
+    icon: 'alert',
+    title: '旧STEP Learn に接続できません',
+    text: '旧STEP Learn が停止しているか、混み合っています。時間をおいて再度お試しください。',
+  },
+}
+
+export const errorContent = (status: number): ErrorContent =>
+  ERRORS[status] ?? (status >= 500 ? SERVER_ERROR : (ERRORS[400] as ErrorContent))
+
+export const ErrorPage = ({
+  status,
+  content = errorContent(status),
+  loggedIn,
+  retry,
+}: {
+  status: number
+  content?: ErrorContent
+  loggedIn: boolean
+  retry?: string
+}) => {
+  const body = (
+    <EmptyState
+      page
+      icon={content.icon}
+      title={content.title}
+      text={
+        <>
+          {content.text}
+          <span class="error-code">エラーコード {status}</span>
+        </>
+      }
+      action={
+        <div class="row">
+          {retry && (
+            <Button href={retry} icon="arrowPath" data-reload>
+              再読み込み
+            </Button>
+          )}
+          {loggedIn && !retry && (
+            <Button href="/courses" icon="book">
+              コース一覧
+            </Button>
+          )}
+          <Button href="/" variant="primary">
+            ホームへ戻る
+          </Button>
+        </div>
+      }
+    />
+  )
+  useStyle('/src/moodle-mode/moodle-mode.css')
+  return loggedIn ? <AppShell>{body}</AppShell> : <AuthShell>{body}</AuthShell>
 }
