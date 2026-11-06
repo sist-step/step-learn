@@ -128,6 +128,8 @@ export type MoodleCourse = {
   canmanage: boolean
   total: number
   done: number
+  // 必須にしないのは、プラグインを更新する前の Moodle は返さないため
+  inprogress?: boolean
   members: number
   teachers: string[]
   imageurl: string

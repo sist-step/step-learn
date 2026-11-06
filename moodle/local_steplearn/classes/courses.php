@@ -88,6 +88,7 @@ class courses {
     public static function export(\stdClass $course, array $access): array {
         global $CFG, $USER;
         require_once($CFG->libdir . '/completionlib.php');
+        require_once($CFG->dirroot . '/course/lib.php');
         $context = \context_course::instance($course->id);
         [$summary, $summaryformat] = util::format_text($course->summary, $course->summaryformat, $context, 'course', 'summary', 0);
 
@@ -136,6 +137,7 @@ class courses {
             'canmanage' => $access['canmanage'],
             'total' => $total,
             'done' => $done,
+            'inprogress' => course_classify_for_timeline($course, null, $completion) === COURSE_TIMELINE_INPROGRESS,
             'members' => count_enrolled_users($context, '', 0, true),
             'teachers' => $teachers,
             'imageurl' => $imageurl,
@@ -158,6 +160,7 @@ class courses {
             'canmanage' => new external_value(PARAM_BOOL, 'can edit the course contents'),
             'total' => new external_value(PARAM_INT, 'activities with completion visible to the user'),
             'done' => new external_value(PARAM_INT, 'completed activities'),
+            'inprogress' => new external_value(PARAM_BOOL, 'in progress on the Moodle dashboard timeline (not ended, not completed, started)'),
             'members' => new external_value(PARAM_INT, 'active participants'),
             'teachers' => new external_multiple_structure(new external_value(PARAM_TEXT, 'name'), 'course contacts'),
             'imageurl' => new external_value(PARAM_URL, 'course image (webservice/pluginfile.php) or empty'),
