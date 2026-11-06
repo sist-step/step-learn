@@ -56,7 +56,7 @@
 /* 行の間を row-gap で空けないのは、高さ 0 から伸ばすパネルの上下に gap が残り、開け閉めの始めと終わりに段差が出るため */
 .sec-tiles { --tile-gap: 12px; list-style: none; margin: calc(-1 * var(--tile-gap)) 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); grid-auto-flow: row dense; column-gap: var(--tile-gap); }
 .sec-tiles > li { margin-top: var(--tile-gap); }
-.sec-tile-cell { display: flex; min-width: 0; }
+.sec-tile-cell { position: relative; display: flex; min-width: 0; }
 .sec-tile-panel { grid-column: 1 / -1; min-width: 0; scroll-margin: 16px; }
 .sec-tile-panel.is-sliding { overflow: clip; }
 .section-close { flex: none; }
@@ -90,37 +90,73 @@
   color: var(--text);
 }
 a.sec-tile { transition: border-color 0.15s, box-shadow 0.2s, transform 0.2s var(--ease); }
+a.sec-tile .sec-tile-glyph { transition: transform 0.25s var(--ease); }
 @media (hover: hover) {
   a.sec-tile:hover { border-color: var(--border-strong); box-shadow: var(--shadow); transform: translateY(-1px); text-decoration: none; }
   a.sec-tile:hover .sec-tile-title { color: var(--c-ink); }
+  a.sec-tile:hover .sec-tile-glyph { transform: translateY(-2px) scale(1.04); }
 }
-.sec-tile-media { position: relative; display: grid; place-items: center; aspect-ratio: 16 / 9; background: var(--c-soft); color: var(--c-ink); }
+.sec-tile-media {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 2 / 1;
+  background: radial-gradient(120% 100% at 100% 0%, color-mix(in srgb, var(--c1) 20%, transparent), transparent 70%), var(--c-soft);
+  color: var(--c-ink);
+}
 .sec-tile-media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.sec-tile-media .icon { width: 40px; height: 40px; }
-.sec-tile-number { font-size: var(--fs-display); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
-.sec-tile-body { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px 14px; min-width: 0; flex: 1; }
-.sec-tile-eyebrow { display: flex; align-items: center; gap: 6px; min-height: 22px; }
-.sec-tile-num { color: var(--muted); font-size: var(--fs-xs); font-weight: 600; font-variant-numeric: tabular-nums; }
-.sec-tile-done { margin-left: auto; color: var(--success-text); }
-.sec-tile-title { font-weight: 650; font-size: var(--fs-md); line-height: 1.35; word-break: auto-phrase; overflow-wrap: anywhere; transition: color 0.15s; }
-.sec-tile-meta { display: flex; align-items: center; gap: 4px; margin-top: auto; padding-top: 2px; color: var(--muted); font-size: var(--fs-xs); }
-.sec-tile-meta .icon { flex: none; }
-.sec-tile-progress { display: flex; align-items: center; gap: 8px; padding: 0 14px 14px; }
-.sec-tile-progress-bar { flex: 1; height: 6px; border-radius: 999px; background: linear-gradient(var(--success-strong), var(--success-strong)) no-repeat 0 0 / var(--w, 0) 100%, var(--track); }
-.sec-tile-progress-label { color: var(--muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.sec-tile-glyph { display: grid; place-items: center; width: 56px; height: 56px; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--card-border); }
+.sec-tile-glyph .icon { width: 28px; height: 28px; }
+.sec-tile-number { font-size: var(--fs-xl); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+/* 番号とバッジを本文の行に置かないのは、行が 1 つ増えてタイルが縦に伸びるため */
+.sec-tile-num, .sec-tile-badge { position: absolute; top: 8px; display: inline-flex; align-items: center; justify-content: center; height: 24px; border-radius: 999px; font-size: var(--fs-xs); font-weight: 650; font-variant-numeric: tabular-nums; }
+.sec-tile-num { left: 8px; min-width: 24px; padding: 0 8px; background: color-mix(in srgb, var(--surface) 88%, transparent); color: var(--text-2); box-shadow: var(--shadow-sm); backdrop-filter: blur(6px); }
+.sec-tile-badge { right: 8px; width: 24px; }
+.sec-tile-badge.is-done { background: var(--success-strong); color: var(--on-strong); }
+.sec-tile-badge.is-locked { background: var(--surface); color: var(--muted); box-shadow: var(--shadow-sm); }
+.sec-tile-body { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px 14px 14px; min-width: 0; flex: 1; }
+.sec-tile-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-weight: 650; font-size: var(--fs-md); line-height: 1.35; word-break: auto-phrase; overflow-wrap: anywhere; transition: color 0.15s; }
+.sec-tile-meta { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: auto; color: var(--muted); font-size: var(--fs-xs); }
+.sec-tile-pct { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-2); }
+.sec-tile.is-done .sec-tile-pct { color: var(--success-text); }
+.sec-tile-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--track); }
+.sec-tile-progress > span { display: block; width: var(--w, 0); height: 100%; background: var(--success-strong); border-radius: 0 999px 999px 0; }
 .sec-tile.is-hidden { border-style: dashed; background: color-mix(in srgb, var(--surface) 60%, transparent); }
 .sec-tile.is-hidden :is(.sec-tile-title, .sec-tile-media) { color: var(--muted); }
+.sec-tile.is-hidden .sec-tile-media { background: var(--surface-2); }
 .sec-tile:is(.is-locked, .is-empty) { box-shadow: none; background: transparent; border: 1px dashed var(--border-strong); }
 .sec-tile:is(.is-locked, .is-empty) .sec-tile-media { background: var(--surface-2); color: var(--muted); }
+.sec-tile:is(.is-locked, .is-empty) .sec-tile-glyph { background: transparent; box-shadow: inset 0 0 0 1px var(--border-strong); }
 .sec-tile:is(.is-locked, .is-empty) .sec-tile-title { color: var(--text-2); font-weight: 500; }
-.sec-tile.is-done .sec-tile-media { background: color-mix(in srgb, var(--success) 14%, transparent); }
+.sec-tile.is-done .sec-tile-media { background: radial-gradient(120% 100% at 100% 0%, color-mix(in srgb, var(--success) 22%, transparent), transparent 70%), color-mix(in srgb, var(--success) 10%, var(--surface)); color: var(--success-text); }
 a.sec-tile[aria-expanded='true'] { border-color: var(--c1); box-shadow: 0 0 0 1px var(--c1), var(--shadow-card); }
 a.sec-tile[aria-expanded='true'] .sec-tile-title { color: var(--c-ink); }
+/* 切り欠きをタイルの枠の色にしないのは、タイルではなくパネルから出ているように見せるため */
+.sec-tile-cell:has(> a[aria-expanded='true'])::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  bottom: calc(-1 * var(--tile-gap) - 8px);
+  width: 16px;
+  height: 16px;
+  translate: -50% 0;
+  rotate: 45deg;
+  background: var(--surface);
+  border: 1px solid var(--card-border);
+  border-right: 0;
+  border-bottom: 0;
+  border-top-left-radius: 3px;
+  animation: tile-notch-in 0.2s var(--ease) 0.08s both;
+}
+@keyframes tile-notch-in { from { opacity: 0; translate: -50% 6px; } }
 @media (max-width: 640px) {
   .sec-tiles { --tile-gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sec-tile-body { padding: 10px 12px 12px; }
   .sec-tile-title { font-size: var(--fs-base); }
-  .sec-tile-media .icon { width: 32px; height: 32px; }
+  .sec-tile-glyph { width: 44px; height: 44px; }
+  .sec-tile-glyph .icon { width: 24px; height: 24px; }
+  .sec-tile-number { font-size: var(--fs-lg); }
 }
 
 /* サブタイル: セクションの中のアイテムもタイルで並べる */
