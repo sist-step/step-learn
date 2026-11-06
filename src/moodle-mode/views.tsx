@@ -24,9 +24,7 @@ export const LoginPage = ({ next = '', error }: { next?: string; error?: string 
       <h1>おかえりなさい</h1>
       <div class="stack">
         {error && <Alert>{error}</Alert>}
-        <p class="muted">
-          旧STEP Learn（Moodle）のアカウントでログインします。Microsoft アカウントでログインしている方も、こちらからどうぞ。
-        </p>
+        <p class="muted">旧STEP Learn のアカウントでログインします。Microsoft アカウントでログインしている方も、こちらからどうぞ。</p>
         {/* 再読み込みなしの遷移にしないのは、Moodle（別オリジン）のログイン画面に移り、fetch では追えないため */}
         <form method="post" action="/auth/moodle/start" data-reload>
           <input type="hidden" name="next" value={next} />
@@ -45,7 +43,7 @@ const COMPLETION_LABELS: Record<ItemCompletion, string> = {
   none: 'なし',
   manual: '学生が自分で完了にする',
   view: '開いたら完了',
-  auto: 'Moodle の条件で完了',
+  auto: '旧STEP Learn の条件で完了',
 }
 
 const hostOf = (url: string) => URL.parse(url)?.host ?? url
@@ -227,7 +225,7 @@ const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sect
   <Modal
     id={ADD_ITEM_MODAL}
     heading="アイテムを追加"
-    description="リンクとファイルを追加できます。課題や小テストは Moodle の画面で追加してください。"
+    description="リンクとファイルを追加できます。課題や小テストは旧STEP Learn の画面で追加してください。"
   >
     <form
       method="post"
@@ -383,6 +381,7 @@ export const CoursePage = ({
       <CourseHeader
         access={access}
         tab="content"
+        editSwitch={false}
         progress={isStudent ? { done: doneCount, total: trackedItems.length } : undefined}
         actions={
           isStudent &&
@@ -403,7 +402,7 @@ export const CoursePage = ({
         tabActions={
           <>
             <Button href={moodleCourseUrl} variant="ghost" icon="external" target="_blank" rel="noopener" data-no-prefetch>
-              Moodle で開く
+              旧STEP Learnで開く
             </Button>
             {manage && (
               <Button variant="primary" icon="plus" class="edit-only" popovertarget={ADD_SECTION_MODAL}>
@@ -494,7 +493,7 @@ export const TEXT_PREVIEW_MAX = 200 * 1024
 
 const COMPLETION_WAITING: Record<'view' | 'auto', Partial<Record<MItem['kind'], string>>> = {
   view: { link: 'リンクを開くと完了になります', file: 'ファイルを開くと完了になります' },
-  auto: { moodle: 'Moodle の画面で条件を満たすと完了になります' },
+  auto: { moodle: '旧STEP Learn の画面で条件を満たすと完了になります' },
 }
 
 export const ItemPage = ({
@@ -596,8 +595,8 @@ export const ItemPage = ({
           {item.kind === 'moodle' && (
             <LinkCard href={item.url} icon="academicCap" class="link-card-lg kind-moodle" target="_blank" rel="noopener" data-no-prefetch>
               <span class="file-name">
-                <span class="strong">Moodle で開く</span>
-                <span class="muted small truncate">この活動は Moodle の画面で使います</span>
+                <span class="strong">旧STEP Learnで開く</span>
+                <span class="muted small truncate">この活動は旧STEP Learn の画面で使います</span>
               </span>
               <Button as="span" variant="primary" iconEnd="external">
                 開く
@@ -829,7 +828,7 @@ export const ItemEditPage = ({
             )}
             {item.completion === 'auto' && (
               <Alert tone="info">
-                完了の条件は Moodle の画面で設定されているため、ここでは変えられません（保存してもそのまま残ります）。
+                完了の条件は旧STEP Learn の画面で設定されているため、ここでは変えられません（保存してもそのまま残ります）。
               </Alert>
             )}
           </Card>
@@ -887,7 +886,7 @@ export const ItemEditPage = ({
         </form>
 
         <Card tone="danger" class="editor-danger">
-          <DangerRow heading="アイテムを削除" description="Moodle からも削除され、学生の完了記録も消えます。">
+          <DangerRow heading="アイテムを削除" description="旧STEP Learn からも削除され、学生の完了記録も消えます。">
             <form method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`}>
               <Button type="submit" variant="danger-outline" size="sm" icon="trash">
                 削除

@@ -22,18 +22,20 @@ export const CourseHeader = ({
   progress,
   actions,
   tabActions,
+  editSwitch: showEditSwitch = true,
 }: {
   access: CourseAccess
   tab?: Tab
   progress?: { done: number; total: number }
   actions?: Child
   tabActions?: Child
+  editSwitch?: boolean
 }) => {
   useStyle('/src/components/course.css')
   const { course, canManage } = access
   const base = `/courses/${course.id}`
   const hero = courseImageUrl(course.id, 'hero', course.heroImage)
-  const editSwitch = tab === 'content' && canManage
+  const editSwitch = showEditSwitch && tab === 'content' && canManage
   const compact = tab === 'participants' || tab === 'settings'
   return (
     <>
