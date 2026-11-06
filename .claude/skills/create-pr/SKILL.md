@@ -47,3 +47,13 @@ EOF
 ```
 
 作成したら PR の URL を報告する。
+
+## 5. worktree の削除
+
+`EnterWorktree` で作った worktree の中で作業していた場合は、PR を作ったあとに削除してメインの作業ディレクトリに戻る（Codex など、`ExitWorktree` がない環境では行わない）。
+
+1. 消してよい状態かを確かめる。どちらかが空でなければ削除せず、ユーザーに伝える
+   - `git status --porcelain`（未コミットの変更がない）
+   - `git log --oneline @{u}..HEAD`（すべてプッシュ済み）
+2. `ExitWorktree` を `action: "remove"`、`discard_changes: true` で呼ぶ。コミットはプッシュ済みなので失われない。`WorktreeRemove` フックがディレクトリを消し、ブランチはマージされるまでローカルに残る
+3. あとで PR の修正を頼まれたら、もう一度 `EnterWorktree` でブランチと同じ名前（`feature/quiz` など）を指定する。そのブランチが残っていれば、それを開いた worktree が作られる
