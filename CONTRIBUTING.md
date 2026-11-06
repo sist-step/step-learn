@@ -21,6 +21,25 @@ npm run dev
 | 開発環境・CI・依存関係 | `chore/dev-setup` |
 | ドキュメント | `docs/readme-deploy` |
 
+## 並行して作業する（worktree）
+
+複数の Claude Code のセッションで同時に作業できるよう、ファイルを編集する作業はセッションごとに git の worktree（`.claude/worktrees/<名前>`）で行います。
+
+- 普通に `claude` で起動したセッションでも、編集を伴う依頼をすると Claude が最初の編集の前に worktree を作って移ります（`AGENTS.md` の指示）。質問や調査だけならメインの作業ディレクトリのままです
+- 自分で作るときは `claude -w feature-quiz` で起動します
+- `WorktreeCreate` フック（`scripts/worktree.ts`）が `origin/master` から worktree を作り、`npm ci`・`.env` のコピー・`data/` のコピーまで行います。DB は起動中の開発サーバーがあっても壊れないよう、SQLite のバックアップ機能で複製します
+- 名前が `feature/` `fix/` `chore/` `docs/`（または `feature-` など）で始まるとブランチは `feature/…` などになり、それ以外は `worktree-<名前>` になります。同じ名前のブランチがあれば、それを開きます
+- 開発サーバーはポートを分けて起動します。作成時に空いているポート（5180 番から）が表示されます: `npm run dev -- --port 5180 --strictPort`
+- PR を作ると、Claude が worktree を削除してメインの作業ディレクトリに戻ります（`create-pr` スキル）。`WorktreeRemove` フックが worktree を消し、マージ済みのブランチだけを削除します。マージ前のブランチはプッシュ済みのまま残ります
+- Claude Code 以外（Codex や `git worktree add`）で作った worktree では、その中で `npm run worktree:setup` を実行すると同じ準備ができます
+
+気をつけること:
+
+- `data/` は作成時点のコピーなので、worktree での変更はメインの DB に反映されません
+- ブラウザの Cookie はポートで分かれないため、どれか 1 つでログアウトや別のユーザーでのログインをすると、ほかのポートのログインも切れます
+- Moodle モードの確認は、プラグインの戻り先に合わせて 5174 番で行う必要があるため、同時に 1 か所でしかできません
+- 2 つのブランチがそれぞれマイグレーションを生成すると、後からマージする側で作り直しになります（「プルリクエスト」の最後を参照）。DB を変える作業は同時に 1 つにします
+
 ## コミットメッセージ
 
 `種類: 内容` の形で、日本語で簡潔に書きます。

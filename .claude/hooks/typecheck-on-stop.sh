@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
-cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/../..}" || exit 0
-
 input=$(cat)
+cwd=$(printf '%s' "$input" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+# CLAUDE_PROJECT_DIR だけで決めないのは、セッションの途中で worktree に入ったときも起動時のディレクトリを指したままになるため
+cd "$(git -C "${cwd:-.}" rev-parse --show-toplevel 2>/dev/null || echo "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/../..}")" || exit 0
+
 # 型エラーを直せないまま止め続けると無限に再開してしまうので、フックで再開された回では止めない
 if printf '%s' "$input" | grep -q '"stop_hook_active"[[:space:]]*:[[:space:]]*true'; then
   exit 0

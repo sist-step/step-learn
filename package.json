@@ -15,7 +15,8 @@
     "db:generate:moodle": "drizzle-kit generate --config drizzle.moodle.config.ts",
     "db:studio": "drizzle-kit studio",
     "db:check": "node scripts/check-migrations.ts",
-    "db:check:moodle": "node scripts/check-migrations.ts --moodle"
+    "db:check:moodle": "node scripts/check-migrations.ts --moodle",
+    "worktree:setup": "node scripts/worktree.ts setup"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",
