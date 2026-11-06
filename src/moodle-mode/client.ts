@@ -136,6 +136,32 @@ export type MoodleCourse = {
   members: number
   teachers: string[]
   imageurl: string
+  /** local_steplearn_get_course だけが返す */
+  format?: MoodleFormat
+}
+
+export type MoodleFormat = {
+  name: string
+  /** 折りたたみ型トピック（format_topcoll） */
+  topcoll?: {
+    order: number[]
+    collapsed: number[]
+    current: number
+    toggleall: boolean
+    onesection: boolean
+    columns: number
+    summarywhencollapsed: boolean
+    persistent: boolean
+  }
+  /** タイル（format_tiles） */
+  tiles?: {
+    defaulticon: string
+    /** 0 は出さない、1 は分数、2 は割合 */
+    progress: number
+    subtiles: boolean
+    subtileszero: boolean
+    tiles: { sectionid: number; icon: string; photourl: string }[]
+  }
 }
 
 export type MoodleModule = {
@@ -167,6 +193,7 @@ export type MoodleSection = {
   summaryformat: number
   section: number
   uservisible?: boolean
+  availabilityinfo?: string
   component?: string | null
   /** サブセクション（component が mod_subsection）のときは、その活動の instance */
   itemid?: number | null
@@ -197,6 +224,8 @@ export const api = (token: string) => ({
   createSection: (courseid: number, name: string) => call<number>(token, 'local_steplearn_create_section', { courseid, name }),
   updateSection: (courseid: number, sectionid: number, name: string, summary: string) =>
     call<null>(token, 'local_steplearn_update_section', { courseid, sectionid, name, summary }),
+  setSectionsCollapsed: (courseid: number, sectionids: number[], collapsed: boolean) =>
+    call<null>(token, 'local_steplearn_set_sections_collapsed', { courseid, sectionids, collapsed }),
   saveUrl: (p: {
     courseid: number
     cmid: number

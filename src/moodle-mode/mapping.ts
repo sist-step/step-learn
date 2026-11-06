@@ -2,7 +2,7 @@ import type { CourseCardData } from '../components/ui'
 import type { CourseAccess } from '../lib/courses'
 import { COURSE_COLORS, type Completion, type Course, type NavCourse } from '../lib/types'
 import { toMarkdown, toPlainText } from '../moodle/html'
-import type { MoodleCourse, MoodleModule, MoodleSection } from './client'
+import type { MoodleCourse, MoodleFormat, MoodleModule, MoodleSection } from './client'
 
 // Moodle のコースには色がないので、ID から決めて毎回同じ色にする
 export const courseColor = (id: number) => COURSE_COLORS[id % COURSE_COLORS.length]
@@ -74,8 +74,17 @@ export type MItem = {
   childSectionId: number | null
 }
 
-/** parentId はサブセクションの中身のセクションのとき、それを含むセクション */
-export type MSection = { id: number; number: number; title: string; summary: string; hidden: boolean; parentId: number | null }
+/** parentId はサブセクションの中身のセクションのとき、それを含むセクション。locked はアクセス制限で、まだ開けない */
+export type MSection = {
+  id: number
+  number: number
+  title: string
+  summary: string
+  hidden: boolean
+  parentId: number | null
+  locked: boolean
+  restriction: string
+}
 
 // 状態の値は Moodle の COMPLETION_COMPLETE（1）と COMPLETION_COMPLETE_PASS（2）
 const isComplete = (state: number | undefined) => state === 1 || state === 2
@@ -122,6 +131,8 @@ const toSection = (s: MoodleSection, parentId: number | null, hidden: boolean): 
   summary: toPlainText(s.summary, s.summaryformat),
   hidden,
   parentId,
+  locked: s.uservisible === false,
+  restriction: s.availabilityinfo ? toPlainText(s.availabilityinfo, 1) : '',
 })
 
 /** core_course_get_contents の結果を、セクションとアイテムの一覧にする。items は上から読む順に並ぶ */
@@ -152,3 +163,73 @@ export function toOutline(list: MoodleSection[], { tracking, manage }: { trackin
 export const isOpenable = (it: MItem) => it.kind !== 'label' && it.kind !== 'subsection' && !(it.kind === 'moodle' && !it.url)
 
 export const isTracked = (it: MItem) => it.completion !== 'none'
+
+export type TopcollLayout = {
+  kind: 'topcoll'
+  /** 学生に見せる順（「最新の週を先頭に」などの並べ方を反映したもの） */
+  order: number[]
+  collapsed: number[]
+  current: number
+  toggleAll: boolean
+  oneSection: boolean
+  columns: number
+  summaryWhenCollapsed: boolean
+  persistent: boolean
+}
+
+export type TileProgress = 'none' | 'fraction' | 'percent'
+
+/** photo は Moodle での写真のファイル名（変わると配信 URL も変わる） */
+export type Tile = { icon: string; photo: string; photoUrl: string }
+
+export type TilesLayout = {
+  kind: 'tiles'
+  defaultIcon: string
+  progress: TileProgress
+  subtiles: boolean
+  subtilesZero: boolean
+  tiles: Map<number, Tile>
+}
+
+/** コースフォーマットに合わせたコースページの見せ方。list はトピック形式などの、すべてを開いたセクションの一覧 */
+export type CourseLayout = { kind: 'list' } | TopcollLayout | TilesLayout
+
+const TILE_PROGRESS: TileProgress[] = ['none', 'fraction', 'percent']
+
+const fileName = (url: string) => decodeURIComponent(URL.parse(url)?.pathname.split('/').at(-1) ?? '')
+
+export function toLayout(format: MoodleFormat | undefined): CourseLayout {
+  if (format?.topcoll) {
+    const t = format.topcoll
+    return {
+      kind: 'topcoll',
+      order: t.order,
+      collapsed: t.collapsed,
+      current: t.current,
+      toggleAll: t.toggleall,
+      oneSection: t.onesection,
+      columns: t.columns,
+      summaryWhenCollapsed: t.summarywhencollapsed,
+      persistent: t.persistent,
+    }
+  }
+  if (format?.tiles) {
+    const t = format.tiles
+    return {
+      kind: 'tiles',
+      defaultIcon: t.defaulticon,
+      progress: TILE_PROGRESS[t.progress] ?? 'none',
+      subtiles: t.subtiles,
+      subtilesZero: t.subtileszero,
+      tiles: new Map(t.tiles.map((x) => [x.sectionid, { icon: x.icon, photo: x.photourl && fileName(x.photourl), photoUrl: x.photourl }])),
+    }
+  }
+  return { kind: 'list' }
+}
+
+/** セクションをコースページで開く URL。タイルではセクションごとの画面になる */
+export function sectionHref(courseId: number, layout: CourseLayout, sections: MSection[], sectionId: number) {
+  const top = sections.find((s) => s.id === sectionId)?.parentId ?? sectionId
+  const tiles = layout.kind === 'tiles' && sections.find((s) => s.id === top)?.number !== 0
+  return `/courses/${courseId}${tiles ? `?section=${top}` : ''}#section-${sectionId}`
+}
