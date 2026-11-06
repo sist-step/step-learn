@@ -32,6 +32,8 @@ export default defineConfig(({ command }) => ({
       },
     },
   ],
+  // 既定の監視範囲のままにしないのは、worktree の中の編集や npm ci にまでメインの開発サーバーが反応してしまうため
+  server: { watch: { ignored: ['**/.claude/worktrees/**'] } },
   environments: {
     // `vite build` でクライアント（CSS/JS）→ サーバーの順にビルドされる
     client: {
