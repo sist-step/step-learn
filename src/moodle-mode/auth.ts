@@ -3,11 +3,12 @@ import type { Context } from 'hono'
 import { deleteCookie, getCookie, getSignedCookie, setSignedCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
 import { config } from '../lib/config'
+import { showsAllCourses } from '../lib/http'
 import type { AppEnv, User } from '../lib/types'
 import { coursesKey, cached } from './cache'
 import { api, isTokenError, type Exchanged } from './client'
 import { db } from './db'
-import { toNavCourse } from './mapping'
+import { isInProgress, toNavCourse } from './mapping'
 import { sessions, users } from './schema'
 import { decryptToken, encryptToken } from './token'
 
@@ -115,10 +116,11 @@ export const session = createMiddleware<MoodleEnv>(async (c, next) => {
   if (c.req.method === 'GET') {
     try {
       const list = await cached(coursesKey(user.id), () => api(token).myCourses())
+      const all = showsAllCourses(c)
       c.set(
         'navCourses',
         list
-          .filter((m) => m.role)
+          .filter((m) => m.role && (all || isInProgress(m)))
           .slice(0, NAV_LIMIT)
           .map(toNavCourse),
       )

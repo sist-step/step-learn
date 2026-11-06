@@ -4,7 +4,7 @@ import { deleteCookie, getSignedCookie, setSignedCookie } from 'hono/cookie'
 import type { CourseCardData } from '../components/ui'
 import { config } from '../lib/config'
 import { firstError, isFile, validate } from '../lib/forms'
-import { field, intParam, readForm, redirectWith, wantsJson } from '../lib/http'
+import { field, intParam, readForm, redirectWith, showsAllCourses, wantsJson } from '../lib/http'
 import { previewKind } from '../lib/preview'
 import { EXECUTABLE_NOT_ALLOWED, FILE_TOO_LARGE, MAX_FILE_SIZE, isExecutable } from '../lib/storage'
 import { CoursesPage } from '../routes/courses/views'
@@ -13,7 +13,7 @@ import { createSession, destroyByMoodleSid, destroySession, safeNext, type Moodl
 import { forgetCourse, forgetProgress } from './cache'
 import { exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
 import { loadCourse, moodle, myCourses, outlineOf, progressOf, revisionOf, type LoadedCourse } from './data'
-import { isOpenable, isTracked, toCard, type MItem } from './mapping'
+import { isInProgress, isOpenable, isTracked, toCard, type MItem } from './mapping'
 import { CoursePage, ItemEditPage, ItemPage, LoginPage, TEXT_PREVIEW_MAX } from './views'
 
 type C = Context<MoodleEnv>
@@ -104,7 +104,8 @@ const firstOpen = (loaded: LoadedCourse) => outlineOf(loaded).find((it) => isTra
 
 export async function dashboard(c: C) {
   const user = c.var.user!
-  const results: CourseCardData[] = (await myCourses(c)).map(toCard)
+  const all = showsAllCourses(c)
+  const results: CourseCardData[] = (await myCourses(c)).filter((m) => all || isInProgress(m)).map(toCard)
   const featured = featuredCourse(results)
   const nextItem = featured && firstOpen(await loadCourse(c, featured.id))
   return c.render(
@@ -206,9 +207,12 @@ export async function createSection(c: C) {
   return redirectWith(c, editUrl(id, sid), 'セクションを追加しました。')
 }
 
+const topSections = (loaded: LoadedCourse) => loaded.sections.filter((s) => !s.parentId)
+
+// サブセクションの中身のセクションを対象にしないのは、Moodle ではサブセクションの活動と一緒に動かしたり消したりするもので、単独で操作すると壊れるため
 const findSection = (loaded: LoadedCourse, c: C) => {
   const sid = intParam(c, 'sid')
-  return loaded.sections.find((s) => s.id === sid)
+  return topSections(loaded).find((s) => s.id === sid)
 }
 
 export async function updateSection(c: C) {
@@ -228,7 +232,7 @@ export async function moveSection(c: C) {
   const section = loaded && findSection(loaded, c)
   if (!loaded || !section || section.number === 0) return c.notFound()
   const dir = field(await readForm(c), 'dir') === 'up' ? 'up' : 'down'
-  const list = loaded.sections
+  const list = topSections(loaded)
   const i = list.findIndex((s) => s.id === section.id)
   // Moodle は「このセクションの後ろへ」しか指定できないので、上へは 2 つ前の後ろに置く。一般（0 番）より前には置けない
   const after = dir === 'up' ? list[i - 2] : list[i + 1]
@@ -371,7 +375,9 @@ export async function setItemHidden(c: C) {
   const item = loaded && findItem(loaded, c)
   if (!loaded || !item) return c.notFound()
   const hidden = await readHidden(c)
-  await changeCourse(c, loaded, hidden ? 'cm_hide' : 'cm_show', [item.id])
+  // サブセクションに cm_hide を使わないのは、Moodle 5.1 では表示の更新を返すときにセクション ID を取り違えて失敗するため。Moodle の画面と同じく中身のセクションを切り替える
+  if (item.childSectionId) await changeCourse(c, loaded, hidden ? 'section_hide' : 'section_show', [item.childSectionId])
+  else await changeCourse(c, loaded, hidden ? 'cm_hide' : 'cm_show', [item.id])
   return redirectWith(c, editUrl(loaded.course.id, item.sectionId), hiddenMessage(item.title, hidden), 'info')
 }
 

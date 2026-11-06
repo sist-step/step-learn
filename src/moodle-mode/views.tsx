@@ -3,7 +3,7 @@ import { Button, IconButton } from '../components/button'
 import { Card, DangerRow, LinkCard } from '../components/card'
 import { cx } from '../components/cx'
 import { FileField, FileInput, FormField, SegmentedControl, SelectField, TextAreaField, TextField, validateWith } from '../components/form'
-import { Icon } from '../components/icons'
+import { Icon, type IconName } from '../components/icons'
 import { AppShell, AuthShell } from '../components/layout'
 import { Markdown } from '../components/markdown'
 import { MenuItem, Modal, Popover } from '../components/overlay'
@@ -24,9 +24,7 @@ export const LoginPage = ({ next = '', error }: { next?: string; error?: string 
       <h1>おかえりなさい</h1>
       <div class="stack">
         {error && <Alert>{error}</Alert>}
-        <p class="muted">
-          旧STEP Learn（Moodle）のアカウントでログインします。Microsoft アカウントでログインしている方も、こちらからどうぞ。
-        </p>
+        <p class="muted">旧STEP Learn のアカウントでログインします。Microsoft アカウントでログインしている方も、こちらからどうぞ。</p>
         {/* 再読み込みなしの遷移にしないのは、Moodle（別オリジン）のログイン画面に移り、fetch では追えないため */}
         <form method="post" action="/auth/moodle/start" data-reload>
           <input type="hidden" name="next" value={next} />
@@ -45,7 +43,7 @@ const COMPLETION_LABELS: Record<ItemCompletion, string> = {
   none: 'なし',
   manual: '学生が自分で完了にする',
   view: '開いたら完了',
-  auto: 'Moodle の条件で完了',
+  auto: '旧STEP Learn の条件で完了',
 }
 
 const hostOf = (url: string) => URL.parse(url)?.host ?? url
@@ -148,8 +146,11 @@ const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId:
       ? hostOf(item.url)
       : item.kind === 'file'
         ? `${item.fileName} · ${formatBytes(item.fileSize)}`
-        : 'Moodle で開く'
+        : item.url
+          ? '旧STEP Learnで開く'
+          : ''
   const newTab = opensNewTab(item)
+  const linkless = item.locked || !isOpenable(item)
   const body = (
     <>
       <KindIcon item={item} />
@@ -163,7 +164,7 @@ const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId:
           {COMPLETION_LABELS[item.completion]}
         </Chip>
       )}
-      {!item.locked &&
+      {!linkless &&
         (newTab ? <Icon name="external" size={14} class="item-ext" /> : <Icon name="chevronRight" size={16} class="item-ext" />)}
     </>
   )
@@ -172,7 +173,7 @@ const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId:
       class={cx('item-row', tracked && item.done && 'is-done', item.hidden && 'is-hidden edit-only', item.locked && 'is-locked')}
       data-item={item.id}
     >
-      {item.locked ? (
+      {linkless ? (
         <span class="item-link">{body}</span>
       ) : (
         <a
@@ -192,8 +193,71 @@ const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId:
   )
 }
 
+const AddItemButton = ({ sectionId }: { sectionId: number }) => (
+  <button type="button" class="add-item edit-only" popovertarget={ADD_ITEM_MODAL} data-add-item-section={sectionId}>
+    <Icon name="plus" size={16} /> アイテムを追加
+  </button>
+)
+
+const SubsectionRow = ({
+  item,
+  contents,
+  courseId,
+  isStudent,
+  manage,
+}: {
+  item: MItem
+  contents: MItem[]
+  courseId: number
+  isStudent: boolean
+  manage: boolean
+}) => {
+  const shown = contents.filter((it) => !it.hidden).length
+  return (
+    <li
+      class={cx('item-subsection', item.hidden && 'is-hidden edit-only', item.locked && 'is-locked')}
+      id={`section-${item.childSectionId}`}
+    >
+      <div class="item-row subsection-head" data-item={item.id}>
+        <span class="item-link">
+          <span class="item-icon kind-subsection">
+            <Icon name={item.locked ? 'lock' : 'folder'} size={16} />
+          </span>
+          <span class="item-text">
+            <span class="item-title">{item.title}</span>
+            <span class="item-meta truncate">{item.locked ? item.restriction || 'まだ開けません' : `${shown} アイテム`}</span>
+          </span>
+          {item.hidden && <HiddenChip />}
+        </span>
+        {manage && (
+          <div class="row-actions edit-only">
+            <RowMenu
+              base={`/courses/${courseId}/items/${item.id}`}
+              hidden={item.hidden}
+              confirm={`サブセクション「${item.title}」と中のアイテムをすべて削除しますか？`}
+            />
+          </div>
+        )}
+      </div>
+      {contents.length > 0 && (
+        <ul class="items subsection-items">
+          {contents.map((it) => (
+            <ItemRow item={it} courseId={courseId} isStudent={isStudent} manage={manage} />
+          ))}
+        </ul>
+      )}
+      {manage && item.childSectionId && <AddItemButton sectionId={item.childSectionId} />}
+    </li>
+  )
+}
+
 const ADD_ITEM_MODAL = 'add-item'
 const ADD_SECTION_MODAL = 'add-section'
+
+const sectionOptions = (sections: MSection[]) => {
+  const titles = new Map(sections.map((s) => [s.id, s.title]))
+  return sections.map((s) => ({ value: String(s.id), label: s.parentId ? `${titles.get(s.parentId)} › ${s.title}` : s.title }))
+}
 
 const KIND_DESCRIPTIONS = { link: '外部のサイトを紹介する', file: 'PDF や画像などを配る' } as const
 const KINDS = ['link', 'file'] as const
@@ -227,7 +291,7 @@ const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sect
   <Modal
     id={ADD_ITEM_MODAL}
     heading="アイテムを追加"
-    description="リンクとファイルを追加できます。課題や小テストは Moodle の画面で追加してください。"
+    description="リンクとファイルを追加できます。課題や小テストは旧STEP Learn の画面で追加してください。"
   >
     <form
       method="post"
@@ -270,12 +334,7 @@ const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sect
           fieldClass="when-file"
         />
         <div class="grid-2">
-          <SelectField
-            label="セクション"
-            name="section_id"
-            id="new-item-section"
-            options={sections.map((s) => ({ value: String(s.id), label: s.title }))}
-          />
+          <SelectField label="セクション" name="section_id" id="new-item-section" options={sectionOptions(sections)} />
           <fieldset class="field">
             <legend>学生への表示</legend>
             <SegmentedControl
@@ -368,10 +427,16 @@ export const CoursePage = ({
 
   const bySection = new Map<number, MItem[]>()
   for (const it of items) bySection.set(it.sectionId, [...(bySection.get(it.sectionId) ?? []), it])
-  const visibleSections = sections.filter((s) => !s.hidden)
+  const childrenOf = (it: MItem) => (it.childSectionId ? (bySection.get(it.childSectionId) ?? []) : [])
+  const topSections = sections.filter((s) => !s.parentId)
+  const hiddenSubsections = new Set(sections.filter((s) => s.parentId && s.hidden).map((s) => s.id))
+  const isShown = (it: MItem) => !it.hidden && !hiddenSubsections.has(it.sectionId)
+  const contentsOf = (sectionId: number) =>
+    (bySection.get(sectionId) ?? []).flatMap((it) => (it.kind === 'subsection' ? childrenOf(it) : [it]))
+  const visibleSections = topSections.filter((s) => !s.hidden)
   // 学生にも同じ番号で見えるよう、表示しているセクションだけで数える
   const sectionNumber = new Map(visibleSections.map((s, i) => [s.id, String(i + 1).padStart(2, '0')]))
-  const shownItems = visibleSections.flatMap((s) => (bySection.get(s.id) ?? []).filter((it) => !it.hidden))
+  const shownItems = visibleSections.flatMap((s) => contentsOf(s.id).filter(isShown))
   const trackedItems = shownItems.filter(isTracked)
   const doneCount = trackedItems.filter((it) => it.done).length
   const openable = shownItems.filter((it) => isOpenable(it) && !it.locked)
@@ -383,6 +448,7 @@ export const CoursePage = ({
       <CourseHeader
         access={access}
         tab="content"
+        editSwitch={false}
         progress={isStudent ? { done: doneCount, total: trackedItems.length } : undefined}
         actions={
           isStudent &&
@@ -403,7 +469,7 @@ export const CoursePage = ({
         tabActions={
           <>
             <Button href={moodleCourseUrl} variant="ghost" icon="external" target="_blank" rel="noopener" data-no-prefetch>
-              Moodle で開く
+              旧STEP Learnで開く
             </Button>
             {manage && (
               <Button variant="primary" icon="plus" class="edit-only" popovertarget={ADD_SECTION_MODAL}>
@@ -418,17 +484,18 @@ export const CoursePage = ({
           <div class={manage ? 'view-only' : undefined}>
             <EmptyState
               icon="layers"
-              title={manage && sections.length > 0 ? '学生に表示している教材はありません' : 'まだ教材がありません'}
+              title={manage && topSections.length > 0 ? '学生に表示している教材はありません' : 'まだ教材がありません'}
               text={manage ? '編集モードにして、セクションやアイテムを追加しましょう。' : '教師が教材を追加するとここに表示されます。'}
             />
           </div>
         )}
-        {sections.length > 0 && (
+        {topSections.length > 0 && (
           <div class="sections">
-            {sections.map((s) => {
+            {topSections.map((s) => {
               const list = bySection.get(s.id) ?? []
-              const shown = list.filter((it) => !it.hidden)
-              const hiddenCount = list.length - shown.length
+              const contents = contentsOf(s.id)
+              const shown = contents.filter(isShown)
+              const hiddenCount = contents.length - shown.length
               const shownTracked = shown.filter(isTracked)
               const sectionDone = shownTracked.filter((it) => it.done).length
               const empty = !manage && shown.length === 0
@@ -465,16 +532,16 @@ export const CoursePage = ({
                   {s.summary && <p class="section-summary">{s.summary}</p>}
                   {list.length > 0 && (
                     <ul class="items">
-                      {list.map((it) => (
-                        <ItemRow item={it} courseId={id} isStudent={isStudent} manage={manage} />
-                      ))}
+                      {list.map((it) =>
+                        it.kind === 'subsection' ? (
+                          <SubsectionRow item={it} contents={childrenOf(it)} courseId={id} isStudent={isStudent} manage={manage} />
+                        ) : (
+                          <ItemRow item={it} courseId={id} isStudent={isStudent} manage={manage} />
+                        ),
+                      )}
                     </ul>
                   )}
-                  {manage && (
-                    <button type="button" class="add-item edit-only" popovertarget={ADD_ITEM_MODAL} data-add-item-section={s.id}>
-                      <Icon name="plus" size={16} /> アイテムを追加
-                    </button>
-                  )}
+                  {manage && <AddItemButton sectionId={s.id} />}
                 </details>
               )
             })}
@@ -494,7 +561,7 @@ export const TEXT_PREVIEW_MAX = 200 * 1024
 
 const COMPLETION_WAITING: Record<'view' | 'auto', Partial<Record<MItem['kind'], string>>> = {
   view: { link: 'リンクを開くと完了になります', file: 'ファイルを開くと完了になります' },
-  auto: { moodle: 'Moodle の画面で条件を満たすと完了になります' },
+  auto: { moodle: '旧STEP Learn の画面で条件を満たすと完了になります' },
 }
 
 export const ItemPage = ({
@@ -534,44 +601,72 @@ export const ItemPage = ({
   const isHidden = (o: MItem) => o.hidden || hiddenSections.has(o.sectionId)
   const siblings = outline.filter((o) => o.sectionId === item.sectionId)
   const position = siblings.findIndex((o) => o.id === item.id) + 1
+  const sectionById = new Map(sections.map((s) => [s.id, s]))
+  const topOf = (sectionId: number) => sectionById.get(sectionId)?.parentId ?? sectionId
   const outlineSections = sections
-    .map((s) => ({ section: s, items: outline.filter((o) => o.sectionId === s.id) }))
+    .filter((s) => !s.parentId)
+    .map((s) => ({ section: s, items: outline.filter((o) => topOf(o.sectionId) === s.id) }))
     .filter((s) => access.canManage || s.items.length > 0)
+  // 入れ子のアイテムの前にだけ見出しを出すのは、親のセクションのアイテムと読む順のまま並べるため
+  const startsSubsection = (list: MItem[], i: number) =>
+    list[i].sectionId !== topOf(list[i].sectionId) && list[i - 1]?.sectionId !== list[i].sectionId
   const navHref = (o: MItem) => `${base}/${o.id}`
   const waiting = item.completion === 'view' || item.completion === 'auto' ? COMPLETION_WAITING[item.completion][item.kind] : undefined
+
+  const pdf = preview === 'pdf'
+  const crumbs = (
+    <Breadcrumbs
+      items={[
+        { href: '/courses', label: 'コース一覧' },
+        { href: `/courses/${id}`, label: access.course.title },
+      ]}
+    />
+  )
+  const head = (
+    <>
+      <header class="reader-head">
+        {section && position > 0 && (
+          <span class="eyebrow">
+            <a href={`/courses/${id}#section-${section.id}`}>{section.title}</a> · {position} / {siblings.length}
+          </span>
+        )}
+        <KindIcon item={item} />
+        <h1>{item.title}</h1>
+        {access.canManage && (item.kind === 'link' || item.kind === 'file') && (
+          <Button href={`${base}/${item.id}/edit`} variant="ghost" size="sm" icon="pencil">
+            編集
+          </Button>
+        )}
+        {pdf && (
+          <Button href={fileUrl} size="sm" icon="download" aria-label="ダウンロード" data-no-prefetch download {...onOpen(item)}>
+            <span class="hide-sm">ダウンロード</span>
+          </Button>
+        )}
+      </header>
+      {access.canManage && isHidden(item) && (
+        <Alert tone="info">
+          {item.hidden ? 'このアイテム' : 'このアイテムのセクション'}は学生に非表示です。学生のコース画面には表示されず、URL
+          を開いても見つかりません。
+        </Alert>
+      )}
+    </>
+  )
 
   return (
     <AppShell tone={access.course.color}>
       <Styles use={['/src/routes/content/content.css', '/src/moodle-mode/moodle-mode.css']} />
-      <Breadcrumbs
-        items={[
-          { href: '/courses', label: 'コース一覧' },
-          { href: `/courses/${id}`, label: access.course.title },
-        ]}
-      />
+      {pdf ? (
+        <div class="pdf-stage">
+          {crumbs}
+          {head}
+          <iframe class="file-preview" src={previewUrl} title={item.fileName} />
+        </div>
+      ) : (
+        crumbs
+      )}
       <div class="reader">
         <article class="reader-main">
-          <header class="reader-head">
-            {section && position > 0 && (
-              <span class="eyebrow">
-                <a href={`/courses/${id}#section-${section.id}`}>{section.title}</a> · {position} / {siblings.length}
-              </span>
-            )}
-            <KindIcon item={item} />
-            <h1>{item.title}</h1>
-            {access.canManage && (item.kind === 'link' || item.kind === 'file') && (
-              <Button href={`${base}/${item.id}/edit`} variant="ghost" size="sm" icon="pencil">
-                編集
-              </Button>
-            )}
-          </header>
-
-          {access.canManage && isHidden(item) && (
-            <Alert tone="info">
-              {item.hidden ? 'このアイテム' : 'このアイテムのセクション'}は学生に非表示です。学生のコース画面には表示されず、URL
-              を開いても見つかりません。
-            </Alert>
-          )}
+          {!pdf && head}
 
           {item.kind === 'link' && (
             <LinkCard
@@ -596,8 +691,8 @@ export const ItemPage = ({
           {item.kind === 'moodle' && (
             <LinkCard href={item.url} icon="academicCap" class="link-card-lg kind-moodle" target="_blank" rel="noopener" data-no-prefetch>
               <span class="file-name">
-                <span class="strong">Moodle で開く</span>
-                <span class="muted small truncate">この活動は Moodle の画面で使います</span>
+                <span class="strong">旧STEP Learnで開く</span>
+                <span class="muted small truncate">この活動は旧STEP Learn の画面で使います</span>
               </span>
               <Button as="span" variant="primary" iconEnd="external">
                 開く
@@ -605,7 +700,7 @@ export const ItemPage = ({
             </LinkCard>
           )}
 
-          {item.kind === 'file' && (
+          {item.kind === 'file' && !pdf && (
             <>
               <LinkCard icon="file" class="link-card-lg kind-file">
                 <span class="file-name">
@@ -619,7 +714,6 @@ export const ItemPage = ({
                   ダウンロード
                 </Button>
               </LinkCard>
-              {preview === 'pdf' && <iframe class="file-preview" src={previewUrl} title={item.fileName} loading="lazy" />}
               {textPreview !== null && (
                 <div class="file-preview-text">
                   <pre>{textPreview}</pre>
@@ -717,8 +811,14 @@ export const ItemPage = ({
               </div>
               {items.length > 0 && (
                 <ul>
-                  {items.map((o) => (
-                    <li>
+                  {items.map((o, i) => (
+                    <li class={o.sectionId !== s.id ? 'is-nested' : undefined}>
+                      {startsSubsection(items, i) && (
+                        <span class={cx('outline-sub', hiddenSections.has(o.sectionId) && 'is-hidden')}>
+                          <Icon name="folder" size={12} />
+                          <span class="truncate">{sectionById.get(o.sectionId)?.title}</span>
+                        </span>
+                      )}
                       <a
                         href={o.kind === 'file' ? navHref(o) : o.url}
                         class={cx('outline-link', o.id === item.id && 'active', isHidden(o) && 'is-hidden')}
@@ -829,7 +929,7 @@ export const ItemEditPage = ({
             )}
             {item.completion === 'auto' && (
               <Alert tone="info">
-                完了の条件は Moodle の画面で設定されているため、ここでは変えられません（保存してもそのまま残ります）。
+                完了の条件は旧STEP Learn の画面で設定されているため、ここでは変えられません（保存してもそのまま残ります）。
               </Alert>
             )}
           </Card>
@@ -853,7 +953,7 @@ export const ItemEditPage = ({
                   label="セクション"
                   name="section_id"
                   id="f-section"
-                  options={sections.map((s) => ({ value: String(s.id), label: s.title }))}
+                  options={sectionOptions(sections)}
                   value={String(v.sectionId)}
                 />
                 {!!access.course.completionEnabled && item.completion !== 'auto' && (
@@ -887,7 +987,7 @@ export const ItemEditPage = ({
         </form>
 
         <Card tone="danger" class="editor-danger">
-          <DangerRow heading="アイテムを削除" description="Moodle からも削除され、学生の完了記録も消えます。">
+          <DangerRow heading="アイテムを削除" description="旧STEP Learn からも削除され、学生の完了記録も消えます。">
             <form method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`}>
               <Button type="submit" variant="danger-outline" size="sm" icon="trash">
                 削除
@@ -898,4 +998,79 @@ export const ItemEditPage = ({
       </div>
     </AppShell>
   )
+}
+
+// ---------------------------------------------------------------- エラー
+
+export type ErrorContent = { icon: IconName; title: string; text: string }
+
+const SERVER_ERROR: ErrorContent = {
+  icon: 'alert',
+  title: 'エラーが発生しました',
+  text: '時間をおいて再度お試しください。問題が続く場合は、管理者にお問い合わせください。',
+}
+
+const ERRORS: Partial<Record<number, ErrorContent>> = {
+  400: { icon: 'alert', title: 'リクエストが正しくありません', text: 'URL や入力した内容を確かめて、もう一度お試しください。' },
+  403: { icon: 'lock', title: 'この操作は受け付けられませんでした', text: 'ページを開き直してから、もう一度お試しください。' },
+  404: { icon: 'search', title: 'ページが見つかりません', text: 'URL が間違っているか、閲覧する権限がありません。' },
+  500: SERVER_ERROR,
+  502: {
+    icon: 'alert',
+    title: '旧STEP Learn でエラーが発生しました',
+    text: '旧STEP Learn が処理できませんでした。時間をおいて再度お試しください。',
+  },
+  503: {
+    icon: 'alert',
+    title: '旧STEP Learn に接続できません',
+    text: '旧STEP Learn が停止しているか、混み合っています。時間をおいて再度お試しください。',
+  },
+}
+
+export const errorContent = (status: number): ErrorContent =>
+  ERRORS[status] ?? (status >= 500 ? SERVER_ERROR : (ERRORS[400] as ErrorContent))
+
+export const ErrorPage = ({
+  status,
+  content = errorContent(status),
+  loggedIn,
+  retry,
+}: {
+  status: number
+  content?: ErrorContent
+  loggedIn: boolean
+  retry?: string
+}) => {
+  const body = (
+    <EmptyState
+      page
+      icon={content.icon}
+      title={content.title}
+      text={
+        <>
+          {content.text}
+          <span class="error-code">エラーコード {status}</span>
+        </>
+      }
+      action={
+        <div class="row">
+          {retry && (
+            <Button href={retry} icon="arrowPath" data-reload>
+              再読み込み
+            </Button>
+          )}
+          {loggedIn && !retry && (
+            <Button href="/courses" icon="book">
+              コース一覧
+            </Button>
+          )}
+          <Button href="/" variant="primary">
+            ホームへ戻る
+          </Button>
+        </div>
+      }
+    />
+  )
+  useStyle('/src/moodle-mode/moodle-mode.css')
+  return loggedIn ? <AppShell>{body}</AppShell> : <AuthShell>{body}</AuthShell>
 }

@@ -3,6 +3,7 @@ import academicCap from 'heroicons/24/outline/academic-cap.svg?raw'
 import sliders from 'heroicons/24/outline/adjustments-horizontal.svg?raw'
 import arrowDown from 'heroicons/24/outline/arrow-down.svg?raw'
 import download from 'heroicons/24/outline/arrow-down-tray.svg?raw'
+import arrowPath from 'heroicons/24/outline/arrow-path.svg?raw'
 import logout from 'heroicons/24/outline/arrow-right-start-on-rectangle.svg?raw'
 import external from 'heroicons/24/outline/arrow-top-right-on-square.svg?raw'
 import arrowUp from 'heroicons/24/outline/arrow-up.svg?raw'
@@ -11,6 +12,7 @@ import maximize from 'heroicons/24/outline/arrows-pointing-out.svg?raw'
 import menu from 'heroicons/24/outline/bars-3.svg?raw'
 import bold from 'heroicons/24/outline/bold.svg?raw'
 import book from 'heroicons/24/outline/book-open.svg?raw'
+import calendar from 'heroicons/24/outline/calendar.svg?raw'
 import check from 'heroicons/24/outline/check.svg?raw'
 import checkCircle from 'heroicons/24/outline/check-circle.svg?raw'
 import chevronDoubleLeft from 'heroicons/24/outline/chevron-double-left.svg?raw'
@@ -26,6 +28,7 @@ import ellipsis from 'heroicons/24/outline/ellipsis-horizontal.svg?raw'
 import alert from 'heroicons/24/outline/exclamation-circle.svg?raw'
 import eye from 'heroicons/24/outline/eye.svg?raw'
 import eyeSlash from 'heroicons/24/outline/eye-slash.svg?raw'
+import folder from 'heroicons/24/outline/folder.svg?raw'
 import globe from 'heroicons/24/outline/globe-alt.svg?raw'
 import heading from 'heroicons/24/outline/h2.svg?raw'
 import home from 'heroicons/24/outline/home.svg?raw'
@@ -98,6 +101,9 @@ const svgs = {
   code,
   lock,
   academicCap,
+  calendar,
+  folder,
+  arrowPath,
 } as const
 
 export type IconName = keyof typeof svgs

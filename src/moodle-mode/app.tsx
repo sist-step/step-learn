@@ -1,17 +1,16 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { csrf } from 'hono/csrf'
 import { HTTPException } from 'hono/http-exception'
+import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { secureHeaders } from 'hono/secure-headers'
-import { Button } from '../components/button'
-import { AppShell, AuthShell } from '../components/layout'
-import { EmptyState } from '../components/ui'
 import { config } from '../lib/config'
-import { flashMiddleware, limitBody } from '../lib/http'
+import { flashMiddleware, limitBody, wantsJson } from '../lib/http'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE } from '../lib/storage'
 import { renderer } from '../renderer'
 import { destroySession, requireAuth, session, type MoodleEnv } from './auth'
-import { isNotFound, isTokenError, isUnavailable } from './client'
+import { MoodleError, isAccessDenied, isNotFound, isTokenError, isUnavailable } from './client'
 import * as h from './handlers'
+import { ErrorPage, errorContent, type ErrorContent } from './views'
 
 const app = new Hono<MoodleEnv>()
 
@@ -20,13 +19,14 @@ const guestBodyLimit = limitBody(64 * 1024)
 // ファイルの上限ちょうどにしないのは、同じフォームでタイトルなどの入力欄も一緒に送るため
 const userBodyLimit = limitBody(MAX_FILE_SIZE + 1024 * 1024, FILE_TOO_LARGE)
 
+// 最初に置くのは、CSRF の検証など前のミドルウェアで起きたエラーも、エラーの画面で描けるようにするため
+app.use(renderer)
 app.use(secureHeaders())
 // フォーム POST の Origin を検証（SameSite=Lax Cookie と合わせた CSRF 対策）。ログアウトの通知は JSON なので対象外になる
 app.use(csrf(config.appOrigin ? { origin: config.appOrigin } : undefined))
 app.use(flashMiddleware)
 app.use(session)
 app.use((c, next) => (c.var.user ? userBodyLimit : guestBodyLimit)(c, next))
-app.use(renderer)
 
 app.get('/', (c) => c.redirect(c.var.user ? '/dashboard' : '/login'))
 
@@ -75,70 +75,37 @@ auth.post('/courses/:id/items/:iid/complete', h.toggleComplete)
 auth.get('/courses/:id/items/:iid/file', h.downloadFile)
 app.route('/', auth)
 
-const NotFound = ({ loggedIn }: { loggedIn: boolean }) => (
-  <EmptyState
-    page
-    icon="search"
-    title="ページが見つかりません"
-    text="URL が間違っているか、閲覧する権限がありません。"
-    action={
-      loggedIn ? (
-        <div class="row">
-          <Button href="/courses" icon="book">
-            コース一覧
-          </Button>
-          <Button href="/" variant="primary">
-            ホームへ戻る
-          </Button>
-        </div>
-      ) : (
-        <Button href="/" variant="primary">
-          ホームへ戻る
-        </Button>
-      )
-    }
-  />
-)
+// エラーの画面を HTML で返すのは、client.ts が HTML でない応答を受けると送信先の URL を GET で開き直してしまうため
+function renderError(c: Context<MoodleEnv>, status: ContentfulStatusCode, content?: ErrorContent) {
+  const shown = content ?? errorContent(status)
+  if (wantsJson(c)) return c.json({ error: shown.title }, status)
+  c.status(status)
+  const url = new URL(c.req.url)
+  const retry = status >= 500 && c.req.method === 'GET' ? url.pathname + url.search : undefined
+  return c.render(<ErrorPage status={status} content={shown} loggedIn={!!c.var.user} retry={retry} />, { title: shown.title })
+}
 
-app.notFound((c) => {
-  c.status(404)
-  return c.render(c.var.user ? <AppShell>{<NotFound loggedIn />}</AppShell> : <AuthShell>{<NotFound loggedIn={false} />}</AuthShell>, {
-    title: '見つかりません',
-  })
-})
+app.notFound((c) => renderError(c, 404))
 
-const ErrorPage = ({ title, text }: { title: string; text: string }) => (
-  <AuthShell>
-    <EmptyState
-      page
-      icon="alert"
-      title={title}
-      text={text}
-      action={
-        <Button href="/" variant="primary">
-          ホームへ戻る
-        </Button>
-      }
-    />
-  </AuthShell>
-)
+const ACCESS_DENIED: ErrorContent = {
+  icon: 'lock',
+  title: 'このアカウントでは利用できません',
+  text: '旧STEP Learn の設定で、このアカウントから STEP Learn を使うことが許可されていません。管理者にお問い合わせください。',
+}
 
 app.onError(async (err, c) => {
-  if (err instanceof HTTPException) return err.getResponse()
-  if (isNotFound(err)) return c.notFound()
+  if (err instanceof HTTPException) return renderError(c, err.status)
+  if (isNotFound(err)) return renderError(c, 404)
   if (isTokenError(err)) {
     await destroySession(c)
     const url = new URL(c.req.url)
     const next = c.req.method === 'GET' ? url.pathname + url.search : '/dashboard'
     return c.redirect(`/login?next=${encodeURIComponent(next)}`, 303)
   }
-  if (isUnavailable(err)) {
-    c.status(503)
-    return c.render(<ErrorPage title="Moodle に接続できません" text="時間をおいて再度お試しください。" />, { title: 'エラー' })
-  }
+  if (isUnavailable(err)) return renderError(c, 503)
   console.error(err)
-  c.status(500)
-  return c.render(<ErrorPage title="エラーが発生しました" text="時間をおいて再度お試しください。" />, { title: 'エラー' })
+  if (isAccessDenied(err)) return renderError(c, 403, ACCESS_DENIED)
+  return renderError(c, err instanceof MoodleError ? 502 : 500)
 })
 
 export default app
