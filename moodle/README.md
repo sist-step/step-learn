@@ -21,6 +21,13 @@ dev/               手元で試すための Moodle 5.1（Docker）
 ## 本番の Moodle での設定
 
 1. `local_steplearn/` を Moodle の `public/local/steplearn/` に置き、管理画面からインストールする
+   - サイト管理 > プラグイン > プラグインをインストールする から入れる場合は、次のコマンドで作った `moodle/local_steplearn.zip`（git では管理しない）をアップロードする。zip の中のディレクトリ名はプラグインの名前の `steplearn` にする必要がある
+
+     ```sh
+     cd moodle && rm -f local_steplearn.zip && mkdir -p .zip && cp -R local_steplearn .zip/steplearn \
+       && (cd .zip && zip -rqX ../local_steplearn.zip steplearn -x '*.DS_Store') && rm -rf .zip
+     ```
+
 2. サイト管理 > 一般 > 拡張機能 > Web サービス
    - 「Web サービスを有効にする」と「REST プロトコル」を有効にする
    - 認証済みユーザーのロールに `webservice/rest:use` を許可する
