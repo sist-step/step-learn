@@ -104,7 +104,84 @@ if (!$DB->record_exists('course_modules', ['course' => $course->id])) {
     ], ['visible' => 0]);
 }
 
+/**
+ * コースフォーマットのプラグイン（タイル・折りたたみ型トピック）を入れているときだけ、確かめるためのコースを作る。
+ */
+function ensure_format_course(
+    testing_data_generator $generator,
+    string $format,
+    string $fullname,
+    array $options,
+    array $users
+): ?stdClass {
+    global $DB;
+    if (!core_component::get_component_directory('format_' . $format)) {
+        return null;
+    }
+    $shortname = 'moodle-mode-' . $format;
+    $course = $DB->get_record('course', ['shortname' => $shortname]);
+    if ($course) {
+        return $course;
+    }
+    $course = $generator->create_course([
+        'fullname' => $fullname,
+        'shortname' => $shortname,
+        'summary' => '<p>コースフォーマットに合わせた表示を確かめるためのコースです。</p>',
+        'enablecompletion' => 1,
+        'numsections' => 5,
+        'format' => $format,
+    ] + $options);
+    $generator->enrol_user($users[0]->id, $course->id, 'editingteacher');
+    $generator->enrol_user($users[1]->id, $course->id, 'student');
+    $generator->create_module('url', [
+        'course' => $course->id,
+        'section' => 0,
+        'name' => 'シラバス',
+        'externalurl' => 'https://example.com/syllabus',
+    ]);
+    for ($section = 1; $section <= 5; $section++) {
+        $generator->create_module('url', [
+            'course' => $course->id,
+            'section' => $section,
+            'name' => "第{$section}回 参考リンク",
+            'externalurl' => "https://example.com/{$section}",
+        ], ['completion' => COMPLETION_TRACKING_MANUAL]);
+        $generator->create_module('resource', [
+            'course' => $course->id,
+            'section' => $section,
+            'name' => "第{$section}回 資料",
+            'defaultfilename' => "week{$section}.txt",
+        ], ['completion' => COMPLETION_TRACKING_MANUAL]);
+    }
+    return $course;
+}
+
+$tiles = ensure_format_course(
+    $generator,
+    'tiles',
+    'タイル形式の検証',
+    ['courseshowtileprogress' => 1, 'defaulttileicon' => 'book'],
+    [$teacher, $student]
+);
+if ($tiles) {
+    $modinfo = get_fast_modinfo($tiles);
+    foreach ([1 => 'flask', 2 => 'number_2', 3 => 'users'] as $number => $icon) {
+        \format_tiles\local\format_option::set(
+            $tiles->id,
+            \format_tiles\local\format_option::OPTION_SECTION_ICON,
+            $modinfo->get_section_info($number)->id,
+            $icon
+        );
+    }
+}
+$topcoll = ensure_format_course($generator, 'topcoll', '折りたたみ型トピックの検証', [], [$teacher, $student]);
+
 cli_writeln('MOODLE_URL=' . $CFG->wwwroot);
 cli_writeln('MOODLE_EXCHANGE_TOKEN=' . $token);
 cli_writeln('MOODLE_BACKCHANNEL_SECRET=' . BACKCHANNEL_SECRET);
 cli_writeln('コース ID: ' . $course->id . '（teacher1 / student1、パスワード ' . PASSWORD . '）');
+foreach (['タイル' => $tiles, '折りたたみ型トピック' => $topcoll] as $label => $formatcourse) {
+    if ($formatcourse) {
+        cli_writeln("{$label}のコース ID: {$formatcourse->id}");
+    }
+}
