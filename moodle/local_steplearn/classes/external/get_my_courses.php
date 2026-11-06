@@ -44,8 +44,8 @@ class get_my_courses extends external_api {
     public static function execute(): array {
         self::validate_context(\context_system::instance());
         $result = [];
-        // enrol_get_my_courses の列だけで足りないのは、概要や完了の設定など export で使う列が含まれないため
-        $fields = ['summary', 'summaryformat', 'enablecompletion'];
+        // enrol_get_my_courses の列だけで足りないのは、概要や完了の設定、終了日など export で使う列が含まれないため
+        $fields = ['summary', 'summaryformat', 'enablecompletion', 'enddate'];
         foreach (enrol_get_my_courses($fields, 'fullname ASC', self::LIMIT) as $course) {
             $access = courses::access($course);
             if ($access) {

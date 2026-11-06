@@ -1,6 +1,7 @@
 import type { Child } from 'hono/jsx'
 import { useRequestContext } from 'hono/jsx-renderer'
-import { getTheme } from '../lib/http'
+import { config } from '../lib/config'
+import { getTheme, showsAllCourses } from '../lib/http'
 import { ROLE_LABELS, type AppEnv, type Flash } from '../lib/types'
 import { Icon, type IconName } from './icons'
 import { IconButton } from './button'
@@ -84,6 +85,9 @@ const UserMenu = ({ editable }: { editable?: boolean }) => {
           アカウント設定
         </MenuItem>
         <Switch class="menu-item" icon="moon" label="ダークモード" checked={getTheme(c) === 'dark'} data-theme-toggle />
+        {config.moodle && (
+          <Switch class="menu-item" icon="calendar" label="進行中のコースのみ" checked={!showsAllCourses(c)} data-courses-toggle />
+        )}
         {editable && <Switch class="menu-item" icon="pencil" label="編集モード" checked={false} data-edit-mode-toggle />}
       </div>
       {/* 再読み込みなしの遷移にしないのは、Moodle モードではログアウトのあと Moodle（別オリジン）に移り、fetch では追えないため */}

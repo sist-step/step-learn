@@ -82,6 +82,12 @@
 .file-preview-video { display: block; width: 100%; max-height: 75vh; border-radius: var(--radius); margin-bottom: 24px; }
 .file-preview-audio { display: block; width: 100%; margin-bottom: 24px; }
 
+.content:has(> .pdf-stage) { max-width: none; }
+.pdf-stage { display: flex; flex-direction: column; height: calc(100dvh - var(--topbar-h) - 36px); min-height: 420px; margin-bottom: 32px; }
+.pdf-stage .reader-head { margin-bottom: 16px; }
+.pdf-stage > .alert { margin-bottom: 16px; }
+.pdf-stage > .file-preview { flex: 1; min-height: 0; height: auto; margin: 0; }
+
 .complete-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 40px 0 8px; padding-top: 32px; border-top: 1px solid var(--border); }
 .complete-bar .btn { min-width: 200px; }
 .complete-bar .btn[aria-pressed='true'] .icon { animation: pop 0.35s var(--ease); }
@@ -174,6 +180,7 @@
 @media (max-width: 900px) {
   .reader { grid-template-columns: minmax(0, 1fr); gap: 28px; }
   .reader-outline { position: static; max-height: none; }
+  .pdf-stage { height: calc(100dvh - var(--topbar-h) - 32px); }
 }
 @media (max-width: 640px) {
   .reader-head h1 { font-size: var(--fs-2xl); }

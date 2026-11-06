@@ -14,3 +14,22 @@
 .item-label.is-hidden .prose { color: var(--muted); }
 
 .moodle-note { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: var(--fs-sm); }
+
+.kind-subsection { --kind: var(--c1, var(--accent)); }
+.item-subsection { margin: 2px 0 6px; }
+.subsection-head .item-title { font-weight: 650; }
+.subsection-head .item-link { cursor: default; }
+.item-subsection.is-hidden .subsection-head :is(.item-title, .item-icon) { color: var(--muted); }
+.item-subsection.is-locked .subsection-head :is(.item-title, .item-icon) { color: var(--muted); }
+.subsection-items { margin-left: 27px; padding: 0 0 0 8px; border-left: 2px solid var(--border); }
+.item-subsection > .add-item { width: calc(100% - 43px); margin: 4px 8px 4px 35px; }
+@media (hover: hover) {
+  .subsection-head:hover { background: none; }
+  .subsection-head:hover .item-title { color: var(--text); }
+}
+
+.outline-sub { display: flex; align-items: center; gap: 6px; padding: 6px 10px 2px; font-size: var(--fs-xs); font-weight: 600; color: var(--text-2); }
+.outline-sub.is-hidden { color: var(--muted); }
+.is-nested > .outline-link { margin-left: 16px; }
+
+.error-code { display: block; margin-top: 8px; font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }

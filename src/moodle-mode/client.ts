@@ -9,6 +9,7 @@ export class MoodleError extends Error {
   constructor(
     readonly errorcode: string,
     message: string,
+    readonly debuginfo = '',
   ) {
     super(message)
   }
@@ -23,11 +24,13 @@ const NOT_FOUND_CODES = new Set([
   'invalidcourseid',
   'requireloginerror',
   'nopermissions',
-  'accessexception',
   'invalidparameter',
 ])
 
 export const isNotFound = (e: unknown) => e instanceof MoodleError && NOT_FOUND_CODES.has(e.errorcode)
+
+// 404 にまとめないのは、Web サービスの認証で起きる（rest:use の権限がないなど）Moodle の設定の問題で、ユーザーのすべての画面が見えなくなるため
+export const isAccessDenied = (e: unknown) => e instanceof MoodleError && e.errorcode === 'accessexception'
 
 /** トークンの期限切れ・削除。ログインし直せば直る */
 export const isTokenError = (e: unknown) => e instanceof MoodleError && e.errorcode === 'invalidtoken'
@@ -65,8 +68,8 @@ export async function call<T>(token: string, wsfunction: string, params: Record<
   if (!res.ok) throw new MoodleError('unavailable', `Moodle が ${res.status} を返しました`)
   const data = (await res.json()) as unknown
   if (data && typeof data === 'object' && 'exception' in data) {
-    const { errorcode, message } = data as { errorcode?: string; message?: string }
-    throw new MoodleError(errorcode ?? 'unknown', message ?? '')
+    const { errorcode, message, debuginfo } = data as { errorcode?: string; message?: string; debuginfo?: string }
+    throw new MoodleError(errorcode ?? 'unknown', message ?? '', debuginfo)
   }
   return data as T
 }
@@ -128,6 +131,8 @@ export type MoodleCourse = {
   canmanage: boolean
   total: number
   done: number
+  // 必須にしないのは、プラグインを更新する前の Moodle は返さないため
+  inprogress?: boolean
   members: number
   teachers: string[]
   imageurl: string
@@ -163,6 +168,8 @@ export type MoodleSection = {
   section: number
   uservisible?: boolean
   component?: string | null
+  /** サブセクション（component が mod_subsection）のときは、その活動の instance */
+  itemid?: number | null
   modules: MoodleModule[]
 }
 

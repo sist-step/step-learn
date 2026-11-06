@@ -29,6 +29,17 @@ document.addEventListener('click', (e) => {
   document.cookie = `theme=${theme}; path=/; max-age=31536000; samesite=lax`
 })
 
+// --- マイコースの絞り込み（Moodle モード。クッキーでサーバーに伝え、今の画面を描き直す）
+document.addEventListener('click', (e) => {
+  const t = (e.target as Element).closest('[data-courses-toggle]')
+  if (!t) return
+  const currentOnly = t.getAttribute('aria-checked') !== 'true'
+  t.setAttribute('aria-checked', String(currentOnly))
+  document.cookie = currentOnly ? 'courses=; path=/; max-age=0; samesite=lax' : 'courses=all; path=/; max-age=31536000; samesite=lax'
+  prefetched.clear()
+  void visit(new URL(location.href))
+})
+
 function syncThemeColor() {
   const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
   document.querySelector('meta[name=theme-color]')?.setAttribute('content', bg)
