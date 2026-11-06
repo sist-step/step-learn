@@ -27,6 +27,7 @@ import ellipsis from 'heroicons/24/outline/ellipsis-horizontal.svg?raw'
 import alert from 'heroicons/24/outline/exclamation-circle.svg?raw'
 import eye from 'heroicons/24/outline/eye.svg?raw'
 import eyeSlash from 'heroicons/24/outline/eye-slash.svg?raw'
+import folder from 'heroicons/24/outline/folder.svg?raw'
 import globe from 'heroicons/24/outline/globe-alt.svg?raw'
 import heading from 'heroicons/24/outline/h2.svg?raw'
 import home from 'heroicons/24/outline/home.svg?raw'
@@ -100,6 +101,7 @@ const svgs = {
   lock,
   academicCap,
   calendar,
+  folder,
 } as const
 
 export type IconName = keyof typeof svgs

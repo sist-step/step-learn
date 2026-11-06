@@ -165,6 +165,8 @@ export type MoodleSection = {
   section: number
   uservisible?: boolean
   component?: string | null
+  /** サブセクション（component が mod_subsection）のときは、その活動の instance */
+  itemid?: number | null
   modules: MoodleModule[]
 }
 
