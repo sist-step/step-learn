@@ -4,7 +4,7 @@ import { deleteCookie, getSignedCookie, setSignedCookie } from 'hono/cookie'
 import type { CourseCardData } from '../components/ui'
 import { config } from '../lib/config'
 import { firstError, isFile, validate } from '../lib/forms'
-import { field, intParam, readForm, redirectWith, wantsJson } from '../lib/http'
+import { field, intParam, readForm, redirectWith, showsAllCourses, wantsJson } from '../lib/http'
 import { previewKind } from '../lib/preview'
 import { EXECUTABLE_NOT_ALLOWED, FILE_TOO_LARGE, MAX_FILE_SIZE, isExecutable } from '../lib/storage'
 import { CoursesPage } from '../routes/courses/views'
@@ -13,7 +13,7 @@ import { createSession, destroyByMoodleSid, destroySession, safeNext, type Moodl
 import { forgetCourse, forgetProgress } from './cache'
 import { exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
 import { loadCourse, moodle, myCourses, outlineOf, progressOf, revisionOf, type LoadedCourse } from './data'
-import { isOpenable, isTracked, toCard, type MItem } from './mapping'
+import { isInProgress, isOpenable, isTracked, toCard, type MItem } from './mapping'
 import { CoursePage, ItemEditPage, ItemPage, LoginPage, TEXT_PREVIEW_MAX } from './views'
 
 type C = Context<MoodleEnv>
@@ -104,7 +104,8 @@ const firstOpen = (loaded: LoadedCourse) => outlineOf(loaded).find((it) => isTra
 
 export async function dashboard(c: C) {
   const user = c.var.user!
-  const results: CourseCardData[] = (await myCourses(c)).map(toCard)
+  const all = showsAllCourses(c)
+  const results: CourseCardData[] = (await myCourses(c)).filter((m) => all || isInProgress(m)).map(toCard)
   const featured = featuredCourse(results)
   const nextItem = featured && firstOpen(await loadCourse(c, featured.id))
   return c.render(

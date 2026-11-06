@@ -39,6 +39,8 @@ export const toCard = (m: MoodleCourse): CourseCardData => ({
   teachers: m.teachers.join('、') || null,
 })
 
+export const isInProgress = (m: MoodleCourse) => m.inprogress !== false
+
 export const toNavCourse = (m: MoodleCourse): NavCourse => ({ id: m.id, title: m.fullname, color: courseColor(m.id), iconImage: null })
 
 /** link と file は STEP Learn の画面で扱い、moodle は Moodle の画面で開く。label はセクションの中に本文を出す */
