@@ -64,6 +64,11 @@ $functions = [
         'type' => 'write',
         'capabilities' => 'moodle/course:manageactivities, mod/resource:addinstance',
     ],
+    'local_steplearn_set_sections_collapsed' => [
+        'classname' => 'local_steplearn\external\set_sections_collapsed',
+        'description' => 'Remember which sections the current user collapsed on the course page.',
+        'type' => 'write',
+    ],
 ];
 
 $services = [
@@ -83,6 +88,7 @@ $services = [
             'local_steplearn_update_section',
             'local_steplearn_save_url',
             'local_steplearn_save_resource',
+            'local_steplearn_set_sections_collapsed',
         ],
         'restrictedusers' => 0,
         'enabled' => 1,
