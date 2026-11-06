@@ -539,38 +539,60 @@ export const ItemPage = ({
   const navHref = (o: MItem) => `${base}/${o.id}`
   const waiting = item.completion === 'view' || item.completion === 'auto' ? COMPLETION_WAITING[item.completion][item.kind] : undefined
 
+  const pdf = preview === 'pdf'
+  const crumbs = (
+    <Breadcrumbs
+      items={[
+        { href: '/courses', label: 'コース一覧' },
+        { href: `/courses/${id}`, label: access.course.title },
+      ]}
+    />
+  )
+  const head = (
+    <>
+      <header class="reader-head">
+        {section && position > 0 && (
+          <span class="eyebrow">
+            <a href={`/courses/${id}#section-${section.id}`}>{section.title}</a> · {position} / {siblings.length}
+          </span>
+        )}
+        <KindIcon item={item} />
+        <h1>{item.title}</h1>
+        {access.canManage && (item.kind === 'link' || item.kind === 'file') && (
+          <Button href={`${base}/${item.id}/edit`} variant="ghost" size="sm" icon="pencil">
+            編集
+          </Button>
+        )}
+        {pdf && (
+          <Button href={fileUrl} size="sm" icon="download" aria-label="ダウンロード" data-no-prefetch download {...onOpen(item)}>
+            <span class="hide-sm">ダウンロード</span>
+          </Button>
+        )}
+      </header>
+      {access.canManage && isHidden(item) && (
+        <Alert tone="info">
+          {item.hidden ? 'このアイテム' : 'このアイテムのセクション'}は学生に非表示です。学生のコース画面には表示されず、URL
+          を開いても見つかりません。
+        </Alert>
+      )}
+    </>
+  )
+
   return (
     <AppShell tone={access.course.color}>
       <Styles use={['/src/routes/content/content.css', '/src/moodle-mode/moodle-mode.css']} />
-      <Breadcrumbs
-        items={[
-          { href: '/courses', label: 'コース一覧' },
-          { href: `/courses/${id}`, label: access.course.title },
-        ]}
-      />
+      {pdf ? (
+        <div class="pdf-stage">
+          {crumbs}
+          {head}
+          <iframe class="file-preview" src={previewUrl} title={item.fileName} />
+        </div>
+      ) : (
+        crumbs
+      )}
       <div class="reader">
         <article class="reader-main">
-          <header class="reader-head">
-            {section && position > 0 && (
-              <span class="eyebrow">
-                <a href={`/courses/${id}#section-${section.id}`}>{section.title}</a> · {position} / {siblings.length}
-              </span>
-            )}
-            <KindIcon item={item} />
-            <h1>{item.title}</h1>
-            {access.canManage && (item.kind === 'link' || item.kind === 'file') && (
-              <Button href={`${base}/${item.id}/edit`} variant="ghost" size="sm" icon="pencil">
-                編集
-              </Button>
-            )}
-          </header>
-
-          {access.canManage && isHidden(item) && (
-            <Alert tone="info">
-              {item.hidden ? 'このアイテム' : 'このアイテムのセクション'}は学生に非表示です。学生のコース画面には表示されず、URL
-              を開いても見つかりません。
-            </Alert>
-          )}
+          {!pdf && head}
 
           {item.kind === 'link' && (
             <LinkCard
@@ -604,7 +626,7 @@ export const ItemPage = ({
             </LinkCard>
           )}
 
-          {item.kind === 'file' && (
+          {item.kind === 'file' && !pdf && (
             <>
               <LinkCard icon="file" class="link-card-lg kind-file">
                 <span class="file-name">
@@ -618,7 +640,6 @@ export const ItemPage = ({
                   ダウンロード
                 </Button>
               </LinkCard>
-              {preview === 'pdf' && <iframe class="file-preview" src={previewUrl} title={item.fileName} loading="lazy" />}
               {textPreview !== null && (
                 <div class="file-preview-text">
                   <pre>{textPreview}</pre>
