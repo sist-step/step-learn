@@ -35,3 +35,6 @@ export const forgetProgress = (courseId: number, userId: number) => {
   entries.delete(courseKey(courseId, userId))
   entries.delete(contentsKey(courseId, userId))
 }
+
+/** 利用者がセクションを開閉したとき。本人のコースの情報（開閉の記録を含む）だけが変わる */
+export const forgetSections = (courseId: number, userId: number) => entries.delete(courseKey(courseId, userId))

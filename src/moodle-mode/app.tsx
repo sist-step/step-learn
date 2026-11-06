@@ -60,6 +60,8 @@ auth.get(
 )
 auth.get('/courses/:id/:kind{hero|icon}/:name', h.courseImage)
 auth.post('/courses/:id/sections', h.createSection)
+auth.post('/courses/:id/sections/collapse', h.collapseSections)
+auth.get('/courses/:id/sections/:sid/photo/:name', h.tilePhoto)
 auth.post('/courses/:id/sections/:sid', h.updateSection)
 auth.post('/courses/:id/sections/:sid/move', h.moveSection)
 auth.post('/courses/:id/sections/:sid/delete', h.removeSection)
