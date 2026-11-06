@@ -21,6 +21,7 @@ use core_external\external_function_parameters;
 use core_external\external_single_structure;
 use core_external\external_value;
 use local_steplearn\courses;
+use local_steplearn\formats;
 
 /**
  * アクセスできるコース 1 つを、ロールと進捗付きで返す。
@@ -48,13 +49,16 @@ class get_course extends external_api {
         // 存在しないコースと区別できる応答になるため
         self::validate_context(\context_system::instance());
         [$course, $access] = courses::require_access($courseid);
-        return courses::export($course, $access);
+        return courses::export($course, $access) + ['format' => formats::export($course)];
     }
 
     /**
      * @return external_single_structure
      */
     public static function execute_returns(): external_single_structure {
-        return courses::structure();
+        // コース一覧（get_my_courses）に含めないのは、フォーマットの設定はコースの画面でしか使わず、コースの数だけ計算することになるため
+        $structure = courses::structure();
+        $structure->keys['format'] = formats::structure();
+        return $structure;
     }
 }

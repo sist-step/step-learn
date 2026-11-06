@@ -24,7 +24,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_steplearn';
-$plugin->version = 2026110600;
+$plugin->version = 2026110700;
 $plugin->requires = 2025100600;
 $plugin->maturity = MATURITY_ALPHA;
 $plugin->release = '0.1.0';

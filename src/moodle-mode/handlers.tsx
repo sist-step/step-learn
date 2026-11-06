@@ -10,10 +10,10 @@ import { EXECUTABLE_NOT_ALLOWED, FILE_TOO_LARGE, MAX_FILE_SIZE, isExecutable } f
 import { CoursesPage } from '../routes/courses/views'
 import { DashboardPage, featuredCourse } from '../routes/dashboard/views'
 import { createSession, destroyByMoodleSid, destroySession, safeNext, type MoodleEnv } from './auth'
-import { forgetCourse, forgetProgress } from './cache'
+import { forgetCourse, forgetProgress, forgetSections } from './cache'
 import { exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
 import { loadCourse, moodle, myCourses, outlineOf, progressOf, revisionOf, type LoadedCourse } from './data'
-import { isInProgress, isOpenable, isTracked, toCard, type MItem } from './mapping'
+import { isInProgress, isOpenable, isTracked, sectionHref, toCard, type MItem } from './mapping'
 import { CoursePage, ItemEditPage, ItemPage, LoginPage, TEXT_PREVIEW_MAX } from './views'
 
 type C = Context<MoodleEnv>
@@ -21,7 +21,6 @@ type C = Context<MoodleEnv>
 const base64url = (bytes: Uint8Array | ArrayBuffer) =>
   Buffer.from(bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes).toString('base64url')
 const randomString = () => base64url(crypto.getRandomValues(new Uint8Array(32)))
-const editUrl = (courseId: number, sectionId?: number) => `/courses/${courseId}${sectionId ? `#section-${sectionId}` : ''}`
 
 // ---------------------------------------------------------------- ログイン
 
@@ -144,6 +143,8 @@ export async function showCourse(c: C) {
       access={loaded.access}
       sections={loaded.sections}
       items={loaded.items}
+      layout={loaded.layout}
+      openSection={Number(c.req.query('section')) || undefined}
       revision={await revisionOf(loaded)}
       moodleCourseUrl={moodleUrl(`/course/view.php?id=${id}`)}
     />,
@@ -172,7 +173,47 @@ export async function courseImage(c: C) {
   })
 }
 
+export async function tilePhoto(c: C) {
+  const id = intParam(c, 'id')
+  const sid = intParam(c, 'sid')
+  if (!id || !sid) return c.notFound()
+  const { layout, sections } = await loadCourse(c, id)
+  const tile = layout.kind === 'tiles' ? layout.tiles.get(sid) : undefined
+  if (!tile?.photoUrl || !sections.some((s) => s.id === sid)) return c.notFound()
+  const res = await fetchFile(c.var.token!, tile.photoUrl)
+  const type = res?.headers.get('content-type')?.split(';')[0] ?? ''
+  if (!res?.ok || !IMAGE_TYPES.has(type)) return c.notFound()
+  return new Response(res.body, {
+    headers: { 'Content-Type': type, 'Cache-Control': 'private, max-age=3600', 'X-Content-Type-Options': 'nosniff' },
+  })
+}
+
 // ---------------------------------------------------------------- セクション
+
+const sectionIds = (value: string) =>
+  value
+    .split(',')
+    .map(Number)
+    .filter((n) => Number.isInteger(n) && n > 0)
+
+// 表示だけの状態なのにクッキーで持たないのは、折りたたみ型トピックの開閉は Moodle にユーザーごとに記録され、旧STEP Learn の画面とそろえるため
+export async function collapseSections(c: C) {
+  const id = intParam(c, 'id')
+  if (!id) return c.notFound()
+  const loaded = await loadCourse(c, id)
+  if (loaded.layout.kind !== 'topcoll' || !loaded.layout.persistent) return c.notFound()
+  const form = await readForm(c)
+  const known = new Set(loaded.sections.filter((s) => !s.parentId).map((s) => s.id))
+  const opened = sectionIds(field(form, 'open', 2000)).filter((sid) => known.has(sid))
+  const closed = sectionIds(field(form, 'closed', 2000)).filter((sid) => known.has(sid))
+  if (opened.length) await moodle(c).setSectionsCollapsed(id, opened, false)
+  if (closed.length) await moodle(c).setSectionsCollapsed(id, closed, true)
+  forgetSections(id, c.var.user!.id)
+  return c.body(null, 204)
+}
+
+const editUrl = (loaded: LoadedCourse, sectionId?: number) =>
+  sectionId ? sectionHref(loaded.course.id, loaded.layout, loaded.sections, sectionId) : `/courses/${loaded.course.id}`
 
 async function manageCourse(c: C) {
   const id = intParam(c, 'id')
@@ -201,10 +242,10 @@ export async function createSection(c: C) {
   if (!loaded) return c.notFound()
   const id = loaded.course.id
   const result = validate('section', await readForm(c))
-  if (!result.ok) return redirectWith(c, editUrl(id), firstError(result.errors), 'error')
+  if (!result.ok) return redirectWith(c, editUrl(loaded), firstError(result.errors), 'error')
   const sid = await moodle(c).createSection(id, result.values.title)
   forgetCourse(id)
-  return redirectWith(c, editUrl(id, sid), 'セクションを追加しました。')
+  return redirectWith(c, editUrl(loaded, sid), 'セクションを追加しました。')
 }
 
 const topSections = (loaded: LoadedCourse) => loaded.sections.filter((s) => !s.parentId)
@@ -221,10 +262,10 @@ export async function updateSection(c: C) {
   if (!loaded || !section) return c.notFound()
   const id = loaded.course.id
   const result = validate('section', await readForm(c))
-  if (!result.ok) return redirectWith(c, editUrl(id, section.id), firstError(result.errors), 'error')
+  if (!result.ok) return redirectWith(c, editUrl(loaded, section.id), firstError(result.errors), 'error')
   await moodle(c).updateSection(id, section.id, result.values.title, result.values.summary ?? '')
   forgetCourse(id)
-  return redirectWith(c, editUrl(id, section.id), 'セクションを更新しました。')
+  return redirectWith(c, editUrl(loaded, section.id), 'セクションを更新しました。')
 }
 
 export async function moveSection(c: C) {
@@ -237,7 +278,7 @@ export async function moveSection(c: C) {
   // Moodle は「このセクションの後ろへ」しか指定できないので、上へは 2 つ前の後ろに置く。一般（0 番）より前には置けない
   const after = dir === 'up' ? list[i - 2] : list[i + 1]
   if (after) await changeCourse(c, loaded, 'section_move_after', [section.id], { sectionid: after.id })
-  return c.redirect(editUrl(loaded.course.id, section.id), 303)
+  return c.redirect(editUrl(loaded, section.id), 303)
 }
 
 export async function setSectionHidden(c: C) {
@@ -246,7 +287,7 @@ export async function setSectionHidden(c: C) {
   if (!loaded || !section || section.number === 0) return c.notFound()
   const hidden = await readHidden(c)
   await changeCourse(c, loaded, hidden ? 'section_hide' : 'section_show', [section.id])
-  return redirectWith(c, editUrl(loaded.course.id, section.id), hiddenMessage(section.title, hidden), 'info')
+  return redirectWith(c, editUrl(loaded, section.id), hiddenMessage(section.title, hidden), 'info')
 }
 
 export async function removeSection(c: C) {
@@ -254,7 +295,7 @@ export async function removeSection(c: C) {
   const section = loaded && findSection(loaded, c)
   if (!loaded || !section || section.number === 0) return c.notFound()
   await changeCourse(c, loaded, 'section_delete', [section.id])
-  return redirectWith(c, editUrl(loaded.course.id), 'セクションを削除しました。', 'info')
+  return redirectWith(c, editUrl(loaded), 'セクションを削除しました。', 'info')
 }
 
 // ---------------------------------------------------------------- アイテム
@@ -281,11 +322,11 @@ export async function createItem(c: C) {
   const sectionId = Number(field(form, 'section_id'))
   if (!loaded.sections.some((s) => s.id === sectionId)) return c.notFound()
   const result = validate('item', form)
-  if (!result.ok) return redirectWith(c, editUrl(id, sectionId), firstError(result.errors), 'error')
+  if (!result.ok) return redirectWith(c, editUrl(loaded, sectionId), firstError(result.errors), 'error')
   const { type, hidden, title, url } = result.values
   if (type !== 'link' && type !== 'file') return c.notFound()
   const completion = loaded.course.completionenabled ? (result.values.completion ?? 'none') : 'none'
-  if (completion === 'play') return redirectWith(c, editUrl(id, sectionId), PLAY_NOT_SUPPORTED, 'error')
+  if (completion === 'play') return redirectWith(c, editUrl(loaded, sectionId), PLAY_NOT_SUPPORTED, 'error')
   const target = { courseid: id, cmid: 0, sectionid: sectionId, name: title, completion, visible: !hidden }
 
   let cmid: number
@@ -294,11 +335,11 @@ export async function createItem(c: C) {
   } else {
     const file = isFile(result.values.file) ? result.values.file : null
     const uploadError = await checkUpload(file)
-    if (uploadError || !file) return redirectWith(c, editUrl(id, sectionId), uploadError ?? 'ファイルを選択してください。', 'error')
+    if (uploadError || !file) return redirectWith(c, editUrl(loaded, sectionId), uploadError ?? 'ファイルを選択してください。', 'error')
     cmid = await moodle(c).saveResource({ ...target, draftitemid: await uploadDraft(c.var.token!, file) })
   }
   forgetCourse(id)
-  const next = field(form, 'then') === 'view' ? `/courses/${id}/items/${cmid}` : editUrl(id, sectionId)
+  const next = field(form, 'then') === 'view' ? `/courses/${id}/items/${cmid}` : editUrl(loaded, sectionId)
   return redirectWith(c, next, `「${title}」を追加しました。`)
 }
 
@@ -308,7 +349,9 @@ export async function editItem(c: C) {
   const loaded = await manageCourse(c)
   const item = loaded && findItem(loaded, c)
   if (!loaded || !editable(item)) return c.notFound()
-  return c.render(<ItemEditPage access={loaded.access} item={item} sections={loaded.sections} />, { title: `編集 - ${item.title}` })
+  return c.render(<ItemEditPage access={loaded.access} item={item} sections={loaded.sections} layout={loaded.layout} />, {
+    title: `編集 - ${item.title}`,
+  })
 }
 
 export async function updateItem(c: C) {
@@ -332,6 +375,7 @@ export async function updateItem(c: C) {
         access={loaded.access}
         item={item}
         sections={loaded.sections}
+        layout={loaded.layout}
         values={{
           title: field(form, 'title', 200),
           url: field(form, 'url', 2000),
@@ -367,7 +411,7 @@ export async function moveItem(c: C) {
   const before = dir === 'up' ? list[i - 1] : list[i + 2]
   const moves = dir === 'up' ? i > 0 : i < list.length - 1
   if (moves) await changeCourse(c, loaded, 'cm_move', [item.id], before ? { cmid: before.id } : { sectionid: item.sectionId })
-  return c.redirect(editUrl(loaded.course.id, item.sectionId), 303)
+  return c.redirect(editUrl(loaded, item.sectionId), 303)
 }
 
 export async function setItemHidden(c: C) {
@@ -378,7 +422,7 @@ export async function setItemHidden(c: C) {
   // サブセクションに cm_hide を使わないのは、Moodle 5.1 では表示の更新を返すときにセクション ID を取り違えて失敗するため。Moodle の画面と同じく中身のセクションを切り替える
   if (item.childSectionId) await changeCourse(c, loaded, hidden ? 'section_hide' : 'section_show', [item.childSectionId])
   else await changeCourse(c, loaded, hidden ? 'cm_hide' : 'cm_show', [item.id])
-  return redirectWith(c, editUrl(loaded.course.id, item.sectionId), hiddenMessage(item.title, hidden), 'info')
+  return redirectWith(c, editUrl(loaded, item.sectionId), hiddenMessage(item.title, hidden), 'info')
 }
 
 export async function removeItem(c: C) {
@@ -386,7 +430,7 @@ export async function removeItem(c: C) {
   const item = loaded && findItem(loaded, c)
   if (!loaded || !item) return c.notFound()
   await changeCourse(c, loaded, 'cm_delete', [item.id])
-  return redirectWith(c, editUrl(loaded.course.id, item.sectionId), `「${item.title}」を削除しました。`, 'info')
+  return redirectWith(c, editUrl(loaded, item.sectionId), `「${item.title}」を削除しました。`, 'info')
 }
 
 /** 学生に見えるアイテムだけを返す（教師にはすべて）。ラベルとアクセス制限中のものは開く画面がないので除く */
@@ -429,6 +473,7 @@ export async function showItem(c: C) {
       item={item}
       section={loaded.sections.find((s) => s.id === item.sectionId)}
       sections={loaded.sections}
+      layout={loaded.layout}
       outline={outline}
       prev={navigable[idx - 1]}
       next={navigable[idx + 1]}

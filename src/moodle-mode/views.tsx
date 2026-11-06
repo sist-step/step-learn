@@ -13,8 +13,9 @@ import type { CourseAccess } from '../lib/courses'
 import type { FieldErrors } from '../lib/forms'
 import { previewKind } from '../lib/preview'
 import { MAX_FILE_SIZE, formatBytes } from '../lib/storage'
-import type { ItemCompletion, MItem, MSection } from './mapping'
-import { isOpenable, isTracked } from './mapping'
+import type { CourseLayout, ItemCompletion, MItem, MSection, TilesLayout, TopcollLayout } from './mapping'
+import { isOpenable, isTracked, sectionHref } from './mapping'
+import { TileIcon, tileNumber } from './tile-icons'
 
 // ---------------------------------------------------------------- ログイン
 
@@ -407,24 +408,7 @@ const SectionEditBar = ({ courseId, section }: { courseId: number; section: MSec
   )
 }
 
-export const CoursePage = ({
-  access,
-  sections,
-  items,
-  revision,
-  moodleCourseUrl,
-}: {
-  access: CourseAccess
-  sections: MSection[]
-  items: MItem[]
-  revision: string
-  moodleCourseUrl: string
-}) => {
-  const id = access.course.id
-  const manage = access.canManage
-  const isStudent = access.role === 'student'
-  const tracking = !!access.course.completionEnabled
-
+const courseOutline = (sections: MSection[], items: MItem[], layout: CourseLayout) => {
   const bySection = new Map<number, MItem[]>()
   for (const it of items) bySection.set(it.sectionId, [...(bySection.get(it.sectionId) ?? []), it])
   const childrenOf = (it: MItem) => (it.childSectionId ? (bySection.get(it.childSectionId) ?? []) : [])
@@ -434,13 +418,317 @@ export const CoursePage = ({
   const contentsOf = (sectionId: number) =>
     (bySection.get(sectionId) ?? []).flatMap((it) => (it.kind === 'subsection' ? childrenOf(it) : [it]))
   const visibleSections = topSections.filter((s) => !s.hidden)
-  // 学生にも同じ番号で見えるよう、表示しているセクションだけで数える
-  const sectionNumber = new Map(visibleSections.map((s, i) => [s.id, String(i + 1).padStart(2, '0')]))
-  const shownItems = visibleSections.flatMap((s) => contentsOf(s.id).filter(isShown))
+  // 学生にも同じ番号で見えるよう、表示しているセクションだけで数える。タイルと折りたたみ型トピックで一般セクションを数えないのは、Moodle の画面の「トピック 1」などと番号をそろえるため
+  const numbered = layout.kind === 'list' ? visibleSections : visibleSections.filter((s) => s.number !== 0)
+  const sectionNumber = new Map(numbered.map((s, i) => [s.id, String(i + 1).padStart(2, '0')]))
+  const statsOf = (sectionId: number) => {
+    const contents = contentsOf(sectionId)
+    const shown = contents.filter(isShown)
+    const tracked = shown.filter(isTracked)
+    return { contents, shown, tracked, done: tracked.filter((it) => it.done).length }
+  }
+  return { bySection, childrenOf, topSections, isShown, contentsOf, visibleSections, sectionNumber, statsOf }
+}
+
+type CourseOutline = ReturnType<typeof courseOutline>
+
+type CardOptions = {
+  open?: boolean
+  /** 開閉できない（タイルのセクションの画面と、折りたたみ型トピックの一般セクション） */
+  fixed?: boolean
+  /** 同時に 1 つだけ開くセクションの組（details の name） */
+  group?: string
+  current?: boolean
+  summaryInHead?: boolean
+  subtiles?: boolean
+}
+
+const SectionCard = ({
+  s,
+  o,
+  courseId,
+  isStudent,
+  manage,
+  options = {},
+}: {
+  s: MSection
+  o: CourseOutline
+  courseId: number
+  isStudent: boolean
+  manage: boolean
+  options?: CardOptions
+}) => {
+  const list = o.bySection.get(s.id) ?? []
+  const { contents, shown, tracked, done } = o.statsOf(s.id)
+  const hiddenCount = contents.length - shown.length
+  const empty = !manage && shown.length === 0
+  const emptyView = manage && shown.length === 0
+  const { open = true, fixed = false, group, current = false, summaryInHead = false, subtiles = false } = options
+  return (
+    <details
+      class={cx(
+        'section-card',
+        s.hidden && 'is-hidden edit-only',
+        empty && 'is-empty',
+        emptyView && 'is-empty-view',
+        fixed && 'is-fixed',
+        current && 'is-current',
+      )}
+      id={`section-${s.id}`}
+      open={open}
+      name={group}
+      data-section={s.id}
+    >
+      <summary class="section-head" tabindex={fixed ? -1 : undefined}>
+        <span class="section-num">{o.sectionNumber.get(s.id) ?? <Icon name={s.number === 0 ? 'home' : 'eyeSlash'} size={14} />}</span>
+        <span class="section-title-wrap">
+          <span class="section-title">{s.title}</span>
+          {!empty && (
+            <span class="muted small">
+              {emptyView && <span class="view-only">{hiddenCount > 0 ? `非表示 ${hiddenCount}` : 'アイテムなし'}</span>}
+              <span class={emptyView ? 'edit-only' : undefined}>{`${shown.length} アイテム`}</span>
+              {isStudent && tracked.length > 0 && ` · ${done} 完了`}
+              {hiddenCount > 0 && <span class="edit-only">{` · 非表示 ${hiddenCount}`}</span>}
+            </span>
+          )}
+          {summaryInHead && s.summary && <span class="section-head-summary">{s.summary}</span>}
+        </span>
+        {current && <Chip tone="accent">現在のセクション</Chip>}
+        {empty && <Chip>準備中</Chip>}
+        {s.hidden && <HiddenChip />}
+        {isStudent && tracked.length > 0 && done === tracked.length && (
+          <Chip tone="success" icon="check">
+            完了
+          </Chip>
+        )}
+        {!fixed && <Icon name="chevronDown" class="section-caret" />}
+      </summary>
+      {manage && <SectionEditBar courseId={courseId} section={s} />}
+      {!summaryInHead && s.summary && <p class="section-summary">{s.summary}</p>}
+      {list.length > 0 && (
+        <ul class={cx('items', subtiles && 'is-subtiles')}>
+          {list.map((it) =>
+            it.kind === 'subsection' ? (
+              <SubsectionRow item={it} contents={o.childrenOf(it)} courseId={courseId} isStudent={isStudent} manage={manage} />
+            ) : (
+              <ItemRow item={it} courseId={courseId} isStudent={isStudent} manage={manage} />
+            ),
+          )}
+        </ul>
+      )}
+      {manage && <AddItemButton sectionId={s.id} />}
+    </details>
+  )
+}
+
+type SectionsProps = { o: CourseOutline; courseId: number; isStudent: boolean; manage: boolean }
+
+const ListSections = ({ o, ...rest }: SectionsProps) => (
+  <div class="sections">
+    {o.topSections.map((s) => (
+      <SectionCard s={s} o={o} {...rest} />
+    ))}
+  </div>
+)
+
+const TopcollSections = ({ o, layout, ...rest }: SectionsProps & { layout: TopcollLayout }) => {
+  const general = o.topSections.find((s) => s.number === 0)
+  const byId = new Map(o.topSections.map((s) => [s.id, s]))
+  // 教師に Moodle の並べ方を使わないのは、「最新の週を先頭に」などでは未来のセクションが外れ、編集できなくなるため（Moodle でも編集中はそのまま並ぶ）
+  const toggles = rest.manage ? o.topSections.filter((s) => s.number !== 0) : layout.order.flatMap((sid) => byId.get(sid) ?? [])
+  const collapsed = new Set(layout.collapsed)
+  const firstOpen = layout.oneSection ? (toggles.find((s) => s.id === layout.current) ?? toggles.find((s) => !collapsed.has(s.id))) : null
+  const isOpen = (s: MSection) => (layout.oneSection ? s.id === firstOpen?.id : !collapsed.has(s.id))
+  const shownCount = toggles.filter((s) => !s.hidden).length
+  return (
+    <div class="stack">
+      {general && <SectionCard s={general} o={o} {...rest} options={{ fixed: true }} />}
+      {layout.toggleAll && !layout.oneSection && shownCount > 1 && (
+        <div class="section-toggles">
+          <Button size="sm" variant="ghost" icon="chevronDown" data-sections-toggle="open">
+            すべて開く
+          </Button>
+          <Button size="sm" variant="ghost" icon="chevronRight" data-sections-toggle="close">
+            すべて閉じる
+          </Button>
+        </div>
+      )}
+      <div
+        class={cx('sections', layout.columns > 1 && `sections-cols-${layout.columns}`)}
+        data-collapse-url={layout.persistent ? `/courses/${rest.courseId}/sections/collapse` : undefined}
+      >
+        {toggles.map((s) => (
+          <SectionCard
+            s={s}
+            o={o}
+            {...rest}
+            options={{
+              open: isOpen(s),
+              group: layout.oneSection ? `topcoll-${rest.courseId}` : undefined,
+              current: s.id === layout.current,
+              summaryInHead: layout.summaryWhenCollapsed,
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const tileHref = (courseId: number, s: MSection) => `/courses/${courseId}?section=${s.id}`
+
+const TileCard = ({
+  s,
+  o,
+  layout,
+  courseId,
+  isStudent,
+}: {
+  s: MSection
+  o: CourseOutline
+  layout: TilesLayout
+  courseId: number
+  isStudent: boolean
+}) => {
+  const tile = layout.tiles.get(s.id)
+  const icon = tile?.icon || layout.defaultIcon
+  const number = tileNumber(icon)
+  const { shown, tracked, done } = o.statsOf(s.id)
+  const locked = s.locked && isStudent
+  const empty = isStudent && shown.length === 0
+  const progress = isStudent && tracked.length > 0 ? layout.progress : 'none'
+  const pct = tracked.length ? Math.round((done / tracked.length) * 100) : 0
+  const complete = tracked.length > 0 && done === tracked.length
+  const body = (
+    <>
+      <span class="sec-tile-media">
+        {tile?.photo ? (
+          <img src={`/courses/${courseId}/sections/${s.id}/photo/${encodeURIComponent(tile.photo)}`} alt="" loading="lazy" />
+        ) : number ? (
+          <span class="sec-tile-number">{number}</span>
+        ) : (
+          <TileIcon name={icon} />
+        )}
+      </span>
+      <span class="sec-tile-body">
+        <span class="sec-tile-eyebrow">
+          <span class="sec-tile-num">{o.sectionNumber.get(s.id) ?? <Icon name="eyeSlash" size={12} />}</span>
+          {s.hidden && <HiddenChip />}
+          {isStudent && complete && <Icon name="checkCircle" size={16} class="sec-tile-done" />}
+        </span>
+        <span class="sec-tile-title">{s.title}</span>
+        <span class="sec-tile-meta truncate">
+          {locked ? (
+            <>
+              <Icon name="lock" size={12} /> {s.restriction || 'まだ開けません'}
+            </>
+          ) : empty ? (
+            '準備中'
+          ) : progress === 'fraction' ? (
+            `${done} / ${tracked.length} 完了`
+          ) : (
+            `${shown.length} アイテム`
+          )}
+        </span>
+      </span>
+      {progress === 'percent' && !locked && (
+        <span class="sec-tile-progress" role="img" aria-label={`${pct}% 完了`}>
+          <span class="sec-tile-progress-bar" style={`--w:${pct}%`} />
+          <span class="sec-tile-progress-label">{pct}%</span>
+        </span>
+      )}
+    </>
+  )
+  return (
+    <li class={cx('sec-tile-cell', s.hidden && 'edit-only')} id={`section-${s.id}`}>
+      {locked || empty ? (
+        <span class={cx('sec-tile', locked && 'is-locked', empty && 'is-empty')}>{body}</span>
+      ) : (
+        <a href={tileHref(courseId, s)} class={cx('sec-tile', s.hidden && 'is-hidden', isStudent && complete && 'is-done')}>
+          {body}
+        </a>
+      )}
+    </li>
+  )
+}
+
+const TilesSections = ({ o, layout, openSection, ...rest }: SectionsProps & { layout: TilesLayout; openSection?: number }) => {
+  const general = o.topSections.find((s) => s.number === 0)
+  const tiles = o.topSections.filter((s) => s.number !== 0)
+  const opened = tiles.find((s) => s.id === openSection && (rest.manage || (!s.hidden && !s.locked)))
+  if (opened) {
+    const nav = tiles.filter((s) => (rest.manage ? true : !s.hidden && !s.locked))
+    const i = nav.findIndex((s) => s.id === opened.id)
+    const prev = nav[i - 1]
+    const next = nav[i + 1]
+    return (
+      <div class="stack">
+        <a href={`/courses/${rest.courseId}#section-${opened.id}`} class="back-link">
+          <Icon name="chevronLeft" size={16} />
+          すべてのタイル
+        </a>
+        <SectionCard s={opened} o={o} {...rest} options={{ fixed: true, subtiles: layout.subtiles }} />
+        {(prev || next) && (
+          <nav class="sec-tile-pager" aria-label="前後のセクション">
+            {prev && (
+              <Button href={tileHref(rest.courseId, prev)} variant="ghost" icon="chevronLeft" class="sec-tile-pager-prev">
+                <span class="truncate">{prev.title}</span>
+              </Button>
+            )}
+            {next && (
+              <Button href={tileHref(rest.courseId, next)} variant="ghost" iconEnd="chevronRight" class="sec-tile-pager-next">
+                <span class="truncate">{next.title}</span>
+              </Button>
+            )}
+          </nav>
+        )}
+      </div>
+    )
+  }
+  return (
+    <div class="stack">
+      {general && <SectionCard s={general} o={o} {...rest} options={{ fixed: true, subtiles: layout.subtilesZero }} />}
+      {tiles.length > 0 && (
+        <ul class="sec-tiles">
+          {tiles.map((s) => (
+            <TileCard s={s} o={o} layout={layout} courseId={rest.courseId} isStudent={rest.isStudent} />
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+export const CoursePage = ({
+  access,
+  sections,
+  items,
+  layout,
+  openSection,
+  revision,
+  moodleCourseUrl,
+}: {
+  access: CourseAccess
+  sections: MSection[]
+  items: MItem[]
+  layout: CourseLayout
+  /** タイルで開いているセクション */
+  openSection?: number
+  revision: string
+  moodleCourseUrl: string
+}) => {
+  const id = access.course.id
+  const manage = access.canManage
+  const isStudent = access.role === 'student'
+  const tracking = !!access.course.completionEnabled
+
+  const o = courseOutline(sections, items, layout)
+  const shownItems = o.visibleSections.flatMap((s) => o.contentsOf(s.id).filter(o.isShown))
   const trackedItems = shownItems.filter(isTracked)
   const doneCount = trackedItems.filter((it) => it.done).length
   const openable = shownItems.filter((it) => isOpenable(it) && !it.locked)
   const nextItem = openable.find((it) => isTracked(it) && !it.done) ?? (trackedItems.length === 0 ? openable[0] : undefined)
+  const props = { o, courseId: id, isStudent, manage }
 
   return (
     <AppShell editable={manage} tone={access.course.color}>
@@ -480,73 +768,23 @@ export const CoursePage = ({
         }
       />
       <TabPanel>
-        {visibleSections.length === 0 && (
+        {o.visibleSections.length === 0 && (
           <div class={manage ? 'view-only' : undefined}>
             <EmptyState
               icon="layers"
-              title={manage && topSections.length > 0 ? '学生に表示している教材はありません' : 'まだ教材がありません'}
+              title={manage && o.topSections.length > 0 ? '学生に表示している教材はありません' : 'まだ教材がありません'}
               text={manage ? '編集モードにして、セクションやアイテムを追加しましょう。' : '教師が教材を追加するとここに表示されます。'}
             />
           </div>
         )}
-        {topSections.length > 0 && (
-          <div class="sections">
-            {topSections.map((s) => {
-              const list = bySection.get(s.id) ?? []
-              const contents = contentsOf(s.id)
-              const shown = contents.filter(isShown)
-              const hiddenCount = contents.length - shown.length
-              const shownTracked = shown.filter(isTracked)
-              const sectionDone = shownTracked.filter((it) => it.done).length
-              const empty = !manage && shown.length === 0
-              const emptyView = manage && shown.length === 0
-              return (
-                <details
-                  class={cx('section-card', s.hidden && 'is-hidden edit-only', empty && 'is-empty', emptyView && 'is-empty-view')}
-                  id={`section-${s.id}`}
-                  open
-                >
-                  <summary class="section-head">
-                    <span class="section-num">{sectionNumber.get(s.id) ?? <Icon name="eyeSlash" size={14} />}</span>
-                    <span class="section-title-wrap">
-                      <span class="section-title">{s.title}</span>
-                      {!empty && (
-                        <span class="muted small">
-                          {emptyView && <span class="view-only">{hiddenCount > 0 ? `非表示 ${hiddenCount}` : 'アイテムなし'}</span>}
-                          <span class={emptyView ? 'edit-only' : undefined}>{`${shown.length} アイテム`}</span>
-                          {isStudent && shownTracked.length > 0 && ` · ${sectionDone} 完了`}
-                          {hiddenCount > 0 && <span class="edit-only">{` · 非表示 ${hiddenCount}`}</span>}
-                        </span>
-                      )}
-                    </span>
-                    {empty && <Chip>準備中</Chip>}
-                    {s.hidden && <HiddenChip />}
-                    {isStudent && shownTracked.length > 0 && sectionDone === shownTracked.length && (
-                      <Chip tone="success" icon="check">
-                        完了
-                      </Chip>
-                    )}
-                    <Icon name="chevronDown" class="section-caret" />
-                  </summary>
-                  {manage && <SectionEditBar courseId={id} section={s} />}
-                  {s.summary && <p class="section-summary">{s.summary}</p>}
-                  {list.length > 0 && (
-                    <ul class="items">
-                      {list.map((it) =>
-                        it.kind === 'subsection' ? (
-                          <SubsectionRow item={it} contents={childrenOf(it)} courseId={id} isStudent={isStudent} manage={manage} />
-                        ) : (
-                          <ItemRow item={it} courseId={id} isStudent={isStudent} manage={manage} />
-                        ),
-                      )}
-                    </ul>
-                  )}
-                  {manage && <AddItemButton sectionId={s.id} />}
-                </details>
-              )
-            })}
-          </div>
-        )}
+        {o.topSections.length > 0 &&
+          (layout.kind === 'topcoll' ? (
+            <TopcollSections {...props} layout={layout} />
+          ) : layout.kind === 'tiles' ? (
+            <TilesSections {...props} layout={layout} openSection={openSection} />
+          ) : (
+            <ListSections {...props} />
+          ))}
         {manage && <AddSectionModal courseId={id} />}
         {manage && sections.length > 0 && <AddItemModal courseId={id} sections={sections} tracking={tracking} />}
       </TabPanel>
@@ -574,11 +812,13 @@ export const ItemPage = ({
   next,
   textPreview,
   revision,
+  layout,
 }: {
   access: CourseAccess
   item: MItem
   section?: MSection
   sections: MSection[]
+  layout: CourseLayout
   outline: MItem[]
   prev?: MItem
   next?: MItem
@@ -627,7 +867,7 @@ export const ItemPage = ({
       <header class="reader-head">
         {section && position > 0 && (
           <span class="eyebrow">
-            <a href={`/courses/${id}#section-${section.id}`}>{section.title}</a> · {position} / {siblings.length}
+            <a href={sectionHref(id, layout, sections, section.id)}>{section.title}</a> · {position} / {siblings.length}
           </span>
         )}
         <KindIcon item={item} />
@@ -863,12 +1103,14 @@ export const ItemEditPage = ({
   access,
   item,
   sections,
+  layout,
   values,
   errors = {},
 }: {
   access: CourseAccess
   item: MItem
   sections: MSection[]
+  layout: CourseLayout
   values?: Partial<ItemEditValues>
   errors?: FieldErrors
 }) => {
@@ -891,7 +1133,7 @@ export const ItemEditPage = ({
         items={[
           { href: '/courses', label: 'コース一覧' },
           { href: `/courses/${courseId}`, label: access.course.title },
-          section && { href: `/courses/${courseId}#section-${section.id}`, label: section.title },
+          section && { href: sectionHref(courseId, layout, sections, section.id), label: section.title },
           { href: base, label: item.title },
         ].filter((b) => !!b)}
       />
