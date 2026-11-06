@@ -53,9 +53,11 @@
 }
 
 /* ===== コースフォーマット: タイル */
-.sec-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.sec-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); grid-auto-flow: row dense; gap: 12px; }
 .sec-tile-cell { display: flex; min-width: 0; }
-.sec-tile-cell:target .sec-tile { border-color: var(--focus); box-shadow: var(--ring); }
+.sec-tile-panel { grid-column: 1 / -1; min-width: 0; scroll-margin: 16px; animation: tile-panel-in 0.2s var(--ease); }
+@keyframes tile-panel-in { from { opacity: 0; transform: translateY(-4px); } }
+.section-close { flex: none; }
 .sec-tile {
   position: relative;
   flex: 1;
@@ -94,16 +96,14 @@ a.sec-tile { transition: border-color 0.15s, box-shadow 0.2s, transform 0.2s var
 .sec-tile:is(.is-locked, .is-empty) .sec-tile-media { background: var(--surface-2); color: var(--muted); }
 .sec-tile:is(.is-locked, .is-empty) .sec-tile-title { color: var(--text-2); font-weight: 500; }
 .sec-tile.is-done .sec-tile-media { background: color-mix(in srgb, var(--success) 14%, transparent); }
+a.sec-tile[aria-expanded='true'] { border-color: var(--c1); box-shadow: 0 0 0 1px var(--c1), var(--shadow-card); }
+a.sec-tile[aria-expanded='true'] .sec-tile-title { color: var(--c-ink); }
 @media (max-width: 640px) {
   .sec-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .sec-tile-body { padding: 10px 12px 12px; }
   .sec-tile-title { font-size: var(--fs-base); }
   .sec-tile-media .icon { width: 32px; height: 32px; }
 }
-
-.sec-tile-pager { display: flex; justify-content: space-between; gap: 8px; }
-.sec-tile-pager .btn { min-width: 0; max-width: 48%; }
-.sec-tile-pager-next { margin-left: auto; }
 
 /* サブタイル: セクションの中のアイテムもタイルで並べる */
 .items.is-subtiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; padding: 10px 12px 12px; }
