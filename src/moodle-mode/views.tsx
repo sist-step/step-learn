@@ -604,42 +604,48 @@ const TileCard = ({
   const progress = isStudent && tracked.length > 0 ? layout.progress : 'none'
   const pct = tracked.length ? Math.round((done / tracked.length) * 100) : 0
   const complete = tracked.length > 0 && done === tracked.length
+  const showPct = progress === 'percent' && !locked
   const body = (
     <>
       <span class="sec-tile-media">
         {tile?.photo ? (
           <img src={`/courses/${courseId}/sections/${s.id}/photo/${encodeURIComponent(tile.photo)}`} alt="" loading="lazy" />
-        ) : number ? (
-          <span class="sec-tile-number">{number}</span>
         ) : (
-          <TileIcon name={icon} />
+          <span class="sec-tile-glyph">{number ? <span class="sec-tile-number">{number}</span> : <TileIcon name={icon} />}</span>
+        )}
+        <span class="sec-tile-num">{o.sectionNumber.get(s.id) ?? <Icon name="eyeSlash" size={12} />}</span>
+        {locked ? (
+          <span class="sec-tile-badge is-locked">
+            <Icon name="lock" size={14} />
+          </span>
+        ) : (
+          isStudent &&
+          complete && (
+            <span class="sec-tile-badge is-done" role="img" aria-label="完了">
+              <Icon name="check" size={14} />
+            </span>
+          )
         )}
       </span>
       <span class="sec-tile-body">
-        <span class="sec-tile-eyebrow">
-          <span class="sec-tile-num">{o.sectionNumber.get(s.id) ?? <Icon name="eyeSlash" size={12} />}</span>
-          {s.hidden && <HiddenChip />}
-          {isStudent && complete && <Icon name="checkCircle" size={16} class="sec-tile-done" />}
-        </span>
         <span class="sec-tile-title">{s.title}</span>
-        <span class="sec-tile-meta truncate">
-          {locked ? (
-            <>
-              <Icon name="lock" size={12} /> {s.restriction || 'まだ開けません'}
-            </>
-          ) : empty ? (
-            '準備中'
-          ) : progress === 'fraction' ? (
-            `${done} / ${tracked.length} 完了`
-          ) : (
-            `${shown.length} アイテム`
-          )}
+        {s.hidden && <HiddenChip />}
+        <span class="sec-tile-meta">
+          <span class="truncate">
+            {locked
+              ? s.restriction || 'まだ開けません'
+              : empty
+                ? '準備中'
+                : progress === 'fraction'
+                  ? `${done} / ${tracked.length} 完了`
+                  : `${shown.length} アイテム`}
+          </span>
+          {showPct && pct > 0 && <span class="sec-tile-pct">{pct}%</span>}
         </span>
       </span>
-      {progress === 'percent' && !locked && (
+      {showPct && (
         <span class="sec-tile-progress" role="img" aria-label={`${pct}% 完了`}>
-          <span class="sec-tile-progress-bar" style={`--w:${pct}%`} />
-          <span class="sec-tile-progress-label">{pct}%</span>
+          <span style={`--w:${pct}%`} />
         </span>
       )}
     </>
