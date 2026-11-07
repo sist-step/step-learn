@@ -330,6 +330,8 @@ export async function showItem(c: Context<AppEnv>) {
       type: items.type,
       title: items.title,
       url: items.url,
+      fileName: items.fileName,
+      fileType: items.fileType,
       hidden: items.hidden,
       completion: items.completion,
     })
