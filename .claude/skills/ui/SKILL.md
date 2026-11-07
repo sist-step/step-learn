@@ -114,6 +114,19 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `CourseRow` | コースの 1 行表示（頭文字・名前・コード。右端は教師なら「担当」、学生は進捗、それ以外は矢印）。タイルの中などの狭い場所で使う |
 | `formatDate` | UNIX 秒を「2026年10月28日」形式で表示 |
 
+### マスコット — `src/components/mascot.tsx`
+
+| 部品 | 用途 |
+| --- | --- |
+| `Mascot` | ロゴ（シアンの輪・黒い枠・STEP の帯）を元にした SVG のキャラクター。`mood`（`normal` / `happy` / `sad` / `surprised` / `thinking` / `sleepy`）/ `pose`（`idle` / `wave` / `cheer` / `point`）/ `motion`（`none` / `float` / `bounce` / `hop` / `wiggle`、既定 `float`）/ `look`（`front` / `left` / `right` / `up`）/ `size`（幅 px、既定 120）/ `stand`（足元の STEP の台、既定 `true`）/ `say`（右に出す吹き出し）/ `label`（渡すと `role="img"` の代替テキストになり、なければ飾りとして隠す）。値の一覧は `MASCOT_MOODS` などの配列 |
+
+`Mascot` は全部の表情・腕を描いておき、ルート要素の `data-mood` / `data-pose` / `data-motion` / `data-look` で CSS が出し分ける。表示後に `client.ts` から `el.dataset.mood = 'happy'` と書き換えるだけで切り替わる（腕と視線はトランジションで動く）。色は `.mascot` の `--mascot-ink` / `--mascot-ring` / `--mascot-face` / `--mascot-eye` / `--mascot-cheek` で上書きできる。
+
+```tsx
+<Mascot mood="happy" pose="wave" say="こんにちは！" />
+<Mascot mood="sleepy" motion="none" stand={false} size={64} label="眠っている STEP のキャラクター" />
+```
+
 ### PDF — `src/components/pdf.tsx`
 
 | 部品 | 用途 |
