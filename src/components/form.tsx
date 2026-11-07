@@ -294,15 +294,18 @@ export const SegmentedControl = ({
   label,
   options,
   value = options[0]?.value,
+  class: cls,
+  ...rest
 }: {
   name: string
   label: string
   options: readonly SegmentOption[]
   value?: string
-}) => {
+  class?: string
+} & JSX.IntrinsicElements['div']) => {
   useStyle('/src/components/form.css')
   return (
-    <div class="segmented" role="radiogroup" aria-label={label}>
+    <div class={cx('segmented', cls)} role="radiogroup" aria-label={label} {...rest}>
       {options.map((o) => (
         <label>
           <input type="radio" name={name} value={o.value} checked={o.value === value} />

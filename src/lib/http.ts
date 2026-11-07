@@ -71,6 +71,12 @@ const COURSES_COOKIE = 'courses'
 
 export const showsAllCourses = (c: Context) => getCookie(c, COURSES_COOKIE) === 'all'
 
+export type PdfMode = 'viewer' | 'browser'
+
+const PDF_COOKIE = 'pdf'
+
+export const getPdfMode = (c: Context): PdfMode => (getCookie(c, PDF_COOKIE) === 'browser' ? 'browser' : 'viewer')
+
 export type Form = Record<string, string | File | (string | File)[]>
 
 export async function readForm(c: Context): Promise<Form> {

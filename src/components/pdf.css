@@ -1,0 +1,79 @@
+/* ==========================================================================
+   PDF（ヘッダーの帯・ビューアー）
+   ========================================================================== */
+
+/* ===== ヘッダーの帯 */
+.pdf-bar { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding-left: 12px; }
+.pdf-bar > .item-icon { width: 32px; height: 32px; border-radius: 8px; flex: none; }
+.pdf-bar-text { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.35; }
+.pdf-bar-text .crumbs { font-size: var(--fs-xs); }
+.pdf-bar h1 { font-size: var(--fs-md); font-weight: 650; }
+.pdf-bar-hidden { flex: none; }
+.pdf-bar-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.pdf-mode { align-self: center; padding: 3px; }
+.pdf-mode span { padding: 4px 12px; }
+
+/* ===== 本文 */
+.pdf-stage { position: relative; height: calc(100dvh - var(--topbar-h)); min-height: 360px; }
+.pdf-frame { display: block; width: 100%; height: 100%; border: 0; background: var(--surface-3); }
+.pdf-stage + .reader { max-width: 1120px; margin: 40px auto 0; padding: 0 32px; }
+
+/* ===== ビューアー */
+.pdf-viewer { position: absolute; inset: 0; background: var(--surface-3); }
+.pdf-pages { position: absolute; inset: 0; overflow: auto; padding: 24px 24px 88px; scrollbar-gutter: stable; }
+.pdf-pages:focus-visible { outline-offset: -2px; }
+.pdf-page {
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  position: relative;
+  margin: 0 auto 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+.pdf-page > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pdf-status { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 24px; text-align: center; }
+
+.pdf-toolbar {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  translate: -50% 0;
+  border: 1px solid var(--overlay-border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-lg);
+  white-space: nowrap;
+}
+.pdf-toolbar[hidden] { display: none; }
+.pdf-page-count { display: flex; align-items: center; gap: 6px; padding: 0 4px; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.pdf-toolbar .pdf-page-input { width: 3.5em; height: var(--control-h-sm); padding: 0 4px; text-align: center; font-variant-numeric: tabular-nums; }
+.pdf-toolbar-sep { width: 1px; height: 20px; margin: 0 4px; background: var(--border-strong); }
+.pdf-zoom { min-width: 3.5em; font-size: var(--fs-sm); font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
+.pdf-toolbar .icon-btn[aria-pressed='true'] { background: var(--c-soft); color: var(--c-ink); }
+
+/* pdf.js の pdf_viewer.css を読み込まないのは、使わない部品（注釈・フォーム・検索など）の CSS が大半を占めるため。文字の選択に要る分だけを写している */
+.pdf-text { position: absolute; inset: 0; z-index: 0; overflow: clip; line-height: 1; text-align: initial; letter-spacing: normal; word-spacing: normal; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; color-scheme: only light; --min-font-size: 1; --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv: calc(1 / var(--min-font-size)); }
+.pdf-text :is(span, br) { position: absolute; color: transparent; white-space: pre; cursor: text; transform-origin: 0% 0%; user-select: text; }
+.pdf-text > :not(.markedContent), .pdf-text .markedContent span:not(.markedContent) { z-index: 1; --font-height: 0; --scale-x: 1; --rotate: 0deg; font-size: calc(var(--text-scale-factor) * var(--font-height)); transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
+.pdf-text .markedContent { display: contents; }
+.pdf-text span[role='img'] { user-select: none; cursor: default; }
+.pdf-text ::selection { background: color-mix(in srgb, var(--focus) 30%, transparent); color: transparent; }
+
+@media (max-width: 900px) {
+  .pdf-bar { padding-left: 4px; gap: 10px; }
+  .pdf-stage + .reader { padding: 0 16px; margin-top: 28px; }
+}
+@media (max-width: 640px) {
+  .pdf-bar > .item-icon, .pdf-bar-text .crumbs, .pdf-bar-hidden, .pdf-toolbar-sep, .pdf-zoom { display: none; }
+  .pdf-bar { gap: 6px; }
+  .pdf-bar-actions { gap: 4px; }
+  /* 文字を display: none で消さないのは、アイコンだけになっても読み上げでは「ビューアー」「ブラウザ」と伝えるため */
+  .pdf-mode span { gap: 0; padding: 6px 10px; font-size: 0; }
+  .pdf-pages { padding: 12px 12px 80px; }
+  .pdf-page { margin-bottom: 12px; }
+}

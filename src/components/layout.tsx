@@ -100,7 +100,7 @@ const UserMenu = ({ editable }: { editable?: boolean }) => {
   )
 }
 
-export const AppShell = ({ children, editable, tone }: { children: Child; editable?: boolean; tone?: string }) => {
+export const AppShell = ({ children, editable, tone, topbar }: { children: Child; editable?: boolean; tone?: string; topbar?: Child }) => {
   useStyle('/src/components/layout.css')
   const c = useRequestContext<AppEnv>()
   const user = c.var.user!
@@ -122,12 +122,13 @@ export const AppShell = ({ children, editable, tone }: { children: Child; editab
   ).filter((l) => l !== false)
 
   return (
-    <div class="app">
+    <div class={cx('app', !!topbar && 'app-immersive')}>
       <header class="topbar">
         <div class="topbar-start">
           <IconButton icon="menu" label="メニューを開く" iconSize={18} class="nav-open-btn" data-nav-toggle aria-controls="rail" />
           <Brand />
         </div>
+        {topbar && <div class={cx('topbar-main', tone && `tone-${tone}`)}>{topbar}</div>}
         <div class="topbar-end">
           {editable && (
             <button
