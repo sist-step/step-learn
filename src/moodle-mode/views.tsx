@@ -7,6 +7,7 @@ import { Icon, type IconName } from '../components/icons'
 import { AppShell, AuthShell } from '../components/layout'
 import { Markdown } from '../components/markdown'
 import { MenuItem, Modal, Popover } from '../components/overlay'
+import { PdfBar, PdfStage } from '../components/pdf'
 import { Styles, useStyle } from '../components/style'
 import { Alert, Breadcrumbs, Chip, EmptyState, TabPanel } from '../components/ui'
 import type { CourseAccess } from '../lib/courses'
@@ -865,11 +866,6 @@ export const ItemPage = ({
             編集
           </Button>
         )}
-        {pdf && (
-          <Button href={fileUrl} size="sm" icon="download" aria-label="ダウンロード" data-no-prefetch download {...onOpen(item)}>
-            <span class="hide-sm">ダウンロード</span>
-          </Button>
-        )}
       </header>
       {access.canManage && isHidden(item) && (
         <Alert tone="info">
@@ -880,18 +876,35 @@ export const ItemPage = ({
     </>
   )
 
-  return (
-    <AppShell tone={access.course.color}>
-      <Styles use={['/src/routes/content/content.css', '/src/moodle-mode/moodle-mode.css']} />
-      {pdf ? (
-        <div class="pdf-stage">
-          {crumbs}
-          {head}
-          <iframe class="file-preview" src={previewUrl} title={item.fileName} />
-        </div>
-      ) : (
-        crumbs
+  const pdfBar = pdf ? (
+    <PdfBar
+      crumbs={[
+        { href: '/courses', label: 'コース一覧' },
+        { href: `/courses/${id}`, label: access.course.title },
+        ...(section && position > 0
+          ? [{ href: sectionHref(id, layout, sections, section.id), label: `${section.title} · ${position} / ${siblings.length}` }]
+          : []),
+      ]}
+      title={item.title}
+      hiddenNote={
+        access.canManage && isHidden(item) ? `${item.hidden ? 'このアイテム' : 'このアイテムのセクション'}は学生に非表示です。` : undefined
+      }
+    >
+      {access.canManage && (
+        <Button href={`${base}/${item.id}/edit`} variant="ghost" size="sm" icon="pencil" aria-label="編集">
+          <span class="hide-sm">編集</span>
+        </Button>
       )}
+      <Button href={fileUrl} size="sm" icon="download" aria-label="ダウンロード" data-no-prefetch download {...onOpen(item)}>
+        <span class="hide-sm">ダウンロード</span>
+      </Button>
+    </PdfBar>
+  ) : undefined
+
+  return (
+    <AppShell tone={access.course.color} topbar={pdfBar}>
+      <Styles use={['/src/routes/content/content.css', '/src/moodle-mode/moodle-mode.css']} />
+      {pdf ? <PdfStage src={previewUrl} title={item.fileName} /> : crumbs}
       <div class="reader">
         <article class="reader-main">
           {!pdf && head}

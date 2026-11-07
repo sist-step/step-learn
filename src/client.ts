@@ -40,6 +40,16 @@ document.addEventListener('click', (e) => {
   void visit(new URL(location.href))
 })
 
+// --- PDF の表示方法（components/pdf.tsx の PdfBar。クッキーでサーバーに伝え、今の画面を描き直す）
+document.addEventListener('change', (e) => {
+  const input = e.target
+  if (!(input instanceof HTMLInputElement) || !input.closest('[data-pdf-mode]')) return
+  document.cookie =
+    input.value === 'browser' ? 'pdf=browser; path=/; max-age=31536000; samesite=lax' : 'pdf=; path=/; max-age=0; samesite=lax'
+  prefetched.clear()
+  void visit(new URL(location.href))
+})
+
 function syncThemeColor() {
   const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
   document.querySelector('meta[name=theme-color]')?.setAttribute('content', bg)
@@ -810,6 +820,22 @@ function initAuthArt() {
   authArt.then(({ showAuthArt }) => showAuthArt(host)).catch(() => {})
 }
 
+// --- PDF ビューアー（components/pdf.tsx の PdfStage）
+// ここに直接 import しないのは、pdf.js が大きく、PDF のない画面でも毎回読み込むことになるため
+let pdfViewer: Promise<typeof import('./pdf-viewer')> | null = null
+function initPdfViewers() {
+  void pdfViewer?.then(({ releaseDetachedPdfViewers }) => releaseDetachedPdfViewers())
+  const roots = $$<HTMLElement>('[data-pdf-viewer]:not([data-pdf-ready])')
+  if (!roots.length) return
+  pdfViewer ??= import('./pdf-viewer')
+  pdfViewer
+    .then(({ mountPdfViewer }) => roots.forEach((root) => void mountPdfViewer(root)))
+    .catch(() => {
+      pdfViewer = null
+      toast('PDF ビューアーを読み込めませんでした。', 'error')
+    })
+}
+
 // --- ⌘S / Ctrl+S で保存（data-save-shortcut のボタンを押す）
 document.addEventListener('keydown', (e) => {
   if (e.key !== 's' || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return
@@ -1064,7 +1090,18 @@ function patch(from: Element, to: Element, persist: boolean) {
 
 function swapBody(next: HTMLElement) {
   const kept = $$('[data-persist]').some((el) => el.id && next.querySelector(`#${CSS.escape(el.id)}[data-persist]`))
-  kept ? patch(document.body, next, false) : document.body.replaceWith(next)
+  if (!kept) return document.body.replaceWith(next)
+  const immersive = (root: ParentNode) => !!root.querySelector('.app-immersive')
+  const changesRail = immersive(document.body) !== immersive(next)
+  patch(document.body, next, false)
+  const rail = changesRail ? document.getElementById('rail') : null
+  if (!rail) return
+  // CSS だけで止めないのは、サイドバーが遷移しても同じ要素のまま残り、細いレールとヘッダーから開くサイドバーの間の幅と位置の transition を、CSS では開閉によるものと区別できないため
+  // 差し替えの前に付けないのは、patch が新しいページに合わせて style 属性を消すため
+  rail.style.setProperty('transition', 'none')
+  // 次の描画を待たずにここで計算させ、戻すのも 2 フレーム後にするのは、View Transition の更新中は描画が止まっていて、新しい見た目を計算する前に戻すとその時点から transition が始まるため
+  void getComputedStyle(rail).transform
+  requestAnimationFrame(() => requestAnimationFrame(() => rail.style.removeProperty('transition')))
 }
 
 // --- 開いているサイドバーを遷移中も開いたままにする
@@ -1441,5 +1478,6 @@ function initContent() {
   applyEditMode(readEditMode())
   updateToc()
   initMarkdownEditors()
+  initPdfViewers()
 }
 initPage()
