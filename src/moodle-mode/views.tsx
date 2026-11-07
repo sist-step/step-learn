@@ -1,4 +1,4 @@
-import { CourseHeader, CourseLiveSync, ItemIcon, nextActionLabel } from '../components/course'
+import { CourseHeader, CourseLiveSync, ItemIcon } from '../components/course'
 import { Button, IconButton } from '../components/button'
 import { Card, DangerRow, LinkCard } from '../components/card'
 import { cx } from '../components/cx'
@@ -463,7 +463,8 @@ const SectionCard = ({
   const list = o.bySection.get(s.id) ?? []
   const { contents, shown, tracked, done } = o.statsOf(s.id)
   const hiddenCount = contents.length - shown.length
-  const empty = !manage && shown.length === 0
+  const locked = !manage && s.locked
+  const empty = !manage && !locked && shown.length === 0
   const emptyView = manage && shown.length === 0
   const { open = true, fixed = false, group, current = false, summaryInHead = false, subtiles = false, closable = false } = options
   return (
@@ -471,7 +472,8 @@ const SectionCard = ({
       class={cx(
         'section-card',
         s.hidden && 'is-hidden edit-only',
-        empty && 'is-empty',
+        (empty || locked) && 'is-empty',
+        locked && 'is-locked',
         emptyView && 'is-empty-view',
         fixed && 'is-fixed',
         current && 'is-current',
@@ -485,7 +487,13 @@ const SectionCard = ({
         <span class="section-num">{o.sectionNumber.get(s.id) ?? <Icon name={s.number === 0 ? 'home' : 'eyeSlash'} size={14} />}</span>
         <span class="section-title-wrap">
           <span class="section-title">{s.title}</span>
-          {!empty && (
+          {locked && (
+            <span class="section-restriction muted small">
+              <Icon name="lock" size={14} />
+              <span>{s.restriction || 'まだ開けません'}</span>
+            </span>
+          )}
+          {!empty && !locked && (
             <span class="muted small">
               {emptyView && <span class="view-only">{hiddenCount > 0 ? `非表示 ${hiddenCount}` : 'アイテムなし'}</span>}
               <span class={emptyView ? 'edit-only' : undefined}>{`${shown.length} アイテム`}</span>
@@ -724,8 +732,6 @@ export const CoursePage = ({
   const shownItems = o.visibleSections.flatMap((s) => o.contentsOf(s.id).filter(o.isShown))
   const trackedItems = shownItems.filter(isTracked)
   const doneCount = trackedItems.filter((it) => it.done).length
-  const openable = shownItems.filter((it) => isOpenable(it) && !it.locked)
-  const nextItem = openable.find((it) => isTracked(it) && !it.done) ?? (trackedItems.length === 0 ? openable[0] : undefined)
   const props = { o, courseId: id, isStudent, manage }
 
   return (
@@ -736,22 +742,6 @@ export const CoursePage = ({
         tab="content"
         editSwitch={false}
         progress={isStudent ? { done: doneCount, total: trackedItems.length } : undefined}
-        actions={
-          isStudent &&
-          nextItem && (
-            <div class="course-next">
-              <Button
-                href={itemHref(id, nextItem)}
-                variant="primary"
-                iconEnd={opensNewTab(nextItem) ? 'external' : 'chevronRight'}
-                {...(opensNewTab(nextItem) ? { target: '_blank', rel: 'noopener', 'data-no-prefetch': '' } : {})}
-              >
-                {nextActionLabel(doneCount)}
-              </Button>
-              <span class="course-next-meta muted small truncate">次: {nextItem.title}</span>
-            </div>
-          )
-        }
         tabActions={
           <>
             <Button href={moodleCourseUrl} variant="ghost" icon="external" target="_blank" rel="noopener" data-no-prefetch>
