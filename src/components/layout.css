@@ -120,6 +120,24 @@
 .content { max-width: calc(1120px + var(--rail-w)); margin: 0 auto; padding: 20px 32px 96px calc(var(--rail-w) + 8px); }
 .backdrop { display: none; }
 
+.topbar-main { display: flex; align-items: center; flex: 1; min-width: 0; height: 100%; }
+.app-immersive .content { max-width: none; padding: 0; }
+.app-immersive .topbar .brand-name { display: none; }
+/* 遷移でサイドバーを細いレールから変形させないのは、画面の外に隠れた広いサイドバーとの間で形を補間して、消える途中で大きく引き伸ばされるため */
+.app-immersive .rail { view-transition-name: none; }
+@media (max-width: 640px) {
+  .app-immersive .topbar .brand { display: none; }
+}
+/* ヘッダーに中身を置く画面（AppShell の topbar）でレールを出したままにしないのは、ヘッダーの下を本文だけで埋めるため */
+@media (min-width: 901px) {
+  .app-immersive .topbar { padding-left: 16px; }
+  .app-immersive .nav-open-btn { display: inline-grid !important; width: 40px; height: 40px; }
+  .app-immersive .rail { width: var(--rail-w-open); background: var(--chrome); border-right: 1px solid var(--overlay-border); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; transform: translateX(-100%); visibility: hidden; transition: transform 0.25s var(--ease), visibility 0s 0.25s; }
+  .app-immersive .rail .rail-label { opacity: 1; }
+  .nav-open .app-immersive .rail { transform: none; visibility: visible; box-shadow: var(--shadow-lg); transition: transform 0.25s var(--ease); }
+  .nav-open .app-immersive .backdrop { display: block; position: fixed; inset: var(--topbar-h) 0 0; z-index: 30; background: rgb(0 0 0 / 0.25); animation: fade 0.2s; }
+}
+
 @media (max-width: 900px) {
   :root { --topbar-h: 56px; }
   .topbar { padding: 0 12px; gap: 8px; }

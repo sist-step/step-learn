@@ -9,6 +9,7 @@ import external from 'heroicons/24/outline/arrow-top-right-on-square.svg?raw'
 import arrowUp from 'heroicons/24/outline/arrow-up.svg?raw'
 import upload from 'heroicons/24/outline/arrow-up-tray.svg?raw'
 import maximize from 'heroicons/24/outline/arrows-pointing-out.svg?raw'
+import fitWidth from 'heroicons/24/outline/arrows-right-left.svg?raw'
 import menu from 'heroicons/24/outline/bars-3.svg?raw'
 import bold from 'heroicons/24/outline/bold.svg?raw'
 import book from 'heroicons/24/outline/book-open.svg?raw'
@@ -37,6 +38,8 @@ import italic from 'heroicons/24/outline/italic.svg?raw'
 import link from 'heroicons/24/outline/link.svg?raw'
 import listBullet from 'heroicons/24/outline/list-bullet.svg?raw'
 import search from 'heroicons/24/outline/magnifying-glass.svg?raw'
+import zoomOut from 'heroicons/24/outline/magnifying-glass-minus.svg?raw'
+import zoomIn from 'heroicons/24/outline/magnifying-glass-plus.svg?raw'
 import moon from 'heroicons/24/outline/moon.svg?raw'
 import lock from 'heroicons/24/outline/lock-closed.svg?raw'
 import listNumbered from 'heroicons/24/outline/numbered-list.svg?raw'
@@ -91,6 +94,9 @@ const svgs = {
   alert,
   monitor,
   maximize,
+  fitWidth,
+  zoomIn,
+  zoomOut,
   moon,
   photo,
   bold,

@@ -45,6 +45,7 @@
     "heroicons": "^2.2.0",
     "oxlint": "^1.90.0",
     "oxlint-tsgolint": "^7.0.2005",
+    "pdfjs-dist": "^6.4.299",
     "prettier": "^3.9.10",
     "socket.io-client": "^4.8.4",
     "three": "^0.187.0",
