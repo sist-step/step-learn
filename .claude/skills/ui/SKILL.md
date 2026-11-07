@@ -5,7 +5,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 
 # UI の作り方
 
-方針は「SSR ＋ 小さなクライアント JS」。JavaScript は必須で、無効なときは renderer の noscript が案内だけを出すので、JS なしの代替は作らない。CSS は部品・画面ごとのファイルに分け、そのページで使う分だけを読み込む（下の「CSS の置き場所と読み込み」）。JS は `src/client.ts` の 1 ファイル（重いライブラリを使うものは分けて、使う画面でだけ `client.ts` が動的に読み込む。Markdown エディターの CodeMirror は `src/markdown-editor.ts`、ログイン画面の three.js は `src/auth-art.ts`）。CSS フレームワークや UI ライブラリは入れない。
+方針は「SSR ＋ 小さなクライアント JS」。JavaScript は必須で、無効なときは renderer の noscript が案内だけを出すので、JS なしの代替は作らない。CSS は部品・画面ごとのファイルに分け、そのページで使う分だけを読み込む（下の「CSS の置き場所と読み込み」）。JS は `src/client.ts` の 1 ファイル（重いライブラリを使うものは分けて、使う画面でだけ `client.ts` が動的に読み込む。Markdown エディターの CodeMirror は `src/markdown-editor.ts`、ログイン画面の three.js は `src/auth-art.ts`、PDF ビューアーの pdf.js は `src/pdf-viewer.ts`）。CSS フレームワークや UI ライブラリは入れない。
 
 ## まず既存の部品を使う
 
@@ -114,6 +114,13 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `CourseRow` | コースの 1 行表示（頭文字・名前・コード。右端は教師なら「担当」、学生は進捗、それ以外は矢印）。タイルの中などの狭い場所で使う |
 | `formatDate` | UNIX 秒を「2026年10月28日」形式で表示 |
 
+### PDF — `src/components/pdf.tsx`
+
+| 部品 | 用途 |
+| --- | --- |
+| `PdfBar` | PDF のアイテムで `AppShell` の `topbar` に渡す帯（パンくず・タイトル・「ビューアー / ブラウザ」の切り替え・`children` の操作ボタン）。切り替えは `pdf` クッキーに保存し、サーバーが読んで描き分ける |
+| `PdfStage` | ヘッダーの下いっぱいの PDF 表示。既定は pdf.js の自作ビューアー（`src/pdf-viewer.ts`。`client.ts` が PDF のある画面でだけ読み込む）、ブラウザを選ぶと iframe でブラウザ標準のビューアー |
+
 ログイン前の画面（`AuthShell`）の右側は、`src/auth-art.ts` が three.js で描く 3D アニメーション（背景は無地で、台座の上で小さなキューブが 14 種類の形（ロケット・ネコ・家・アイスクリームなど。`MODELS`）に組み上がっては組み替わる。クリックでつつくとキューブが弾け、3 回続けると次の形へ。ドラッグで回せる）。`data-auth-art` の要素に `client.ts` が canvas を置き、再読み込みなしの遷移では同じ canvas を新しい要素へ移して続きから動かす。色は `--art-deep` / `--art-mid` / `--art-bright` / `--art-shine` とコースの色（`tone-*`）を読み取る。スマホ幅（非表示）では three.js を読み込まない
 
 クラス名を条件で組み立てるときは `components/cx.ts` の `cx('a', cond && 'b')` を使う。
@@ -127,7 +134,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 - 部品が出すクラスは `src/client.ts` も参照している（`btn-success` の切り替え、`data-toggle-password` など）。名前を変えるときは `client.ts` も検索する
 - 部品を足したら、この表にも追記する
 
-`src/components/layout.tsx` の `AppShell`（ログイン後。コース配下の画面では `tone` にコースの色を渡す）/ `AuthShell`（ログイン前）で必ず包む。コース配下の画面は `components/course.tsx` の `CourseHeader` でタブを出す。
+`src/components/layout.tsx` の `AppShell`（ログイン後。コース配下の画面では `tone` にコースの色を渡す。`topbar` に中身を渡すとヘッダーにその画面の見出しや操作を置き、レールを畳んで本文をヘッダーの下いっぱいに広げる。例は PDF のアイテム）/ `AuthShell`（ログイン前）で必ず包む。コース配下の画面は `components/course.tsx` の `CourseHeader` でタブを出す。
 
 アイコンは `<Icon name="..." size={16} />`（`components/icons.tsx`）。使える名前は `svgs` のキー。アイコンは [Heroicons](https://heroicons.com/) の 24px outline だけを使い、足すときは devDependency の `heroicons` から `import foo from 'heroicons/24/outline/<名前>.svg?raw'` で読み込んで `svgs` に加える（ビルド時に文字列として埋め込まれるので、実行時の依存は増えない）。パスを手書きしたり、外部のアイコンフォントや画像を使ったりしない。
 
