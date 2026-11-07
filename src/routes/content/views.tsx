@@ -17,7 +17,7 @@ import { ITEM_TYPE_LABELS, type Item, type Section } from '../../lib/types'
 
 export type ItemInput = { title: string; body: string; url: string; file: File | null }
 
-export type OutlineItem = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'url' | 'hidden' | 'completion'>
+export type OutlineItem = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'url' | 'fileName' | 'fileType' | 'hidden' | 'completion'>
 
 export type OutlineSection = Pick<Section, 'id' | 'title' | 'hidden'>
 
@@ -220,6 +220,8 @@ export const ItemPage = ({
   const tracked = outline.filter(isTracked)
 
   const navHref = (o: OutlineItem) => `${base}/${o.id}`
+  const opensNewTab = (o: OutlineItem) =>
+    o.type === 'link' || o.type === 'screen' || (o.type === 'file' && previewKind(o.fileType ?? '', o.fileName ?? '') === 'pdf')
   const hiddenSections = new Set(sections.filter((s) => s.hidden).map((s) => s.id))
   const isHidden = (o: OutlineItem) => !!o.hidden || hiddenSections.has(o.sectionId)
   const siblings = outline.filter((o) => o.sectionId === item.sectionId)
@@ -462,7 +464,7 @@ export const ItemPage = ({
                       <a
                         href={o.type === 'link' ? o.url : o.type === 'screen' ? `${navHref(o)}/screen` : navHref(o)}
                         class={cx('outline-link', o.id === item.id && 'active', isHidden(o) && 'is-hidden')}
-                        {...(o.type === 'link' || o.type === 'screen'
+                        {...(opensNewTab(o)
                           ? { target: '_blank', rel: o.type === 'link' ? 'noopener noreferrer' : 'noopener', 'data-no-prefetch': '' }
                           : {})}
                         aria-current={o.id === item.id ? 'page' : undefined}

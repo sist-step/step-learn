@@ -31,10 +31,14 @@ import { Chip, CourseCard, EmptyState, PageHeader, TabPanel, type CourseCardData
 import { courseImageUrl, type CourseImageKind } from '../../lib/course-images'
 import type { CourseAccess } from '../../lib/courses'
 import { MAX_IMAGE_SIZE } from '../../lib/images'
+import { previewKind } from '../../lib/preview'
 import { formatBytes } from '../../lib/storage'
 import { COMPLETION_LABELS, ITEM_TYPE_LABELS, type Completion, type Item, type ItemType, type Section } from '../../lib/types'
 
-export type ItemLite = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'url' | 'fileName' | 'fileSize' | 'hidden' | 'completion'>
+export type ItemLite = Pick<
+  Item,
+  'id' | 'sectionId' | 'type' | 'title' | 'url' | 'fileName' | 'fileSize' | 'fileType' | 'hidden' | 'completion'
+>
 
 // ---------------------------------------------------------------- 一覧
 
@@ -112,7 +116,8 @@ const ItemRow = ({
   const tracked = completion && completion !== 'none'
   const opensToComplete = isStudent && completion === 'view' && item.type === 'link' && !done
   const external = item.type === 'link'
-  const newTab = item.type === 'link' || item.type === 'screen'
+  const pdf = item.type === 'file' && previewKind(item.fileType ?? '', item.fileName ?? '') === 'pdf'
+  const newTab = item.type === 'link' || item.type === 'screen' || pdf
   const href = item.type === 'link' ? item.url : item.type === 'screen' ? `${base}/screen` : base
   const meta =
     item.type === 'link'
