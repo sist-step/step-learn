@@ -63,7 +63,8 @@ const KindIcon = ({ item }: { item: MItem }) => {
 const itemHref = (courseId: number, it: MItem) =>
   it.kind === 'link' || it.kind === 'moodle' ? it.url : `/courses/${courseId}/items/${it.id}`
 
-const opensNewTab = (it: MItem) => it.kind === 'link' || it.kind === 'moodle'
+const opensNewTab = (it: MItem) =>
+  it.kind === 'link' || it.kind === 'moodle' || (it.kind === 'file' && previewKind(it.fileType, it.fileName) === 'pdf')
 
 const HiddenChip = () => <Chip icon="eyeSlash">学生に非表示</Chip>
 
