@@ -1,0 +1,120 @@
+/* ===== マスコット */
+.mascot {
+  --mascot-ink: var(--text);
+  --mascot-ring: var(--accent);
+  --mascot-face: var(--art-shine);
+  --mascot-eye: var(--art-deep);
+  --mascot-cheek: color-mix(in srgb, var(--danger) 40%, transparent);
+  --mascot-stand-text: var(--surface);
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.mascot-svg { display: block; flex: none; overflow: visible; }
+/* 変形の基準を view-box にしないと、transform-origin がグループの外接矩形の左上から測られ、座標に合わせて回せない */
+.mascot-svg :is(g, path, ellipse) { transform-box: view-box; }
+
+.mascot-ink { fill: var(--mascot-ink); }
+.mascot-bracket { fill: none; stroke: var(--mascot-ink); stroke-width: 9; stroke-linejoin: miter; }
+.mascot-face { fill: var(--mascot-face); }
+.mascot-ring { fill: none; stroke: var(--mascot-ring); stroke-width: 13; stroke-linejoin: miter; stroke-dasharray: 0 3.5 101 7 247 3.5; }
+.mascot-limb { fill: none; stroke: var(--mascot-ring); stroke-width: 7; stroke-linecap: round; }
+.mascot-hand { fill: var(--mascot-ring); stroke: var(--mascot-ink); stroke-width: 2.5; }
+.mascot-cheek { fill: var(--mascot-cheek); opacity: 0.7; transition: opacity 0.3s; }
+.mascot-pupil { fill: var(--mascot-eye); }
+.mascot-shine { fill: var(--mascot-face); }
+.mascot-line { fill: none; stroke: var(--mascot-eye); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.mascot-tear { fill: var(--mascot-ring); stroke: var(--mascot-eye); stroke-width: 1; }
+.mascot-zzz { fill: var(--mascot-ink); font-weight: 700; font-size: 14px; }
+.mascot-zzz text:last-child { font-size: 18px; }
+.mascot-stand text { fill: var(--mascot-stand-text); font-weight: 800; font-size: 16px; letter-spacing: 3px; text-anchor: middle; }
+
+/* ----- 表情（data-mood） */
+.mascot :is(.mascot-mouth, .mascot-eyes-happy, .mascot-eyes-sleepy, .mascot-tear, .mascot-zzz, .mascot-brows) { display: none; }
+.mascot[data-mood='normal'] .mascot-mouth-normal,
+.mascot[data-mood='happy'] :is(.mascot-mouth-happy, .mascot-eyes-happy),
+.mascot[data-mood='sad'] :is(.mascot-mouth-sad, .mascot-tear, .mascot-brows),
+.mascot[data-mood='surprised'] :is(.mascot-mouth-surprised, .mascot-brows),
+.mascot[data-mood='thinking'] :is(.mascot-mouth-thinking, .mascot-brows),
+.mascot[data-mood='sleepy'] :is(.mascot-mouth-sleepy, .mascot-eyes-sleepy, .mascot-zzz) { display: inline; }
+.mascot:is([data-mood='happy'], [data-mood='sleepy']) .mascot-eyes-open { display: none; }
+.mascot[data-mood='happy'] .mascot-cheek { opacity: 1; }
+.mascot[data-mood='sad'] .mascot-cheek { opacity: 0.3; }
+
+.mascot-brow-l { transform-origin: 83px 91px; }
+.mascot-brow-r { transform-origin: 117px 91px; }
+.mascot[data-mood='sad'] .mascot-brow-l { transform: translateY(2px) rotate(-18deg); }
+.mascot[data-mood='sad'] .mascot-brow-r { transform: translateY(2px) rotate(18deg); }
+.mascot[data-mood='surprised'] .mascot-brows { transform: translateY(-5px); }
+.mascot[data-mood='thinking'] .mascot-brow-l { transform: translateY(2px); }
+.mascot[data-mood='thinking'] .mascot-brow-r { transform: translateY(-4px) rotate(10deg); }
+
+.mascot-eyes-open { transform-origin: 100px 104px; transition: transform 0.25s; }
+.mascot[data-mood='surprised'] .mascot-eyes-open { transform: scale(1.25); }
+.mascot-blink { transform-origin: 100px 104px; animation: mascot-blink 4.5s infinite; }
+
+/* ----- 視線（data-look） */
+.mascot-gaze { transition: transform 0.3s ease-out; }
+.mascot[data-look='left'] .mascot-gaze { transform: translateX(-4px); }
+.mascot[data-look='right'] .mascot-gaze { transform: translateX(4px); }
+.mascot[data-look='up'] .mascot-gaze { transform: translateY(-4px); }
+
+/* ----- ポーズ（data-pose） */
+.mascot-arm { transition: transform 0.35s cubic-bezier(0.3, 1.4, 0.5, 1); }
+.mascot-arm-l { transform-origin: 46px 124px; }
+.mascot-arm-r { transform-origin: 154px 124px; }
+.mascot[data-pose='wave'] .mascot-arm-r { animation: mascot-wave 0.45s ease-in-out infinite alternate; }
+.mascot[data-pose='cheer'] .mascot-arm-l { transform: rotate(105deg); animation: mascot-cheer-l 0.5s ease-in-out infinite alternate; }
+.mascot[data-pose='cheer'] .mascot-arm-r { transform: rotate(-105deg); animation: mascot-cheer-r 0.5s ease-in-out infinite alternate; }
+.mascot[data-pose='point'] .mascot-arm-r { transform: rotate(-70deg); }
+
+/* ----- 動き（data-motion） */
+.mascot-body { transform-origin: 100px 188px; }
+.mascot[data-motion='float'] .mascot-body { animation: mascot-float 2.4s ease-in-out infinite alternate; }
+.mascot[data-motion='bounce'] .mascot-body { animation: mascot-bounce 0.7s ease-in-out infinite; }
+.mascot[data-motion='hop'] .mascot-body { animation: mascot-hop 1.4s ease-in-out infinite; }
+.mascot[data-motion='wiggle'] .mascot-body { animation: mascot-wiggle 0.5s ease-in-out infinite alternate; }
+.mascot-zzz text { animation: mascot-zzz 2.4s ease-out infinite; }
+.mascot-zzz text:last-child { animation-delay: 1.2s; }
+
+@keyframes mascot-blink { 0%, 92%, 100% { transform: none; } 95% { transform: scaleY(0.1); } }
+@keyframes mascot-wave { from { transform: rotate(-95deg); } to { transform: rotate(-125deg); } }
+@keyframes mascot-cheer-l { from { transform: rotate(98deg); } to { transform: rotate(115deg); } }
+@keyframes mascot-cheer-r { from { transform: rotate(-98deg); } to { transform: rotate(-115deg); } }
+@keyframes mascot-float { from { transform: none; } to { transform: translateY(-6px); } }
+@keyframes mascot-bounce { 0%, 100% { transform: scale(1.04, 0.94); } 50% { transform: translateY(-8px) scale(0.97, 1.03); } }
+@keyframes mascot-hop {
+  0%, 40%, 90%, 100% { transform: none; }
+  50% { transform: scale(1.06, 0.9); }
+  65% { transform: translateY(-22px) scale(0.96, 1.05); }
+  80% { transform: scale(1.06, 0.92); }
+}
+@keyframes mascot-wiggle { from { transform: rotate(-6deg); } to { transform: rotate(6deg); } }
+@keyframes mascot-zzz { from { opacity: 0; transform: translate(0, 4px); } 30% { opacity: 1; } to { opacity: 0; transform: translate(6px, -8px); } }
+
+/* ----- 吹き出し */
+.mascot-say {
+  position: relative;
+  margin-top: 12px;
+  max-width: 16em;
+  padding: 8px 12px;
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-sm);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.mascot-say::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: -6px;
+  width: 10px;
+  height: 10px;
+  border-bottom: 1px solid var(--overlay-border);
+  border-left: 1px solid var(--overlay-border);
+  background: inherit;
+  transform: rotate(45deg);
+}
