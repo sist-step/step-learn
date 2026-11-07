@@ -8,12 +8,12 @@ import { field, intParam, readForm, redirectWith, showsAllCourses, wantsJson } f
 import { previewKind } from '../lib/preview'
 import { EXECUTABLE_NOT_ALLOWED, FILE_TOO_LARGE, MAX_FILE_SIZE, isExecutable } from '../lib/storage'
 import { CoursesPage } from '../routes/courses/views'
-import { DashboardPage, featuredCourse } from '../routes/dashboard/views'
+import { DashboardPage } from '../routes/dashboard/views'
 import { createSession, destroyByMoodleSid, destroySession, safeNext, type MoodleEnv } from './auth'
 import { forgetCourse, forgetProgress, forgetSections } from './cache'
 import { exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
 import { loadCourse, moodle, myCourses, outlineOf, progressOf, revisionOf, type LoadedCourse } from './data'
-import { isInProgress, isOpenable, isTracked, sectionHref, toCard, type MItem } from './mapping'
+import { isInProgress, isOpenable, sectionHref, toCard, type MItem } from './mapping'
 import { CoursePage, ItemEditPage, ItemPage, LoginPage, TEXT_PREVIEW_MAX } from './views'
 
 type C = Context<MoodleEnv>
@@ -99,24 +99,13 @@ export const toMoodle = (path: (c: C) => string | null) => (c: C) => {
 
 // ---------------------------------------------------------------- ダッシュボード・コース一覧
 
-const firstOpen = (loaded: LoadedCourse) => outlineOf(loaded).find((it) => isTracked(it) && !it.done && !it.locked)
-
 export async function dashboard(c: C) {
   const user = c.var.user!
   const all = showsAllCourses(c)
   const results: CourseCardData[] = (await myCourses(c)).filter((m) => all || isInProgress(m)).map(toCard)
-  const featured = featuredCourse(results)
-  const nextItem = featured && firstOpen(await loadCourse(c, featured.id))
-  return c.render(
-    <DashboardPage
-      name={user.name}
-      canCreate={false}
-      isAdmin={false}
-      results={results}
-      nextItem={nextItem && { id: nextItem.id, title: nextItem.title }}
-    />,
-    { title: 'ダッシュボード' },
-  )
+  return c.render(<DashboardPage name={user.name} canCreate={false} isAdmin={false} results={results} />, {
+    title: 'ダッシュボード',
+  })
 }
 
 export async function listCourses(c: C) {
