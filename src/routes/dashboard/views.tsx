@@ -1,11 +1,10 @@
 import { Bento, Tile } from '../../components/card'
-import { CreateCourseButton, nextActionLabel } from '../../components/course'
+import { CreateCourseButton } from '../../components/course'
 import { cx } from '../../components/cx'
 import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
-import { CourseIcon, CourseRow, EmptyState, courseInitials, Progress, ProgressRing, type CourseCardData } from '../../components/ui'
-import { courseImageUrl } from '../../lib/course-images'
+import { CourseRow, EmptyState, ProgressRing, type CourseCardData } from '../../components/ui'
 import { randomTip } from '../../lib/tips'
 
 const greeting = () => {
@@ -38,36 +37,22 @@ const AdminLink = ({ href, icon, label, description }: { href: string; icon: Ico
 const learningOf = (results: CourseCardData[]) => results.filter((r) => r.role === 'student')
 const trackedTotal = (learning: CourseCardData[]) => learning.reduce((n, r) => n + (r.total ?? 0), 0)
 
-export const featuredCourse = (results: CourseCardData[]) => {
-  const learning = learningOf(results)
-  return learning.find((r) => (r.total ?? 0) > (r.done ?? 0)) ?? (trackedTotal(learning) === 0 ? learning[0] : undefined)
-}
-
 export const DashboardPage = ({
   name,
   canCreate,
   isAdmin,
   results,
-  nextItem,
 }: {
   name: string
   canCreate: boolean
   isAdmin: boolean
   results: CourseCardData[]
-  nextItem?: { id: number; title: string }
 }) => {
-  const teaching = results.filter((r) => r.role === 'teacher')
   const learning = learningOf(results)
   const totalItems = trackedTotal(learning)
   const doneItems = learning.reduce((n, r) => n + (r.done ?? 0), 0)
-  const next = featuredCourse(results)
-  const nextTracked = (next?.total ?? 0) > 0
-  const recent = learning.length === 0 ? teaching[0] : undefined
-  const hasSide = totalItems > 0 || learning.length > 0 || isAdmin || !!recent
-  const stacked = totalItems === 0 && results.length <= 6 && (!!next || !!recent)
-  const featured = next ?? recent
-  const hero = featured && courseImageUrl(featured.id, 'hero', featured.heroImage)
-  const cover = hero && <img class="tile-feature-cover" src={hero} alt="" />
+  const showsAdmin = learning.length === 0 && isAdmin
+  const hasSide = totalItems > 0 || showsAdmin
 
   return (
     <AppShell>
@@ -102,27 +87,7 @@ export const DashboardPage = ({
             </Tile>
           </>
         )}
-        {next && (
-          <Tile
-            href={nextItem ? `/courses/${next.id}/items/${nextItem.id}` : `/courses/${next.id}`}
-            span={2}
-            rows={stacked ? 2 : 1}
-            class={`tile-feature tone-${next.color}`}
-          >
-            {cover}
-            <CourseIcon course={next} text={courseInitials(next)} class="course-mono" />
-            <div class="tile-feature-body">
-              <span class="tile-feature-label">{nextItem ? '次に学ぶ' : '最近のコース'}</span>
-              <strong class="tile-feature-title">{next.title}</strong>
-              {nextItem && <span class="tile-feature-next truncate">次: {nextItem.title}</span>}
-              {nextTracked && <Progress done={next.done ?? 0} total={next.total ?? 0} />}
-            </div>
-            <span class="tile-feature-cta">
-              {nextItem ? nextActionLabel(next.done ?? 0) : '開く'} <Icon name="chevronRight" size={16} />
-            </span>
-          </Tile>
-        )}
-        {learning.length === 0 && isAdmin && !recent && (
+        {showsAdmin && (
           <Tile span={2} class="tile-stat tile-admin">
             <StatLabel icon="shield">管理</StatLabel>
             <strong class="tile-admin-title">ユーザーとコースを管理</strong>
@@ -132,35 +97,7 @@ export const DashboardPage = ({
             </div>
           </Tile>
         )}
-        {recent && (
-          <Tile span={2} rows={stacked ? 2 : 1} class={`tile-feature tile-teach tone-${recent.color}`}>
-            {cover}
-            <CourseIcon course={recent} text={courseInitials(recent)} class="course-mono" />
-            <div class="tile-feature-body">
-              <span class="tile-feature-label">最近のコース</span>
-              <strong class="tile-feature-title">{recent.title}</strong>
-              <span class="tile-feature-next">参加者 {recent.members ?? 0}人</span>
-            </div>
-            <div class="tile-quick">
-              <a href={`/courses/${recent.id}`}>
-                <Icon name="layers" size={16} />
-                教材
-              </a>
-              <a href={`/courses/${recent.id}/participants`}>
-                <Icon name="users" size={16} />
-                参加者
-              </a>
-              <a href={`/courses/${recent.id}/settings`}>
-                <Icon name="sliders" size={16} />
-                設定
-              </a>
-            </div>
-          </Tile>
-        )}
-        <Tile
-          span={stacked || (next && totalItems > 0) ? 2 : 4}
-          class={cx('tile-courses', isAdmin && results.length === 0 && 'tile-compact')}
-        >
+        <Tile span={4} class={cx('tile-courses', isAdmin && results.length === 0 && 'tile-compact')}>
           <div class="tile-head">
             <h2>
               マイコース <span class="count">{results.length}</span>

@@ -1,4 +1,4 @@
-import { CourseHeader, CourseLiveSync, ItemIcon, nextActionLabel } from '../components/course'
+import { CourseHeader, CourseLiveSync, ItemIcon } from '../components/course'
 import { Button, IconButton } from '../components/button'
 import { Card, DangerRow, LinkCard } from '../components/card'
 import { cx } from '../components/cx'
@@ -724,8 +724,6 @@ export const CoursePage = ({
   const shownItems = o.visibleSections.flatMap((s) => o.contentsOf(s.id).filter(o.isShown))
   const trackedItems = shownItems.filter(isTracked)
   const doneCount = trackedItems.filter((it) => it.done).length
-  const openable = shownItems.filter((it) => isOpenable(it) && !it.locked)
-  const nextItem = openable.find((it) => isTracked(it) && !it.done) ?? (trackedItems.length === 0 ? openable[0] : undefined)
   const props = { o, courseId: id, isStudent, manage }
 
   return (
@@ -736,22 +734,6 @@ export const CoursePage = ({
         tab="content"
         editSwitch={false}
         progress={isStudent ? { done: doneCount, total: trackedItems.length } : undefined}
-        actions={
-          isStudent &&
-          nextItem && (
-            <div class="course-next">
-              <Button
-                href={itemHref(id, nextItem)}
-                variant="primary"
-                iconEnd={opensNewTab(nextItem) ? 'external' : 'chevronRight'}
-                {...(opensNewTab(nextItem) ? { target: '_blank', rel: 'noopener', 'data-no-prefetch': '' } : {})}
-              >
-                {nextActionLabel(doneCount)}
-              </Button>
-              <span class="course-next-meta muted small truncate">次: {nextItem.title}</span>
-            </div>
-          )
-        }
         tabActions={
           <>
             <Button href={moodleCourseUrl} variant="ghost" icon="external" target="_blank" rel="noopener" data-no-prefetch>
