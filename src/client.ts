@@ -836,6 +836,113 @@ function initPdfViewers() {
     })
 }
 
+// --- マスコットの気まぐれな動き（components/mascot.tsx の Mascot）
+// CSS のくり返しだけで動かさないのは、同じ間隔で同じ動きが続くと機械的に見えるため
+const MASCOT_QUIRKS = { hop: 900, 'lean-l': 1400, 'lean-r': 1400, squish: 700, peek: 1600, tap: 1300 } as const
+const MASCOT_REACTIONS = { surprised: 900, happy: 1600, thinking: 1500 } as const
+const MASCOT_GLANCES = ['left', 'right', 'up', 'down'] as const
+const livingMascots = new WeakSet<HTMLElement>()
+
+const randomIn = (min: number, max: number) => min + Math.random() * (max - min)
+const pickFrom = <T>(items: readonly T[]) => items[Math.floor(Math.random() * items.length)]
+const pickKey = <T extends object>(table: T) => pickFrom(Object.keys(table) as (keyof T)[])
+
+function repeatRandomly(el: HTMLElement, min: number, max: number, act: () => number) {
+  const tick = () => {
+    if (!el.isConnected) return
+    const busy = document.hidden ? 0 : act()
+    setTimeout(tick, busy + randomIn(min, max))
+  }
+  setTimeout(tick, randomIn(min, max))
+}
+
+function flagFor(el: HTMLElement, name: string, value: string, ms: number) {
+  el.setAttribute(name, value)
+  setTimeout(() => el.removeAttribute(name), ms)
+  return ms
+}
+
+function animateMascot(el: HTMLElement) {
+  livingMascots.add(el)
+  repeatRandomly(el, 1500, 5500, () => {
+    flagFor(el, 'data-blink', '', 130)
+    if (Math.random() < 0.25) setTimeout(() => flagFor(el, 'data-blink', '', 130), 280)
+    return 450
+  })
+  repeatRandomly(el, 1200, 4000, () => flagFor(el, 'data-glance', pickFrom(MASCOT_GLANCES), randomIn(700, 2200)))
+  repeatRandomly(el, 3500, 9000, () => {
+    const quirk = pickKey(MASCOT_QUIRKS)
+    return flagFor(el, 'data-quirk', quirk, MASCOT_QUIRKS[quirk])
+  })
+  repeatRandomly(el, 6000, 14_000, () => {
+    const mood = el.dataset.mood
+    const reaction = pickKey(MASCOT_REACTIONS)
+    if (!mood || mood === reaction || mood === 'sleepy') return 0
+    el.dataset.mood = reaction
+    setTimeout(() => {
+      if (el.dataset.mood === reaction) el.dataset.mood = mood
+    }, MASCOT_REACTIONS[reaction])
+    return MASCOT_REACTIONS[reaction]
+  })
+  typeMascotSay(el)
+}
+
+// 同じ速さで打ち続けないのは、句読点でも息継ぎしないと機械が読み上げているように見えるため
+const MASCOT_PAUSES: Record<string, number> = { '、': 220, '，': 220, '。': 420, '！': 420, '？': 420, '!': 420, '?': 420, '…': 380 }
+
+function splitIntoChars(root: HTMLElement) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  const texts: Text[] = []
+  while (walker.nextNode()) texts.push(walker.currentNode as Text)
+  return texts.flatMap((node) => {
+    const chars = [...node.data].map((ch) => Object.assign(document.createElement('span'), { className: 'mascot-char', textContent: ch }))
+    node.replaceWith(...chars)
+    return chars
+  })
+}
+
+function typeMascotSay(el: HTMLElement) {
+  const text = el.querySelector<HTMLElement>('.mascot-say-text')
+  if (!text || el.dataset.typing !== '') return
+  // 1 文字ずつの span を読み上げさせないのは、スクリーンリーダーが 1 文字ずつ区切って読んでしまうため
+  text.after(Object.assign(document.createElement('span'), { className: 'sr-only', textContent: text.textContent }))
+  text.setAttribute('aria-hidden', 'true')
+  const chars = splitIntoChars(text)
+  el.dataset.typing = 'on'
+  el.setAttribute('data-hush', '')
+  let next = 0
+  const typeNext = () => {
+    if (!el.isConnected) return
+    const ch = chars[next++]
+    if (!ch) {
+      el.removeAttribute('data-typing')
+      el.removeAttribute('data-hush')
+      el.removeAttribute('data-talking')
+      if (/[！!]$/.test(chars.at(-1)?.textContent ?? '')) flagFor(el, 'data-quirk', 'hop', MASCOT_QUIRKS.hop)
+      return
+    }
+    ch.classList.add('is-shown')
+    const pause = MASCOT_PAUSES[ch.textContent] ?? 0
+    el.toggleAttribute('data-hush', pause > 0)
+    setTimeout(typeNext, pause || randomIn(40, 90))
+  }
+  setTimeout(typeNext, 450)
+}
+
+function initMascots() {
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches
+  $$<HTMLElement>('[data-mascot]')
+    .filter((el) => !livingMascots.has(el))
+    .forEach((el) => {
+      if (!still) {
+        animateMascot(el)
+        return
+      }
+      el.removeAttribute('data-typing')
+      el.removeAttribute('data-talking')
+    })
+}
+
 // --- ⌘S / Ctrl+S で保存（data-save-shortcut のボタンを押す）
 document.addEventListener('keydown', (e) => {
   if (e.key !== 's' || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return
@@ -1479,5 +1586,6 @@ function initContent() {
   updateToc()
   initMarkdownEditors()
   initPdfViewers()
+  initMascots()
 }
 initPage()

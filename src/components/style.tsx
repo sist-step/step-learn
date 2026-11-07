@@ -14,6 +14,7 @@ export const STYLESHEETS = [
   '/src/components/layout.css',
   '/src/components/toast.css',
   '/src/components/ui.css',
+  '/src/components/mascot.css',
   '/src/components/card.css',
   '/src/components/course.css',
   '/src/components/pdf.css',

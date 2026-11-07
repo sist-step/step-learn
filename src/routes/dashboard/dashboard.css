@@ -1,7 +1,8 @@
 .tile-welcome { justify-content: center; }
 .tile-welcome h1 { font-size: var(--fs-3xl); font-weight: 650; letter-spacing: 0; }
 .tile-welcome .eyebrow { margin-bottom: 0; }
-.tile-tip { max-width: 520px; font-size: var(--fs-sm); color: var(--muted); line-height: 1.6; }
+.tile-mascot { margin-top: 4px; }
+.tile-mascot .mascot-say { max-width: 520px; }
 .tile-actions { display: flex; gap: 8px; margin-top: 6px; }
 .tile-stat { justify-content: space-between; }
 .tile-stat .ring { width: 56px; height: 56px; }
