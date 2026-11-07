@@ -3,6 +3,7 @@ import { CreateCourseButton } from '../../components/course'
 import { cx } from '../../components/cx'
 import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
+import { Mascot } from '../../components/mascot'
 import { Styles } from '../../components/style'
 import { CourseRow, EmptyState, ProgressRing, type CourseCardData } from '../../components/ui'
 import { randomTip } from '../../lib/tips'
@@ -53,6 +54,7 @@ export const DashboardPage = ({
   const doneItems = learning.reduce((n, r) => n + (r.done ?? 0), 0)
   const showsAdmin = learning.length === 0 && isAdmin
   const hasSide = totalItems > 0 || showsAdmin
+  const tip = randomTip()
 
   return (
     <AppShell>
@@ -65,7 +67,7 @@ export const DashboardPage = ({
             )}
           </div>
           <h1>{`${greeting()}、${name}さん`}</h1>
-          <p class="tile-tip">{randomTip()}</p>
+          <Mascot class="tile-mascot" act={tip.act} pose="wave" size={72} stand={false} say={tip.text} />
           {canCreate && (
             <div class="tile-actions">
               <CreateCourseButton />
