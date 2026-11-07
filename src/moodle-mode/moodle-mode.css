@@ -38,6 +38,9 @@
 .section-card.is-fixed > .section-head { cursor: default; }
 .section-card.is-current { border-color: color-mix(in srgb, var(--c1) 45%, var(--card-border)); }
 .section-head-summary { margin-top: 4px; color: var(--muted); font-size: var(--fs-sm); white-space: pre-line; }
+.section-restriction { display: flex; align-items: flex-start; gap: 4px; }
+.section-restriction > .icon { flex: none; margin-top: 2px; }
+.section-restriction > span { white-space: pre-line; }
 
 /* ===== コースフォーマット: 折りたたみ型トピック */
 .section-toggles { display: flex; justify-content: flex-end; gap: 4px; margin-bottom: -4px; }
