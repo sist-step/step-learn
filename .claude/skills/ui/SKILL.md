@@ -118,12 +118,13 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 
 | 部品 | 用途 |
 | --- | --- |
-| `Mascot` | ロゴ（シアンの輪・黒い枠・STEP の帯）を元にした SVG のキャラクター。`mood`（`normal` / `happy` / `sad` / `surprised` / `thinking` / `sleepy`）/ `pose`（`idle` / `wave` / `cheer` / `point`）/ `motion`（`none` / `float` / `bounce` / `hop` / `wiggle`、既定 `float`）/ `look`（`front` / `left` / `right` / `up`）/ `size`（幅 px、既定 120）/ `stand`（足元の STEP の台、既定 `true`）/ `say`（右に出す吹き出し）/ `label`（渡すと `role="img"` の代替テキストになり、なければ飾りとして隠す）。値の一覧は `MASCOT_MOODS` などの配列 |
+| `Mascot` | ロゴ（シアンの輪・黒い枠・STEP の帯）を元にした SVG のキャラクター。`act` で動きのパターン（`MASCOT_ACTS`: `greet` あいさつ / `cheer` 応援 / `advise` 助言 / `idea` ひらめき / `ask` 質問 / `think` 考える / `warn` 注意 / `agree` うなずく / `share` すすめる / `rest` 休む）を選ぶと、表情・ポーズ・動き・視線がまとめて決まる。個別に渡した `mood`（`normal` / `happy` / `sad` / `surprised` / `thinking` / `sleepy`）/ `pose`（`idle` / `wave`（振り続ける）/ `greet`（表示したときに 3 回振って下ろす）/ `cheer` / `point` / `raise`（手を挙げる）/ `open`（両手を広げる））/ `motion`（`none` / `float` / `bounce` / `hop` / `wiggle` / `nod`（うなずく）/ `tilt`（首をかしげる）/ `shake`（首を振る）、既定 `float`）/ `look`（`front` / `left` / `right` / `up`）は `act` より優先する。`size`（幅 px、既定 120）/ `stand`（足元の STEP の台、既定 `true`）/ `say`（右に出す吹き出し）/ `label`（渡すと `role="img"` の代替テキストになり、なければ飾りとして隠す）。値の一覧は `MASCOT_MOODS` などの配列。ダッシュボードのヒント（`lib/tips.ts`）は 1 件ずつ言葉に合う `act` を持ち、ダッシュボードでは `pose="wave"` で手を振り続ける |
 
-`Mascot` は全部の表情・腕を描いておき、ルート要素の `data-mood` / `data-pose` / `data-motion` / `data-look` で CSS が出し分ける。表示後に `client.ts` から `el.dataset.mood = 'happy'` と書き換えるだけで切り替わる（腕と視線はトランジションで動く）。色は `.mascot` の `--mascot-ink` / `--mascot-ring` / `--mascot-face` / `--mascot-eye` / `--mascot-cheek` で上書きできる。
+`Mascot` は全部の表情・腕を描いておき、ルート要素の `data-mood` / `data-pose` / `data-motion` / `data-look` で CSS が出し分ける。表示後に `client.ts` から `el.dataset.mood = 'happy'` と書き換えるだけで切り替わる（腕と視線はトランジションで動く）。`say` を渡すと吹き出しが開き、`client.ts`（`typeMascotSay`）が文字を 1 文字ずつ出す（`data-typing`）。打っているあいだは口が動き（`data-talking`）、句読点では間を置いて口を止め（`data-hush`）、「！」で言い終えると跳ねる。読み上げ用には全文を `sr-only` で置く。ほっぺ・左腕・右上の角は CSS で常に小さく揺れる。機械的に見えないよう、`client.ts`（`initMascots`）が `[data-mascot]` ごとにランダムな間隔で、まばたき（`data-blink`、ときどき 2 回）・視線（`data-glance`）・気まぐれな動作（`data-quirk`: `hop` / `lean-l` / `lean-r` / `squish` / `peek` / `tap`）・一瞬の表情（`data-mood` を驚き・笑顔・考え顔にして戻す）を付け外しする。気まぐれな動作は `.mascot-actor` で動かすので `data-motion` と重なる。これらは `transform` ではなく `translate` / `scale` / `rotate` で動かしているので、表情やポーズの `transform` と重なっても打ち消し合わない。色は `.mascot` の `--mascot-ink` / `--mascot-ring` / `--mascot-face` / `--mascot-eye` / `--mascot-cheek` で上書きできる。
 
 ```tsx
-<Mascot mood="happy" pose="wave" say="こんにちは！" />
+<Mascot act="cheer" say="その調子！" />
+<Mascot act="think" look="left" say="どうしてだろう？" />
 <Mascot mood="sleepy" motion="none" stand={false} size={64} label="眠っている STEP のキャラクター" />
 ```
 
