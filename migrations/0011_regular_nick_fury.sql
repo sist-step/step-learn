@@ -1,0 +1,1 @@
+ALTER TABLE `items` ADD `link_target` text DEFAULT 'new' NOT NULL;
