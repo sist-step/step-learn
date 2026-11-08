@@ -3,15 +3,7 @@ import type { Context } from 'hono'
 import type { CourseFormValues } from '../../components/course'
 import type { CourseCardData } from '../../components/ui'
 import { canCreateCourse } from '../../lib/auth'
-import {
-  courseRevision,
-  getCourseAccess,
-  memberCount,
-  teacherNames,
-  trackedDoneCount,
-  trackedItemCount,
-  visibleItem,
-} from '../../lib/courses'
+import { courseRevision, getCourseAccess, memberCount, trackedDoneCount, trackedItemCount, visibleItem } from '../../lib/courses'
 import { courseImagePrefix, type CourseImageKind } from '../../lib/course-images'
 import { contains, db } from '../../lib/db'
 import { firstError, validate, type FormValues } from '../../lib/forms'
@@ -52,7 +44,6 @@ export async function list(c: Context<AppEnv>) {
       total: trackedItemCount(courses.id),
       done: trackedDoneCount(user.id, courses.id),
       members: memberCount(),
-      teachers: teacherNames(),
     })
     .from(courses)
     .leftJoin(enrollments, and(eq(enrollments.courseId, courses.id), eq(enrollments.userId, user.id)))

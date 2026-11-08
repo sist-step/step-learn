@@ -111,7 +111,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `Progress` / `ProgressRing` | 進捗バー・リング（JS で更新できる `data-*` 付き） |
 | `CourseCard` | コース一覧のカード（名前 → コード → 概要。受講中のチップは出さない） |
 | `CourseIcon` | コースの頭文字のバッジ。コースアイコンが設定されていれば画像を出す。大きさと形は `class`（`course-mono` / `course-hero-mono` / `dot`）で決める |
-| `CourseRow` | コースの 1 行表示（頭文字・名前・コード。右端は教師なら「担当」、学生は進捗、それ以外は矢印）。タイルの中などの狭い場所で使う |
+| `CourseRow` | コースの 1 行表示（頭文字・名前・コード。右端は学生なら進捗、それ以外は矢印）。タイルの中などの狭い場所で使う |
 | `formatDate` | UNIX 秒を「2026年10月28日」形式で表示 |
 
 ### マスコット — `src/components/mascot.tsx`

@@ -232,7 +232,6 @@ export type CourseCardData = {
   total?: number
   done?: number
   members?: number
-  teachers?: string | null
 }
 
 export const CourseIcon = ({
@@ -263,7 +262,6 @@ export const CourseCard = ({ course, showProgress }: { course: CourseCardData; s
       <div class="course-cover">
         {hero && <img class="course-cover-img" src={hero} alt="" loading="lazy" />}
         <CourseIcon course={course} text={courseInitials(course)} class="course-mono" />
-        <div class="course-cover-badges">{course.role === 'teacher' && <Chip tone="accent">担当</Chip>}</div>
       </div>
       <div class="course-body">
         <h3 class="course-title">{course.title}</h3>
@@ -276,12 +274,6 @@ export const CourseCard = ({ course, showProgress }: { course: CourseCardData; s
         ) : (
           <span class="meta">
             <Icon name="users" size={14} /> {course.members ?? 0}人
-            {course.teachers && (
-              <>
-                <span class="meta-sep">·</span>
-                <span class="truncate">担当 {course.teachers}</span>
-              </>
-            )}
           </span>
         )}
       </div>
@@ -298,9 +290,7 @@ export const CourseRow = ({ course }: { course: CourseCardData }) => {
         <span class="strong truncate">{course.title}</span>
         {course.code && <span class="muted small truncate">{course.code}</span>}
       </span>
-      {course.role === 'teacher' ? (
-        <Chip tone="accent">担当</Chip>
-      ) : course.role === 'student' && course.total ? (
+      {course.role === 'student' && course.total ? (
         <Progress done={course.done ?? 0} total={course.total} />
       ) : (
         <Icon name="chevronRight" size={16} class="muted" />
