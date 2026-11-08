@@ -41,7 +41,8 @@ app.use(renderer)
 app.post('/courses/:id/*', async (c, next) => {
   await next()
   const id = Number(c.req.param('id'))
-  if (Number.isSafeInteger(id) && c.res.status < 400 && !c.req.path.endsWith('/complete')) touchCourse(id)
+  // ログインしていない要求を除くのは、requireAuth のログイン画面へのリダイレクト（302）も 400 未満なので、誰でも任意のコースを進められてしまうため
+  if (c.var.user && Number.isSafeInteger(id) && c.res.status < 400 && !c.req.path.endsWith('/complete')) touchCourse(id)
 })
 
 app.get('/', (c) => c.redirect(c.var.user ? '/dashboard' : '/login'))
