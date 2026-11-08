@@ -93,11 +93,9 @@
   color: var(--text);
 }
 a.sec-tile { transition: border-color 0.15s, box-shadow 0.2s, transform 0.2s var(--ease); }
-a.sec-tile .sec-tile-glyph { transition: transform 0.25s var(--ease); }
 @media (hover: hover) {
   a.sec-tile:hover { border-color: var(--border-strong); box-shadow: var(--shadow); transform: translateY(-1px); text-decoration: none; }
   a.sec-tile:hover .sec-tile-title { color: var(--c-ink); }
-  a.sec-tile:hover .sec-tile-glyph { transform: translateY(-2px) scale(1.04); }
 }
 .sec-tile-media {
   position: relative;
@@ -117,9 +115,6 @@ a.sec-tile .sec-tile-glyph { transition: transform 0.25s var(--ease); }
 .tile-art .art-d { fill: color-mix(in srgb, var(--art-1) 62%, transparent); }
 .sec-tile.is-done .tile-art { --art: var(--success); --art-h: 0; }
 .sec-tile:is(.is-hidden, .is-locked, .is-empty) .tile-art { --art: var(--muted); --art-h: 0; opacity: 0.6; }
-.sec-tile-glyph { position: relative; display: grid; place-items: center; width: 56px; height: 56px; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--card-border); }
-.sec-tile-glyph .icon { width: 28px; height: 28px; }
-.sec-tile-number { font-size: var(--fs-xl); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
 /* 番号とバッジを本文の行に置かないのは、行が 1 つ増えてタイルが縦に伸びるため */
 .sec-tile-num, .sec-tile-badge { position: absolute; top: 8px; display: inline-flex; align-items: center; justify-content: center; height: 24px; border-radius: 999px; font-size: var(--fs-xs); font-weight: 650; font-variant-numeric: tabular-nums; }
 .sec-tile-num { left: 8px; min-width: 24px; padding: 0 8px; background: color-mix(in srgb, var(--surface) 88%, transparent); color: var(--text-2); box-shadow: var(--shadow-sm); backdrop-filter: blur(6px); }
@@ -138,7 +133,6 @@ a.sec-tile .sec-tile-glyph { transition: transform 0.25s var(--ease); }
 .sec-tile.is-hidden .sec-tile-media { background: var(--surface-2); }
 .sec-tile:is(.is-locked, .is-empty) { box-shadow: none; background: transparent; border: 1px dashed var(--border-strong); }
 .sec-tile:is(.is-locked, .is-empty) .sec-tile-media { background: var(--surface-2); color: var(--muted); }
-.sec-tile:is(.is-locked, .is-empty) .sec-tile-glyph { background: transparent; box-shadow: inset 0 0 0 1px var(--border-strong); }
 .sec-tile:is(.is-locked, .is-empty) .sec-tile-title { color: var(--text-2); font-weight: 500; }
 .sec-tile.is-done .sec-tile-media { background: radial-gradient(120% 100% at 100% 0%, color-mix(in srgb, var(--success) 22%, transparent), transparent 70%), color-mix(in srgb, var(--success) 10%, var(--surface)); color: var(--success-text); }
 a.sec-tile[aria-expanded='true'] { border-color: var(--c1); box-shadow: 0 0 0 1px var(--c1), var(--shadow-card); }
@@ -166,9 +160,6 @@ a.sec-tile[aria-expanded='true'] .sec-tile-title { color: var(--c-ink); }
   .sec-tiles { --tile-gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sec-tile-body { padding: 10px 12px 12px; }
   .sec-tile-title { font-size: var(--fs-base); }
-  .sec-tile-glyph { width: 44px; height: 44px; }
-  .sec-tile-glyph .icon { width: 24px; height: 24px; }
-  .sec-tile-number { font-size: var(--fs-lg); }
 }
 
 /* サブタイル: セクションの中のアイテムもタイルで並べる */

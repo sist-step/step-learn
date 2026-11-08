@@ -17,7 +17,6 @@ import { MAX_FILE_SIZE, formatBytes } from '../lib/storage'
 import type { CourseLayout, ItemCompletion, MItem, MSection, TilesLayout, TopcollLayout } from './mapping'
 import { isOpenable, isTracked, sectionHref } from './mapping'
 import { TileArt } from './tile-art'
-import { TileIcon, tileNumber } from './tile-icons'
 
 // ---------------------------------------------------------------- ログイン
 
@@ -609,8 +608,6 @@ const TileCard = ({
   index: number
 }) => {
   const tile = layout.tiles.get(s.id)
-  const icon = tile?.icon || layout.defaultIcon
-  const number = tileNumber(icon)
   const { shown, tracked, done } = o.statsOf(s.id)
   const locked = s.locked && isStudent
   const empty = isStudent && shown.length === 0
@@ -624,10 +621,7 @@ const TileCard = ({
         {tile?.photo ? (
           <img src={`/courses/${courseId}/sections/${s.id}/photo/${encodeURIComponent(tile.photo)}`} alt="" loading="lazy" />
         ) : (
-          <>
-            <TileArt index={index} seed={s.id} />
-            <span class="sec-tile-glyph">{number ? <span class="sec-tile-number">{number}</span> : <TileIcon name={icon} />}</span>
-          </>
+          <TileArt index={index} seed={s.id} />
         )}
         <span class="sec-tile-num">{o.sectionNumber.get(s.id) ?? <Icon name="eyeSlash" size={12} />}</span>
         {locked ? (
