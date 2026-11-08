@@ -176,6 +176,13 @@ function setup(root: HTMLElement) {
       if (socket.active) return
       showMessage('画面共有に接続できませんでした。ページを再読み込みしてください。')
     })
+    socket.on('revoked', () => {
+      if (socket === viewer) viewer = null
+      closeDecoder()
+      stats.width = 0
+      showMessage('この画面共有を表示できなくなりました。ページを再読み込みしてください。')
+      setState('終了', false)
+    })
     socket.on('disconnect', () => {
       if (socket === viewer) showMessage('接続が切れました。再接続しています…')
     })
@@ -343,9 +350,13 @@ function setup(root: HTMLElement) {
       )
       stop()
     })
+    socket.on('revoked', () => {
+      showError('画面を共有する権限がなくなったため、共有を停止しました。')
+      stop()
+    })
     socket.on('disconnect', (reason) => {
       if (reason === 'io server disconnect') {
-        showError('別のタブで共有が始まったため、このタブでの共有を停止しました。')
+        if (presentation === current) showError('別のタブで共有が始まったため、このタブでの共有を停止しました。')
         stop()
       } else if (presentation) {
         showError('接続が切れました。再接続しています…')
