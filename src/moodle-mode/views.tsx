@@ -16,6 +16,7 @@ import { previewKind } from '../lib/preview'
 import { MAX_FILE_SIZE, formatBytes } from '../lib/storage'
 import type { CourseLayout, ItemCompletion, MItem, MSection, TilesLayout, TopcollLayout } from './mapping'
 import { isOpenable, isTracked, sectionHref } from './mapping'
+import { TileArt } from './tile-art'
 import { TileIcon, tileNumber } from './tile-icons'
 
 // ---------------------------------------------------------------- ログイン
@@ -597,6 +598,7 @@ const TileCard = ({
   courseId,
   isStudent,
   open,
+  index,
 }: {
   s: MSection
   o: CourseOutline
@@ -604,6 +606,7 @@ const TileCard = ({
   courseId: number
   isStudent: boolean
   open: boolean
+  index: number
 }) => {
   const tile = layout.tiles.get(s.id)
   const icon = tile?.icon || layout.defaultIcon
@@ -621,7 +624,10 @@ const TileCard = ({
         {tile?.photo ? (
           <img src={`/courses/${courseId}/sections/${s.id}/photo/${encodeURIComponent(tile.photo)}`} alt="" loading="lazy" />
         ) : (
-          <span class="sec-tile-glyph">{number ? <span class="sec-tile-number">{number}</span> : <TileIcon name={icon} />}</span>
+          <>
+            <TileArt index={index} seed={s.id} />
+            <span class="sec-tile-glyph">{number ? <span class="sec-tile-number">{number}</span> : <TileIcon name={icon} />}</span>
+          </>
         )}
         <span class="sec-tile-num">{o.sectionNumber.get(s.id) ?? <Icon name="eyeSlash" size={12} />}</span>
         {locked ? (
@@ -690,9 +696,11 @@ const TilesSections = ({ o, layout, openSection, ...rest }: SectionsProps & { la
       {general && <SectionCard s={general} o={o} {...rest} options={{ fixed: true, subtiles: layout.subtilesZero }} />}
       {tiles.length > 0 && (
         <ul class="sec-tiles">
-          {tiles.flatMap((s) => {
+          {tiles.flatMap((s, index) => {
             const open = s.id === openSection && openable(s)
-            const tile = <TileCard s={s} o={o} layout={layout} courseId={rest.courseId} isStudent={rest.isStudent} open={open} />
+            const tile = (
+              <TileCard s={s} o={o} layout={layout} courseId={rest.courseId} isStudent={rest.isStudent} open={open} index={index} />
+            )
             if (!openable(s)) return [tile]
             return [
               tile,
