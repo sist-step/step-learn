@@ -69,6 +69,11 @@ $functions = [
         'description' => 'Remember which sections the current user collapsed on the course page.',
         'type' => 'write',
     ],
+    'local_steplearn_check_session' => [
+        'classname' => 'local_steplearn\external\check_session',
+        'description' => 'Whether the Moodle session a STEP Learn session started from is still active. Extends it if so.',
+        'type' => 'write',
+    ],
 ];
 
 $services = [
@@ -89,6 +94,7 @@ $services = [
             'local_steplearn_save_url',
             'local_steplearn_save_resource',
             'local_steplearn_set_sections_collapsed',
+            'local_steplearn_check_session',
         ],
         'restrictedusers' => 0,
         'enabled' => 1,
