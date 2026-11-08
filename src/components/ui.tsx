@@ -281,24 +281,6 @@ export const CourseCard = ({ course, showProgress }: { course: CourseCardData; s
   )
 }
 
-export const CourseRow = ({ course }: { course: CourseCardData }) => {
-  useStyle('/src/components/ui.css')
-  return (
-    <a href={`/courses/${course.id}`} class={`course-row tone-${course.color}`}>
-      <CourseIcon course={course} text={courseInitials(course)} class="course-mono" />
-      <span class="course-row-text">
-        <span class="strong truncate">{course.title}</span>
-        {course.code && <span class="muted small truncate">{course.code}</span>}
-      </span>
-      {course.role === 'student' && course.total ? (
-        <Progress done={course.done ?? 0} total={course.total} />
-      ) : (
-        <Icon name="chevronRight" size={16} class="muted" />
-      )}
-    </a>
-  )
-}
-
 export const formatDate = (unix: number) =>
   new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'short', day: 'numeric' }).format(
     new Date(unix * 1000),

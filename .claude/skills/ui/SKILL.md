@@ -109,9 +109,8 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `Markdown`（`markdown.tsx`） | Markdown を HTML にして `.prose` の見た目で出す（`source`）。`lib/markdown.ts` の変換を使うので生の HTML は通らない |
 | `Avatar` | 名前から色とイニシャルを作るアイコン |
 | `Progress` / `ProgressRing` | 進捗バー・リング（JS で更新できる `data-*` 付き） |
-| `CourseCard` | コース一覧のカード（名前 → コード → 概要。受講中のチップは出さない） |
+| `CourseCard` | コースのカード（名前 → コード → 概要）。コース一覧とダッシュボードのマイコースで `.course-grid` に並べる |
 | `CourseIcon` | コースの頭文字のバッジ。コースアイコンが設定されていれば画像を出す。大きさと形は `class`（`course-mono` / `course-hero-mono` / `dot`）で決める |
-| `CourseRow` | コースの 1 行表示（頭文字・名前・コード。右端は学生なら進捗、それ以外は矢印）。タイルの中などの狭い場所で使う |
 | `formatDate` | UNIX 秒を「2026年10月28日」形式で表示 |
 
 ### マスコット — `src/components/mascot.tsx`
