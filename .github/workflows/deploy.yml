@@ -84,9 +84,11 @@ jobs:
         run: docker compose build
       - name: Start
         run: docker compose up -d --wait --wait-timeout 60
-      - name: Show logs
+      # ログを出さないのは、SMTP 未設定のときはパスワード再設定や登録のリンク（トークン付き）が標準出力に出ていて、
+      # Actions のログを読める人に渡ってしまうため。ログはサーバー上で docker compose logs を実行して見る
+      - name: Show status
         if: failure()
-        run: docker compose logs --tail 200
+        run: docker compose ps -a
       - name: Prune old images
         run: docker image prune -f
       - name: Remove env file
