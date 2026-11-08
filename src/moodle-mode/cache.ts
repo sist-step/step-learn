@@ -22,6 +22,8 @@ const forget = (match: (key: string) => boolean) => {
 }
 
 export const coursesKey = (userId: number) => `courses:${userId}`
+// courses: で始めるのは、forgetCourse で参加しているコースの一覧と一緒に捨てるため
+export const otherCoursesKey = (userId: number) => `courses:others:${userId}`
 export const courseKey = (courseId: number, userId: number) => `course:${courseId}:${userId}`
 export const contentsKey = (courseId: number, userId: number) => `contents:${courseId}:${userId}`
 

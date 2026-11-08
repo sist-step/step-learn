@@ -232,6 +232,7 @@ export type CourseCardData = {
   total?: number
   done?: number
   members?: number
+  inProgress: boolean
 }
 
 export const CourseIcon = ({
@@ -254,11 +255,19 @@ export const CourseIcon = ({
 
 export const courseInitials = (course: { code: string; title: string }) => [...(course.code || course.title)].slice(0, 2).join('')
 
+/** client.ts が localStorage の設定で表示を切り替えるまでの既定（進行中・参加しているコースだけ）で見えるか */
+export const shownByDefault = (course: CourseCardData) => course.inProgress && !!course.role
+
 export const CourseCard = ({ course, showProgress }: { course: CourseCardData; showProgress?: boolean }) => {
   useStyle('/src/components/ui.css')
   const hero = courseImageUrl(course.id, 'hero', course.heroImage)
   return (
-    <a href={`/courses/${course.id}`} class={`course-card tone-${course.color}`}>
+    <a
+      href={`/courses/${course.id}`}
+      class={`course-card tone-${course.color}`}
+      data-course-ended={!course.inProgress || undefined}
+      data-course-unenrolled={!course.role || undefined}
+    >
       <div class="course-cover">
         {hero && <img class="course-cover-img" src={hero} alt="" loading="lazy" />}
         <CourseIcon course={course} text={courseInitials(course)} class="course-mono" />

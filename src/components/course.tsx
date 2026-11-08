@@ -88,8 +88,11 @@ export const CourseHeader = ({
   )
 }
 
-export type CourseFormValues = Partial<Pick<Course, 'title' | 'code' | 'summary' | 'color' | 'completionEnabled'>>
-export type CourseFormErrors = Partial<Record<'title' | 'code' | 'summary', string>>
+export type CourseFormValues = Partial<Pick<Course, 'title' | 'code' | 'summary' | 'color' | 'completionEnabled'>> & {
+  startDate?: string
+  endDate?: string
+}
+export type CourseFormErrors = Partial<Record<'title' | 'code' | 'summary' | 'start_date' | 'end_date', string>>
 
 const COLOR_LABELS: Record<(typeof COURSE_COLORS)[number], string> = {
   cyan: 'シアン',
@@ -133,6 +136,24 @@ const CourseFields = ({ values, errors = {} }: { values: CourseFormValues; error
         rows={3}
         placeholder="このコースで学べることを簡潔に"
       />
+      <div class="grid-2">
+        <TextField
+          label="開始日（任意）"
+          name="start_date"
+          type="date"
+          value={values.startDate}
+          error={errors.start_date}
+          hint="空欄なら、開始前の期間を区切りません"
+        />
+        <TextField
+          label="終了日（任意）"
+          name="end_date"
+          type="date"
+          value={values.endDate}
+          error={errors.end_date}
+          hint="終了日を過ぎると「進行中」の一覧に出なくなります"
+        />
+      </div>
 
       <fieldset class="field">
         <legend>カラー</legend>
