@@ -2,7 +2,17 @@ import type { Child } from 'hono/jsx'
 import { courseImageUrl } from '../lib/course-images'
 import type { CourseAccess } from '../lib/courses'
 import { completionChoices } from '../lib/forms'
-import { COMPLETION_LABELS, COMPLETIONS, COURSE_COLORS, type Completion, type Course, type ItemType } from '../lib/types'
+import {
+  COMPLETION_LABELS,
+  COMPLETIONS,
+  COURSE_COLORS,
+  LINK_TARGET_LABELS,
+  LINK_TARGETS,
+  type Completion,
+  type Course,
+  type ItemType,
+  type LinkTarget,
+} from '../lib/types'
 import { Button } from './button'
 import { Card } from './card'
 import { cx } from './cx'
@@ -256,6 +266,57 @@ export const ItemIcon = ({ type }: { type: ItemType }) => {
 
 export const CourseLiveSync = ({ courseId, revision }: { courseId: number; revision: string }) => (
   <span hidden data-live={`/courses/${courseId}/revision`} data-live-rev={revision} />
+)
+
+export const LinkTargetField = ({
+  id,
+  value = 'new',
+  hint = '埋め込むと、アイテムの画面の中にサイトを表示します。埋め込みを許可していないサイトは表示されません。',
+  fieldClass,
+}: {
+  id?: string
+  value?: string
+  hint?: Child
+  fieldClass?: string
+}) => (
+  <SelectField
+    label="開き方"
+    name="link_target"
+    id={id}
+    options={LINK_TARGETS.map((t) => ({ value: t, label: LINK_TARGET_LABELS[t] }))}
+    value={value}
+    hint={hint}
+    fieldClass={fieldClass}
+  />
+)
+
+/** リンクのアイテムを開く a 要素の属性。埋め込むものは、STEP Learn のアイテムの画面（itemHref）で開く */
+export function linkOpenAttrs(url: string, target: LinkTarget, itemHref: string) {
+  if (target === 'embed') return { href: itemHref }
+  // 同じタブでも noreferrer を外さないのは、コースやアイテムの URL をリンク先のサイトに知らせないため
+  if (target === 'same') return { href: url, rel: 'noreferrer' }
+  return { href: url, target: '_blank', rel: 'noopener noreferrer', 'data-no-prefetch': '' }
+}
+
+// sandbox に allow-top-navigation を入れないのは、埋め込んだサイトが STEP Learn の画面ごと別のページへ移動させないため
+export const LinkEmbed = ({ url, title }: { url: string; title: string }) => (
+  <div class="link-embed">
+    <iframe
+      src={url}
+      title={title}
+      referrerpolicy="no-referrer"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-presentation"
+      allow="fullscreen; clipboard-write; encrypted-media; picture-in-picture"
+      allowfullscreen
+    />
+    <p class="muted small">
+      表示されないときは
+      <a href={url} target="_blank" rel="noopener noreferrer" data-no-prefetch>
+        新しいタブで開く
+        <Icon name="external" size={12} />
+      </a>
+    </p>
+  </div>
 )
 
 const COMPLETION_HINTS: Record<ItemType | 'any', string> = {

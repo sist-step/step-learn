@@ -1,8 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { isEmail } from '../lib/forms'
-import type { Completion, CourseRole, ItemType } from '../lib/types'
+import { LINK_TARGET_LABELS, type Completion, type CourseRole, type ItemType, type LinkTarget } from '../lib/types'
 import { checkUsername, normalizeUsername } from '../lib/username'
+import { MOODLE_DISPLAY_LABELS, isExactDisplay, linkTargetOf, moodleDisplayOf } from './display'
 import { toMarkdown, toPlainText } from './html'
 import { type XmlNode, at, childrenOf, numberAt, parseXml, textAt } from './xml'
 
@@ -14,6 +15,7 @@ export type BackupItem = {
   title: string
   body: string
   url: string
+  linkTarget: LinkTarget
   file: BackupFile | null
   hidden: boolean
   completion: Completion
@@ -136,7 +138,7 @@ function readActivity(dir: string, activity: Activity, filesOf: ReturnType<typeo
   if (hasRestriction(moduleXml)) notes.push(RESTRICTION_NOTE)
   const title = cut(textAt(data, 'name') || activity.title || moduleLabel(activity.module), LIMITS.itemTitle, notes, 'タイトル')
   const intro = () => toMarkdown(textAt(data, 'intro'), numberAt(data, 'introformat'))
-  const base = { module: activity.module, title, url: '', file: null, hidden, notes }
+  const base = { module: activity.module, title, url: '', linkTarget: 'new' as const, file: null, hidden, notes }
 
   const page = (converted: { markdown: string; images: number; tables: number }): BackupItem => {
     if (converted.images) notes.push(`本文の画像 ${converted.images} 枚は取り込めないため「（画像: 名前）」に置き換えます`)
@@ -172,7 +174,11 @@ function readActivity(dir: string, activity: Activity, filesOf: ReturnType<typeo
       const url = textAt(data, 'externalurl').trim()
       if (!/^https?:\/\//i.test(url) || url.length > LIMITS.url)
         return [{ ...base, type: null, body: '', completion: 'none', notes: [`http(s) で始まらない URL（${url}）のため取り込みません`] }]
-      return [{ ...base, type: 'link', url, body: intro().markdown, completion: completionOf(moduleXml, 'link') }]
+      const display = moodleDisplayOf(numberAt(data, 'display')) ?? 'auto'
+      const linkTarget = linkTargetOf(display)
+      if (!isExactDisplay(display))
+        notes.push(`表示方法「${MOODLE_DISPLAY_LABELS[display]}」は「${LINK_TARGET_LABELS[linkTarget]}」にします`)
+      return [{ ...base, type: 'link', url, linkTarget, body: intro().markdown, completion: completionOf(moduleXml, 'link') }]
     }
     case 'resource': {
       const rows = filesOf(contextId, 'mod_resource', 'content').sort((a, b) => b.sortorder - a.sortorder)

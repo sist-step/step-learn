@@ -121,6 +121,7 @@ export async function show(c: Context<AppEnv>) {
       type: items.type,
       title: items.title,
       url: items.url,
+      linkTarget: items.linkTarget,
       fileName: items.fileName,
       fileSize: items.fileSize,
       fileType: items.fileType,

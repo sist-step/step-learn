@@ -137,6 +137,7 @@ function readItemInput(form: Form): ItemInput {
     title: field(form, 'title', 200),
     body: field(form, 'body', 100_000),
     url: field(form, 'url', 2000),
+    linkTarget: field(form, 'link_target', 10),
     file: fileField(form, 'file'),
   }
 }
@@ -173,6 +174,7 @@ export async function createItem(c: Context<AppEnv>) {
       title: input.title,
       body: input.body,
       url: type === 'link' ? input.url : '',
+      linkTarget: type === 'link' ? input.link_target : 'new',
       hidden,
       completion: access.course.completionEnabled ? (input.completion ?? 'none') : 'none',
       ...fileColumns(stored),
@@ -240,6 +242,7 @@ export async function updateItem(c: Context<AppEnv>) {
       title: input.title,
       body: input.body,
       url: item.type === 'link' ? (input.url ?? '') : '',
+      linkTarget: item.type === 'link' ? input.link_target : 'new',
       hidden,
       completion,
       ...fileColumns(stored),
@@ -330,6 +333,7 @@ export async function showItem(c: Context<AppEnv>) {
       type: items.type,
       title: items.title,
       url: items.url,
+      linkTarget: items.linkTarget,
       fileName: items.fileName,
       fileType: items.fileType,
       hidden: items.hidden,
