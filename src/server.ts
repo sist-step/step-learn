@@ -19,7 +19,8 @@ server.use(
 server.use('/favicon.ico', serveStatic({ path: './dist/client/favicon.ico' }))
 server.use('/favicon.png', serveStatic({ path: './dist/client/favicon.png' }))
 server.use('/apple-touch-icon.png', serveStatic({ path: './dist/client/apple-touch-icon.png' }))
-server.route('/', app)
+// route で組み込まないのは、app の notFound ではなく server の既定の notFound が使われ、404 が素のテキストになるため
+server.all('*', (c) => app.fetch(c.req.raw, c.env))
 
 const httpServer = serve({ fetch: server.fetch, port: config.port }, (info) => {
   console.log(`STEP Learn listening on http://localhost:${info.port}`)
