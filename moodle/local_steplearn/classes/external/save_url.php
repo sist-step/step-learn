@@ -41,6 +41,7 @@ class save_url extends external_api {
             'externalurl' => new external_value(PARAM_URL, 'http(s) URL'),
             'completion' => new external_value(PARAM_ALPHA, 'none, manual, view or keep (updates only)'),
             'visible' => new external_value(PARAM_BOOL, 'visible to students (ignored when updating)', VALUE_DEFAULT, true),
+            'display' => new external_value(PARAM_ALPHA, 'new, same, embed or keep', VALUE_DEFAULT, 'keep'),
         ]);
     }
 
@@ -52,6 +53,7 @@ class save_url extends external_api {
      * @param string $externalurl
      * @param string $completion
      * @param bool $visible
+     * @param string $display
      * @return int course module id
      */
     public static function execute(
@@ -61,7 +63,8 @@ class save_url extends external_api {
         string $name,
         string $externalurl,
         string $completion,
-        bool $visible = true
+        bool $visible = true,
+        string $display = 'keep'
     ): int {
         global $CFG;
         $params = self::validate_parameters(self::execute_parameters(), compact(
@@ -71,12 +74,17 @@ class save_url extends external_api {
             'name',
             'externalurl',
             'completion',
-            'visible'
+            'visible',
+            'display'
         ));
         self::validate_context(\context_system::instance());
         $course = courses::require_manage($params['courseid']);
-        if (!preg_match('~^https?://~i', $params['externalurl']) || !in_array($params['completion'], modules::COMPLETIONS)) {
-            throw new \invalid_parameter_exception('externalurl or completion');
+        if (
+            !preg_match('~^https?://~i', $params['externalurl'])
+            || !in_array($params['completion'], modules::COMPLETIONS)
+            || !in_array($params['display'], modules::DISPLAYS)
+        ) {
+            throw new \invalid_parameter_exception('externalurl, completion or display');
         }
         require_once($CFG->dirroot . '/course/lib.php');
 
@@ -84,12 +92,14 @@ class save_url extends external_api {
             [$data] = modules::load($course, $params['cmid'], 'url');
             $data->name = $params['name'];
             $data->externalurl = $params['externalurl'];
+            modules::set_display($data, $params['display']);
             modules::set_completion($data, $params['completion'], true);
             update_module($data);
             return $params['cmid'];
         }
         $data = modules::create($course, 'url', $params['sectionid'], $params['name'], $params['visible']);
         $data->externalurl = $params['externalurl'];
+        modules::set_display($data, $params['display']);
         modules::set_completion($data, $params['completion'], false);
         return (int) create_module($data)->coursemodule;
     }
