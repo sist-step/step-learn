@@ -26,6 +26,17 @@ export function redirectWith(c: Context<AppEnv>, location: string, message: stri
   return c.redirect(location, 303)
 }
 
+const NEXT_BASE = 'http://next.invalid'
+
+/** オープンリダイレクトを防ぐため、同一サイト内のパスだけを許可する */
+export function safeNext(next: string | undefined) {
+  // 先頭の文字だけで判定しないのは、ブラウザが URL の中のタブや改行を取り除くため、`/<TAB>/evil.example` が `//evil.example` として解釈されるため
+  // oxlint-disable-next-line no-control-regex -- 制御文字を含む値を拒否するため
+  if (!next || !next.startsWith('/') || /[\x00-\x20\x7f\\]/.test(next)) return '/dashboard'
+  const url = new URL(next, NEXT_BASE)
+  return url.origin === NEXT_BASE ? url.pathname + url.search + url.hash : '/dashboard'
+}
+
 /** Referer が同一オリジンならそのパスを、そうでなければ fallback を返す */
 export function sameOriginReferer(c: Context, fallback: string) {
   try {

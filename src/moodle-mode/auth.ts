@@ -171,9 +171,3 @@ export const requireAuth = createMiddleware<MoodleEnv>(async (c, next) => {
   }
   await next()
 })
-
-/** オープンリダイレクトを防ぐため、同一サイト内の相対パスのみ許可 */
-export function safeNext(next: string | undefined) {
-  if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return '/dashboard'
-  return next
-}
