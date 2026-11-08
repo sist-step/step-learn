@@ -74,7 +74,8 @@ const COMMON = new Set([
   'lms',
 ])
 
-const strip = (s: string) => s.replace(/^[\d\W_]+|[\d\W_]+$/g, '')
+// 前後の記号を /^[\d\W_]+|[\d\W_]+$/ で消さないのは、記号の長い並びで後ろ側の候補を開始位置ごとに読み直し、二乗の時間がかかるため
+const strip = (s: string) => s.match(/[a-z](?:[\s\S]*[a-z])?/i)?.[0] ?? ''
 
 function isSequence(s: string) {
   const step = s.charCodeAt(1) - s.charCodeAt(0)

@@ -55,7 +55,10 @@ const flag = () =>
 
 const username = () => z.pipe(z.pipe(text('ユーザー名', 100), z.transform(normalizeUsername)), z.string().check(rule(checkUsername)))
 
-const newPassword = () => z.pipe(text('パスワード', 200, { required: true }), z.string().check(rule((p: string) => checkPassword(p))))
+const PASSWORD_MAX_LENGTH = 200
+
+const newPassword = () =>
+  z.pipe(text('パスワード', PASSWORD_MAX_LENGTH, { required: true }), z.string().check(rule((p: string) => checkPassword(p))))
 
 const file = (message: string) => z.custom<File>(isFile, message)
 
@@ -93,6 +96,8 @@ const completeRegister = z
   })
   .check(
     z.superRefine((v, ctx) => {
+      // 長すぎる値を調べないのは、項目の上限を超えていてもこの検証は実行され、送られた値をそのまま受け取るため
+      if (v.password.length > PASSWORD_MAX_LENGTH) return
       const message = checkPassword(v.password, v)
       if (message) ctx.issues.push({ code: 'custom', message, input: v, path: ['password'] })
     }),
