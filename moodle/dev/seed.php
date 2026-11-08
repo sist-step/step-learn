@@ -23,6 +23,7 @@ set_config('enablecompletion', 1);
 set_config('appurl', APP_URL, 'local_steplearn');
 set_config('backchannelurl', BACKCHANNEL_URL, 'local_steplearn');
 set_config('backchannelsecret', BACKCHANNEL_SECRET, 'local_steplearn');
+set_config('banner', 1, 'local_steplearn');
 
 $authenticated = $DB->get_record('role', ['shortname' => 'user'], '*', MUST_EXIST);
 assign_capability('webservice/rest:use', CAP_ALLOW, $authenticated->id, $system->id, true);
