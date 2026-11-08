@@ -328,7 +328,7 @@ export async function createItem(c: C) {
 
   let cmid: number
   if (type === 'link') {
-    cmid = await moodle(c).saveUrl({ ...target, externalurl: url })
+    cmid = await moodle(c).saveUrl({ ...target, externalurl: url, display: result.values.link_target })
   } else {
     const file = isFile(result.values.file) ? result.values.file : null
     const uploadError = await checkUpload(file)
@@ -376,6 +376,7 @@ export async function updateItem(c: C) {
         values={{
           title: field(form, 'title', 200),
           url: field(form, 'url', 2000),
+          linkTarget: field(form, 'link_target', 10),
           hidden: field(form, 'hidden') === '1' ? 1 : 0,
           sectionId,
           completion: field(form, 'completion', 10),
@@ -385,11 +386,13 @@ export async function updateItem(c: C) {
       { title: `編集 - ${item.title}` },
     )
   }
-  const { title, url, hidden } = result.values
+  const { title, url, hidden, link_target: linkTarget } = result.values
   // Moodle の画面で決めた条件や、完了ステータスを使わないコースの設定を上書きしないよう、変えないときは keep を送る
   const completion = !loaded.course.completionenabled || item.completion === 'auto' ? 'keep' : (result.values.completion ?? 'keep')
   const target = { courseid: id, cmid: item.id, sectionid: item.sectionId, name: title, completion, visible: !hidden }
-  if (item.kind === 'link') await moodle(c).saveUrl({ ...target, externalurl: url ?? item.url })
+  // 開き方を変えないときに keep を送るのは、STEP Learn にない表示方法（ポップアップなど）を Moodle の画面で選んでいても、近い開き方に書き換えないため
+  const display = linkTarget === item.linkTarget ? 'keep' : linkTarget
+  if (item.kind === 'link') await moodle(c).saveUrl({ ...target, externalurl: url ?? item.url, display })
   else await moodle(c).saveResource({ ...target, draftitemid: file ? await uploadDraft(c.var.token!, file) : 0 })
   if (!!hidden !== item.hidden) await moodle(c).updateCourse(id, hidden ? 'cm_hide' : 'cm_show', [item.id])
   if (sectionId !== item.sectionId) await moodle(c).updateCourse(id, 'cm_move', [item.id], { sectionid: sectionId })

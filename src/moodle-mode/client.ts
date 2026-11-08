@@ -1,4 +1,5 @@
 import { config } from '../lib/config'
+import type { LinkTarget } from '../lib/types'
 
 const moodle = config.moodle!
 
@@ -182,6 +183,8 @@ export type MoodleModule = {
     details: { rulename: string }[]
   }
   contents?: { type: string; filename: string; fileurl: string; filesize: number; mimetype?: string }[]
+  /** 活動ごとの追加の情報（JSON）。URL では display（自動を解決したあとの表示方法） */
+  customdata?: string
 }
 
 export type MoodleSection = {
@@ -235,6 +238,7 @@ export const api = (token: string) => ({
     externalurl: string
     completion: string
     visible: boolean
+    display: LinkTarget | 'keep'
   }) => call<number>(token, 'local_steplearn_save_url', p),
   saveResource: (p: {
     courseid: number
