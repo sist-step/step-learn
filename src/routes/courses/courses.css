@@ -248,6 +248,9 @@
 .item-form[data-kind='file'] [data-kind-summary='file'],
 .item-form[data-kind='screen'] [data-kind-summary='screen'] { display: flex; }
 .kind-summary > .btn { flex: none; margin-left: auto; }
+/* 切り替え中にボタンの幅を残さないのは、カードの大きさから伸びはじめるときに文字が折り返して見えるため */
+.item-steps.is-switching .kind-summary { position: relative; }
+.item-steps.is-switching .kind-summary > .btn { position: absolute; top: 0; right: 10px; bottom: 0; margin-block: auto; }
 @media (max-width: 640px) {
   .kind-picker { grid-template-columns: minmax(0, 1fr); }
   .kind-summary .kind-option-text .small { display: none; }
