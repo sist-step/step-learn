@@ -4,6 +4,19 @@
 .course-scope { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .course-scope .segmented { align-self: center; }
 .course-scope .btn[aria-pressed='true'] { --btn-bg: var(--c-soft); --btn-fg: var(--c-ink); --btn-border: transparent; }
+/* 名前を常に付けないのは、絞り込み以外の遷移（検索など）でも一覧が横に動いてしまうため */
+:root[data-scope-slide] [data-course-list] { view-transition-name: course-list; }
+/* 切り替えを画面全体のフェードに含めないのは、前のつまみが元の位置に薄く残り、滑るつまみと二重に見えるため */
+:root[data-scope-slide] .course-scope .segmented { view-transition-name: course-scope; }
+::view-transition-old(course-scope) { display: none; }
+::view-transition-new(course-scope) { animation: none; }
+:root[data-scope-slide='next'] { --scope-slide: 24px; }
+:root[data-scope-slide='prev'] { --scope-slide: -24px; }
+::view-transition-group(course-list) { animation-duration: 0.3s; animation-timing-function: var(--ease); }
+::view-transition-old(course-list) { animation: course-list-out 0.14s ease-out both; }
+::view-transition-new(course-list) { animation: course-list-in 0.3s var(--ease) 0.08s both; }
+@keyframes course-list-out { to { opacity: 0; translate: calc(var(--scope-slide) * -1) 0; } }
+@keyframes course-list-in { from { opacity: 0; translate: var(--scope-slide) 0; } }
 @media (max-width: 640px) {
   .courses-toolbar .toolbar-grow { flex-basis: 100%; }
 }
