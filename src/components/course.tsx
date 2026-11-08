@@ -161,7 +161,7 @@ const CourseFields = ({ values, errors = {} }: { values: CourseFormValues; error
           type="date"
           value={values.endDate}
           error={errors.end_date}
-          hint="終了日を過ぎると「進行中」の一覧に出なくなります"
+          hint="終了日を過ぎると、ダッシュボードやコース一覧の「進行中」に出なくなります"
         />
       </div>
 

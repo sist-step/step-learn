@@ -123,6 +123,7 @@ class courses {
                 break;
             }
         }
+        $timeline = course_classify_for_timeline($course, null, $completion);
         $teachers = array_values(array_unique(array_map(fn($contact) => $contact['username'], $element->get_course_contacts())));
 
         return [
@@ -137,7 +138,8 @@ class courses {
             'canmanage' => $access['canmanage'],
             'total' => $total,
             'done' => $done,
-            'inprogress' => course_classify_for_timeline($course, null, $completion) === COURSE_TIMELINE_INPROGRESS,
+            'inprogress' => $timeline === COURSE_TIMELINE_INPROGRESS,
+            'upcoming' => $timeline === COURSE_TIMELINE_FUTURE,
             'members' => count_enrolled_users($context, '', 0, true),
             'teachers' => $teachers,
             'imageurl' => $imageurl,
@@ -161,6 +163,7 @@ class courses {
             'total' => new external_value(PARAM_INT, 'activities with completion visible to the user'),
             'done' => new external_value(PARAM_INT, 'completed activities'),
             'inprogress' => new external_value(PARAM_BOOL, 'in progress on the Moodle dashboard timeline (not ended, not completed, started)'),
+            'upcoming' => new external_value(PARAM_BOOL, 'not started yet on the Moodle dashboard timeline'),
             'members' => new external_value(PARAM_INT, 'active participants'),
             'teachers' => new external_multiple_structure(new external_value(PARAM_TEXT, 'name'), 'course contacts'),
             'imageurl' => new external_value(PARAM_URL, 'course image (webservice/pluginfile.php) or empty'),
