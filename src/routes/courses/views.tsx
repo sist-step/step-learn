@@ -32,7 +32,7 @@ import { courseImageUrl, type CourseImageKind } from '../../lib/course-images'
 import type { CourseAccess } from '../../lib/courses'
 import { MAX_IMAGE_SIZE } from '../../lib/images'
 import { previewKind } from '../../lib/preview'
-import { formatBytes } from '../../lib/storage'
+import { formatBytes } from '../../lib/bytes'
 import { COMPLETION_LABELS, ITEM_TYPE_LABELS, type Completion, type Item, type ItemType, type Section } from '../../lib/types'
 
 export type ItemLite = Pick<
@@ -620,7 +620,6 @@ const CourseImageCard = ({ courseId, kind, imageKey }: { courseId: number; kind:
             src={courseImageUrl(courseId, kind, imageKey)}
             aspect={f.aspect}
             width={f.width}
-            emptyLabel={imageKey ? '現在の画像を使用中' : undefined}
             hint={`${f.hint}PNG・JPEG・WebP・GIF、最大 ${formatBytes(MAX_IMAGE_SIZE)}。`}
           />
           <div class="form-actions">

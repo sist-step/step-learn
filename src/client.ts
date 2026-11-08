@@ -3,6 +3,7 @@
 // 全ページ共通のクライアント処理。JS が無効な環境では renderer の noscript がアプリを使えなくする。
 
 import checkSvg from 'heroicons/24/outline/check.svg?raw'
+import { formatBytes } from './lib/bytes'
 import { isFormName, validate, type FieldErrors, type FormInput } from './lib/forms'
 
 const $$ = <T extends Element>(sel: string, root: ParentNode = document) => [...root.querySelectorAll<T>(sel)]
@@ -793,7 +794,7 @@ document.addEventListener('change', (e) => {
     file = undefined
     toast(input.dataset.tooLarge ?? '', 'error')
   }
-  const preview = input.closest('.image-field')?.querySelector<HTMLImageElement>('[data-image-preview]')
+  const preview = input.closest('[data-file-drop]')?.querySelector<HTMLImageElement>('[data-image-preview]')
   if (!preview) return
   if (preview.src.startsWith('blob:')) URL.revokeObjectURL(preview.src)
   const src = file ? URL.createObjectURL(file) : preview.dataset.saved
@@ -803,15 +804,65 @@ document.addEventListener('change', (e) => {
   preview.hidden = !src
 })
 
-// --- 選んだファイル名をファイル選択の横に出す（components/form.tsx の FileInput）
+// --- 選んだファイルをファイル選択の下に出す（components/form.tsx の FileInput）
 // 画像のプレビューより前に登録しないのは、上限を超えて選択を取り消したあとの状態を出すため
 document.addEventListener('change', (e) => {
   const input = e.target as HTMLInputElement
   if (input.type !== 'file') return
-  const picker = input.closest('.file-picker')
-  const name = picker?.querySelector<HTMLElement>('[data-file-name]')
-  if (name) name.textContent = input.files?.[0]?.name ?? name.dataset.empty ?? '選択されていません'
-  picker?.toggleAttribute('data-has-file', !!input.files?.length)
+  const drop = input.closest<HTMLElement>('[data-file-drop]')
+  if (!drop) return
+  const file = input.files?.[0]
+  drop.toggleAttribute('data-has-file', !!file)
+  if (!file) return
+  const ext = file.name.includes('.') ? file.name.split('.').pop()!.toUpperCase() : ''
+  drop.querySelector('[data-file-name]')!.textContent = file.name
+  drop.querySelector('[data-file-meta]')!.textContent = [ext, formatBytes(file.size)].filter(Boolean).join('・')
+})
+
+document.addEventListener('click', (e) => {
+  const clear = (e.target as Element).closest('[data-file-clear]')
+  const input = clear?.closest('[data-file-drop]')?.querySelector<HTMLInputElement>('input[type=file]')
+  if (!input) return
+  input.value = ''
+  input.dispatchEvent(new Event('change', { bubbles: true }))
+  input.focus()
+})
+
+// --- ファイル選択へのドラッグ＆ドロップ
+const dropZoneOf = (e: DragEvent) => (e.target instanceof Element ? e.target.closest<HTMLLabelElement>('.file-drop-zone') : null)
+const carriesFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files')
+
+// accept はブラウザがドロップでは確かめないので、ファイル選択の画面と同じ規則でここで確かめる
+function acceptsFile(accept: string, file: File) {
+  if (!accept) return true
+  const name = file.name.toLowerCase()
+  return accept
+    .split(',')
+    .map((a) => a.trim().toLowerCase())
+    .some((a) => (a.startsWith('.') ? name.endsWith(a) : a.endsWith('/*') ? file.type.startsWith(a.slice(0, -1)) : file.type === a))
+}
+
+document.addEventListener('dragover', (e) => {
+  const zone = dropZoneOf(e)
+  if (!zone || !carriesFiles(e)) return
+  e.preventDefault()
+  e.dataTransfer!.dropEffect = 'copy'
+  zone.toggleAttribute('data-dragging', true)
+})
+document.addEventListener('dragleave', (e) => dropZoneOf(e)?.removeAttribute('data-dragging'))
+document.addEventListener('drop', (e) => {
+  const zone = dropZoneOf(e)
+  if (!zone || !carriesFiles(e)) return
+  e.preventDefault()
+  zone.removeAttribute('data-dragging')
+  const input = document.getElementById(zone.htmlFor)
+  const file = e.dataTransfer!.files[0]
+  if (!(input instanceof HTMLInputElement) || !file) return
+  if (!acceptsFile(input.accept, file)) return toast('この形式のファイルは選べません。', 'error')
+  const files = new DataTransfer()
+  files.items.add(file)
+  input.files = files.files
+  input.dispatchEvent(new Event('change', { bubbles: true }))
 })
 
 // --- 目次（data-toc）で、いま表示している節のリンクを強調する

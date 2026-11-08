@@ -36,10 +36,11 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `SelectField` | ラベル付きのセレクト。`options`（`{ value, label }[]`）と `value` |
 | `TextAreaField` | ラベル付きの複数行入力 |
 | `FileField` | ラベル付きのファイル選択（中身は `FileInput`） |
-| `ImageField` | プレビュー付きの画像選択。`src`（保存済みの画像の URL）/ `aspect`（プレビューの縦横比、既定 `16 / 9`）/ `emptyLabel`（未選択の表示）。プレビューを押しても選べる。選ぶとプレビューが替わり、上限を超えるファイルは `client.ts` が送信前に取り消す。受け取ったファイルは `lib/images.ts` の `putImage(prefix, file)` で検証・保存し、`serveImage(key)` で配信する |
+| `ImageField` | プレビュー付きの画像選択。`src`（保存済みの画像の URL）/ `aspect`（プレビューの縦横比、既定 `16 / 9`）/ `width`。`FileInput` のドロップ領域がそのままプレビューになり、画像があるときはホバー・ドラッグ中だけ案内を重ねる。選ぶとプレビューが替わり、上限を超えるファイルは `client.ts` が送信前に取り消す。受け取ったファイルは `lib/images.ts` の `putImage(prefix, file)` で検証・保存し、`serveImage(key)` で配信する |
 | `FormField` | ラベル・エラー・ヒントの枠だけ。中身を自由に組みたいとき（`children` に `Input` などを置く） |
 | `Input` / `Select` / `Textarea` | ラベルなしの部品。表の中や横並びのフォームで使う（`aria-label` を付ける）。`compact` で小さくなる |
-| `FileInput` | ファイル選択。ブラウザ標準の部品を隠し、日本語のボタン（`buttonLabel`、既定「ファイルを選択」）と選んだファイル名（未選択のときは `emptyLabel`、既定「選択されていません」）を出す。`id` は必須（ボタンが `label[for]` になる）。ファイル名の表示は `client.ts` が `data-file-name` を書き換え、選択を外すと `data-empty` の文言に戻す |
+| `FileInput` | ファイル選択。ブラウザ標準の部品を隠し、点線のドロップ領域（「ドラッグ＆ドロップ または {`buttonLabel`}」、既定「ファイルを選択」。タッチ端末と幅の狭い領域ではドラッグの案内を省く）を出す。`id` は必須（領域が `label[for]` になる）。押して選ぶほか、ファイルをドロップしても選べ（`client.ts` が `accept` を確かめる）、選ぶと下に `FileChip`（名前・拡張子・サイズ・取り消しの ×）が出る。`icon` は `FileChip` のアイコン、`zoneClass` / `zoneStyle` / `children` は領域の見た目と中身（`ImageField` のプレビュー） |
+| `FileChip` | ファイル 1 件の行（`name` / `meta` / `icon`、既定 `file`）。編集画面の「現在のファイル」にも使い、`FileInput` で選んだファイルと同じ見た目にそろえる |
 | `SearchBox` | 一覧上部の検索欄（`/` キーでフォーカス） |
 | `SegmentedControl` | ラジオボタンの切り替え（`name` / `label` / `options`（`icon` 付き可）/ `value`） |
 | `MarkdownEditor`（`markdown.tsx`） | Markdown の入力欄。CodeMirror のエディターに書式ボタン（⌘B / ⌘I / ⌘K）と「書く / プレビュー」の切り替え、書き方の早見表が付く。`label` / `name` / `value` / `rows`（最低の高さ）/ `placeholder` / `error` / `hint`。送信されるのは中の `textarea`（`name`）の値。Markdown を受け取る入力欄では `TextAreaField` ではなくこれを使う |
