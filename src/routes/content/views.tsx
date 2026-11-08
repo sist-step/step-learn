@@ -4,7 +4,7 @@ import { Icon } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
 import { Button } from '../../components/button'
-import { FileInput, FormField, SegmentedControl, SelectField, TextField, validateWith } from '../../components/form'
+import { FileChip, FileInput, FormField, SegmentedControl, SelectField, TextField, validateWith } from '../../components/form'
 import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, DangerRow, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
@@ -12,7 +12,8 @@ import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
 import { previewKind } from '../../lib/preview'
-import { MAX_FILE_SIZE, formatBytes } from '../../lib/storage'
+import { formatBytes } from '../../lib/bytes'
+import { MAX_FILE_SIZE } from '../../lib/storage'
 import { ITEM_TYPE_LABELS, type Item, type Section } from '../../lib/types'
 
 export type ItemInput = { title: string; body: string; url: string; file: File | null }
@@ -140,24 +141,22 @@ export const ItemEditPage = ({
             </Card>
             {item.type === 'file' && (
               <Card heading="ファイル">
-                <FormField
-                  id="f-file"
-                  error={errors.file}
-                  label="差し替えるファイル"
-                  hint={`選ばなければ今のファイルのまま（最大 ${formatBytes(MAX_FILE_SIZE)}）`}
-                >
-                  <div class="file-current">
-                    <Icon name="file" />
-                    <span class="truncate">{item.fileName}</span>
-                    <span class="muted small">{formatBytes(item.fileSize ?? 0)}</span>
-                  </div>
-                  <FileInput
+                <div class="stack">
+                  <FileChip name={item.fileName ?? ''} meta={`現在のファイル・${formatBytes(item.fileSize ?? 0)}`} />
+                  <FormField
                     id="f-file"
-                    name="file"
-                    aria-invalid={errors.file ? 'true' : undefined}
-                    aria-describedby="f-file-error f-file-desc"
-                  />
-                </FormField>
+                    error={errors.file}
+                    label="差し替えるファイル"
+                    hint={`選ばなければ今のファイルのまま（最大 ${formatBytes(MAX_FILE_SIZE)}）`}
+                  >
+                    <FileInput
+                      id="f-file"
+                      name="file"
+                      aria-invalid={errors.file ? 'true' : undefined}
+                      aria-describedby="f-file-error f-file-desc"
+                    />
+                  </FormField>
+                </div>
               </Card>
             )}
           </aside>

@@ -30,35 +30,95 @@ select.input {
 .input-sm { width: auto; height: var(--control-h-sm); padding: 0 10px; border-radius: var(--radius-sm); font-size: var(--fs-sm); }
 select.input-sm { padding-right: 32px; background-position: right 10px center; }
 input::placeholder, textarea::placeholder { color: var(--muted); }
-.file-picker { position: relative; display: flex; align-items: center; gap: 12px; min-width: 0; }
+/* ===== ファイル選択 */
+.file-drop { position: relative; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 /* display: none にしないのは、Tab でフォーカスできなくなり、検証で欄へ移動するときの行き先もなくなるため */
-.file-picker .file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-.file-picker .btn { --btn-border: var(--field-border); flex: none; cursor: pointer; }
-@media (hover: hover) {
-  .file-picker .btn:hover { --btn-border: color-mix(in srgb, var(--text) 55%, var(--field-border)); }
-}
-.file-picker:has(.file-input:focus-visible) .btn { outline: 2px solid var(--focus); outline-offset: 2px; }
-.file-picker:has(.file-input[aria-invalid='true']) .btn { border-color: var(--danger); }
-.file-picker-name { font-size: var(--fs-sm); color: var(--muted); }
-
-.image-field { display: flex; flex-direction: column; gap: 10px; }
-.image-preview {
+.file-drop .file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.file-drop-zone {
   position: relative;
   display: grid;
   place-items: center;
+  min-height: 136px;
+  padding: 24px 16px;
   overflow: hidden;
+  container-type: inline-size;
   border: 1px dashed var(--field-border);
   border-radius: var(--radius-field);
-  background: var(--surface-2);
-  color: var(--muted);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  text-align: center;
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
+/* 子要素をポインターの対象から外すのは、ドラッグ中に子要素へ入るたびに dragleave が起きて強調がちらつくため */
+.file-drop-zone > * { pointer-events: none; }
+.file-drop-body { display: flex; flex-direction: column; align-items: center; gap: 12px; line-height: 1.6; }
+.file-drop-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-2);
+  box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--card-border);
+  transition: color 0.15s, translate 0.2s var(--ease);
+}
+.file-drop-link { color: var(--c-ink); font-weight: 600; white-space: nowrap; }
 @media (hover: hover) {
-  .image-preview:hover { border-color: color-mix(in srgb, var(--text) 55%, var(--field-border)); }
+  .file-drop-zone:hover { border-color: color-mix(in srgb, var(--text) 55%, var(--field-border)); background: var(--surface-2); }
+  .file-drop-zone:hover .file-drop-link { text-decoration: underline; text-underline-offset: 3px; }
 }
+.file-drop-zone[data-dragging] { border-style: solid; border-color: var(--c-ink); background: var(--c-soft); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-ink) 15%, transparent); }
+.file-drop-zone[data-dragging] .file-drop-icon { color: var(--c-ink); translate: 0 -3px; }
+.file-drop:has(.file-input:focus-visible) .file-drop-zone { border-color: var(--focus); box-shadow: var(--ring-field); }
+.file-drop:has(.file-input[aria-invalid='true']) .file-drop-zone { border-color: var(--danger); }
+@media (hover: none) {
+  .file-drop-drag { display: none; }
+}
+@container (max-width: 220px) {
+  .file-drop-drag { display: none; }
+}
+
+.file-chip { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 10px 8px 10px 10px; border-radius: var(--radius); background: var(--surface-2); }
+.file-chip-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--c-ink);
+  box-shadow: inset 0 0 0 1px var(--card-border);
+}
+.file-chip-body { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.file-chip-name { font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
+.file-chip-meta { font-size: var(--fs-xs); color: var(--muted); }
+.file-chip .icon-btn { flex: none; }
+.file-drop:not([data-has-file]) .file-drop-chip { display: none; }
+.file-drop[data-has-file] .file-drop-chip { animation: rise 0.2s var(--ease); }
+
+.image-preview { min-height: 0; padding: 0; background: var(--surface-2); }
 .image-preview img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .image-preview img[hidden] { display: none; }
+.image-preview .file-drop-body { gap: 8px; }
+/* :where で包むのは、ホバーやドラッグ中に案内を出す下のルールより詳細度を上げないため */
+:where(.image-preview:has(img:not([hidden]))) .file-drop-body {
+  position: absolute;
+  inset: 0;
+  justify-content: center;
+  padding: 8px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.image-preview[data-dragging] .file-drop-body, .file-drop:has(.file-input:focus-visible) .image-preview .file-drop-body { opacity: 1; }
+@media (hover: hover) {
+  .image-preview:hover .file-drop-body { opacity: 1; }
+}
 
 .input-wrap { position: relative; }
 .input-wrap.with-action .input { padding-right: 44px; }
