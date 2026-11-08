@@ -87,7 +87,6 @@
 .rail-link > :first-child { justify-self: center; }
 .rail-link.active { background: var(--c-soft); color: var(--c-ink); }
 .rail-course.active { background: none; color: var(--text); }
-:root:not([data-courses-all]) .rail-courses:not(:has(.rail-course:not([data-course-ended]))) { display: none; }
 .rail-course.active .dot { box-shadow: 0 0 0 2px var(--current-ring), 0 0 0 4px var(--c1); }
 .rail-label { padding-right: 14px; font-weight: 500; opacity: 0; transition: opacity 0.15s; }
 @media (min-width: 901px) {

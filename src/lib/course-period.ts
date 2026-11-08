@@ -14,7 +14,3 @@ export const unixToDateInput = (unix: number | null | undefined) => (unix == nul
 /** 終了日はその日の終わりまでを期間に含める。期間を決めていない側は区切らない */
 export const isInPeriod = (period: { startAt: number | null; endAt: number | null }, at = Math.floor(Date.now() / 1000)) =>
   (period.startAt == null || period.startAt <= at) && (period.endAt == null || at < period.endAt + DAY)
-
-// 期間外のコースを後ろに回すのは、上限で切ったときに、絞り込みで隠れる期間外のコースだけが残って進行中のコースが消えないようにするため
-export const inProgressFirst = <T extends { inProgress: boolean }>(list: T[], limit: number) =>
-  [...list.filter((c) => c.inProgress), ...list.filter((c) => !c.inProgress)].slice(0, limit)

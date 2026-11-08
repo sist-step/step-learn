@@ -74,10 +74,26 @@ export async function list(c: Context<AppEnv>) {
     .orderBy(desc(courses.createdAt))
     .all()
     .map(({ startAt, endAt, ...course }) => ({ ...course, inProgress: isInPeriod({ startAt, endAt }) }))
+    .filter((course) => isAdmin || course.inProgress || course.role === 'teacher')
+  // 検索結果から決めないのは、一致する担当コースがない検索で切り替えが消えてしまうため
+  const teaches = !!db
+    .select({ courseId: enrollments.courseId })
+    .from(enrollments)
+    .where(and(eq(enrollments.userId, user.id), eq(enrollments.role, 'teacher')))
+    .limit(1)
+    .get()
 
-  return c.render(<CoursesPage q={q} isAdmin={isAdmin} showsOthers={isAdmin} canCreate={canCreateCourse(user)} results={results} />, {
-    title: 'コース一覧',
-  })
+  return c.render(
+    <CoursesPage
+      q={q}
+      isAdmin={isAdmin}
+      showsEnded={isAdmin || teaches}
+      showsOthers={isAdmin}
+      canCreate={canCreateCourse(user)}
+      results={results}
+    />,
+    { title: 'コース一覧' },
+  )
 }
 
 export async function create(c: Context<AppEnv>) {
