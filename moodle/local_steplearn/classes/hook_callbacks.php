@@ -27,7 +27,7 @@ use html_writer;
  */
 class hook_callbacks {
     /**
-     * ログイン画面では上端に帯を出し、ダッシュボードでは通知として出す。
+     * ログイン画面ではユーザー名の入力欄の上に出し、ダッシュボードでは通知として出す。
      *
      * @param before_standard_top_of_body_html_generation $hook
      */
@@ -53,11 +53,21 @@ class hook_callbacks {
             if (!self::heading_to_steplearn()) {
                 $hook->add_html(html_writer::div(
                     self::content($appurl),
-                    'alert alert-info border-0 rounded-0 mb-0 d-flex justify-content-center'
+                    'alert alert-info mb-4 d-none',
+                    ['id' => 'local-steplearn-banner']
                 ));
+                // テンプレート（core/loginform）に差し込まず JS で移すのは、ローカルプラグインからはログインフォームのテンプレートを変えられないため
+                // 移せなかったときも隠したままにしないのは、テーマがログイン画面の作りを変えていても案内は届けたいため
+                $PAGE->requires->js_amd_inline(<<<'JS'
+                    const banner = document.getElementById('local-steplearn-banner');
+                    if (banner) {
+                        document.querySelector('.loginform > .login-form')?.before(banner);
+                        banner.classList.remove('d-none');
+                    }
+                    JS);
             }
         } else if (isloggedin() && !isguestuser()) {
-            // 上端に帯として出さないのは、ダッシュボードでは固定のナビゲーションバーの下に隠れるため
+            // ページの上端に出さないのは、ダッシュボードでは固定のナビゲーションバーの下に隠れるため
             \core\notification::add(self::content($appurl), \core\output\notification::NOTIFY_INFO);
         }
     }

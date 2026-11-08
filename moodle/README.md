@@ -15,7 +15,7 @@ dev/               手元で試すための Moodle 5.1（Docker）
 | ログアウト | `logout.php` が Moodle からもログアウトして STEP Learn のログイン画面に戻す。STEP Learn は Moodle のセッションと時刻をログアウトの通知の鍵で署名して渡し、署名がない（または正しくない）ときは、他のサイトから踏ませた強制ログアウトを防ぐため確認画面を出す。Moodle の画面でログアウトしたときは、STEP Learn に署名付きで知らせる（`user_loggedout` の監視）。時間切れや管理者による強制ログアウトは通知が来ないので、STEP Learn が 1 分おきに `local_steplearn_check_session` で Moodle のセッションが続いているかを確かめ、切れていればログアウトさせる（続いていれば Moodle のセッションも延長する） |
 | コースの情報 | `local_steplearn_get_my_courses` / `local_steplearn_get_course`。ロール・編集できるか・進捗・教師の名前・参加者数・コース画像をまとめて返す。`local_steplearn_get_other_courses` は、管理者（`moodle/course:view` を持つ人）に参加していないコースを同じ形で返す（コース一覧の「登録外も表示」）。`get_course` は、タイル（format_tiles）と折りたたみ型トピック（format_topcoll）のコースではその表示の設定も返す |
 | セクションの開閉 | `local_steplearn_set_sections_collapsed`。STEP Learn で開閉したセクションを、Moodle のコース画面と同じユーザー設定（`coursesectionspreferences_<コース ID>`）に記録する |
-| 新しい STEP Learn の案内 | 設定の「新しい STEP Learn を案内する」をオンにすると、ログイン画面の上端（帯）とダッシュボード（通知）に「新しい STEP Learn を使う」ボタンを出す。ボタンは STEP Learn の `GET /auth/moodle/start` に移り、そのままログインの受け渡しを始める（Moodle にログイン済みなら画面を挟まずに入れる）。STEP Learn の「旧STEP Learnでログイン」から来てログイン画面にいる人には出さない |
+| 新しい STEP Learn の案内 | 設定の「新しい STEP Learn を案内する」をオンにすると、ログイン画面（ログインフォームの中）とダッシュボード（通知）に「新しい STEP Learn を使う」ボタンを出す。ボタンは STEP Learn の `GET /auth/moodle/start` に移り、そのままログインの受け渡しを始める（Moodle にログイン済みなら画面を挟まずに入れる）。STEP Learn の「旧STEP Learnでログイン」から来てログイン画面にいる人には出さない |
 | 教材の編集 | `local_steplearn_save_url` / `local_steplearn_save_resource`（URL・ファイルの活動の作成と更新）、`local_steplearn_create_section` / `local_steplearn_update_section`。Moodle 5.1 のコアには URL・ファイルの活動を作る Web サービスがないため |
 
 並べ替え・表示の切り替え・削除は、コアの `core_courseformat_update_course` を使います（トピック形式・週形式など、コンポーネントに対応したコースフォーマットが必要です）。
