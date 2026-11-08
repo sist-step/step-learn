@@ -1,5 +1,6 @@
 // サーバーの handlers と client.ts の両方が読み込むので、DB や Node の API を使うモジュールを import しない
 import * as z from 'zod/mini'
+import { dateInputToUnix, isDateInput } from './course-period'
 import { checkPassword } from './password'
 import { isMediaFile } from './preview'
 import { COMPLETIONS, COURSE_COLORS, type Completion, type ItemType } from './types'
@@ -101,13 +102,25 @@ const profile = z.object({ name: text('氏名', 60, { required: true }), usernam
 
 const password = z.object({ current: text('現在のパスワード', 200, { required: true }), password: newPassword() })
 
-const course = z.object({
-  title: text('コース名', 120, { required: true }),
-  code: text('コースコード', 30),
-  summary: text('概要', 2000),
-  color: choice(COURSE_COLORS, 'cyan'),
-  completion_enabled: flag(),
-})
+const date = (label: string) =>
+  z.pipe(trimmed(), z.string().check(rule((s: string) => (!s || isDateInput(s) ? null : `${label}が正しくありません。`))))
+
+const course = z
+  .object({
+    title: text('コース名', 120, { required: true }),
+    code: text('コースコード', 30),
+    summary: text('概要', 2000),
+    color: choice(COURSE_COLORS, 'cyan'),
+    completion_enabled: flag(),
+    start_date: date('開始日'),
+    end_date: date('終了日'),
+  })
+  .check(
+    z.superRefine((v, ctx) => {
+      if (isDateInput(v.start_date) && isDateInput(v.end_date) && dateInputToUnix(v.end_date) < dateInputToUnix(v.start_date))
+        ctx.issues.push({ code: 'custom', message: '終了日は開始日以降の日付にしてください。', input: v, path: ['end_date'] })
+    }),
+  )
 
 const section = z.object({ title: text('セクション名', 120, { required: true }), summary: z.optional(text('説明', 2000)) })
 

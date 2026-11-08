@@ -1,12 +1,23 @@
 import type { Context } from 'hono'
 import type { MoodleEnv } from './auth'
-import { cached, contentsKey, courseKey, coursesKey } from './cache'
-import { api, type MoodleFormat } from './client'
+import { cached, contentsKey, courseKey, coursesKey, otherCoursesKey } from './cache'
+import { api, isTokenError, type MoodleFormat } from './client'
 import { isOpenable, isTracked, toAccess, toLayout, toOutline } from './mapping'
 
 export const moodle = (c: Context<MoodleEnv>) => api(c.var.token!)
 
 export const myCourses = (c: Context<MoodleEnv>) => cached(coursesKey(c.var.user!.id), () => moodle(c).myCourses())
+
+export async function otherCourses(c: Context<MoodleEnv>) {
+  try {
+    return await cached(otherCoursesKey(c.var.user!.id), () => moodle(c).otherCourses())
+  } catch (e) {
+    // 一覧ごと失敗させないのは、プラグインを更新する前の Moodle にはこの API がなく、参加しているコースだけでも出せるため
+    if (isTokenError(e)) throw e
+    console.error('[moodle] other courses', e)
+    return []
+  }
+}
 
 /** コースとその教材。アクセスできなければ Moodle の notfound で例外になる（app.tsx の onError が 404 にする） */
 export async function loadCourse(c: Context<MoodleEnv>, courseId: number, { fresh = false } = {}) {

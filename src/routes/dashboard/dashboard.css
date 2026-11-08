@@ -22,7 +22,6 @@
   .tile-link { min-height: var(--tap); margin-block: -12px; padding-inline: 8px; margin-inline-end: -8px; }
 }
 .tile-courses { gap: 14px; }
-.course-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
 
 .tile-courses .empty { border: 0; box-shadow: none; padding: 24px 0; }
 

@@ -29,15 +29,52 @@ document.addEventListener('click', (e) => {
   document.cookie = `theme=${theme}; path=/; max-age=31536000; samesite=lax`
 })
 
-// --- マイコースの絞り込み（Moodle モード。クッキーでサーバーに伝え、今の画面を描き直す）
+// --- 表示するコースの絞り込み（端末ごと）
+// サーバーに伝えないのは、絞り込む候補のコースをすべて描いてあり、ここでは見せるかどうかを切り替えるだけで済むため
+const COURSES_ALL_KEY = 'sl:courses-all'
+const COURSES_OTHERS_KEY = 'sl:courses-others'
+const readFlag = (key: string) => {
+  try {
+    return localStorage.getItem(key) === '1'
+  } catch {
+    return false
+  }
+}
+const writeFlag = (key: string, on: boolean) => {
+  try {
+    if (on) localStorage.setItem(key, '1')
+    else localStorage.removeItem(key)
+  } catch {}
+}
+function applyCourseFilter() {
+  const all = readFlag(COURSES_ALL_KEY)
+  const others = readFlag(COURSES_OTHERS_KEY)
+  const root = document.documentElement
+  root.toggleAttribute('data-courses-all', all)
+  root.toggleAttribute('data-courses-others', others)
+  $$('[data-courses-toggle]').forEach((el) => el.setAttribute('aria-checked', String(!all)))
+  $$('[data-courses-others-toggle]').forEach((el) => el.setAttribute('aria-pressed', String(others)))
+  $$<HTMLInputElement>('[data-course-scope] input').forEach((input) => (input.checked = input.value === (all ? 'all' : 'current')))
+  const shown = (el: Element) =>
+    (all || !el.hasAttribute('data-course-ended')) && (!el.hasAttribute('data-course-unenrolled') || (all && others))
+  $$('[data-course-list]').forEach((list) => {
+    const count = $$('.course-card', list).filter(shown).length
+    $$('[data-course-count]', list).forEach((el) => (el.textContent = String(count)))
+    $$<HTMLElement>('[data-courses-empty]', list).forEach((el) => (el.hidden = count > 0))
+  })
+}
 document.addEventListener('click', (e) => {
-  const t = (e.target as Element).closest('[data-courses-toggle]')
+  const t = (e.target as Element).closest('[data-courses-toggle], [data-courses-others-toggle]')
   if (!t) return
-  const currentOnly = t.getAttribute('aria-checked') !== 'true'
-  t.setAttribute('aria-checked', String(currentOnly))
-  document.cookie = currentOnly ? 'courses=; path=/; max-age=0; samesite=lax' : 'courses=all; path=/; max-age=31536000; samesite=lax'
-  prefetched.clear()
-  void visit(new URL(location.href))
+  if (t.hasAttribute('data-courses-toggle')) writeFlag(COURSES_ALL_KEY, t.getAttribute('aria-checked') === 'true')
+  else writeFlag(COURSES_OTHERS_KEY, t.getAttribute('aria-pressed') !== 'true')
+  applyCourseFilter()
+})
+document.addEventListener('change', (e) => {
+  const input = e.target
+  if (!(input instanceof HTMLInputElement) || !input.closest('[data-course-scope]')) return
+  writeFlag(COURSES_ALL_KEY, input.value === 'all')
+  applyCourseFilter()
 })
 
 // --- PDF の表示方法（components/pdf.tsx の PdfBar。クッキーでサーバーに伝え、今の画面を描き直す）
@@ -1583,6 +1620,7 @@ function initContent() {
   completeOnView()
   restoreCollapsed()
   applyEditMode(readEditMode())
+  applyCourseFilter()
   updateToc()
   initMarkdownEditors()
   initPdfViewers()

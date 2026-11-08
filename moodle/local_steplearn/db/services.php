@@ -35,6 +35,12 @@ $functions = [
         'description' => 'Courses the current user is enrolled in, with role and progress.',
         'type' => 'read',
     ],
+    'local_steplearn_get_other_courses' => [
+        'classname' => 'local_steplearn\external\get_other_courses',
+        'description' => 'Courses the current user is not enrolled in, for users who can view all courses.',
+        'type' => 'read',
+        'capabilities' => 'moodle/course:view',
+    ],
     'local_steplearn_get_course' => [
         'classname' => 'local_steplearn\external\get_course',
         'description' => 'A course the current user can access, with role and progress.',
@@ -88,6 +94,7 @@ $services = [
             'mod_url_view_url',
             'mod_resource_view_resource',
             'local_steplearn_get_my_courses',
+            'local_steplearn_get_other_courses',
             'local_steplearn_get_course',
             'local_steplearn_create_section',
             'local_steplearn_update_section',

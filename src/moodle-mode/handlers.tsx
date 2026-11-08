@@ -4,7 +4,7 @@ import { deleteCookie, getSignedCookie, setSignedCookie } from 'hono/cookie'
 import type { CourseCardData } from '../components/ui'
 import { config } from '../lib/config'
 import { firstError, isFile, validate } from '../lib/forms'
-import { field, intParam, readForm, redirectWith, showsAllCourses, wantsJson } from '../lib/http'
+import { field, intParam, readForm, redirectWith, wantsJson } from '../lib/http'
 import { previewKind } from '../lib/preview'
 import { EXECUTABLE_NOT_ALLOWED, FILE_TOO_LARGE, MAX_FILE_SIZE, isExecutable } from '../lib/storage'
 import { CoursesPage } from '../routes/courses/views'
@@ -12,8 +12,8 @@ import { DashboardPage } from '../routes/dashboard/views'
 import { createSession, destroyByMoodleSid, destroySession, safeNext, type MoodleEnv } from './auth'
 import { forgetCourse, forgetProgress, forgetSections } from './cache'
 import { exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
-import { loadCourse, moodle, myCourses, outlineOf, progressOf, revisionOf, type LoadedCourse } from './data'
-import { isInProgress, isOpenable, sectionHref, toCard, type MItem } from './mapping'
+import { loadCourse, moodle, myCourses, otherCourses, outlineOf, progressOf, revisionOf, type LoadedCourse } from './data'
+import { isOpenable, sectionHref, toCard, type MItem } from './mapping'
 import { CoursePage, ItemEditPage, ItemPage, LoginPage, TEXT_PREVIEW_MAX } from './views'
 
 type C = Context<MoodleEnv>
@@ -101,8 +101,7 @@ export const toMoodle = (path: (c: C) => string | null) => (c: C) => {
 
 export async function dashboard(c: C) {
   const user = c.var.user!
-  const all = showsAllCourses(c)
-  const results: CourseCardData[] = (await myCourses(c)).filter((m) => all || isInProgress(m)).map(toCard)
+  const results: CourseCardData[] = (await myCourses(c)).map(toCard)
   return c.render(<DashboardPage name={user.name} canCreate={false} isAdmin={false} results={results} />, {
     title: 'ダッシュボード',
   })
@@ -111,10 +110,12 @@ export async function dashboard(c: C) {
 export async function listCourses(c: C) {
   const q = (c.req.query('q') ?? '').trim().slice(0, 100)
   const needle = q.toLowerCase()
-  const results = (await myCourses(c))
+  const isAdmin = c.var.user!.role === 'admin'
+  const [mine, others] = await Promise.all([myCourses(c), isAdmin ? otherCourses(c) : []])
+  const results = [...mine, ...others]
     .map(toCard)
     .filter((r) => !needle || [r.title, r.code, r.summary].some((s) => s.toLowerCase().includes(needle)))
-  return c.render(<CoursesPage q={q} isAdmin={false} canCreate={false} results={results} />, { title: 'コース一覧' })
+  return c.render(<CoursesPage q={q} isAdmin={false} showsOthers={isAdmin} canCreate={false} results={results} />, { title: 'コース一覧' })
 }
 
 // ---------------------------------------------------------------- コースページ
