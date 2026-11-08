@@ -422,6 +422,9 @@ type StepMotion = { animations: Animation[]; settle: () => void }
 
 const STEP_DURATION = 360
 const STEP_EASE = 'cubic-bezier(0.2, 0.7, 0.2, 1)'
+// 出ていく要素が消えきる前に選んだカードを動かしたり入ってくる要素を出したりしないのは、出ていく側を absolute で同じ場所に重ねているため、重なって見えるため
+const FADE_OUT_DURATION = 120
+const MOVE_DELAY = FADE_OUT_DURATION
 let stepMotion: StepMotion | null = null
 
 function settleStepMotion() {
@@ -439,14 +442,18 @@ function morphFrom(el: HTMLElement, from: DOMRect) {
       { transform: `translate(${from.left - to.left}px, ${from.top - to.top}px)`, width: `${from.width}px`, height: `${from.height}px` },
       { transform: 'none', width: `${to.width}px`, height: `${to.height}px` },
     ],
-    { duration: STEP_DURATION, easing: STEP_EASE },
+    { duration: STEP_DURATION, delay: MOVE_DELAY, easing: STEP_EASE, fill: 'backwards' },
   )
 }
 
-const keepHidden = (el: Element) => el.animate([{ opacity: 0 }, { opacity: 0 }], { duration: STEP_DURATION })
+const keepHidden = (el: Element) => el.animate([{ opacity: 0 }, { opacity: 0 }], { duration: MOVE_DELAY + STEP_DURATION, fill: 'forwards' })
 
 const fadeOut = (el: Element) =>
-  el.animate([{ opacity: 1 }, { opacity: 0, transform: 'scale(0.96)' }], { duration: 180, easing: 'ease-out', fill: 'forwards' })
+  el.animate([{ opacity: 1 }, { opacity: 0, transform: 'scale(0.96)' }], {
+    duration: FADE_OUT_DURATION,
+    easing: 'ease-out',
+    fill: 'forwards',
+  })
 
 const riseIn = (el: Element, delay: number) =>
   el.animate(
@@ -494,7 +501,9 @@ function goToItemStep(form: HTMLFormElement, step: ItemStep, kind?: string) {
   form.classList.add('is-switching')
   const height = form.animate([{ height: `${fromHeight}px` }, { height: `${form.offsetHeight}px` }], {
     duration: STEP_DURATION,
+    delay: MOVE_DELAY,
     easing: STEP_EASE,
+    fill: 'backwards',
   })
   const others = $$<HTMLElement>('[data-pick-kind]', picker).filter((el) => el !== chosen)
   const animations = forward
@@ -503,15 +512,15 @@ function goToItemStep(form: HTMLFormElement, step: ItemStep, kind?: string) {
         keepHidden(chosen),
         ...others.map(fadeOut),
         morphFrom(summary, fromBox),
-        ...$$('.kind-summary > .btn', settings).map((el) => riseIn(el, 200)),
-        ...visibleChildren(settings, summary).map((el, i) => riseIn(el, 90 + i * 30)),
+        ...$$('.kind-summary > .btn', settings).map((el) => riseIn(el, MOVE_DELAY + 160)),
+        ...visibleChildren(settings, summary).map((el, i) => riseIn(el, MOVE_DELAY + 120 + i * 30)),
       ]
     : [
         height,
         keepHidden(summary),
         ...visibleChildren(settings, summary).map(fadeOut),
         morphFrom(chosen, fromBox),
-        ...others.map((el, i) => riseIn(el, 120 + i * 40)),
+        ...others.map((el, i) => riseIn(el, MOVE_DELAY + 160 + i * 40)),
       ]
   const motion: StepMotion = {
     animations,
