@@ -1,6 +1,7 @@
 import type { Child, JSX } from 'hono/jsx'
 import type { FormName } from '../lib/forms'
 import { IMAGE_ACCEPT, IMAGE_TOO_LARGE, MAX_IMAGE_SIZE } from '../lib/images'
+import { IconButton } from './button'
 import { cx } from './cx'
 import { Icon, type IconName } from './icons'
 import { useStyle } from './style'
@@ -167,26 +168,67 @@ export const TextAreaField = ({
   )
 }
 
+export const FileChip = ({
+  name,
+  meta,
+  icon = 'file',
+  children,
+  class: cls,
+  ...rest
+}: { name?: string; meta?: string; icon?: IconName; children?: Child; class?: string } & JSX.IntrinsicElements['div']) => {
+  useStyle('/src/components/form.css')
+  return (
+    <div class={cx('file-chip', cls)} {...rest}>
+      <span class="file-chip-icon">
+        <Icon name={icon} size={20} />
+      </span>
+      <span class="file-chip-body">
+        <span class="file-chip-name truncate" data-file-name>
+          {name}
+        </span>
+        <span class="file-chip-meta" data-file-meta>
+          {meta}
+        </span>
+      </span>
+      {children}
+    </div>
+  )
+}
+
 // ブラウザ標準の見た目のままにしないのは、ボタンと「選択されていません」がブラウザの言語で出て、ほかの部品とも形がそろわないため
 export const FileInput = ({
   id,
   buttonLabel = 'ファイルを選択',
-  emptyLabel = '選択されていません',
+  icon,
+  zoneClass,
+  zoneStyle,
+  children,
   class: cls,
   ...rest
-}: { id: string; buttonLabel?: string; emptyLabel?: string; class?: string } & Omit<JSX.IntrinsicElements['input'], 'type' | 'id'>) => {
+}: { id: string; buttonLabel?: string; icon?: IconName; zoneClass?: string; zoneStyle?: string; children?: Child; class?: string } & Omit<
+  JSX.IntrinsicElements['input'],
+  'type' | 'id' | 'children'
+>) => {
   useStyle('/src/components/form.css', '/src/components/button.css')
   return (
-    <span class="file-picker">
+    <div class="file-drop" data-file-drop>
       <input type="file" id={id} class={cx('file-input', cls)} {...rest} />
-      <label for={id} class="btn btn-sm">
-        <Icon name="upload" size={16} />
-        {buttonLabel}
+      <label for={id} class={cx('file-drop-zone', zoneClass)} style={zoneStyle}>
+        {children}
+        <span class="file-drop-body">
+          <span class="file-drop-icon">
+            <Icon name="upload" size={18} />
+          </span>
+          <span>
+            <span class="file-drop-drag">ドラッグ＆ドロップ または </span>
+            <span class="file-drop-link">{buttonLabel}</span>
+          </span>
+        </span>
       </label>
-      <span class="file-picker-name truncate" data-file-name data-empty={emptyLabel}>
-        {emptyLabel}
-      </span>
-    </span>
+      <FileChip class="file-drop-chip" icon={icon} data-file-chip>
+        <IconButton icon="x" label="選択を取り消す" data-file-clear />
+      </FileChip>
+    </div>
   )
 }
 
@@ -214,37 +256,34 @@ export const ImageField = ({
   src,
   aspect = '16 / 9',
   width,
-  emptyLabel,
   error,
   hint,
   fieldClass,
   ...rest
-}: LabeledProps & { src?: string | null; aspect?: string; width?: number; emptyLabel?: string } & Omit<
+}: LabeledProps & { src?: string | null; aspect?: string; width?: number } & Omit<
     JSX.IntrinsicElements['input'],
     'id' | 'name' | 'type' | 'src' | 'width'
   >) => {
   useStyle('/src/components/form.css')
   return (
     <FormField id={id} label={label} error={error} hint={hint} class={fieldClass}>
-      <div class="image-field">
-        <label for={id} class="image-preview" style={`aspect-ratio: ${aspect};${width ? ` width: ${width}px;` : ''}`}>
-          <Icon name="photo" size={28} />
-          <img src={src ?? undefined} alt="" hidden={!src} data-image-preview data-saved={src ?? undefined} />
-        </label>
-        <FileInput
-          id={id}
-          name={name}
-          buttonLabel="画像を選択"
-          emptyLabel={emptyLabel}
-          accept={IMAGE_ACCEPT}
-          aria-invalid={error ? 'true' : undefined}
-          aria-describedby={describedBy(id, hint)}
-          data-image-input
-          data-max-size={String(MAX_IMAGE_SIZE)}
-          data-too-large={IMAGE_TOO_LARGE}
-          {...rest}
-        />
-      </div>
+      <FileInput
+        id={id}
+        name={name}
+        buttonLabel="画像を選択"
+        icon="photo"
+        zoneClass="image-preview"
+        zoneStyle={`aspect-ratio: ${aspect};${width ? ` width: ${width}px;` : ''}`}
+        accept={IMAGE_ACCEPT}
+        aria-invalid={error ? 'true' : undefined}
+        aria-describedby={describedBy(id, hint)}
+        data-image-input
+        data-max-size={String(MAX_IMAGE_SIZE)}
+        data-too-large={IMAGE_TOO_LARGE}
+        {...rest}
+      >
+        <img src={src ?? undefined} alt="" hidden={!src} data-image-preview data-saved={src ?? undefined} />
+      </FileInput>
     </FormField>
   )
 }

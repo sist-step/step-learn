@@ -257,7 +257,7 @@
 }
 
 /* ===== 設定の画像カード */
-form:has(.file-picker:not([data-has-file])) .image-save { display: none; }
+form:has(.file-drop:not([data-has-file])) .image-save { display: none; }
 .image-delete { margin-right: auto; --btn-fg: var(--danger-text); }
 @media (min-width: 641px) {
   .image-delete { margin-left: -18px; }

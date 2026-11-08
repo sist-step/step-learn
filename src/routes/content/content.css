@@ -28,7 +28,6 @@
 .editor-side { display: flex; flex-direction: column; gap: 20px; }
 .editor-danger { grid-column: 2; }
 .editor-title { height: var(--control-h-lg); font-size: 16px; font-weight: 600; }
-.file-current { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius); background: var(--surface-2); margin-bottom: 4px; }
 
 @media (max-width: 900px) {
   .editor { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }

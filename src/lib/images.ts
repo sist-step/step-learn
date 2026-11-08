@@ -1,4 +1,5 @@
-import { formatBytes, storage } from './storage'
+import { formatBytes } from './bytes'
+import { storage } from './storage'
 
 // SVG を受け付けないのは、スクリプトを埋め込めるので同一オリジンでインライン表示すると XSS になるため
 const IMAGE_TYPES = {
