@@ -13,13 +13,12 @@ import {
   hashPassword,
   needsRehash,
   resetPassword,
-  safeNext,
   verifyPassword,
 } from '../../lib/auth'
 import { config } from '../../lib/config'
 import { db } from '../../lib/db'
 import { type FieldErrors, validate } from '../../lib/forms'
-import { clientIp, field, readForm, redirectWith } from '../../lib/http'
+import { clientIp, field, readForm, redirectWith, safeNext } from '../../lib/http'
 import { mailer } from '../../lib/mail'
 import { checkPassword } from '../../lib/password'
 import { rateLimiter } from '../../lib/rate-limit'
