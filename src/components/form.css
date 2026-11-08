@@ -181,10 +181,11 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
 .switch[aria-checked='true'] .switch-track::after { transform: translateX(16px); }
 
 /* セグメント */
-.segmented { display: inline-flex; flex-wrap: wrap; padding: 4px; gap: 2px; background: var(--track); border-radius: 999px; box-shadow: inset 0 0 0 1px var(--track-border); align-self: flex-start; }
+.segmented { display: inline-flex; flex-wrap: wrap; padding: 4px; gap: 2px; background: var(--track); border-radius: 999px; box-shadow: inset 0 0 0 1px var(--track-border); align-self: flex-start; isolation: isolate; }
 .segmented label { cursor: pointer; }
 .segmented input { position: absolute; opacity: 0; }
 .segmented span {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -194,12 +195,24 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
   font-weight: 600;
   color: var(--muted);
   white-space: nowrap;
-  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  transition: color 0.15s, box-shadow 0.15s;
 }
 @media (hover: hover) {
   .segmented span:hover { color: var(--text); }
 }
-.segmented input:checked + span { background: var(--thumb); color: var(--text); box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--card-border); }
+.segmented input:checked + span { color: var(--text); }
+/* つまみを span 自身に塗らないのは、切り替え時に隣の選択肢の文字の下をくぐらせて滑らせるため */
+.segmented input:checked + span::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--thumb);
+  box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--card-border);
+}
+.segmented span.is-entering::before { animation: segment-slide 0.25s var(--ease); }
+@keyframes segment-slide { from { left: var(--segment-from-left); right: var(--segment-from-right); } }
 .segmented input:checked + span .icon { color: var(--c-ink); }
 .segmented input:focus-visible + span { box-shadow: var(--ring); }
 
