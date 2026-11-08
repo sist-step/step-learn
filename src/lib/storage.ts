@@ -2,6 +2,7 @@ import { AwsClient } from 'aws4fetch'
 import fs from 'node:fs'
 import path from 'node:path'
 import { Readable } from 'node:stream'
+import { formatBytes } from './bytes'
 import { config } from './config'
 
 // 教材ファイルの保存先。開発はローカルディスク、本番は R2（S3 互換 API）。
@@ -227,10 +228,4 @@ export const deleteCourseFiles = (courseId: number) => storage.deletePrefix(`cou
 /** レスポンスを待たせない後片付け（失敗してもログだけ残す） */
 export function inBackground(task: Promise<unknown>) {
   task.catch((e) => console.error('[background]', e))
-}
-
-export function formatBytes(n: number) {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
