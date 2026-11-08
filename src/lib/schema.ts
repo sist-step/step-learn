@@ -72,6 +72,8 @@ export const courses = sqliteTable('courses', {
   enrollKey: text('enroll_key'),
   visible: integer('visible').notNull().default(1),
   completionEnabled: integer('completion_enabled').notNull().default(1),
+  startAt: integer('start_at'),
+  endAt: integer('end_at'),
   createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: integer('created_at').notNull().default(now),
   updatedAt: integer('updated_at')

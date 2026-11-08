@@ -22,6 +22,8 @@ export function toCourse(m: MoodleCourse): Course {
     enrollKey: null,
     visible: m.visible ? 1 : 0,
     completionEnabled: m.completionenabled ? 1 : 0,
+    startAt: null,
+    endAt: null,
     createdBy: null,
     createdAt: 0,
     updatedAt: 0,
@@ -36,12 +38,18 @@ export const toCard = (m: MoodleCourse): CourseCardData => ({
   total: m.total,
   done: m.done,
   members: m.members,
-  teachers: m.teachers.join('、') || null,
+  inProgress: isInProgress(m),
 })
 
 export const isInProgress = (m: MoodleCourse) => m.inprogress !== false
 
-export const toNavCourse = (m: MoodleCourse): NavCourse => ({ id: m.id, title: m.fullname, color: courseColor(m.id), iconImage: null })
+export const toNavCourse = (m: MoodleCourse): NavCourse => ({
+  id: m.id,
+  title: m.fullname,
+  color: courseColor(m.id),
+  iconImage: null,
+  inProgress: isInProgress(m),
+})
 
 /** link と file は STEP Learn の画面で扱い、moodle は Moodle の画面で開く。label はセクションの中に本文を出す。subsection は中のアイテムを入れ子で並べる */
 export type ItemKind = 'link' | 'file' | 'moodle' | 'label' | 'subsection'

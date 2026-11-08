@@ -3,16 +3,9 @@ import type { Context } from 'hono'
 import type { CourseFormValues } from '../../components/course'
 import type { CourseCardData } from '../../components/ui'
 import { canCreateCourse } from '../../lib/auth'
-import {
-  courseRevision,
-  getCourseAccess,
-  memberCount,
-  teacherNames,
-  trackedDoneCount,
-  trackedItemCount,
-  visibleItem,
-} from '../../lib/courses'
+import { courseRevision, getCourseAccess, memberCount, trackedDoneCount, trackedItemCount, visibleItem } from '../../lib/courses'
 import { courseImagePrefix, type CourseImageKind } from '../../lib/course-images'
+import { dateInputToUnix, isInPeriod, unixToDateInput } from '../../lib/course-period'
 import { contains, db } from '../../lib/db'
 import { firstError, validate, type FormValues } from '../../lib/forms'
 import { field, intParam, readForm, redirectWith, type Form } from '../../lib/http'
@@ -29,11 +22,26 @@ const courseFormValues = (form: Form): CourseFormValues => ({
   summary: field(form, 'summary', 2000),
   color: field(form, 'color', 20),
   completionEnabled: field(form, 'completion_enabled', 1) === '1' ? 1 : 0,
+  startDate: field(form, 'start_date', 10),
+  endDate: field(form, 'end_date', 10),
+})
+
+const courseValues = (course: Course): CourseFormValues => ({
+  ...course,
+  startDate: unixToDateInput(course.startAt),
+  endDate: unixToDateInput(course.endAt),
 })
 
 type CourseInput = FormValues<'course'>
 
-const courseColumns = ({ completion_enabled: completionEnabled, ...values }: CourseInput) => ({ ...values, completionEnabled })
+const dateColumn = (s: string) => (s ? dateInputToUnix(s) : null)
+
+const courseColumns = ({ completion_enabled: completionEnabled, start_date: startDate, end_date: endDate, ...values }: CourseInput) => ({
+  ...values,
+  completionEnabled,
+  startAt: dateColumn(startDate),
+  endAt: dateColumn(endDate),
+})
 
 export async function list(c: Context<AppEnv>) {
   const user = c.var.user!
@@ -52,7 +60,8 @@ export async function list(c: Context<AppEnv>) {
       total: trackedItemCount(courses.id),
       done: trackedDoneCount(user.id, courses.id),
       members: memberCount(),
-      teachers: teacherNames(),
+      startAt: courses.startAt,
+      endAt: courses.endAt,
     })
     .from(courses)
     .leftJoin(enrollments, and(eq(enrollments.courseId, courses.id), eq(enrollments.userId, user.id)))
@@ -64,8 +73,11 @@ export async function list(c: Context<AppEnv>) {
     )
     .orderBy(desc(courses.createdAt))
     .all()
+    .map(({ startAt, endAt, ...course }) => ({ ...course, inProgress: isInPeriod({ startAt, endAt }) }))
 
-  return c.render(<CoursesPage q={q} isAdmin={isAdmin} canCreate={canCreateCourse(user)} results={results} />, { title: 'コース一覧' })
+  return c.render(<CoursesPage q={q} isAdmin={isAdmin} showsOthers={isAdmin} canCreate={canCreateCourse(user)} results={results} />, {
+    title: 'コース一覧',
+  })
 }
 
 export async function create(c: Context<AppEnv>) {
@@ -160,7 +172,7 @@ export async function settings(c: Context<AppEnv>) {
   const id = intParam(c, 'id')
   const access = id && (await getCourseAccess(c, id))
   if (!access || !access.canManage) return c.notFound()
-  return c.render(<SettingsPage access={access} values={access.course} />, {
+  return c.render(<SettingsPage access={access} values={courseValues(access.course)} />, {
     title: `設定 - ${access.course.title}`,
   })
 }

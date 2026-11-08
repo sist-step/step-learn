@@ -67,10 +67,6 @@ const THEME_COOKIE = 'theme'
 // OS の設定に合わせないのは、利用者が自分で選んだときだけダークにするため
 export const getTheme = (c: Context): Theme => (getCookie(c, THEME_COOKIE) === 'dark' ? 'dark' : 'light')
 
-const COURSES_COOKIE = 'courses'
-
-export const showsAllCourses = (c: Context) => getCookie(c, COURSES_COOKIE) === 'all'
-
 export type PdfMode = 'viewer' | 'browser'
 
 const PDF_COOKIE = 'pdf'

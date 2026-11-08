@@ -232,7 +232,7 @@ export type CourseCardData = {
   total?: number
   done?: number
   members?: number
-  teachers?: string | null
+  inProgress: boolean
 }
 
 export const CourseIcon = ({
@@ -255,15 +255,22 @@ export const CourseIcon = ({
 
 export const courseInitials = (course: { code: string; title: string }) => [...(course.code || course.title)].slice(0, 2).join('')
 
+/** client.ts が localStorage の設定で表示を切り替えるまでの既定（進行中・参加しているコースだけ）で見えるか */
+export const shownByDefault = (course: CourseCardData) => course.inProgress && !!course.role
+
 export const CourseCard = ({ course, showProgress }: { course: CourseCardData; showProgress?: boolean }) => {
   useStyle('/src/components/ui.css')
   const hero = courseImageUrl(course.id, 'hero', course.heroImage)
   return (
-    <a href={`/courses/${course.id}`} class={`course-card tone-${course.color}`}>
+    <a
+      href={`/courses/${course.id}`}
+      class={`course-card tone-${course.color}`}
+      data-course-ended={!course.inProgress || undefined}
+      data-course-unenrolled={!course.role || undefined}
+    >
       <div class="course-cover">
         {hero && <img class="course-cover-img" src={hero} alt="" loading="lazy" />}
         <CourseIcon course={course} text={courseInitials(course)} class="course-mono" />
-        <div class="course-cover-badges">{course.role === 'teacher' && <Chip tone="accent">担当</Chip>}</div>
       </div>
       <div class="course-body">
         <h3 class="course-title">{course.title}</h3>
@@ -274,38 +281,11 @@ export const CourseCard = ({ course, showProgress }: { course: CourseCardData; s
         {showProgress && course.role === 'student' ? (
           <Progress done={course.done ?? 0} total={course.total ?? 0} />
         ) : (
-          <>
-            {course.teachers && (
-              <span class="meta">
-                <span class="truncate">担当 {course.teachers}</span>
-              </span>
-            )}
-            <span class="meta course-members">
-              <Icon name="users" size={14} /> {course.members ?? 0}人
-            </span>
-          </>
+          <span class="meta course-members">
+            <Icon name="users" size={14} /> {course.members ?? 0}人
+          </span>
         )}
       </div>
-    </a>
-  )
-}
-
-export const CourseRow = ({ course }: { course: CourseCardData }) => {
-  useStyle('/src/components/ui.css')
-  return (
-    <a href={`/courses/${course.id}`} class={`course-row tone-${course.color}`}>
-      <CourseIcon course={course} text={courseInitials(course)} class="course-mono" />
-      <span class="course-row-text">
-        <span class="strong truncate">{course.title}</span>
-        {course.code && <span class="muted small truncate">{course.code}</span>}
-      </span>
-      {course.role === 'teacher' ? (
-        <Chip tone="accent">担当</Chip>
-      ) : course.role === 'student' && course.total ? (
-        <Progress done={course.done ?? 0} total={course.total} />
-      ) : (
-        <Icon name="chevronRight" size={16} class="muted" />
-      )}
     </a>
   )
 }
