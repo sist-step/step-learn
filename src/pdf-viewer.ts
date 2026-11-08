@@ -56,11 +56,13 @@ export async function mountPdfViewer(root: HTMLElement) {
   })
   let observer: IntersectionObserver | null = null
   let resizer: ResizeObserver | null = null
+  const listeners = new AbortController()
   viewers.add({
     root,
     destroy: () => {
       observer?.disconnect()
       resizer?.disconnect()
+      listeners.abort()
       void loading.destroy()
     },
   })
@@ -227,6 +229,11 @@ export async function mountPdfViewer(root: HTMLElement) {
     pagesEl.scrollTo({ top: v.el.offsetTop - parseFloat(getComputedStyle(pagesEl).paddingTop) })
     pageInput.value = String(v.page.pageNumber)
   }
+
+  // wheel を横取りして PDF と画面に振り分けないのは、タッチのスクロールや慣性・ホイールの滑らかなスクロールまで自前で作り直すことになるため
+  const syncPageScrolled = () => root.toggleAttribute('data-page-scrolled', scrollY > 0)
+  syncPageScrolled()
+  addEventListener('scroll', syncPageScrolled, { passive: true, signal: listeners.signal })
 
   let scrollFrame = 0
   pagesEl.addEventListener(
