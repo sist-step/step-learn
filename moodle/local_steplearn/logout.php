@@ -27,9 +27,31 @@ $PAGE->set_url(new moodle_url('/local/steplearn/logout.php'));
 $PAGE->set_context(context_system::instance());
 
 $appurl = \local_steplearn\app::url();
-// /login/logout.php と違って sesskey を求めないのは、STEP Learn から移ってくるときには sesskey を知る手段がないため。
-// 他のサイトから踏ませられてもログアウトするだけで、戻り先も固定なので害は小さい
-if (isloggedin()) {
-    require_logout();
+$loggedout = new moodle_url($appurl . '/login', ['loggedout' => 1]);
+if (!isloggedin()) {
+    redirect($loggedout);
 }
-redirect(new moodle_url($appurl . '/login', ['loggedout' => 1]));
+
+// sesskey の代わりに署名で確かめるのは、STEP Learn から移ってくるときには sesskey を知る手段がないため。
+// 署名に Moodle のセッションを含めるのは、攻撃者が自分のログアウトで得た URL を踏ませても、ほかの人をログアウトさせられないようにするため
+$time = optional_param('time', 0, PARAM_INT);
+$sig = optional_param('sig', '', PARAM_ALPHANUM);
+$backchannel = \local_steplearn\app::backchannel();
+$signed = $backchannel && $sig !== '' && abs(time() - $time) <= 300 && hash_equals(
+    hash_hmac('sha256', 'logout.' . hash('sha256', session_id()) . '.' . $time, $backchannel['secret']),
+    $sig
+);
+$sesskey = optional_param('sesskey', '', PARAM_RAW);
+if ($signed || ($sesskey !== '' && confirm_sesskey($sesskey))) {
+    require_logout();
+    redirect($loggedout);
+}
+
+// 署名がないときにそのままログアウトしないのは、他のサイトから踏ませるだけで Moodle と STEP Learn の両方からログアウトさせられるため
+echo $OUTPUT->header();
+echo $OUTPUT->confirm(
+    get_string('logoutconfirm'),
+    new moodle_url('/local/steplearn/logout.php', ['sesskey' => sesskey()]),
+    new moodle_url('/')
+);
+echo $OUTPUT->footer();

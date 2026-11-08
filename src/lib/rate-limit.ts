@@ -32,6 +32,12 @@ export function rateLimiter({ limit, windowSec }: { limit: number; windowSec: nu
       hits.set(key, { count: 1, resetAt: now + windowSec * 1000 })
     },
 
+    /** 先に数えた 1 回分を取り消す */
+    release(key: string) {
+      const entry = current(key, Date.now())
+      if (entry && entry.count > 0) entry.count--
+    },
+
     reset(key: string) {
       hits.delete(key)
     },
