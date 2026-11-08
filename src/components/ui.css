@@ -92,14 +92,8 @@
   color: var(--text);
   transition: background 0.15s;
 }
-.course-row .course-mono { flex: none; min-width: 36px; height: 36px; border-radius: 10px; font-size: var(--fs-xs); }
 .course-row-text { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.35; }
-.course-row .progress { width: 120px; flex: none; }
 .course-row > .icon { flex: none; }
-
-@media (max-width: 640px) {
-  .course-row .progress { width: 80px; }
-}
 
 .progress { display: flex; align-items: center; gap: 10px; width: 100%; }
 .progress-track { flex: 1; height: 8px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }

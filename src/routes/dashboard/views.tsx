@@ -5,7 +5,7 @@ import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Mascot } from '../../components/mascot'
 import { Styles } from '../../components/style'
-import { CourseRow, EmptyState, ProgressRing, type CourseCardData } from '../../components/ui'
+import { CourseCard, EmptyState, ProgressRing, type CourseCardData } from '../../components/ui'
 import { randomTip } from '../../lib/tips'
 
 const greeting = () => {
@@ -109,9 +109,9 @@ export const DashboardPage = ({
             </a>
           </div>
           {results.length > 0 ? (
-            <div class="course-rows">
+            <div class="course-grid">
               {results.map((course) => (
-                <CourseRow course={course} />
+                <CourseCard course={course} showProgress={course.role === 'student' && (course.total ?? 0) > 0} />
               ))}
             </div>
           ) : isAdmin ? (
