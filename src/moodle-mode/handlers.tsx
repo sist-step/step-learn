@@ -77,9 +77,18 @@ export async function finishLogin(c: C) {
   return c.redirect(safeNext(saved.next), 303)
 }
 
+/** Moodle 側で、STEP Learn から移ってきたログアウトだと確かめるための署名。鍵がなければ空（Moodle が確認画面を出す） */
+function logoutQuery(moodleSid: string | null) {
+  const secret = config.moodle!.backchannelSecret
+  if (!secret || !moodleSid) return ''
+  const time = Math.floor(Date.now() / 1000)
+  const sig = crypto.createHmac('sha256', secret).update(`logout.${moodleSid}.${time}`).digest('hex')
+  return `?${new URLSearchParams({ time: String(time), sig })}`
+}
+
 export async function logout(c: C) {
-  await destroySession(c)
-  return c.redirect(moodleUrl('/local/steplearn/logout.php'), 303)
+  const moodleSid = await destroySession(c)
+  return c.redirect(moodleUrl(`/local/steplearn/logout.php${logoutQuery(moodleSid)}`), 303)
 }
 
 const BACKCHANNEL_MAX_AGE = 5 * 60

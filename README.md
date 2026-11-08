@@ -144,7 +144,7 @@ Moodle 側には、このリポジトリの `moodle/local_steplearn/` のプラ�
 | --- | --- |
 | `MOODLE_URL` | Moodle の URL（例 `https://moodle.example.ac.jp`）。設定すると Moodle モードになります |
 | `MOODLE_EXCHANGE_TOKEN` | ログインのコードを交換する専用アカウントのトークン（必須） |
-| `MOODLE_BACKCHANNEL_SECRET` | Moodle でのログアウトの通知を検証する鍵（32 文字以上。プラグインの設定と同じ値）。未設定なら通知を受け付けません |
+| `MOODLE_BACKCHANNEL_SECRET` | Moodle でのログアウトの通知を検証し、STEP Learn からのログアウトに署名する鍵（32 文字以上。プラグインの設定と同じ値）。未設定なら通知を受け付けず、ログアウトのたびに Moodle の確認画面が出ます |
 
 完全移行して Moodle モードを使わなくなったら、次を削除します。
 

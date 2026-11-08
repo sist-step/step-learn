@@ -12,7 +12,7 @@ dev/               手元で試すための Moodle 5.1（Docker）
 | 機能 | 中身 |
 | --- | --- |
 | ログインの受け渡し | `login.php` が Moodle でログインさせてから（手動・Microsoft など、Moodle で使えるどの方式でもよい）、使い捨てのコード（60 秒・1 回だけ、PKCE 付き）を付けて STEP Learn の `/auth/moodle/callback` に戻す。STEP Learn は `local_steplearn_exchange_code` でコードをトークンに交換する |
-| ログアウト | `logout.php` が Moodle からもログアウトして STEP Learn のログイン画面に戻す。Moodle の画面でログアウトしたときは、STEP Learn に署名付きで知らせる（`user_loggedout` の監視）。時間切れや管理者による強制ログアウトは通知が来ないので、STEP Learn が 1 分おきに `local_steplearn_check_session` で Moodle のセッションが続いているかを確かめ、切れていればログアウトさせる（続いていれば Moodle のセッションも延長する） |
+| ログアウト | `logout.php` が Moodle からもログアウトして STEP Learn のログイン画面に戻す。STEP Learn は Moodle のセッションと時刻をログアウトの通知の鍵で署名して渡し、署名がない（または正しくない）ときは、他のサイトから踏ませた強制ログアウトを防ぐため確認画面を出す。Moodle の画面でログアウトしたときは、STEP Learn に署名付きで知らせる（`user_loggedout` の監視）。時間切れや管理者による強制ログアウトは通知が来ないので、STEP Learn が 1 分おきに `local_steplearn_check_session` で Moodle のセッションが続いているかを確かめ、切れていればログアウトさせる（続いていれば Moodle のセッションも延長する） |
 | コースの情報 | `local_steplearn_get_my_courses` / `local_steplearn_get_course`。ロール・編集できるか・進捗・教師の名前・参加者数・コース画像をまとめて返す。`local_steplearn_get_other_courses` は、管理者（`moodle/course:view` を持つ人）に参加していないコースを同じ形で返す（コース一覧の「登録外も表示」）。`get_course` は、タイル（format_tiles）と折りたたみ型トピック（format_topcoll）のコースではその表示の設定も返す |
 | セクションの開閉 | `local_steplearn_set_sections_collapsed`。STEP Learn で開閉したセクションを、Moodle のコース画面と同じユーザー設定（`coursesectionspreferences_<コース ID>`）に記録する |
 | 新しい STEP Learn の案内 | 設定の「新しい STEP Learn を案内する」をオンにすると、ログイン画面の上端（帯）とダッシュボード（通知）に「新しい STEP Learn を使う」ボタンを出す。ボタンは STEP Learn の `GET /auth/moodle/start` に移り、そのままログインの受け渡しを始める（Moodle にログイン済みなら画面を挟まずに入れる）。STEP Learn の「旧STEP Learnでログイン」から来てログイン画面にいる人には出さない |
@@ -34,7 +34,7 @@ dev/               手元で試すための Moodle 5.1（Docker）
    - 認証済みユーザーのロールに `webservice/rest:use` を許可する
 3. サイト管理 > プラグイン > ローカルプラグイン > STEP Learn
    - STEP Learn の URL：`APP_ORIGIN` と同じ（例 `https://lms.example.com`）
-   - ログアウトの通知の鍵：STEP Learn の `MOODLE_BACKCHANNEL_SECRET` と同じ値（32 文字以上）
+   - ログアウトの通知の鍵：STEP Learn の `MOODLE_BACKCHANNEL_SECRET` と同じ値（32 文字以上）。設定しないと、STEP Learn からログアウトするたびに Moodle の確認画面が出る
    - トークンの IP 制限：STEP Learn のサーバーの IP アドレス（任意。設定すると、漏れたトークンを他の場所から使えなくなる）
    - 新しい STEP Learn を案内する：移行を案内し始めるときにオンにする（既定はオフ）。文言はサイト管理 > 言語 > 言語のカスタマイズ で `local_steplearn` の `bannermessage`・`bannerbutton` を変える
 4. コードの交換に使う専用のアカウントを作る
