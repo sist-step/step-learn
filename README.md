@@ -127,6 +127,7 @@ npm run moodle:import -- backup.mbz             # プレビューを表示し、
 `MOODLE_URL` を設定すると、STEP Learn を Moodle 5.1 のフロントエンドとして動かします。データはすべて Moodle にあり、STEP Learn は画面だけを受け持ちます。
 
 - ログインは Moodle のログイン画面で行います（ログイン画面の「旧STEP Learnでログイン」から移動）。手動のアカウントでも Microsoft アカウントでもログインでき、ログインすると STEP Learn と Moodle の両方でログインした状態になります
+- Moodle のログイン画面とダッシュボードに「新しい STEP Learn を使う」ボタンを出せます（プラグインの設定でオンにします）。押すとそのまま STEP Learn にログインします
 - ログアウトすると Moodle からもログアウトします。Moodle の画面でログアウトしたときも、STEP Learn から抜けます（`MOODLE_BACKCHANNEL_SECRET` を設定した場合）
 - Moodle のセッションが時間切れになったときや、管理者に強制ログアウトされたときも、STEP Learn から抜けます（確認は 1 分おきで、次に画面を開いたときにログイン画面に戻ります）。STEP Learn を使っている間は Moodle のセッションも延長されます
 - STEP Learn の画面で扱うのは URL とファイルの活動だけです。課題・小テストなどのほかの活動は「Moodle で開く」から Moodle の画面で使います（ラベルは本文をセクションの中に表示します）

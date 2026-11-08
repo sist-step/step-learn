@@ -35,7 +35,14 @@ export function showLogin(c: C) {
 }
 
 export async function startLogin(c: C) {
-  const next = safeNext(field(await readForm(c), 'next', 500))
+  return redirectToMoodleLogin(c, safeNext(field(await readForm(c), 'next', 500)))
+}
+
+// POST の startLogin を使い回さないのは、Moodle（別オリジン）からのフォーム送信は CSRF の検証で弾かれるため
+/** Moodle の画面にある「新しい STEP Learn を使う」から来たとき */
+export const startLoginFromMoodle = (c: C) => redirectToMoodleLogin(c, '/dashboard')
+
+async function redirectToMoodleLogin(c: C, next: string) {
   const state = randomString()
   const verifier = randomString()
   const challenge = base64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)))
