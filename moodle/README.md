@@ -13,7 +13,7 @@ dev/               手元で試すための Moodle 5.1（Docker）
 | --- | --- |
 | ログインの受け渡し | `login.php` が Moodle でログインさせてから（手動・Microsoft など、Moodle で使えるどの方式でもよい）、使い捨てのコード（60 秒・1 回だけ、PKCE 付き）を付けて STEP Learn の `/auth/moodle/callback` に戻す。STEP Learn は `local_steplearn_exchange_code` でコードをトークンに交換する |
 | ログアウト | `logout.php` が Moodle からもログアウトして STEP Learn のログイン画面に戻す。Moodle の画面でログアウトしたときは、STEP Learn に署名付きで知らせる（`user_loggedout` の監視）。時間切れや管理者による強制ログアウトは通知が来ないので、STEP Learn が 1 分おきに `local_steplearn_check_session` で Moodle のセッションが続いているかを確かめ、切れていればログアウトさせる（続いていれば Moodle のセッションも延長する） |
-| コースの情報 | `local_steplearn_get_my_courses` / `local_steplearn_get_course`。ロール・編集できるか・進捗・教師の名前・参加者数・コース画像をまとめて返す。`get_course` は、タイル（format_tiles）と折りたたみ型トピック（format_topcoll）のコースではその表示の設定も返す |
+| コースの情報 | `local_steplearn_get_my_courses` / `local_steplearn_get_course`。ロール・編集できるか・進捗・教師の名前・参加者数・コース画像をまとめて返す。`local_steplearn_get_other_courses` は、管理者（`moodle/course:view` を持つ人）に参加していないコースを同じ形で返す（コース一覧の「登録外も表示」）。`get_course` は、タイル（format_tiles）と折りたたみ型トピック（format_topcoll）のコースではその表示の設定も返す |
 | セクションの開閉 | `local_steplearn_set_sections_collapsed`。STEP Learn で開閉したセクションを、Moodle のコース画面と同じユーザー設定（`coursesectionspreferences_<コース ID>`）に記録する |
 | 教材の編集 | `local_steplearn_save_url` / `local_steplearn_save_resource`（URL・ファイルの活動の作成と更新）、`local_steplearn_create_section` / `local_steplearn_update_section`。Moodle 5.1 のコアには URL・ファイルの活動を作る Web サービスがないため |
 

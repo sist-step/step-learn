@@ -2,6 +2,7 @@ import { desc, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 import type { CourseCardData } from '../../components/ui'
 import { canCreateCourse } from '../../lib/auth'
+import { isInPeriod } from '../../lib/course-period'
 import { memberCount, trackedDoneCount, trackedItemCount } from '../../lib/courses'
 import { db } from '../../lib/db'
 import { courses, enrollments } from '../../lib/schema'
@@ -23,12 +24,15 @@ export async function show(c: Context<AppEnv>) {
       total: trackedItemCount(courses.id),
       done: trackedDoneCount(user.id, courses.id),
       members: memberCount(),
+      startAt: courses.startAt,
+      endAt: courses.endAt,
     })
     .from(enrollments)
     .innerJoin(courses, eq(courses.id, enrollments.courseId))
     .where(eq(enrollments.userId, user.id))
     .orderBy(desc(enrollments.createdAt))
     .all()
+    .map(({ startAt, endAt, ...course }) => ({ ...course, inProgress: isInPeriod({ startAt, endAt }) }))
   return c.render(<DashboardPage name={user.name} canCreate={canCreateCourse(user)} isAdmin={user.role === 'admin'} results={results} />, {
     title: 'ダッシュボード',
   })

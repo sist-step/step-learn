@@ -27,7 +27,7 @@ import { AppShell } from '../../components/layout'
 import { MarkdownEditor } from '../../components/markdown'
 import { MenuItem, Modal, Popover } from '../../components/overlay'
 import { Styles } from '../../components/style'
-import { Chip, CourseCard, EmptyState, PageHeader, TabPanel, type CourseCardData } from '../../components/ui'
+import { Chip, CourseCard, EmptyState, PageHeader, TabPanel, shownByDefault, type CourseCardData } from '../../components/ui'
 import { courseImageUrl, type CourseImageKind } from '../../lib/course-images'
 import type { CourseAccess } from '../../lib/courses'
 import { MAX_IMAGE_SIZE } from '../../lib/images'
@@ -42,26 +42,52 @@ export type ItemLite = Pick<
 
 // ---------------------------------------------------------------- 一覧
 
+const CourseScopeControl = ({ showsOthers }: { showsOthers: boolean }) => (
+  <div class="course-scope">
+    <SegmentedControl
+      name="course_scope"
+      label="表示するコース"
+      options={[
+        { value: 'current', label: '進行中', icon: 'calendar' },
+        { value: 'all', label: 'すべて', icon: 'layers' },
+      ]}
+      value="current"
+      data-course-scope
+    />
+    {showsOthers && (
+      <Button icon="plus" aria-pressed="false" data-courses-others-toggle>
+        登録外も表示
+      </Button>
+    )}
+  </div>
+)
+
 export const CoursesPage = ({
   q,
   isAdmin,
+  showsOthers,
   canCreate,
   results,
 }: {
   q: string
   isAdmin: boolean
+  showsOthers: boolean
   canCreate: boolean
   results: CourseCardData[]
 }) => (
   <AppShell>
+    <Styles use={['/src/routes/courses/courses.css']} />
     <PageHeader
       title="コース一覧"
-      description={isAdmin ? 'すべてのコースを表示しています。' : '参加しているコースです。'}
+      description={showsOthers ? '「すべて」では、登録していないコースも表示できます。' : '参加しているコースです。'}
       actions={canCreate && <CreateCourseButton />}
     />
-    <form method="get" class="toolbar">
-      <SearchBox label="コースを検索" value={q} placeholder="コース名・コード・概要で検索" />
-    </form>
+    <div class="toolbar courses-toolbar">
+      <form method="get" class="toolbar-grow">
+        <SearchBox label="コースを検索" value={q} placeholder="コース名・コード・概要で検索" />
+      </form>
+      <CourseScopeControl showsOthers={showsOthers} />
+    </div>
     {results.length === 0 ? (
       <EmptyState
         icon="book"
@@ -76,13 +102,30 @@ export const CoursesPage = ({
         action={q && <Button href="/courses">検索をクリア</Button>}
       />
     ) : (
-      <div class="course-grid">
-        {results.map((course) => (
-          <CourseCard course={course} showProgress={course.role === 'student' && (course.total ?? 0) > 0} />
-        ))}
+      <div data-course-list>
+        <div class="course-grid">
+          {results.map((course) => (
+            <CourseCard course={course} showProgress={course.role === 'student' && (course.total ?? 0) > 0} />
+          ))}
+        </div>
+        <FilteredEmpty hidden={results.some(shownByDefault)} showsOthers={showsOthers} />
       </div>
     )}
   </AppShell>
+)
+
+const FilteredEmpty = ({ hidden, showsOthers }: { hidden: boolean; showsOthers: boolean }) => (
+  <div data-courses-empty hidden={hidden}>
+    <EmptyState
+      icon="calendar"
+      title="表示するコースはありません"
+      text={
+        showsOthers
+          ? '「すべて」に切り替えて「登録外も表示」を選ぶと、期間外や登録していないコースも表示できます。'
+          : '「すべて」に切り替えると、期間外のコースも表示できます。'
+      }
+    />
+  </div>
 )
 
 // ---------------------------------------------------------------- コースページ
