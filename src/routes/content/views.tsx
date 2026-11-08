@@ -1,4 +1,13 @@
-import { CompletionField, CompletionStatus, CourseLiveSync, ITEM_ICONS, ItemIcon } from '../../components/course'
+import {
+  CompletionField,
+  CompletionStatus,
+  CourseLiveSync,
+  ITEM_ICONS,
+  ItemIcon,
+  LinkEmbed,
+  LinkTargetField,
+  linkOpenAttrs,
+} from '../../components/course'
 import { cx } from '../../components/cx'
 import { Icon } from '../../components/icons'
 import { AppShell } from '../../components/layout'
@@ -16,9 +25,12 @@ import { formatBytes } from '../../lib/bytes'
 import { MAX_FILE_SIZE } from '../../lib/storage'
 import { ITEM_TYPE_LABELS, type Item, type Section } from '../../lib/types'
 
-export type ItemInput = { title: string; body: string; url: string; file: File | null }
+export type ItemInput = { title: string; body: string; url: string; linkTarget: string; file: File | null }
 
-export type OutlineItem = Pick<Item, 'id' | 'sectionId' | 'type' | 'title' | 'url' | 'fileName' | 'fileType' | 'hidden' | 'completion'>
+export type OutlineItem = Pick<
+  Item,
+  'id' | 'sectionId' | 'type' | 'title' | 'url' | 'linkTarget' | 'fileName' | 'fileType' | 'hidden' | 'completion'
+>
 
 export type OutlineSection = Pick<Section, 'id' | 'title' | 'hidden'>
 
@@ -53,6 +65,7 @@ export const ItemEditPage = ({
     title: item.title,
     body: item.body,
     url: item.url,
+    linkTarget: item.linkTarget as string,
     hidden: item.hidden,
     sectionId: item.sectionId,
     completion: item.completion as string,
@@ -103,6 +116,7 @@ export const ItemEditPage = ({
             {item.type === 'link' && (
               <TextField label="URL" name="url" type="url" value={v.url} error={errors.url} placeholder="https://" />
             )}
+            {item.type === 'link' && <LinkTargetField id="f-link-target" value={v.linkTarget} />}
             <MarkdownEditor
               label={item.type === 'page' ? '本文' : '説明（任意）'}
               name="body"
@@ -215,12 +229,13 @@ export const ItemPage = ({
   const waitsFor = (o: OutlineItem, completion: 'view' | 'play') =>
     isStudent && isTracked(o) && o.completion === completion && !done.has(o.id)
   const onOpen = (o: OutlineItem) => (waitsFor(o, 'view') ? { 'data-complete-on-open': completeUrl(o) } : {})
-  const opensOnView = item.type === 'page' || (!!preview && (preview !== 'text' || textPreview !== null))
+  const embedded = item.type === 'link' && item.linkTarget === 'embed'
+  const opensOnView = item.type === 'page' || embedded || (!!preview && (preview !== 'text' || textPreview !== null))
   const tracked = outline.filter(isTracked)
 
   const navHref = (o: OutlineItem) => `${base}/${o.id}`
   const opensNewTab = (o: OutlineItem) =>
-    o.type === 'link' || o.type === 'screen' || (o.type === 'file' && previewKind(o.fileType ?? '', o.fileName ?? '') === 'pdf')
+    o.type === 'screen' || (o.type === 'file' && previewKind(o.fileType ?? '', o.fileName ?? '') === 'pdf')
   const hiddenSections = new Set(sections.filter((s) => s.hidden).map((s) => s.id))
   const isHidden = (o: OutlineItem) => !!o.hidden || hiddenSections.has(o.sectionId)
   const siblings = outline.filter((o) => o.sectionId === item.sectionId)
@@ -296,14 +311,13 @@ export const ItemPage = ({
         <article class="reader-main">
           {!pdf && head}
 
-          {item.type === 'link' && (
+          {item.type === 'link' && embedded && <LinkEmbed url={item.url} title={item.title} />}
+
+          {item.type === 'link' && !embedded && (
             <LinkCard
-              href={item.url}
               icon="link"
               class={`link-card-lg kind-${item.type}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-no-prefetch
+              {...linkOpenAttrs(item.url, item.linkTarget, navHref(item))}
               {...onOpen(item)}
             >
               <span class="file-name">
@@ -461,13 +475,12 @@ export const ItemPage = ({
                   {items.map((o) => (
                     <li>
                       <a
-                        href={o.type === 'link' ? o.url : o.type === 'screen' ? `${navHref(o)}/screen` : navHref(o)}
+                        href={o.type === 'screen' ? `${navHref(o)}/screen` : navHref(o)}
                         class={cx('outline-link', o.id === item.id && 'active', isHidden(o) && 'is-hidden')}
-                        {...(opensNewTab(o)
-                          ? { target: '_blank', rel: o.type === 'link' ? 'noopener noreferrer' : 'noopener', 'data-no-prefetch': '' }
-                          : {})}
+                        {...(opensNewTab(o) ? { target: '_blank', rel: 'noopener', 'data-no-prefetch': '' } : {})}
+                        {...(o.type === 'link' ? linkOpenAttrs(o.url, o.linkTarget, navHref(o)) : {})}
                         aria-current={o.id === item.id ? 'page' : undefined}
-                        {...(o.type === 'link' ? onOpen(o) : {})}
+                        {...(o.type === 'link' && o.linkTarget !== 'embed' ? onOpen(o) : {})}
                       >
                         {isTracked(o) ? (
                           <span class={cx('outline-dot', done.has(o.id) && 'done')} data-outline-dot={o.id}>

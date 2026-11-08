@@ -26,6 +26,9 @@ class modules {
     /** @var string[] STEP Learn の完了の条件。keep は今の設定を変えない（Moodle の画面で設定した条件を残す） */
     const COMPLETIONS = ['none', 'manual', 'view', 'keep'];
 
+    /** @var string[] STEP Learn の開き方。keep は今の表示方法を変えない（新しく作るときはサイトの既定値） */
+    const DISPLAYS = ['new', 'same', 'embed', 'keep'];
+
     /**
      * @param \stdClass $course
      * @param string $modname
@@ -97,6 +100,25 @@ class modules {
             $i++;
         }
         return [$data, $context];
+    }
+
+    /**
+     * @param \stdClass $data
+     * @param string $display new / same / embed / keep
+     */
+    public static function set_display(\stdClass $data, string $display): void {
+        global $CFG;
+        require_once($CFG->libdir . '/resourcelib.php');
+        if ($display === 'keep') {
+            return;
+        }
+        $data->display = match ($display) {
+            'new' => RESOURCELIB_DISPLAY_NEW,
+            'embed' => RESOURCELIB_DISPLAY_EMBED,
+            default => RESOURCELIB_DISPLAY_OPEN,
+        };
+        // 編集フォームの既定値で補うのは、ポップアップなどから変えたときに、説明を表示しない設定になってしまうため
+        $data->printintro = $data->printintro ?? get_config($data->modulename, 'printintro');
     }
 
     /**

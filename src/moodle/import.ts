@@ -7,7 +7,7 @@ import { formatBytes } from '../lib/bytes'
 import { db } from '../lib/db'
 import { courses, enrollments, items, sections, users } from '../lib/schema'
 import { type StoredFile, deleteCourseFiles, isExecutable, putCourseFile } from '../lib/storage'
-import { COMPLETION_LABELS, COURSE_ROLE_LABELS, ITEM_TYPE_LABELS, type ItemType } from '../lib/types'
+import { COMPLETION_LABELS, COURSE_ROLE_LABELS, ITEM_TYPE_LABELS, LINK_TARGET_LABELS, type ItemType } from '../lib/types'
 import { type Backup, type BackupItem, type BackupParticipant, moduleLabel } from './backup'
 
 export type PlannedParticipant = BackupParticipant & {
@@ -155,7 +155,7 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
       }
       const extra = [
         item.type === 'file' && item.file ? formatBytes(item.file.size) : '',
-        item.type === 'link' ? item.url : '',
+        item.type === 'link' ? `${item.url}（${LINK_TARGET_LABELS[item.linkTarget]}）` : '',
         item.completion !== 'none' ? `完了: ${COMPLETION_LABELS[item.completion]}` : '',
         item.hidden ? warn('学生に非表示') : '',
       ].filter(Boolean)
@@ -242,6 +242,7 @@ export async function runImport(plan: Plan, progress: (message: string) => void)
               title: item.title,
               body: item.body,
               url: item.url,
+              linkTarget: item.linkTarget,
               hidden: item.hidden ? 1 : 0,
               completion: item.completion,
               position: n + 1,

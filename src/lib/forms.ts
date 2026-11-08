@@ -3,7 +3,7 @@ import * as z from 'zod/mini'
 import { dateInputToUnix, isDateInput } from './course-period'
 import { checkPassword } from './password'
 import { isMediaFile } from './preview'
-import { COMPLETIONS, COURSE_COLORS, type Completion, type ItemType } from './types'
+import { COMPLETIONS, COURSE_COLORS, LINK_TARGETS, type Completion, type ItemType } from './types'
 import { checkUsername, normalizeUsername } from './username'
 
 export const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) && s.length <= 254
@@ -144,6 +144,7 @@ const itemFields = {
   body: text('本文', 100_000),
   hidden: flag(),
   type: choice(['page', 'link', 'file', 'screen'], 'page'),
+  link_target: choice(LINK_TARGETS, 'new'),
   completion: z.optional(z.enum(COMPLETIONS, '完了の条件が正しくありません。')),
   // 必須にしないのは、ファイルの欄がファイルのアイテムのフォームにしかないため
   file: z.optional(z.unknown()),
