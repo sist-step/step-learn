@@ -281,7 +281,7 @@ export const CourseCard = ({ course, showProgress }: { course: CourseCardData; s
         {showProgress && course.role === 'student' ? (
           <Progress done={course.done ?? 0} total={course.total ?? 0} />
         ) : (
-          <span class="meta">
+          <span class="meta course-members">
             <Icon name="users" size={14} /> {course.members ?? 0}人
           </span>
         )}
