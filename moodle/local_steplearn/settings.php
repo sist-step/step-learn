@@ -54,4 +54,10 @@ if ($hassiteconfig) {
         '',
         PARAM_TEXT
     ));
+    $settings->add(new admin_setting_configcheckbox(
+        'local_steplearn/banner',
+        get_string('banner', 'local_steplearn'),
+        get_string('banner_desc', 'local_steplearn'),
+        0
+    ));
 }

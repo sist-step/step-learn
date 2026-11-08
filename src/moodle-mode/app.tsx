@@ -31,6 +31,7 @@ app.use((c, next) => (c.var.user ? userBodyLimit : guestBodyLimit)(c, next))
 app.get('/', (c) => c.redirect(c.var.user ? '/dashboard' : '/login'))
 
 app.get('/login', h.showLogin)
+app.get('/auth/moodle/start', h.startLoginFromMoodle)
 app.post('/auth/moodle/start', h.startLogin)
 app.get('/auth/moodle/callback', h.finishLogin)
 app.post('/auth/moodle/backchannel-logout', h.backchannelLogout)
