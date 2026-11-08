@@ -14,3 +14,6 @@ export const unixToDateInput = (unix: number | null | undefined) => (unix == nul
 /** 終了日はその日の終わりまでを期間に含める。期間を決めていない側は区切らない */
 export const isInPeriod = (period: { startAt: number | null; endAt: number | null }, at = Math.floor(Date.now() / 1000)) =>
   (period.startAt == null || period.startAt <= at) && (period.endAt == null || at < period.endAt + DAY)
+
+export const isUpcoming = (period: { startAt: number | null }, at = Math.floor(Date.now() / 1000)) =>
+  period.startAt != null && at < period.startAt

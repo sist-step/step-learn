@@ -5,7 +5,7 @@ import type { CourseCardData } from '../../components/ui'
 import { canCreateCourse } from '../../lib/auth'
 import { courseRevision, getCourseAccess, memberCount, trackedDoneCount, trackedItemCount, visibleItem } from '../../lib/courses'
 import { courseImagePrefix, type CourseImageKind } from '../../lib/course-images'
-import { dateInputToUnix, isInPeriod, unixToDateInput } from '../../lib/course-period'
+import { dateInputToUnix, isInPeriod, isUpcoming, unixToDateInput } from '../../lib/course-period'
 import { contains, db } from '../../lib/db'
 import { firstError, validate, type FormValues } from '../../lib/forms'
 import { field, intParam, readForm, redirectWith, type Form } from '../../lib/http'
@@ -73,27 +73,12 @@ export async function list(c: Context<AppEnv>) {
     )
     .orderBy(desc(courses.createdAt))
     .all()
+    .filter((course) => isAdmin || course.role === 'teacher' || !isUpcoming(course))
     .map(({ startAt, endAt, ...course }) => ({ ...course, inProgress: isInPeriod({ startAt, endAt }) }))
-    .filter((course) => isAdmin || course.inProgress || course.role === 'teacher')
-  // 検索結果から決めないのは、一致する担当コースがない検索で切り替えが消えてしまうため
-  const teaches = !!db
-    .select({ courseId: enrollments.courseId })
-    .from(enrollments)
-    .where(and(eq(enrollments.userId, user.id), eq(enrollments.role, 'teacher')))
-    .limit(1)
-    .get()
 
-  return c.render(
-    <CoursesPage
-      q={q}
-      isAdmin={isAdmin}
-      showsEnded={isAdmin || teaches}
-      showsOthers={isAdmin}
-      canCreate={canCreateCourse(user)}
-      results={results}
-    />,
-    { title: 'コース一覧' },
-  )
+  return c.render(<CoursesPage q={q} isAdmin={isAdmin} showsOthers={isAdmin} canCreate={canCreateCourse(user)} results={results} />, {
+    title: 'コース一覧',
+  })
 }
 
 export async function create(c: Context<AppEnv>) {
