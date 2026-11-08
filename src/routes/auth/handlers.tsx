@@ -68,10 +68,15 @@ export async function submitLogin(c: Context<AppEnv>) {
   const { login, password, next } = result.values
 
   const ip = clientIp(c)
-  const wait = Math.max(loginFailuresByIp.retryAfter(ip), loginFailuresByAccount.retryAfter(login))
+  // 入力のまま数えないのは、メールアドレスもユーザー名も大文字小文字を区別せずに照合するので、書き分けるだけで上限を逃れられるため
+  const account = login.toLowerCase()
+  const wait = Math.max(loginFailuresByIp.retryAfter(ip), loginFailuresByAccount.retryAfter(account))
   if (wait) {
     return c.render(<LoginPage login={login} next={next} errors={{ form: tooManyRequests(c, wait) }} />, { title: 'ログイン' })
   }
+  // 照合に失敗してから数えないのは、照合を待つ間に届いた同時のリクエストが、どれも上限の判定を通ってしまうため
+  loginFailuresByIp.hit(ip)
+  loginFailuresByAccount.hit(account)
 
   const user = db
     .select({ id: users.id, passwordHash: users.passwordHash })
@@ -81,8 +86,6 @@ export async function submitLogin(c: Context<AppEnv>) {
   const ok = user ? await verifyPassword(password, user.passwordHash) : await dummyVerify(password)
 
   if (!user || !ok) {
-    loginFailuresByIp.hit(ip)
-    loginFailuresByAccount.hit(login)
     c.status(401)
     return c.render(
       <LoginPage login={login} next={next} errors={{ form: 'メールアドレス（ユーザー名）またはパスワードが正しくありません。' }} />,
@@ -90,7 +93,8 @@ export async function submitLogin(c: Context<AppEnv>) {
     )
   }
 
-  loginFailuresByAccount.reset(login)
+  loginFailuresByIp.release(ip)
+  loginFailuresByAccount.reset(account)
 
   if (needsRehash(user.passwordHash)) {
     const passwordHash = await hashPassword(password)

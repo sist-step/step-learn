@@ -5,9 +5,13 @@ import { db } from '../../lib/db'
 import { validate, type FieldErrors } from '../../lib/forms'
 import { field, readForm, redirectWith } from '../../lib/http'
 import { checkPassword } from '../../lib/password'
+import { rateLimiter } from '../../lib/rate-limit'
 import { users } from '../../lib/schema'
 import type { AppEnv } from '../../lib/types'
 import { AccountPage } from './views'
+
+// ログインと同じくらいに抑えるのは、セッションを奪った人が、ここを現在のパスワードを総当たりで探す手段に使えないようにするため
+const passwordFailures = rateLimiter({ limit: 10, windowSec: 15 * 60 })
 
 export const show = (c: Context<AppEnv>) => c.render(<AccountPage user={c.var.user!} />, { title: 'アカウント' })
 
@@ -35,9 +39,21 @@ export async function changePassword(c: Context<AppEnv>) {
   }
   const { current, password } = result.values
 
+  const key = String(user.id)
+  const wait = passwordFailures.retryAfter(key)
+  if (wait) {
+    c.status(429)
+    c.header('Retry-After', String(wait))
+    const message = `試行回数が多すぎます。${Math.ceil(wait / 60)}分ほど待ってから再度お試しください。`
+    return c.render(<AccountPage user={user} errors={{ current: message }} />, { title: 'アカウント' })
+  }
+  // 照合に失敗してから数えないのは、照合を待つ間に届いた同時のリクエストが、どれも上限の判定を通ってしまうため
+  passwordFailures.hit(key)
+
   const row = db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, user.id)).get()
   const errors: FieldErrors = {}
-  if (!row || !(await verifyPassword(current, row.passwordHash))) errors.current = '現在のパスワードが正しくありません。'
+  if (row && (await verifyPassword(current, row.passwordHash))) passwordFailures.release(key)
+  else errors.current = '現在のパスワードが正しくありません。'
   // スキーマで確かめないのは、パスワードに含めてはいけない氏名やユーザー名がこのフォームの入力にないため
   const passwordError = checkPassword(password, user)
   if (passwordError) errors.password = passwordError
