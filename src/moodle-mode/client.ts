@@ -226,6 +226,7 @@ export const api = (token: string) => ({
     call<null>(token, 'local_steplearn_update_section', { courseid, sectionid, name, summary }),
   setSectionsCollapsed: (courseid: number, sectionids: number[], collapsed: boolean) =>
     call<null>(token, 'local_steplearn_set_sections_collapsed', { courseid, sectionids, collapsed }),
+  checkSession: (sidhash: string) => call<{ active: boolean }>(token, 'local_steplearn_check_session', { sidhash }),
   saveUrl: (p: {
     courseid: number
     cmid: number

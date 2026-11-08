@@ -21,6 +21,10 @@ const SESSION_TTL = 60 * 60 * 24 * 30 // 30日
 // 残り期限がこれを下回ったときだけ延長する（毎リクエストの書き込みを避ける）
 const SESSION_REFRESH_BELOW = SESSION_TTL / 2
 
+// 毎リクエスト確かめないのは、画面を開くたびに Moodle を 1 回余分に待たせないため。Moodle の時間切れ（既定 8 時間）に比べれば十分短い
+const MOODLE_CHECK_INTERVAL = 60_000
+const MOODLE_CHECK_MAX_ENTRIES = 5_000
+
 const NAV_LIMIT = 12
 
 const enc = new TextEncoder()
@@ -69,6 +73,26 @@ export async function createSession(c: Context<MoodleEnv>, ex: Exchanged) {
   await setSessionCookie(c, token)
 }
 
+const moodleCheckedAt = new Map<string, number>()
+
+/** STEP Learn のセッションを始めた Moodle のセッションが続いているか。続いていれば Moodle 側も延長される */
+async function moodleSessionActive(id: string, token: string, moodleSid: string) {
+  const last = moodleCheckedAt.get(id)
+  if (last !== undefined && Date.now() - last < MOODLE_CHECK_INTERVAL) return true
+  moodleCheckedAt.delete(id)
+  moodleCheckedAt.set(id, Date.now())
+  if (moodleCheckedAt.size > MOODLE_CHECK_MAX_ENTRIES) moodleCheckedAt.delete(moodleCheckedAt.keys().next().value!)
+  try {
+    const { active } = await api(token).checkSession(moodleSid)
+    return active
+  } catch (e) {
+    if (isTokenError(e)) return false
+    // 確かめられないときにログアウトさせないのは、Moodle が一時的に止まったり、プラグインが古かったりするだけで全員を締め出さないため
+    console.error('[moodle] checkSession', e)
+    return true
+  }
+}
+
 export async function destroySession(c: Context) {
   const id = await readSessionId(c)
   if (id) db.delete(sessions).where(eq(sessions.id, id)).run()
@@ -88,6 +112,7 @@ const findSession = (id: string) =>
       siteAdmin: users.siteAdmin,
       token: users.token,
       tokenExpiresAt: users.tokenExpiresAt,
+      moodleSid: sessions.moodleSid,
       expiresAt: sessions.expiresAt,
     })
     .from(sessions)
@@ -104,7 +129,8 @@ export const session = createMiddleware<MoodleEnv>(async (c, next) => {
   const token = row ? decryptToken(row.token) : null
   // トークンの期限が切れたら Moodle にログインし直してもらう。Moodle のセッションが残っていれば画面は出ずに戻ってくる
   const expired = !!row && row.tokenExpiresAt > 0 && row.tokenExpiresAt <= now()
-  if (!id || !row || !token || expired) {
+  // ログアウトの通知だけに頼らないのは、Moodle の時間切れや管理者による強制ログアウトでは user_loggedout が起きないため
+  if (!id || !row || !token || expired || !(await moodleSessionActive(id, token, row.moodleSid))) {
     if (id && row) db.delete(sessions).where(eq(sessions.id, id)).run()
     if (getCookie(c, SESSION_COOKIE) !== undefined) deleteCookie(c, SESSION_COOKIE, { path: '/' })
     return next()
