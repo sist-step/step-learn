@@ -73,10 +73,38 @@ document.addEventListener('click', (e) => {
 })
 document.addEventListener('change', (e) => {
   const input = e.target
-  if (!(input instanceof HTMLInputElement) || !input.closest('[data-course-scope]')) return
+  const scope = input instanceof HTMLInputElement && input.closest('[data-course-scope]')
+  if (!scope) return
+  const inputs = $$<HTMLInputElement>('input', scope)
+  const from = inputs.find((i) => i.value === (readFlag(COURSES_ALL_KEY) ? 'all' : 'current'))
   writeFlag(COURSES_ALL_KEY, input.value === 'all')
-  applyCourseFilter()
+  if (!from || from === input || !document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    return applyCourseFilter()
+  }
+  slideSegment(from, input)
+  const root = document.documentElement
+  const direction = inputs.indexOf(input) > inputs.indexOf(from) ? 'next' : 'prev'
+  root.dataset.scopeSlide = direction
+  void document.startViewTransition(applyCourseFilter).finished.finally(() => {
+    if (root.dataset.scopeSlide === direction) delete root.dataset.scopeSlide
+  })
 })
+
+// つまみを CSS の transition に任せないのは、選択中の背景が選択肢ごとの疑似要素で、要素をまたいで位置を補間できないため
+function slideSegment(from: HTMLInputElement, to: HTMLInputElement) {
+  const fromSpan = from.nextElementSibling
+  const toSpan = to.nextElementSibling
+  if (!(fromSpan instanceof HTMLElement) || !(toSpan instanceof HTMLElement)) return
+  const f = fromSpan.getBoundingClientRect()
+  const t = toSpan.getBoundingClientRect()
+  fromSpan.classList.remove('is-entering')
+  toSpan.classList.remove('is-entering')
+  toSpan.style.setProperty('--segment-from-left', `${f.left - t.left}px`)
+  toSpan.style.setProperty('--segment-from-right', `${t.right - f.right}px`)
+  void toSpan.offsetWidth
+  toSpan.classList.add('is-entering')
+  toSpan.addEventListener('animationend', () => toSpan.classList.remove('is-entering'), { once: true })
+}
 
 // --- PDF の表示方法（components/pdf.tsx の PdfBar。クッキーでサーバーに伝え、今の画面を描き直す）
 document.addEventListener('change', (e) => {
