@@ -27,6 +27,7 @@ import { cx } from '../../components/cx'
 import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { MarkdownEditor } from '../../components/markdown'
+import { WalkingMascot } from '../../components/mascot'
 import { MenuItem, Modal, Popover } from '../../components/overlay'
 import { Styles } from '../../components/style'
 import { Chip, CourseCard, EmptyState, PageHeader, TabPanel, shownByDefault, type CourseCardData } from '../../components/ui'
@@ -587,6 +588,7 @@ export const CoursePage = ({
         {manage && sectionList.length > 0 && <AddItemModal courseId={id} sections={sectionList} tracking={tracking} />}
       </TabPanel>
       <CourseLiveSync courseId={id} revision={revision} />
+      <WalkingMascot />
     </AppShell>
   )
 }
