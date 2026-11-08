@@ -84,9 +84,19 @@ function cut(text: string, max: number, notes: string[], label: string) {
   return text.slice(0, max)
 }
 
+/** 展開先の中にある通常のファイルなら実際のパス。`../` やシンボリックリンクで外を指すなら null */
+function fileInside(dir: string, file: string) {
+  // 展開時の safeJoin だけに頼らないのは、XML に書かれたパスや展開済みのディレクトリの中身は、バックアップを用意した人が自由に決められるため
+  const root = fs.realpathSync(dir)
+  const p = path.resolve(root, file)
+  if (!p.startsWith(root + path.sep) || !fs.existsSync(p)) return null
+  const real = fs.realpathSync(p)
+  return real.startsWith(root + path.sep) && fs.statSync(real).isFile() ? real : null
+}
+
 function readXml(dir: string, file: string) {
-  const p = path.join(dir, file)
-  return fs.existsSync(p) ? parseXml(fs.readFileSync(p, 'utf8')) : undefined
+  const p = fileInside(dir, file)
+  return p ? parseXml(fs.readFileSync(p, 'utf8')) : undefined
 }
 
 type FileRow = { hash: string; name: string; size: number; type: string; sortorder: number }
@@ -104,9 +114,12 @@ function indexFiles(dir: string) {
   return (contextId: string, component: string, filearea: string) => byArea.get(`${contextId}/${component}/${filearea}`) ?? []
 }
 
+const isContentHash = (s: string) => /^[0-9a-f]{40}$/.test(s)
+
 function toBackupFile(dir: string, row: FileRow): BackupFile | null {
-  const p = path.join(dir, 'files', row.hash.slice(0, 2), row.hash)
-  if (!fs.existsSync(p)) return null
+  if (!isContentHash(row.hash)) return null
+  const p = fileInside(dir, path.join('files', row.hash.slice(0, 2), row.hash))
+  if (!p) return null
   return { path: p, name: row.name, size: fs.statSync(p).size, type: row.type || 'application/octet-stream' }
 }
 
