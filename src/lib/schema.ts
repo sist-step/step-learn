@@ -132,6 +132,9 @@ export const items = sqliteTable(
     title: text('title').notNull(),
     body: text('body').notNull().default(''),
     url: text('url').notNull().default(''),
+    linkTarget: text('link_target', { enum: ['new', 'same', 'embed'] })
+      .notNull()
+      .default('new'),
     fileKey: text('file_key'),
     fileName: text('file_name'),
     fileSize: integer('file_size'),
@@ -152,6 +155,7 @@ export const items = sqliteTable(
     index('items_course').on(t.courseId),
     check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen')`),
     check('items_completion', sql`${t.completion} IN ('none', 'manual', 'view', 'play')`),
+    check('items_link_target', sql`${t.linkTarget} IN ('new', 'same', 'embed')`),
   ],
 )
 

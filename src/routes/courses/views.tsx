@@ -5,6 +5,8 @@ import {
   CourseLiveSync,
   CreateCourseButton,
   ItemIcon,
+  LinkTargetField,
+  linkOpenAttrs,
   nextActionLabel,
   type CourseFormErrors,
   type CourseFormValues,
@@ -37,7 +39,7 @@ import { COMPLETION_LABELS, ITEM_TYPE_LABELS, type Completion, type Item, type I
 
 export type ItemLite = Pick<
   Item,
-  'id' | 'sectionId' | 'type' | 'title' | 'url' | 'fileName' | 'fileSize' | 'fileType' | 'hidden' | 'completion'
+  'id' | 'sectionId' | 'type' | 'title' | 'url' | 'linkTarget' | 'fileName' | 'fileSize' | 'fileType' | 'hidden' | 'completion'
 >
 
 // ---------------------------------------------------------------- 一覧
@@ -157,11 +159,11 @@ const ItemRow = ({
 }) => {
   const base = `/courses/${courseId}/items/${item.id}`
   const tracked = completion && completion !== 'none'
-  const opensToComplete = isStudent && completion === 'view' && item.type === 'link' && !done
-  const external = item.type === 'link'
+  const external = item.type === 'link' && item.linkTarget !== 'embed'
+  const opensToComplete = isStudent && completion === 'view' && external && !done
   const pdf = item.type === 'file' && previewKind(item.fileType ?? '', item.fileName ?? '') === 'pdf'
-  const newTab = item.type === 'link' || item.type === 'screen' || pdf
-  const href = item.type === 'link' ? item.url : item.type === 'screen' ? `${base}/screen` : base
+  const newTab = item.type === 'screen' || pdf
+  const href = item.type === 'screen' ? `${base}/screen` : base
   const meta =
     item.type === 'link'
       ? hostOf(item.url)
@@ -173,7 +175,8 @@ const ItemRow = ({
       <a
         href={href}
         class="item-link"
-        {...(newTab ? { target: '_blank', rel: external ? 'noopener noreferrer' : 'noopener', 'data-no-prefetch': '' } : {})}
+        {...(newTab ? { target: '_blank', rel: 'noopener', 'data-no-prefetch': '' } : {})}
+        {...(item.type === 'link' ? linkOpenAttrs(item.url, item.linkTarget, base) : {})}
         {...(opensToComplete ? { 'data-complete-on-open': `${base}/complete` } : {})}
       >
         <ItemIcon type={item.type} />
@@ -188,7 +191,7 @@ const ItemRow = ({
           </Chip>
         )}
         {sharing && <Chip tone="live">配信中</Chip>}
-        {newTab ? <Icon name="external" size={14} class="item-ext" /> : <Icon name="chevronRight" size={16} class="item-ext" />}
+        {newTab || external ? <Icon name="external" size={14} class="item-ext" /> : <Icon name="chevronRight" size={16} class="item-ext" />}
       </a>
       {manage && (
         <div class="row-actions edit-only">
@@ -320,6 +323,7 @@ const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sect
         </div>
         <TextField label="タイトル" name="title" id="new-item-title" placeholder="例：第1回 講義資料" />
         <TextField label="URL" name="url" id="new-item-url" type="url" placeholder="https://" fieldClass="when-link" />
+        <LinkTargetField id="new-item-link-target" fieldClass="when-link" />
         <FileField
           label="ファイル"
           name="file"

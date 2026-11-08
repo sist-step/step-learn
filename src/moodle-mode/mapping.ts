@@ -1,6 +1,7 @@
 import type { CourseCardData } from '../components/ui'
 import type { CourseAccess } from '../lib/courses'
-import { COURSE_COLORS, type Completion, type Course, type NavCourse } from '../lib/types'
+import { COURSE_COLORS, type Completion, type Course, type LinkTarget, type NavCourse } from '../lib/types'
+import { linkTargetOf, moodleDisplayOf, type MoodleDisplay } from '../moodle/display'
 import { toMarkdown, toPlainText } from '../moodle/html'
 import type { MoodleCourse, MoodleFormat, MoodleModule, MoodleSection } from './client'
 
@@ -66,6 +67,10 @@ export type MItem = {
   title: string
   /** link はリンク先、moodle は Moodle の活動の画面 */
   url: string
+  /** link の開き方。Moodle の表示方法を読み替えたもの */
+  linkTarget: LinkTarget
+  /** link の Moodle での表示方法。分からなければ null */
+  display: MoodleDisplay | null
   fileName: string
   fileSize: number
   fileType: string
@@ -104,12 +109,25 @@ function completionOf(m: MoodleModule, tracking: boolean): ItemCompletion {
   return (m.modname === 'url' || m.modname === 'resource') && rules.length === 1 && rules[0] === 'completionview' ? 'view' : 'auto'
 }
 
+function displayOf(m: MoodleModule) {
+  try {
+    const data = JSON.parse(m.customdata ?? '') as { display?: unknown }
+    // 文字列も受け付けるのは、Moodle が DB の値をそのまま入れるため（自動のときだけ数値になる）
+    const display = typeof data.display === 'number' || typeof data.display === 'string' ? moodleDisplayOf(Number(data.display)) : null
+    // ダウンロードを自動とみなすのは、URL の活動の設定ではダウンロードを選べず、自動のときにふつうのページの URL へ Moodle が選ぶ値のため
+    return display === 'download' ? 'auto' : display
+  } catch {
+    return null
+  }
+}
+
 const KINDS: Partial<Record<string, ItemKind>> = { url: 'link', resource: 'file', label: 'label', subsection: 'subsection' }
 
 function toItem(m: MoodleModule, sectionId: number, tracking: boolean, childSectionId: number | null = null): MItem {
   const kind = KINDS[m.modname] ?? 'moodle'
   const content = m.contents?.[0]
   const file = kind === 'file' ? content : undefined
+  const display = kind === 'link' ? displayOf(m) : null
   return {
     id: m.id,
     sectionId,
@@ -118,6 +136,9 @@ function toItem(m: MoodleModule, sectionId: number, tracking: boolean, childSect
     instance: m.instance,
     title: m.name,
     url: kind === 'link' ? (content?.fileurl ?? '') : (m.url ?? ''),
+    // 表示方法が分からないときに新しいタブにするのは、Moodle の設定を読めなかった以前の STEP Learn の開き方に合わせるため
+    linkTarget: display ? linkTargetOf(display) : 'new',
+    display,
     fileName: file?.filename ?? '',
     fileSize: file?.filesize ?? 0,
     fileType: file?.mimetype ?? 'application/octet-stream',

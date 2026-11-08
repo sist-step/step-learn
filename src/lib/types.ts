@@ -49,6 +49,16 @@ export const COMPLETION_LABELS: Record<Completion, string> = {
   play: '最後まで再生したら完了',
 }
 
+export const LINK_TARGETS = ['new', 'same', 'embed'] as const
+
+export type LinkTarget = (typeof LINK_TARGETS)[number]
+
+export const LINK_TARGET_LABELS: Record<LinkTarget, string> = {
+  new: '新しいタブで開く',
+  same: '同じタブで開く',
+  embed: 'ページに埋め込む',
+}
+
 export const COURSE_COLORS = ['cyan', 'indigo', 'sky', 'emerald', 'amber', 'rose', 'violet', 'teal', 'slate'] as const
 
 export const ROLE_LABELS: Record<Role, string> = {
