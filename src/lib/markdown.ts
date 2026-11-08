@@ -11,8 +11,9 @@ function inline(text: string) {
       if (part.startsWith('`') && part.endsWith('`') && part.length > 1) {
         return `<code>${escapeHtml(part.slice(1, -1))}</code>`
       }
+      // リンクの文字と URL に [ ] を含めないのは、閉じていない [ が並んだ行で、開始位置ごとに行末まで読み直して描画が止まるため
       return escapeHtml(part)
-        .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+        .replace(/\[([^[\]]+)\]\((https?:\/\/[^\s)[\]]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
         .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>')
     })
