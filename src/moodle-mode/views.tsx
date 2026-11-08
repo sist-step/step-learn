@@ -1,4 +1,4 @@
-import { CourseHeader, CourseLiveSync, ItemIcon } from '../components/course'
+import { CourseHeader, CourseLiveSync, ItemIcon, LinkEmbed, LinkTargetField, linkOpenAttrs } from '../components/course'
 import { Button, IconButton } from '../components/button'
 import { Card, DangerRow, LinkCard } from '../components/card'
 import { cx } from '../components/cx'
@@ -25,6 +25,7 @@ import type { FieldErrors } from '../lib/forms'
 import { previewKind } from '../lib/preview'
 import { formatBytes } from '../lib/bytes'
 import { MAX_FILE_SIZE } from '../lib/storage'
+import { MOODLE_DISPLAY_LABELS, isExactDisplay } from '../moodle/display'
 import type { CourseLayout, ItemCompletion, MItem, MSection, TilesLayout, TopcollLayout } from './mapping'
 import { isOpenable, isTracked, sectionHref } from './mapping'
 import { TileArt } from './tile-art'
@@ -71,11 +72,20 @@ const KindIcon = ({ item }: { item: MItem }) => {
   )
 }
 
-const itemHref = (courseId: number, it: MItem) =>
-  it.kind === 'link' || it.kind === 'moodle' ? it.url : `/courses/${courseId}/items/${it.id}`
+const isPdf = (it: MItem) => it.kind === 'file' && previewKind(it.fileType, it.fileName) === 'pdf'
 
-const opensNewTab = (it: MItem) =>
-  it.kind === 'link' || it.kind === 'moodle' || (it.kind === 'file' && previewKind(it.fileType, it.fileName) === 'pdf')
+/** アイテムを開く a 要素の属性 */
+function openAttrs(courseId: number, it: MItem) {
+  const page = `/courses/${courseId}/items/${it.id}`
+  if (it.kind === 'link') return linkOpenAttrs(it.url, it.linkTarget, page)
+  const newTab = { target: '_blank', rel: 'noopener', 'data-no-prefetch': '' }
+  if (it.kind === 'moodle') return { href: it.url, ...newTab }
+  return isPdf(it) ? { href: page, ...newTab } : { href: page }
+}
+
+const leavesPage = (it: MItem) => it.kind === 'moodle' || (it.kind === 'link' && it.linkTarget !== 'embed') || isPdf(it)
+
+const completesOnOpen = (it: MItem) => it.kind === 'link' && it.linkTarget !== 'embed' && it.completion === 'view' && !it.done
 
 const HiddenChip = () => <Chip icon="eyeSlash">学生に非表示</Chip>
 
@@ -163,7 +173,6 @@ const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId:
         : item.url
           ? '旧STEP Learnで開く'
           : ''
-  const newTab = opensNewTab(item)
   const linkless = item.locked || !isOpenable(item)
   const body = (
     <>
@@ -179,7 +188,7 @@ const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId:
         </Chip>
       )}
       {!linkless &&
-        (newTab ? <Icon name="external" size={14} class="item-ext" /> : <Icon name="chevronRight" size={16} class="item-ext" />)}
+        (leavesPage(item) ? <Icon name="external" size={14} class="item-ext" /> : <Icon name="chevronRight" size={16} class="item-ext" />)}
     </>
   )
   return (
@@ -191,12 +200,9 @@ const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId:
         <span class="item-link">{body}</span>
       ) : (
         <a
-          href={itemHref(courseId, item)}
           class="item-link"
-          {...(newTab ? { target: '_blank', rel: item.kind === 'link' ? 'noopener noreferrer' : 'noopener', 'data-no-prefetch': '' } : {})}
-          {...(isStudent && item.kind === 'link' && item.completion === 'view' && !item.done
-            ? { 'data-complete-on-open': `${base}/complete` }
-            : {})}
+          {...openAttrs(courseId, item)}
+          {...(isStudent && completesOnOpen(item) ? { 'data-complete-on-open': `${base}/complete` } : {})}
         >
           {body}
         </a>
@@ -340,6 +346,7 @@ const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sect
         </div>
         <TextField label="タイトル" name="title" id="new-item-title" placeholder="例：第1回 講義資料" />
         <TextField label="URL" name="url" id="new-item-url" type="url" placeholder="https://" fieldClass="when-link" />
+        <LinkTargetField id="new-item-link-target" fieldClass="when-link" />
         <FileField
           label="ファイル"
           name="file"
@@ -838,7 +845,8 @@ export const ItemPage = ({
   // 完了済みなら付けないのは、開くたびに送って、すでに付いている完了を書き直さないため
   const waitsForView = (o: MItem) => isStudent && o.completion === 'view' && !o.done
   const onOpen = (o: MItem) => (waitsForView(o) ? { 'data-complete-on-open': completeUrl(o) } : {})
-  const opensOnView = !!preview && (preview !== 'text' || textPreview !== null)
+  const embedded = item.kind === 'link' && item.linkTarget === 'embed'
+  const opensOnView = embedded || (!!preview && (preview !== 'text' || textPreview !== null))
   const tracked = outline.filter(isTracked)
   const hiddenSections = new Set(sections.filter((s) => s.hidden).map((s) => s.id))
   const isHidden = (o: MItem) => o.hidden || hiddenSections.has(o.sectionId)
@@ -923,14 +931,13 @@ export const ItemPage = ({
         <article class="reader-main">
           {!pdf && head}
 
-          {item.kind === 'link' && (
+          {embedded && <LinkEmbed url={item.url} title={item.title} />}
+
+          {item.kind === 'link' && !embedded && (
             <LinkCard
-              href={item.url}
               icon="link"
               class="link-card-lg kind-link"
-              target="_blank"
-              rel="noopener noreferrer"
-              data-no-prefetch
+              {...linkOpenAttrs(item.url, item.linkTarget, navHref(item))}
               {...onOpen(item)}
             >
               <span class="file-name">
@@ -1075,13 +1082,10 @@ export const ItemPage = ({
                         </span>
                       )}
                       <a
-                        href={o.kind === 'file' ? navHref(o) : o.url}
                         class={cx('outline-link', o.id === item.id && 'active', isHidden(o) && 'is-hidden')}
-                        {...(opensNewTab(o)
-                          ? { target: '_blank', rel: o.kind === 'link' ? 'noopener noreferrer' : 'noopener', 'data-no-prefetch': '' }
-                          : {})}
+                        {...openAttrs(id, o)}
                         aria-current={o.id === item.id ? 'page' : undefined}
-                        {...(o.kind === 'link' ? onOpen(o) : {})}
+                        {...(isStudent && completesOnOpen(o) ? { 'data-complete-on-open': completeUrl(o) } : {})}
                       >
                         {isTracked(o) ? (
                           <span class={cx('outline-dot', o.done && 'done')} data-outline-dot={o.id}>
@@ -1112,7 +1116,7 @@ export const ItemPage = ({
 
 // ---------------------------------------------------------------- 編集
 
-export type ItemEditValues = { title: string; url: string; hidden: number; sectionId: number; completion: string }
+export type ItemEditValues = { title: string; url: string; linkTarget: string; hidden: number; sectionId: number; completion: string }
 
 export const ItemEditPage = ({
   access,
@@ -1134,6 +1138,7 @@ export const ItemEditPage = ({
   const v: ItemEditValues = {
     title: item.title,
     url: item.url,
+    linkTarget: item.linkTarget,
     hidden: item.hidden ? 1 : 0,
     sectionId: item.sectionId,
     completion: item.completion === 'auto' ? 'none' : item.completion,
@@ -1183,6 +1188,17 @@ export const ItemEditPage = ({
             <TextField label="タイトル" name="title" value={v.title} error={errors.title} class="editor-title" />
             {item.kind === 'link' && (
               <TextField label="URL" name="url" type="url" value={v.url} error={errors.url} placeholder="https://" />
+            )}
+            {item.kind === 'link' && (
+              <LinkTargetField
+                id="f-link-target"
+                value={v.linkTarget}
+                hint={
+                  item.display && !isExactDisplay(item.display)
+                    ? `旧STEP Learn では表示方法が「${MOODLE_DISPLAY_LABELS[item.display]}」に設定されています。開き方を変えなければ、その設定のまま残ります。`
+                    : undefined
+                }
+              />
             )}
             {item.completion === 'auto' && (
               <Alert tone="info">
