@@ -15,6 +15,5 @@ export const unixToDateInput = (unix: number | null | undefined) => (unix == nul
 export const isInPeriod = (period: { startAt: number | null; endAt: number | null }, at = Math.floor(Date.now() / 1000)) =>
   (period.startAt == null || period.startAt <= at) && (period.endAt == null || at < period.endAt + DAY)
 
-// 期間外のコースを後ろに回すのは、上限で切ったときに、絞り込みで隠れる期間外のコースだけが残って進行中のコースが消えないようにするため
-export const inProgressFirst = <T extends { inProgress: boolean }>(list: T[], limit: number) =>
-  [...list.filter((c) => c.inProgress), ...list.filter((c) => !c.inProgress)].slice(0, limit)
+export const isUpcoming = (period: { startAt: number | null }, at = Math.floor(Date.now() / 1000)) =>
+  period.startAt != null && at < period.startAt

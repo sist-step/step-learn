@@ -84,7 +84,6 @@ const UserMenu = ({ editable }: { editable?: boolean }) => {
           アカウント設定
         </MenuItem>
         <Switch class="menu-item" icon="moon" label="ダークモード" checked={getTheme(c) === 'dark'} data-theme-toggle />
-        <Switch class="menu-item" icon="calendar" label="進行中のコースのみ" checked data-courses-toggle />
         {editable && <Switch class="menu-item" icon="pencil" label="編集モード" checked={false} data-edit-mode-toggle />}
       </div>
       {/* 再読み込みなしの遷移にしないのは、Moodle モードではログアウトのあと Moodle（別オリジン）に移り、fetch では追えないため */}
@@ -169,7 +168,6 @@ export const AppShell = ({ children, editable, tone, topbar }: { children: Child
                 class={cx('rail-link rail-course', currentCourse === nc.id && 'active')}
                 aria-current={currentCourse === nc.id ? (path === `/courses/${nc.id}` ? 'page' : 'location') : undefined}
                 title={nc.title}
-                data-course-ended={!nc.inProgress || undefined}
               >
                 <CourseIcon course={nc} text={[...nc.title][0]} class={`dot tone-${nc.color}`} />
                 <span class="rail-label truncate">{nc.title}</span>

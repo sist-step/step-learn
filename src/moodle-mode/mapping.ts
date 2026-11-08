@@ -44,12 +44,13 @@ export const toCard = (m: MoodleCourse): CourseCardData => ({
 
 export const isInProgress = (m: MoodleCourse) => m.inprogress !== false
 
+export const isUpcoming = (m: MoodleCourse) => m.upcoming === true
+
 export const toNavCourse = (m: MoodleCourse): NavCourse => ({
   id: m.id,
   title: m.fullname,
   color: courseColor(m.id),
   iconImage: null,
-  inProgress: isInProgress(m),
 })
 
 /** link と file は STEP Learn の画面で扱い、moodle は Moodle の画面で開く。label はセクションの中に本文を出す。subsection は中のアイテムを入れ子で並べる */

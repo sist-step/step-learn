@@ -82,7 +82,9 @@ export const CoursesPage = ({
     <Styles use={['/src/routes/courses/courses.css']} />
     <PageHeader
       title="コース一覧"
-      description={showsOthers ? '「すべて」では、登録していないコースも表示できます。' : '参加しているコースです。'}
+      description={
+        showsOthers ? '「すべて」では、期間外や登録していないコースも表示できます。' : '「すべて」では、終了したコースも表示できます。'
+      }
       actions={canCreate && <CreateCourseButton />}
     />
     <div class="toolbar courses-toolbar">
@@ -94,13 +96,13 @@ export const CoursesPage = ({
     {results.length === 0 ? (
       <EmptyState
         icon="book"
-        title={q ? `「${q}」に一致するコースはありません` : isAdmin ? 'まだコースがありません' : 'まだ参加しているコースはありません'}
+        title={q ? `「${q}」に一致するコースはありません` : isAdmin ? 'まだコースがありません' : '進行中のコースはありません'}
         text={
           q
             ? '別のキーワードで検索してみてください。'
             : isAdmin
               ? '「コースを作成」から最初のコースを作りましょう。'
-              : 'コースに追加されると、ここに表示されます。'
+              : 'コースに追加され、期間が始まると、ここに表示されます。'
         }
         action={q && <Button href="/courses">検索をクリア</Button>}
       />
@@ -125,7 +127,7 @@ const FilteredEmpty = ({ hidden, showsOthers }: { hidden: boolean; showsOthers: 
       text={
         showsOthers
           ? '「すべて」に切り替えて「登録外も表示」を選ぶと、期間外や登録していないコースも表示できます。'
-          : '「すべて」に切り替えると、期間外のコースも表示できます。'
+          : '「すべて」に切り替えると、終了したコースも表示できます。'
       }
     />
   </div>
