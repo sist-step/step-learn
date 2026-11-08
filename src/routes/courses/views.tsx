@@ -65,35 +65,33 @@ const CourseScopeControl = ({ showsOthers }: { showsOthers: boolean }) => (
   </div>
 )
 
-const scopeDescription = (showsEnded: boolean, showsOthers: boolean) => {
-  if (showsOthers) return '「すべて」では、期間外や登録していないコースも表示できます。'
-  if (showsEnded) return '「すべて」では、教師として登録している期間外のコースも表示できます。'
-  return '参加している進行中のコースです。'
-}
-
 export const CoursesPage = ({
   q,
   isAdmin,
-  showsEnded,
   showsOthers,
   canCreate,
   results,
 }: {
   q: string
   isAdmin: boolean
-  showsEnded: boolean
   showsOthers: boolean
   canCreate: boolean
   results: CourseCardData[]
 }) => (
   <AppShell>
     <Styles use={['/src/routes/courses/courses.css']} />
-    <PageHeader title="コース一覧" description={scopeDescription(showsEnded, showsOthers)} actions={canCreate && <CreateCourseButton />} />
+    <PageHeader
+      title="コース一覧"
+      description={
+        showsOthers ? '「すべて」では、期間外や登録していないコースも表示できます。' : '「すべて」では、終了したコースも表示できます。'
+      }
+      actions={canCreate && <CreateCourseButton />}
+    />
     <div class="toolbar courses-toolbar">
       <form method="get" class="toolbar-grow">
         <SearchBox label="コースを検索" value={q} placeholder="コース名・コード・概要で検索" />
       </form>
-      {showsEnded && <CourseScopeControl showsOthers={showsOthers} />}
+      <CourseScopeControl showsOthers={showsOthers} />
     </div>
     {results.length === 0 ? (
       <EmptyState
@@ -115,7 +113,7 @@ export const CoursesPage = ({
             <CourseCard course={course} showProgress={course.role === 'student' && (course.total ?? 0) > 0} />
           ))}
         </div>
-        {showsEnded && <FilteredEmpty hidden={results.some(shownByDefault)} showsOthers={showsOthers} />}
+        <FilteredEmpty hidden={results.some(shownByDefault)} showsOthers={showsOthers} />
       </div>
     )}
   </AppShell>
@@ -129,7 +127,7 @@ const FilteredEmpty = ({ hidden, showsOthers }: { hidden: boolean; showsOthers: 
       text={
         showsOthers
           ? '「すべて」に切り替えて「登録外も表示」を選ぶと、期間外や登録していないコースも表示できます。'
-          : '「すべて」に切り替えると、教師として登録している期間外のコースも表示できます。'
+          : '「すべて」に切り替えると、終了したコースも表示できます。'
       }
     />
   </div>

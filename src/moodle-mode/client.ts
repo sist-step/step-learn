@@ -134,6 +134,7 @@ export type MoodleCourse = {
   done: number
   // 必須にしないのは、プラグインを更新する前の Moodle は返さないため
   inprogress?: boolean
+  upcoming?: boolean
   members: number
   imageurl: string
   /** local_steplearn_get_course だけが返す */

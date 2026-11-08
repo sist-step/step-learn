@@ -44,6 +44,8 @@ export const toCard = (m: MoodleCourse): CourseCardData => ({
 
 export const isInProgress = (m: MoodleCourse) => m.inprogress !== false
 
+export const isUpcoming = (m: MoodleCourse) => m.upcoming === true
+
 export const toNavCourse = (m: MoodleCourse): NavCourse => ({
   id: m.id,
   title: m.fullname,

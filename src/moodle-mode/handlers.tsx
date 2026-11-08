@@ -13,7 +13,7 @@ import { createSession, destroyByMoodleSid, destroySession, type MoodleEnv } fro
 import { forgetCourse, forgetProgress, forgetSections } from './cache'
 import { exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
 import { loadCourse, moodle, myCourses, otherCourses, outlineOf, progressOf, revisionOf, type LoadedCourse } from './data'
-import { isInProgress, isOpenable, sectionHref, toCard, type MItem } from './mapping'
+import { isInProgress, isOpenable, isUpcoming, sectionHref, toCard, type MItem } from './mapping'
 import { CoursePage, ItemEditPage, ItemPage, LoginPage, TEXT_PREVIEW_MAX } from './views'
 
 type C = Context<MoodleEnv>
@@ -129,14 +129,10 @@ export async function listCourses(c: C) {
   const isAdmin = c.var.user!.role === 'admin'
   const [mine, others] = await Promise.all([myCourses(c), isAdmin ? otherCourses(c) : []])
   const results = [...mine, ...others]
-    .filter((m) => isAdmin || isInProgress(m) || m.role === 'teacher')
+    .filter((m) => isAdmin || m.role === 'teacher' || !isUpcoming(m))
     .map(toCard)
     .filter((r) => !needle || [r.title, r.code, r.summary].some((s) => s.toLowerCase().includes(needle)))
-  const teaches = mine.some((m) => m.role === 'teacher')
-  return c.render(
-    <CoursesPage q={q} isAdmin={false} showsEnded={isAdmin || teaches} showsOthers={isAdmin} canCreate={false} results={results} />,
-    { title: 'コース一覧' },
-  )
+  return c.render(<CoursesPage q={q} isAdmin={false} showsOthers={isAdmin} canCreate={false} results={results} />, { title: 'コース一覧' })
 }
 
 // ---------------------------------------------------------------- コースページ
