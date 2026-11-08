@@ -36,7 +36,6 @@ export const toCard = (m: MoodleCourse): CourseCardData => ({
   total: m.total,
   done: m.done,
   members: m.members,
-  teachers: m.teachers.join('、') || null,
 })
 
 export const isInProgress = (m: MoodleCourse) => m.inprogress !== false
