@@ -1,7 +1,6 @@
 import type { Child } from 'hono/jsx'
 import { useRequestContext } from 'hono/jsx-renderer'
-import { config } from '../lib/config'
-import { getTheme, showsAllCourses } from '../lib/http'
+import { getTheme } from '../lib/http'
 import { ROLE_LABELS, type AppEnv, type Flash } from '../lib/types'
 import { Icon, type IconName } from './icons'
 import { IconButton } from './button'
@@ -85,9 +84,7 @@ const UserMenu = ({ editable }: { editable?: boolean }) => {
           アカウント設定
         </MenuItem>
         <Switch class="menu-item" icon="moon" label="ダークモード" checked={getTheme(c) === 'dark'} data-theme-toggle />
-        {config.moodle && (
-          <Switch class="menu-item" icon="calendar" label="進行中のコースのみ" checked={!showsAllCourses(c)} data-courses-toggle />
-        )}
+        <Switch class="menu-item" icon="calendar" label="進行中のコースのみ" checked data-courses-toggle />
         {editable && <Switch class="menu-item" icon="pencil" label="編集モード" checked={false} data-edit-mode-toggle />}
       </div>
       {/* 再読み込みなしの遷移にしないのは、Moodle モードではログアウトのあと Moodle（別オリジン）に移り、fetch では追えないため */}
@@ -164,7 +161,7 @@ export const AppShell = ({ children, editable, tone, topbar }: { children: Child
         </nav>
 
         {navCourses.length > 0 && (
-          <nav class="rail-nav" aria-label="マイコース">
+          <nav class="rail-nav rail-courses" aria-label="マイコース">
             <span class="rail-heading rail-label">マイコース</span>
             {navCourses.map((nc) => (
               <a
@@ -172,6 +169,7 @@ export const AppShell = ({ children, editable, tone, topbar }: { children: Child
                 class={cx('rail-link rail-course', currentCourse === nc.id && 'active')}
                 aria-current={currentCourse === nc.id ? (path === `/courses/${nc.id}` ? 'page' : 'location') : undefined}
                 title={nc.title}
+                data-course-ended={!nc.inProgress || undefined}
               >
                 <CourseIcon course={nc} text={[...nc.title][0]} class={`dot tone-${nc.color}`} />
                 <span class="rail-label truncate">{nc.title}</span>

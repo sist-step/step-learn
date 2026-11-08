@@ -294,6 +294,9 @@ kbd {
 
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 
+:root:not([data-courses-all]) :is([data-course-ended], [data-course-unenrolled], [data-courses-others-toggle]),
+:root:not([data-courses-others]) [data-course-unenrolled] { display: none; }
+
 .toolbar { display: flex; gap: 12px; margin-bottom: 20px; }
 .toolbar-grow { flex: 1; display: flex; min-width: 0; }
 

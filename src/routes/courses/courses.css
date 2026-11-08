@@ -1,3 +1,13 @@
+/* ===== 一覧の絞り込み */
+.courses-toolbar { flex-wrap: wrap; align-items: center; }
+.courses-toolbar .toolbar-grow { flex: 0 1 520px; }
+.course-scope { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.course-scope .segmented { align-self: center; }
+.course-scope .btn[aria-pressed='true'] { --btn-bg: var(--c-soft); --btn-fg: var(--c-ink); --btn-border: transparent; }
+@media (max-width: 640px) {
+  .courses-toolbar .toolbar-grow { flex-basis: 100%; }
+}
+
 /* ===== 設定の目次 */
 .settings-layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 32px; align-items: start; }
 .settings-toc { position: sticky; top: calc(var(--topbar-h) + 24px); display: flex; flex-direction: column; gap: 2px; }

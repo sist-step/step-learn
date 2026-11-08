@@ -5,6 +5,7 @@ import { createMiddleware } from 'hono/factory'
 import { parseSigned } from 'hono/utils/cookie'
 import type { AppEnv, Role, User } from './types'
 import { config } from './config'
+import { inProgressFirst, isInPeriod } from './course-period'
 import { db } from './db'
 import { courses, emailVerifications, enrollments, passwordResets, sessions, users } from './schema'
 
@@ -238,14 +239,25 @@ export const session = createMiddleware<AppEnv>(async (c, next) => {
   if (c.req.method === 'GET') {
     c.set(
       'navCourses',
-      db
-        .select({ id: courses.id, title: courses.title, color: courses.color, iconImage: courses.iconImage })
-        .from(enrollments)
-        .innerJoin(courses, eq(courses.id, enrollments.courseId))
-        .where(eq(enrollments.userId, user.id))
-        .orderBy(courses.title)
-        .limit(12)
-        .all(),
+      inProgressFirst(
+        db
+          .select({
+            id: courses.id,
+            title: courses.title,
+            color: courses.color,
+            iconImage: courses.iconImage,
+            startAt: courses.startAt,
+            endAt: courses.endAt,
+          })
+          .from(enrollments)
+          .innerJoin(courses, eq(courses.id, enrollments.courseId))
+          .where(eq(enrollments.userId, user.id))
+          .orderBy(courses.title)
+          .limit(200)
+          .all()
+          .map(({ startAt, endAt, ...course }) => ({ ...course, inProgress: isInPeriod({ startAt, endAt }) })),
+        12,
+      ),
     )
   }
 
