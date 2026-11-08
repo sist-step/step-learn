@@ -117,7 +117,8 @@ a.sec-tile { transition: border-color 0.15s, box-shadow 0.2s, transform 0.2s var
 .sec-tile:is(.is-hidden, .is-locked, .is-empty) .tile-art { --art: var(--muted); --art-h: 0; opacity: 0.6; }
 /* 番号とバッジを本文の行に置かないのは、行が 1 つ増えてタイルが縦に伸びるため */
 .sec-tile-num, .sec-tile-badge { position: absolute; top: 8px; display: inline-flex; align-items: center; justify-content: center; height: 24px; border-radius: 999px; font-size: var(--fs-xs); font-weight: 650; font-variant-numeric: tabular-nums; }
-.sec-tile-num { left: 8px; min-width: 24px; padding: 0 8px; background: color-mix(in srgb, var(--surface) 88%, transparent); color: var(--text-2); box-shadow: var(--shadow-sm); backdrop-filter: blur(6px); }
+/* すりガラス（backdrop-filter）にしないのは、タイルの枚数だけ背景のぼかしをスクロールの毎フレーム合成し直すことになり、スクロールが重くなるため */
+.sec-tile-num { left: 8px; min-width: 24px; padding: 0 8px; background: var(--surface); color: var(--text-2); box-shadow: var(--shadow-sm); }
 .sec-tile-badge { right: 8px; width: 24px; }
 .sec-tile-badge.is-done { background: var(--success-strong); color: var(--on-strong); }
 .sec-tile-badge.is-locked { background: var(--surface); color: var(--muted); box-shadow: var(--shadow-sm); }
