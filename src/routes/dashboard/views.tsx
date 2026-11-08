@@ -5,7 +5,7 @@ import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Mascot } from '../../components/mascot'
 import { Styles } from '../../components/style'
-import { CourseCard, EmptyState, ProgressRing, type CourseCardData } from '../../components/ui'
+import { CourseCard, EmptyState, ProgressRing, shownByDefault, type CourseCardData } from '../../components/ui'
 import { randomTip } from '../../lib/tips'
 
 const greeting = () => {
@@ -55,6 +55,7 @@ export const DashboardPage = ({
   const showsAdmin = learning.length === 0 && isAdmin
   const hasSide = totalItems > 0 || showsAdmin
   const tip = randomTip()
+  const shownCount = results.filter(shownByDefault).length
 
   return (
     <AppShell>
@@ -99,21 +100,29 @@ export const DashboardPage = ({
             </div>
           </Tile>
         )}
-        <Tile span={4} class={cx('tile-courses', isAdmin && results.length === 0 && 'tile-compact')}>
+        <Tile span={4} class={cx('tile-courses', isAdmin && results.length === 0 && 'tile-compact')} data-course-list>
           <div class="tile-head">
             <h2>
-              マイコース <span class="count">{results.length}</span>
+              マイコース
+              <span class="count" data-course-count>
+                {shownCount}
+              </span>
             </h2>
             <a href="/courses" class="tile-link">
               すべて見る <Icon name="chevronRight" size={14} />
             </a>
           </div>
           {results.length > 0 ? (
-            <div class="course-grid">
-              {results.map((course) => (
-                <CourseCard course={course} showProgress={course.role === 'student' && (course.total ?? 0) > 0} />
-              ))}
-            </div>
+            <>
+              <div class="course-grid">
+                {results.map((course) => (
+                  <CourseCard course={course} showProgress={course.role === 'student' && (course.total ?? 0) > 0} />
+                ))}
+              </div>
+              <p class="muted small" data-courses-empty hidden={shownCount > 0}>
+                進行中のコースはありません。ユーザーメニューの「進行中のコースのみ」をオフにすると、期間外のコースも表示されます。
+              </p>
+            </>
           ) : isAdmin ? (
             <p class="muted small">
               参加しているコースはありません。<a href="/courses">コース一覧</a>からすべてのコースを開けます。

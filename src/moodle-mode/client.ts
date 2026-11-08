@@ -205,6 +205,7 @@ export type StateAction =
 /** トークンを持つ利用者として Moodle を呼ぶ関数 */
 export const api = (token: string) => ({
   myCourses: () => call<MoodleCourse[]>(token, 'local_steplearn_get_my_courses'),
+  otherCourses: () => call<MoodleCourse[]>(token, 'local_steplearn_get_other_courses'),
   course: (courseid: number) => call<MoodleCourse>(token, 'local_steplearn_get_course', { courseid }),
   contents: (courseid: number) => call<MoodleSection[]>(token, 'core_course_get_contents', { courseid }),
   viewCourse: (courseid: number) => call<unknown>(token, 'core_course_view_course', { courseid }),
