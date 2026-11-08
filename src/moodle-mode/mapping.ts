@@ -188,11 +188,10 @@ export type TopcollLayout = {
 export type TileProgress = 'none' | 'fraction' | 'percent'
 
 /** photo は Moodle での写真のファイル名（変わると配信 URL も変わる） */
-export type Tile = { icon: string; photo: string; photoUrl: string }
+export type Tile = { photo: string; photoUrl: string }
 
 export type TilesLayout = {
   kind: 'tiles'
-  defaultIcon: string
   progress: TileProgress
   subtiles: boolean
   subtilesZero: boolean
@@ -225,11 +224,10 @@ export function toLayout(format: MoodleFormat | undefined): CourseLayout {
     const t = format.tiles
     return {
       kind: 'tiles',
-      defaultIcon: t.defaulticon,
       progress: TILE_PROGRESS[t.progress] ?? 'none',
       subtiles: t.subtiles,
       subtilesZero: t.subtileszero,
-      tiles: new Map(t.tiles.map((x) => [x.sectionid, { icon: x.icon, photo: x.photourl && fileName(x.photourl), photoUrl: x.photourl }])),
+      tiles: new Map(t.tiles.map((x) => [x.sectionid, { photo: x.photourl && fileName(x.photourl), photoUrl: x.photourl }])),
     }
   }
   return { kind: 'list' }
