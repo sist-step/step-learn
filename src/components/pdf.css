@@ -22,6 +22,7 @@
 .pdf-viewer { position: absolute; inset: 0; background: var(--surface-3); }
 .pdf-pages { position: absolute; inset: 0; overflow: auto; padding: 24px 24px 88px; scrollbar-gutter: stable; }
 .pdf-pages:focus-visible { outline-offset: -2px; }
+.pdf-viewer[data-page-scrolled] .pdf-pages { overflow-y: hidden; }
 .pdf-page {
   --scale-round-x: 1px;
   --scale-round-y: 1px;
