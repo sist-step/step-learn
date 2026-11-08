@@ -33,6 +33,7 @@ export async function show(c: Context<AppEnv>) {
     .orderBy(desc(enrollments.createdAt))
     .all()
     .map(({ startAt, endAt, ...course }) => ({ ...course, inProgress: isInPeriod({ startAt, endAt }) }))
+    .filter((course) => course.inProgress)
   return c.render(<DashboardPage name={user.name} canCreate={canCreateCourse(user)} isAdmin={user.role === 'admin'} results={results} />, {
     title: 'ダッシュボード',
   })

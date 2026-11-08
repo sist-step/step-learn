@@ -53,7 +53,6 @@ function applyCourseFilter() {
   const root = document.documentElement
   root.toggleAttribute('data-courses-all', all)
   root.toggleAttribute('data-courses-others', others)
-  $$('[data-courses-toggle]').forEach((el) => el.setAttribute('aria-checked', String(!all)))
   $$('[data-courses-others-toggle]').forEach((el) => el.setAttribute('aria-pressed', String(others)))
   $$<HTMLInputElement>('[data-course-scope] input').forEach((input) => (input.checked = input.value === (all ? 'all' : 'current')))
   const shown = (el: Element) =>
@@ -65,10 +64,9 @@ function applyCourseFilter() {
   })
 }
 document.addEventListener('click', (e) => {
-  const t = (e.target as Element).closest('[data-courses-toggle], [data-courses-others-toggle]')
+  const t = (e.target as Element).closest('[data-courses-others-toggle]')
   if (!t) return
-  if (t.hasAttribute('data-courses-toggle')) writeFlag(COURSES_ALL_KEY, t.getAttribute('aria-checked') === 'true')
-  else writeFlag(COURSES_OTHERS_KEY, t.getAttribute('aria-pressed') !== 'true')
+  writeFlag(COURSES_OTHERS_KEY, t.getAttribute('aria-pressed') !== 'true')
   applyCourseFilter()
 })
 document.addEventListener('change', (e) => {

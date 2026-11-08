@@ -65,42 +65,46 @@ const CourseScopeControl = ({ showsOthers }: { showsOthers: boolean }) => (
   </div>
 )
 
+const scopeDescription = (showsEnded: boolean, showsOthers: boolean) => {
+  if (showsOthers) return '「すべて」では、期間外や登録していないコースも表示できます。'
+  if (showsEnded) return '「すべて」では、教師として登録している期間外のコースも表示できます。'
+  return '参加している進行中のコースです。'
+}
+
 export const CoursesPage = ({
   q,
   isAdmin,
+  showsEnded,
   showsOthers,
   canCreate,
   results,
 }: {
   q: string
   isAdmin: boolean
+  showsEnded: boolean
   showsOthers: boolean
   canCreate: boolean
   results: CourseCardData[]
 }) => (
   <AppShell>
     <Styles use={['/src/routes/courses/courses.css']} />
-    <PageHeader
-      title="コース一覧"
-      description={showsOthers ? '「すべて」では、登録していないコースも表示できます。' : '参加しているコースです。'}
-      actions={canCreate && <CreateCourseButton />}
-    />
+    <PageHeader title="コース一覧" description={scopeDescription(showsEnded, showsOthers)} actions={canCreate && <CreateCourseButton />} />
     <div class="toolbar courses-toolbar">
       <form method="get" class="toolbar-grow">
         <SearchBox label="コースを検索" value={q} placeholder="コース名・コード・概要で検索" />
       </form>
-      <CourseScopeControl showsOthers={showsOthers} />
+      {showsEnded && <CourseScopeControl showsOthers={showsOthers} />}
     </div>
     {results.length === 0 ? (
       <EmptyState
         icon="book"
-        title={q ? `「${q}」に一致するコースはありません` : isAdmin ? 'まだコースがありません' : 'まだ参加しているコースはありません'}
+        title={q ? `「${q}」に一致するコースはありません` : isAdmin ? 'まだコースがありません' : '進行中のコースはありません'}
         text={
           q
             ? '別のキーワードで検索してみてください。'
             : isAdmin
               ? '「コースを作成」から最初のコースを作りましょう。'
-              : 'コースに追加されると、ここに表示されます。'
+              : 'コースに追加され、期間が始まると、ここに表示されます。'
         }
         action={q && <Button href="/courses">検索をクリア</Button>}
       />
@@ -111,7 +115,7 @@ export const CoursesPage = ({
             <CourseCard course={course} showProgress={course.role === 'student' && (course.total ?? 0) > 0} />
           ))}
         </div>
-        <FilteredEmpty hidden={results.some(shownByDefault)} showsOthers={showsOthers} />
+        {showsEnded && <FilteredEmpty hidden={results.some(shownByDefault)} showsOthers={showsOthers} />}
       </div>
     )}
   </AppShell>
@@ -125,7 +129,7 @@ const FilteredEmpty = ({ hidden, showsOthers }: { hidden: boolean; showsOthers: 
       text={
         showsOthers
           ? '「すべて」に切り替えて「登録外も表示」を選ぶと、期間外や登録していないコースも表示できます。'
-          : '「すべて」に切り替えると、期間外のコースも表示できます。'
+          : '「すべて」に切り替えると、教師として登録している期間外のコースも表示できます。'
       }
     />
   </div>
