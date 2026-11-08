@@ -32,6 +32,7 @@ import eyeSlash from 'heroicons/24/outline/eye-slash.svg?raw'
 import folder from 'heroicons/24/outline/folder.svg?raw'
 import globe from 'heroicons/24/outline/globe-alt.svg?raw'
 import heading from 'heroicons/24/outline/h2.svg?raw'
+import heart from 'heroicons/24/outline/heart.svg?raw'
 import home from 'heroicons/24/outline/home.svg?raw'
 import info from 'heroicons/24/outline/information-circle.svg?raw'
 import italic from 'heroicons/24/outline/italic.svg?raw'
@@ -112,6 +113,7 @@ const svgs = {
   calendar,
   folder,
   arrowPath,
+  heart,
 } as const
 
 export type IconName = keyof typeof svgs
