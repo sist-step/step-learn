@@ -82,8 +82,12 @@ const WIDE =
   /[\u1100-\u115f\u2e80-\u303e\u3041-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua000-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/
 const width = (s: string) => [...s].reduce((n, ch) => n + (WIDE.test(ch) ? 2 : 1), 0)
 
+/** 改行やタブで行を偽れないよう、1 行に収める */
+const line = (s: string) => s.replace(/\s+/g, ' ')
+
 /** 表示幅 w に収まるよう切り詰め、空白で埋める（最後の 1 桁は列の区切りとして空ける） */
-function fit(s: string, w: number) {
+function fit(text: string, w: number) {
+  const s = line(text)
   if (width(s) < w) return s + ' '.repeat(w - width(s))
   let out = ''
   for (const ch of s) {
@@ -120,10 +124,10 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
     bold(`Moodle バックアップのプレビュー`) + dim(`（${path.basename(source)}${backup.release ? `、Moodle ${backup.release}` : ''}）`),
     '',
   )
-  out.push(`  コース名      ${bold(course.title)}${course.code ? dim(`（${course.code}）`) : ''}`)
+  out.push(`  コース名      ${bold(line(course.title))}${course.code ? dim(`（${line(course.code)}）`) : ''}`)
   out.push(`  公開          ${course.visible ? 'する' : warn('しない（Moodle で非表示）')}`)
   out.push(`  完了の記録    ${course.completionEnabled ? '使う' : '使わない'}`)
-  if (course.summary) out.push(`  概要          ${fit(course.summary.replace(/\s+/g, ' '), 60).trimEnd()}`)
+  if (course.summary) out.push(`  概要          ${fit(course.summary, 60).trimEnd()}`)
   out.push('')
   out.push(
     `  セクション ${backup.sections.length}・アイテム ${imported.length}` +
@@ -144,9 +148,9 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
   backup.sections.forEach((s, i) => {
     out.push(
       '',
-      bold(`■ ${i + 1}. ${s.title}`) + (s.hidden ? warn(' [学生に非表示]') : '') + (s.items.length ? '' : dim('  （アイテムなし）')),
+      bold(`■ ${i + 1}. ${line(s.title)}`) + (s.hidden ? warn(' [学生に非表示]') : '') + (s.items.length ? '' : dim('  （アイテムなし）')),
     )
-    if (s.summary) out.push(dim(`    ${fit(s.summary.replace(/\s+/g, ' '), 70).trimEnd()}`))
+    if (s.summary) out.push(dim(`    ${fit(s.summary, 70).trimEnd()}`))
     for (const note of s.notes) out.push(warn(`      ↳ ${note}`))
     for (const item of s.items) {
       if (!item.type) {
@@ -155,7 +159,7 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
       }
       const extra = [
         item.type === 'file' && item.file ? formatBytes(item.file.size) : '',
-        item.type === 'link' ? `${item.url}（${LINK_TARGET_LABELS[item.linkTarget]}）` : '',
+        item.type === 'link' ? `${line(item.url)}（${LINK_TARGET_LABELS[item.linkTarget]}）` : '',
         item.completion !== 'none' ? `完了: ${COMPLETION_LABELS[item.completion]}` : '',
         item.hidden ? warn('学生に非表示') : '',
       ].filter(Boolean)
@@ -173,7 +177,7 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
       for (const p of list.slice(0, limit)) {
         const account = p.existingId ? dim('既存のユーザーに追加') : ok('新規作成') + (p.newUsername ? dim(` @${p.newUsername}`) : '')
         out.push(`    ${fit(COURSE_ROLE_LABELS[p.role], 6)}${fit(p.name, 20)}${fit(p.email, 34)}${account}`)
-        if (p.usernameNote) out.push(warn(`      ↳ ${p.usernameNote}（ログイン後にアカウント画面で設定できます）`))
+        if (p.usernameNote) out.push(warn(`      ↳ ${line(p.usernameNote)}（ログイン後にアカウント画面で設定できます）`))
       }
       if (list.length > limit) out.push(dim(`    ほか ${list.length - limit} 人（--verbose ですべて表示）`))
     }
