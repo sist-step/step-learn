@@ -37,6 +37,9 @@ type Room = {
 const MAX_IN_FLIGHT = 10
 const ACK_TIMEOUT = 10_000
 const KEYFRAME_INTERVAL = 1_000
+// 権限を変える各処理から接続を切らないのは、受講の取り消し・ロールの変更・非表示・ログアウト・パスワードの再設定と経路が多く、
+// 処理を足したときに切り忘れると、権限をなくした人に映像が届き続けるため
+const RECHECK_INTERVAL = 10_000
 
 const rooms = new Map<number, Room>()
 
@@ -109,6 +112,31 @@ function isAllowedOrigin(headers: IncomingHttpHeaders) {
 }
 
 const shareError = (code: ShareError) => new Error(code)
+
+/** その時点で接続してよいなら利用者を、だめなら null を返す */
+async function authorize(cookie: string | undefined, courseId: number, itemId: number, mode: ShareMode) {
+  const user = await userFromCookieHeader(cookie)
+  if (!user) return null
+  const access = await getCourseAccessFor(user, courseId)
+  if (!access || (mode === 'present' && !access.canManage)) return null
+  if (!(await isScreenItem(courseId, itemId))) return null
+  if (!access.canManage && !isVisibleItem(itemId)) return null
+  return user
+}
+
+function recheckPeriodically(socket: ShareSocket) {
+  const { courseId, itemId, mode } = socket.data
+  const timer = setInterval(() => {
+    authorize(socket.handshake.headers.cookie, courseId, itemId, mode)
+      .then((user) => {
+        if (user) return
+        socket.emit('revoked')
+        socket.disconnect(true)
+      })
+      .catch((err: unknown) => console.error('[screen-share] recheck', err))
+  }, RECHECK_INTERVAL)
+  socket.on('disconnect', () => clearInterval(timer))
+}
 
 function forwardFrame(room: Room, meta: FrameMeta, data: Uint8Array) {
   for (const viewer of room.viewers.values()) {
@@ -195,12 +223,9 @@ export function attachScreenShare(httpServer: HttpServer) {
   io.use(async (socket, next) => {
     try {
       const { courseId, itemId, mode } = socket.handshake.auth as Partial<Record<string, unknown>>
-      const user = await userFromCookieHeader(socket.handshake.headers.cookie)
-      if (!user || !isId(courseId) || !isId(itemId) || !isMode(mode)) return next(shareError('not_found'))
-      const access = await getCourseAccessFor(user, courseId)
-      if (!access || (mode === 'present' && !access.canManage)) return next(shareError('not_found'))
-      if (!(await isScreenItem(courseId, itemId))) return next(shareError('not_found'))
-      if (!access.canManage && !isVisibleItem(itemId)) return next(shareError('not_found'))
+      if (!isId(courseId) || !isId(itemId) || !isMode(mode)) return next(shareError('not_found'))
+      const user = await authorize(socket.handshake.headers.cookie, courseId, itemId, mode)
+      if (!user) return next(shareError('not_found'))
       const presenter = rooms.get(itemId)?.presenter
       if (mode === 'present' && presenter && presenter.data.user.id !== user.id) return next(shareError('busy'))
       socket.data = { user, courseId, itemId, mode }
@@ -213,6 +238,7 @@ export function attachScreenShare(httpServer: HttpServer) {
   io.on('connection', (socket) => {
     const { itemId, mode } = socket.data
     const room = roomOf(itemId)
+    recheckPeriodically(socket)
     if (mode === 'present') present(socket, itemId, room)
     else view(socket, itemId, room)
   })

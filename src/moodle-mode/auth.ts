@@ -93,10 +93,12 @@ async function moodleSessionActive(id: string, token: string, moodleSid: string)
   }
 }
 
+/** 消したセッションを始めた Moodle のセッション（sid の SHA-256）を返す。セッションがなければ null */
 export async function destroySession(c: Context) {
   const id = await readSessionId(c)
-  if (id) db.delete(sessions).where(eq(sessions.id, id)).run()
+  const row = id ? db.delete(sessions).where(eq(sessions.id, id)).returning({ moodleSid: sessions.moodleSid }).get() : undefined
   deleteCookie(c, SESSION_COOKIE, { path: '/' })
+  return row?.moodleSid ?? null
 }
 
 /** Moodle でログアウトされたセッションから始めた、STEP Learn のセッションを消す */
@@ -171,9 +173,3 @@ export const requireAuth = createMiddleware<MoodleEnv>(async (c, next) => {
   }
   await next()
 })
-
-/** オープンリダイレクトを防ぐため、同一サイト内の相対パスのみ許可 */
-export function safeNext(next: string | undefined) {
-  if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return '/dashboard'
-  return next
-}

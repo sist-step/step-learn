@@ -68,9 +68,13 @@ export const childrenOf = (node: XmlNode | undefined, name: string) => node?.chi
 /** `a/b/c` の順にたどった子要素 */
 export const at = (node: XmlNode | undefined, path: string) => path.split('/').reduce((n, name) => child(n, name), node)
 
+/** 要素のテキスト。タブと改行以外の制御文字は除き、CR は LF にそろえる */
 export function textAt(node: XmlNode | undefined, path: string) {
   const text = at(node, path)?.text ?? ''
-  return text === MOODLE_NULL ? '' : text
+  if (text === MOODLE_NULL) return ''
+  // 表示するときではなくここで除くのは、取り込みのプレビューで端末にエスケープシーケンスを解釈させず、DB にも残さないため
+  // oxlint-disable-next-line no-control-regex -- 制御文字を除くため
+  return text.replace(/\r\n?/g, '\n').replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, '')
 }
 
 export const numberAt = (node: XmlNode | undefined, path: string) => Number(textAt(node, path)) || 0

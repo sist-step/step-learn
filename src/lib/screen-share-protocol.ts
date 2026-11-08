@@ -18,6 +18,8 @@ export type ServerToClientEvents = {
   idle: () => void
   frame: (meta: FrameMeta, data: ArrayBuffer | Uint8Array, ack: () => void) => void
   keyframe: () => void
+  /** 権限がなくなったので、このあと接続を切る */
+  revoked: () => void
 }
 
 export type ClientToServerEvents = {

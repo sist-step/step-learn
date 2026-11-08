@@ -4,12 +4,12 @@ import { deleteCookie, getSignedCookie, setSignedCookie } from 'hono/cookie'
 import type { CourseCardData } from '../components/ui'
 import { config } from '../lib/config'
 import { firstError, isFile, validate } from '../lib/forms'
-import { field, intParam, readForm, redirectWith, wantsJson } from '../lib/http'
+import { field, intParam, readForm, redirectWith, safeNext, wantsJson } from '../lib/http'
 import { previewKind } from '../lib/preview'
 import { EXECUTABLE_NOT_ALLOWED, FILE_TOO_LARGE, MAX_FILE_SIZE, isExecutable } from '../lib/storage'
 import { CoursesPage } from '../routes/courses/views'
 import { DashboardPage } from '../routes/dashboard/views'
-import { createSession, destroyByMoodleSid, destroySession, safeNext, type MoodleEnv } from './auth'
+import { createSession, destroyByMoodleSid, destroySession, type MoodleEnv } from './auth'
 import { forgetCourse, forgetProgress, forgetSections } from './cache'
 import { exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
 import { loadCourse, moodle, myCourses, otherCourses, outlineOf, progressOf, revisionOf, type LoadedCourse } from './data'
@@ -77,9 +77,18 @@ export async function finishLogin(c: C) {
   return c.redirect(safeNext(saved.next), 303)
 }
 
+/** Moodle 側で、STEP Learn から移ってきたログアウトだと確かめるための署名。鍵がなければ空（Moodle が確認画面を出す） */
+function logoutQuery(moodleSid: string | null) {
+  const secret = config.moodle!.backchannelSecret
+  if (!secret || !moodleSid) return ''
+  const time = Math.floor(Date.now() / 1000)
+  const sig = crypto.createHmac('sha256', secret).update(`logout.${moodleSid}.${time}`).digest('hex')
+  return `?${new URLSearchParams({ time: String(time), sig })}`
+}
+
 export async function logout(c: C) {
-  await destroySession(c)
-  return c.redirect(moodleUrl('/local/steplearn/logout.php'), 303)
+  const moodleSid = await destroySession(c)
+  return c.redirect(moodleUrl(`/local/steplearn/logout.php${logoutQuery(moodleSid)}`), 303)
 }
 
 const BACKCHANNEL_MAX_AGE = 5 * 60
