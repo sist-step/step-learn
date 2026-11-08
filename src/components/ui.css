@@ -178,15 +178,15 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.course-foot { margin: auto 20px 0; padding: 14px 0 16px; border-top: 1px solid var(--border); }
+.course-foot { display: flex; align-items: center; gap: 12px; margin: auto 20px 0; padding: 0 0 16px; }
+.course-members { flex: none; margin-left: auto; }
 @media (max-width: 640px) {
   .course-cover { aspect-ratio: 16 / 5; }
   .course-cover .course-mono { left: 16px; }
   .course-body { padding: 26px 16px 16px; }
-  .course-foot { margin-inline: 16px; padding-block: 12px 14px; }
+  .course-foot { margin-inline: 16px; padding-block: 0 14px; }
 }
 .meta { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--muted); min-width: 0; font-variant-numeric: tabular-nums; }
-.meta-sep { opacity: 0.5; }
 
 a.person { color: var(--text); }
 .person { display: flex; align-items: center; gap: 12px; min-width: 0; }
