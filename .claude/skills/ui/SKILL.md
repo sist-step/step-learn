@@ -133,7 +133,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | 部品 | 用途 |
 | --- | --- |
 | `PdfBar` | PDF のアイテムで `AppShell` の `topbar` に渡す帯（パンくず・タイトル・「ビューアー / ブラウザ」の切り替え・`children` の操作ボタン）。切り替えは `pdf` クッキーに保存し、サーバーが読んで描き分ける |
-| `PdfStage` | ヘッダーの下いっぱいの PDF 表示。既定は pdf.js の自作ビューアー（`src/pdf-viewer.ts`。`client.ts` が PDF のある画面でだけ読み込む）、ブラウザを選ぶと iframe でブラウザ標準のビューアー |
+| `PdfStage` | ヘッダーの下いっぱいの PDF 表示。既定は pdf.js の自作ビューアー（`src/pdf-viewer.ts`。`client.ts` が PDF のある画面でだけ読み込む）、ブラウザを選ぶと iframe でブラウザ標準のビューアー。ビューアーは左にページのサムネイルの一覧を出し（ツールバーの左端のボタンで開閉。開閉は localStorage に保存し、スマホ幅では閉じた状態から始めてページに重ねて出す）、今のページを `aria-current` で示す |
 
 ログイン前の画面（`AuthShell`）の右側は、`src/auth-art.ts` が three.js で描く 3D アニメーション（背景は無地で、台座の上で小さなキューブが 14 種類の形（ロケット・ネコ・家・アイスクリームなど。`MODELS`）に組み上がっては組み替わる。クリックでつつくとキューブが弾け、3 回続けると次の形へ。ドラッグで回せる）。`data-auth-art` の要素に `client.ts` が canvas を置き、再読み込みなしの遷移では同じ canvas を新しい要素へ移して続きから動かす。色は `--art-deep` / `--art-mid` / `--art-bright` / `--art-shine` とコースの色（`tone-*`）を読み取る。スマホ幅（非表示）では three.js を読み込まない
 

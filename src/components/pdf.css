@@ -19,10 +19,11 @@
 .pdf-stage + .reader { max-width: 1120px; margin: 40px auto 0; padding: 0 32px; }
 
 /* ===== ビューアー */
-.pdf-viewer { position: absolute; inset: 0; background: var(--surface-3); }
+.pdf-viewer { --pdf-thumbs-w: 176px; position: absolute; inset: 0; background: var(--surface-3); }
 .pdf-pages { position: absolute; inset: 0; overflow: auto; padding: 24px 24px 88px; scrollbar-gutter: stable; }
 .pdf-pages:focus-visible { outline-offset: -2px; }
-.pdf-viewer[data-page-scrolled] .pdf-pages { overflow-y: hidden; }
+.pdf-viewer[data-page-scrolled] :is(.pdf-pages, .pdf-thumbs) { overflow-y: hidden; }
+.pdf-viewer[data-thumbs-open] .pdf-pages { left: var(--pdf-thumbs-w); }
 .pdf-page {
   --scale-round-x: 1px;
   --scale-round-y: 1px;
@@ -51,11 +52,39 @@
   white-space: nowrap;
 }
 .pdf-toolbar[hidden] { display: none; }
+.pdf-viewer[data-thumbs-open] .pdf-toolbar { left: calc(50% + var(--pdf-thumbs-w) / 2); }
 .pdf-page-count { display: flex; align-items: center; gap: 6px; padding: 0 4px; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
 .pdf-toolbar .pdf-page-input { width: 3.5em; height: var(--control-h-sm); padding: 0 4px; text-align: center; font-variant-numeric: tabular-nums; }
 .pdf-toolbar-sep { width: 1px; height: 20px; margin: 0 4px; background: var(--border-strong); }
 .pdf-zoom { min-width: 3.5em; font-size: var(--fs-sm); font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
 .pdf-toolbar .icon-btn[aria-pressed='true'] { background: var(--c-soft); color: var(--c-ink); }
+
+/* ===== ページの一覧 */
+.pdf-thumbs {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  width: var(--pdf-thumbs-w);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 28px 88px;
+  border-right: 1px solid var(--border);
+  background: var(--chrome);
+  scrollbar-width: thin;
+}
+.pdf-thumbs[hidden] { display: none; }
+.pdf-thumb { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; margin-bottom: 14px; padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--muted); font: inherit; font-size: var(--fs-xs); font-variant-numeric: tabular-nums; cursor: pointer; }
+.pdf-thumb-page { position: relative; display: block; width: 100%; overflow: hidden; border-radius: 2px; background: var(--surface); box-shadow: var(--shadow-card); outline: 2px solid transparent; outline-offset: 3px; transition: outline-color 0.12s; }
+.pdf-thumb-page > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pdf-thumb-num { min-width: 2em; padding: 1px 6px; border-radius: 999px; text-align: center; }
+.pdf-thumb[aria-current='page'] .pdf-thumb-page { outline-color: var(--c-ink); }
+.pdf-thumb[aria-current='page'] .pdf-thumb-num { background: var(--c-soft); color: var(--c-ink); font-weight: 600; }
+@media (hover: hover) {
+  .pdf-thumb:not([aria-current='page']):hover .pdf-thumb-page { outline-color: var(--border-strong); }
+  .pdf-thumb:not([aria-current='page']):hover .pdf-thumb-num { color: var(--text-2); }
+}
 
 /* pdf.js の pdf_viewer.css を読み込まないのは、使わない部品（注釈・フォーム・検索など）の CSS が大半を占めるため。文字の選択に要る分だけを写している */
 .pdf-text { position: absolute; inset: 0; z-index: 0; overflow: clip; line-height: 1; text-align: initial; letter-spacing: normal; word-spacing: normal; text-size-adjust: none; forced-color-adjust: none; transform-origin: 0 0; color-scheme: only light; --min-font-size: 1; --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv: calc(1 / var(--min-font-size)); }
@@ -70,11 +99,17 @@
   .pdf-stage + .reader { padding: 0 16px; margin-top: 28px; }
 }
 @media (max-width: 640px) {
-  .pdf-bar > .item-icon, .pdf-bar-text .crumbs, .pdf-bar-hidden, .pdf-toolbar-sep, .pdf-zoom { display: none; }
+  /* 幅に合わせるボタンを隠すのは、狭い画面では自動の倍率がすでに幅いっぱいで、押しても変わらないため */
+  .pdf-bar > .item-icon, .pdf-bar-text .crumbs, .pdf-bar-hidden, .pdf-toolbar-sep, .pdf-zoom, .pdf-toolbar [data-pdf-action='fit'] { display: none; }
   .pdf-bar { gap: 6px; }
   .pdf-bar-actions { gap: 4px; }
   /* 文字を display: none で消さないのは、アイコンだけになっても読み上げでは「ビューアー」「ブラウザ」と伝えるため */
   .pdf-mode span { gap: 0; padding: 6px 10px; font-size: 0; }
   .pdf-pages { padding: 12px 12px 80px; }
   .pdf-page { margin-bottom: 12px; }
+  /* 一覧の幅だけページを右に寄せないのは、狭い画面ではページが小さくなりすぎて読めないため。開いている間だけ重ねて出す */
+  .pdf-viewer { --pdf-thumbs-w: 148px; }
+  .pdf-viewer[data-thumbs-open] .pdf-pages { left: 0; }
+  .pdf-viewer[data-thumbs-open] .pdf-toolbar { left: 50%; }
+  .pdf-thumbs { z-index: 2; padding: 16px 24px 80px; border-right-color: var(--overlay-border); background: var(--surface-raised); box-shadow: var(--shadow-lg); }
 }
