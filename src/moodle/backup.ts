@@ -40,6 +40,8 @@ export type Backup = {
   course: { title: string; code: string; summary: string; visible: boolean; completionEnabled: boolean }
   sections: BackupSection[]
   usersIncluded: boolean
+  /** 参加者を取り込まない理由。usersIncluded が false のときにプレビューに出す */
+  usersNote?: string
   participants: BackupParticipant[]
   warnings: string[]
 }
@@ -76,9 +78,18 @@ export const moduleLabel = (module: string) => MODULE_LABELS[module] ?? module
 
 const TEACHER_ARCHETYPES = new Set(['editingteacher', 'teacher', 'manager'])
 
-const LIMITS = { courseTitle: 120, courseCode: 30, summary: 2000, sectionTitle: 120, itemTitle: 200, body: 100_000, url: 2000, name: 60 }
+export const LIMITS = {
+  courseTitle: 120,
+  courseCode: 30,
+  summary: 2000,
+  sectionTitle: 120,
+  itemTitle: 200,
+  body: 100_000,
+  url: 2000,
+  name: 60,
+}
 
-function cut(text: string, max: number, notes: string[], label: string) {
+export function cut(text: string, max: number, notes: string[], label: string) {
   if (text.length <= max) return text
   notes.push(`${label}が長すぎるため、${max}文字で切ります`)
   return text.slice(0, max)
@@ -131,7 +142,7 @@ function completionOf(module: XmlNode | undefined, type: ItemType): Completion {
   return 'manual'
 }
 
-const RESTRICTION_NOTE = 'Moodle のアクセス制限（日付・条件）は取り込めないため、制限なしで表示されます'
+export const RESTRICTION_NOTE = 'Moodle のアクセス制限（日付・条件）は取り込めないため、制限なしで表示されます'
 
 const hasRestriction = (node: XmlNode | undefined) =>
   /"c"\s*:\s*\[\s*\{/.test(textAt(node, 'availability')) ||

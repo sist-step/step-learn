@@ -80,6 +80,7 @@ auth.post('/courses/:id/items/:iid/restriction', h.updateItemRestriction)
 auth.get('/courses/:id/items/:iid', h.showItem)
 auth.post('/courses/:id/items/:iid/complete', h.toggleComplete)
 auth.get('/courses/:id/items/:iid/file', h.downloadFile)
+auth.get('/m/:key', h.openExtra)
 app.route('/', auth)
 
 // エラーの画面を HTML で返すのは、client.ts が HTML でない応答を受けると送信先の URL を GET で開き直してしまうため

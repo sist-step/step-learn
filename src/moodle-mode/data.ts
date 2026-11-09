@@ -2,6 +2,7 @@ import type { Context } from 'hono'
 import type { MoodleEnv } from './auth'
 import { cached, contentsKey, courseKey, coursesKey, otherCoursesKey, restrictionsKey } from './cache'
 import { api, isTokenError, type MoodleFormat } from './client'
+import { withExtras } from './extra'
 import { isOpenable, isTracked, toAccess, toLayout, toOutline, withRestrictions } from './mapping'
 
 export const moodle = (c: Context<MoodleEnv>) => api(c.var.token!)
@@ -52,7 +53,7 @@ export async function loadCourse(c: Context<MoodleEnv>, courseId: number, { fres
     access,
     layout: toLayout(course.format),
     restrictable: restrictions.enabled,
-    ...withRestrictions(outline, restrictions.restrictions),
+    ...withExtras(courseId, withRestrictions(outline, restrictions.restrictions)),
   }
 }
 
