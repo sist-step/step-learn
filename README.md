@@ -122,6 +122,21 @@ npm run moodle:import -- backup.mbz             # プレビューを表示し、
 - Moodle のパスワードは引き継げません。新しく作ったユーザーには、ログイン画面の「パスワードを忘れた場合」からパスワードを設定してもらってください（SMTP の設定が必要です）
 - 学生の完了状況や評定は取り込みません
 
+#### Moodle から直接取り込む
+
+.mbz を使わず、Moodle の Web サービスからコースを読んで取り込むこともできます。取り込むのはコース・セクションと URL・ファイル・フォルダーだけです（参加者・ページ・ラベル・課題などは取り込みません）。
+
+```sh
+MOODLE_MIGRATE_URL=https://moodle.example.ac.jp MOODLE_MIGRATE_TOKEN=<トークン> \
+  npm run moodle:migrate -- 12 13 --dry-run   # コース ID 12 と 13 のプレビューだけを表示する
+```
+
+- Moodle に `moodle/local_steplearn/` のプラグインが入っている必要があります（Moodle モードと同じもの）
+- トークンは、すべてのコースを見られるアカウント（システムのコンテキストで「マネージャー」を割り当てたアカウントなど）のものを、外部サービス「STEP Learn」で発行します
+- コースごとにプレビューを表示し、確認してから取り込みます。`--yes`・`--verbose` は `moodle:import` と同じです
+- サブセクションは、親のセクションのすぐ後ろに「親 › 子」という名前のセクションとして並べます
+- Moodle モードで追加した、STEP Learn にしかない種類のアイテムは引き継ぎません
+
 ### Moodle モード（完全移行までの一時的な運用）
 
 `MOODLE_URL` を設定すると、STEP Learn を Moodle 5.1 のフロントエンドとして動かします。データはすべて Moodle にあり、STEP Learn は画面だけを受け持ちます。
@@ -151,9 +166,9 @@ Moodle 側には、このリポジトリの `moodle/local_steplearn/` のプラ�
 
 - `src/moodle-mode/`・`migrations-moodle/`・`drizzle.moodle.config.ts`・`moodle/`
 - `src/index.tsx` のモードの切り替え（`./app` だけを読み込む形に戻す）と、`src/server.ts`・`vite.config.ts` の `config.moodle` の分岐
-- `src/lib/config.ts` の `moodle` / `moodleDatabasePath`、`src/lib/db.ts` の Moodle モードのガード、`src/components/style.tsx` の `moodle-mode.css`
-- `src/lib/forms.ts` の `extraItemFields` / `extraItem`、`src/client.ts` の `setKindOnly`
-- `package.json` の `db:generate:moodle` / `db:check:moodle`、CI の「Check Moodle mode migrations」、`Dockerfile` の `migrations-moodle`、`.dockerignore` の `moodle`
+- `src/lib/config.ts` の `moodle` / `moodleDatabasePath` / `moodleMigrate`、`src/lib/db.ts` の Moodle モードのガード、`src/components/style.tsx` の `moodle-mode.css`
+- `src/moodle/remote.ts` と `src/cli.ts` の `moodle:migrate`、`src/lib/forms.ts` の `extraItemFields` / `extraItem`、`src/client.ts` の `setKindOnly`
+- `package.json` の `moodle:migrate` / `db:generate:moodle` / `db:check:moodle`、CI の「Check Moodle mode migrations」、`Dockerfile` の `migrations-moodle`、`.dockerignore` の `moodle`
 
 ### Docker で動かす
 
