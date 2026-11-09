@@ -14,7 +14,21 @@ import { createSession, destroyByMoodleSid, destroySession, type MoodleEnv } fro
 import { forgetCourse, forgetProgress, forgetSections } from './cache'
 import { MoodleError, exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
 import { loadCourse, moodle, myCourses, otherCourses, outlineOf, progressOf, revisionOf, type LoadedCourse } from './data'
-import { PREVIOUS_ITEM, isInProgress, isOpenable, isTracked, isUpcoming, sectionHref, toCard, type MItem, type MSection } from './mapping'
+import { findExtra, insertExtra, newExtraKey, updateExtraData } from './extra'
+import { extraKindOf, type ExtraKind } from './extra-kinds'
+import {
+  EXTRA_PATH,
+  PREVIOUS_ITEM,
+  isInProgress,
+  isOpenable,
+  isTracked,
+  isUpcoming,
+  sectionHref,
+  toCard,
+  type ExtraContent,
+  type MItem,
+  type MSection,
+} from './mapping'
 import {
   CoursePage,
   ItemEditPage,
@@ -338,6 +352,8 @@ export async function createItem(c: C) {
   const form = await readForm(c)
   const sectionId = Number(field(form, 'section_id'))
   if (!loaded.sections.some((s) => s.id === sectionId)) return c.notFound()
+  const extraKind = extraKindOf(field(form, 'type', 50))
+  if (extraKind) return createExtraItem(c, loaded, sectionId, extraKind, form)
   const result = validate('item', form)
   if (!result.ok) return redirectWith(c, editUrl(loaded, sectionId), firstError(result.errors), 'error')
   const { type, hidden, title, url } = result.values
@@ -360,7 +376,43 @@ export async function createItem(c: C) {
   return redirectWith(c, next, `「${title}」を追加しました。`)
 }
 
-const editable = (it: MItem | null | undefined): it is MItem & { kind: 'link' | 'file' } => it?.kind === 'link' || it?.kind === 'file'
+function validateExtra(kind: ExtraKind, form: Form) {
+  const own = validate(kind.form, form)
+  const common = validate('extraItem', form)
+  if (!own.ok || !common.ok) return { ok: false as const, errors: { ...(common.ok ? {} : common.errors), ...(own.ok ? {} : own.errors) } }
+  return { ok: true as const, common: common.values, data: kind.toData(own.values) }
+}
+
+const extraUrl = (c: C, key: string) => `${config.appOrigin ?? new URL(c.req.url).origin}${EXTRA_PATH}${key}`
+
+async function createExtraItem(c: C, loaded: LoadedCourse, sectionId: number, kind: ExtraKind, form: Form) {
+  const id = loaded.course.id
+  const result = validateExtra(kind, form)
+  if (!result.ok) return redirectWith(c, editUrl(loaded, sectionId), firstError(result.errors), 'error')
+  const { title, hidden } = result.common
+  const completion = loaded.course.completionenabled ? (result.common.completion ?? 'none') : 'none'
+  const key = newExtraKey()
+  // Moodle の画面で開いたときにそのまま STEP Learn に移るよう、同じウィンドウで開く（RESOURCELIB_DISPLAY_OPEN）表示方法にする
+  const cmid = await moodle(c).saveUrl({
+    courseid: id,
+    cmid: 0,
+    sectionid: sectionId,
+    name: title,
+    externalurl: extraUrl(c, key),
+    completion,
+    visible: !hidden,
+    display: 'same',
+  })
+  insertExtra({ key, courseId: id, cmid, type: field(form, 'type', 50), data: result.data })
+  forgetCourse(id)
+  const next = field(form, 'then') === 'view' ? `/courses/${id}/items/${cmid}` : editUrl(loaded, sectionId)
+  return redirectWith(c, next, `「${title}」を追加しました。`)
+}
+
+type EditableItem = MItem & ({ kind: 'link' | 'file' } | { kind: 'extra'; extraKey: string; extra: ExtraContent })
+
+const editable = (it: MItem | null | undefined): it is EditableItem =>
+  it?.kind === 'link' || it?.kind === 'file' || (it?.kind === 'extra' && !!it.extraKey && !!it.extra)
 
 export async function editItem(c: C) {
   const loaded = await manageCourse(c)
@@ -379,6 +431,7 @@ export async function updateItem(c: C) {
   const form = await readForm(c)
   const requestedSection = Number(field(form, 'section_id'))
   const sectionId = loaded.sections.some((s) => s.id === requestedSection) ? requestedSection : item.sectionId
+  if (item.kind === 'extra') return updateExtraItem(c, loaded, item, sectionId, form)
   // 送られてきた種類を使わないのは、画面の隠し欄は書き換えられ、保存済みのアイテムの種類と違うかもしれないため
   const result = validate('itemEdit', { ...form, type: item.kind })
   const file = result.ok && item.kind === 'file' && isFile(result.values.file) ? result.values.file : null
@@ -420,6 +473,51 @@ export async function updateItem(c: C) {
   return redirectWith(c, `/courses/${id}/items/${item.id}/edit`, '保存しました。')
 }
 
+async function updateExtraItem(c: C, loaded: LoadedCourse, item: EditableItem & { kind: 'extra' }, sectionId: number, form: Form) {
+  const id = loaded.course.id
+  const kind = extraKindOf(item.extra.type)
+  if (!kind) return c.notFound()
+  const result = validateExtra(kind, form)
+  if (!result.ok) {
+    c.status(422)
+    return c.render(
+      <ItemEditPage
+        access={loaded.access}
+        item={item}
+        sections={loaded.sections}
+        layout={loaded.layout}
+        values={{
+          title: field(form, 'title', 200),
+          hidden: field(form, 'hidden') === '1' ? 1 : 0,
+          sectionId,
+          completion: field(form, 'completion', 10),
+        }}
+        extraValues={form}
+        errors={result.errors}
+      />,
+      { title: `編集 - ${item.title}` },
+    )
+  }
+  const { title, hidden } = result.common
+  const completion = !loaded.course.completionenabled || item.completion === 'auto' ? 'keep' : (result.common.completion ?? 'keep')
+  updateExtraData(item.extraKey, id, result.data)
+  // リンク先を送り直すのは、save_url が URL を必須にしているため。Moodle の画面で書き換えられていても /m/<key> に戻す
+  await moodle(c).saveUrl({
+    courseid: id,
+    cmid: item.id,
+    sectionid: item.sectionId,
+    name: title,
+    externalurl: extraUrl(c, item.extraKey),
+    completion,
+    visible: !hidden,
+    display: 'keep',
+  })
+  if (!!hidden !== item.hidden) await moodle(c).updateCourse(id, hidden ? 'cm_hide' : 'cm_show', [item.id])
+  if (sectionId !== item.sectionId) await moodle(c).updateCourse(id, 'cm_move', [item.id], { sectionid: sectionId })
+  forgetCourse(id)
+  return redirectWith(c, `/courses/${id}/items/${item.id}/edit`, '保存しました。')
+}
+
 export async function moveItem(c: C) {
   const loaded = await manageCourse(c)
   const item = loaded && findItem(loaded, c)
@@ -449,8 +547,16 @@ export async function removeItem(c: C) {
   const loaded = await manageCourse(c)
   const item = loaded && findItem(loaded, c)
   if (!loaded || !item) return c.notFound()
+  // extra の中身を消さないのは、Moodle のごみ箱から活動を戻したときに、中身も一緒に戻るようにするため
   await changeCourse(c, loaded, 'cm_delete', [item.id])
   return redirectWith(c, editUrl(loaded, item.sectionId), `「${item.title}」を削除しました。`, 'info')
+}
+
+/** Moodle の画面から extra のアイテム（リンク先が /m/<key> の URL の活動）を開いたとき */
+export function openExtra(c: C) {
+  const found = findExtra(c.req.param('key') ?? '')
+  if (!found) return c.notFound()
+  return c.redirect(`/courses/${found.courseId}/items/${found.cmid}`)
 }
 
 // ---------------------------------------------------------------- アクセス制限
@@ -640,7 +746,7 @@ export async function toggleComplete(c: C) {
   const on = field(await readForm(c), 'on', 10)
   // 自動の完了で on（開いた）を送らせるのは、手動の切り替えと取り違えて、自動で付いた完了を未完了に戻さないため
   if (on === 'view' && item.completion === 'view') {
-    if (item.kind === 'link') await moodle(c).viewUrl(item.instance)
+    if (item.kind === 'link' || item.kind === 'extra') await moodle(c).viewUrl(item.instance)
     else if (item.kind === 'file') await moodle(c).viewResource(item.instance)
     else return c.notFound()
   } else if (!on && item.completion === 'manual') {

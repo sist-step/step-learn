@@ -136,7 +136,8 @@ npm run moodle:import -- backup.mbz             # プレビューを表示し、
   - タイル: 一般セクションの下にセクションをタイルで並べ、押すとそのタイルの行のすぐ下にセクションを開きます（同時に開けるのは 1 つで、別のタイルを押すと前のセクションは閉じます）。タイルのアイコン（STEP Learn のアイコンに置き換え）・写真・進捗の表示・サブタイルの設定に従います
   - 折りたたみ型トピック: セクションを開閉でき、開閉は Moodle の画面と同じく利用者ごとに記録されます。並べ方（最新の週を先頭に など）・現在のセクション・すべて開く/閉じる・1 つだけ開く・段組み・閉じたときの概要の表示の設定に従います（色やアイコンの設定は使いません）
 - STEP Learn にしかない機能（新規登録・パスワードの再設定・Markdown のページ・画面共有・CLI）は使えません
-- STEP Learn 側の DB は `data/moodle-mode.db`（ユーザーの写し・セッション・暗号化したトークンだけ）で、`data/step-learn.db` は作りも開きもしません。完全移行のときに引き継ぐ必要はありません
+- Moodle モードだけにある種類のアイテム（`src/moodle-mode/extra-kinds.tsx` に定義する）は、中身を `data/moodle-mode.db` に保存し、Moodle には同じ位置に STEP Learn へ移る URL の活動（リンク先は `/m/<キー>`）を置きます。並び順・表示・アクセス制限・完了は Moodle の活動のものを使います。Moodle でコースをコピーしたときは、コピー先では開けません。完全移行では引き継ぎません
+- STEP Learn 側の DB は `data/moodle-mode.db`（ユーザーの写し・セッション・暗号化したトークンと、Moodle モードだけにある種類のアイテムの中身）で、`data/step-learn.db` は作りも開きもしません。完全移行のときに引き継ぐ必要はありません
 
 Moodle 側には、このリポジトリの `moodle/local_steplearn/` のプラグインを入れて設定します。手順は [moodle/README.md](moodle/README.md) を参照してください。
 
@@ -151,6 +152,7 @@ Moodle 側には、このリポジトリの `moodle/local_steplearn/` のプラ�
 - `src/moodle-mode/`・`migrations-moodle/`・`drizzle.moodle.config.ts`・`moodle/`
 - `src/index.tsx` のモードの切り替え（`./app` だけを読み込む形に戻す）と、`src/server.ts`・`vite.config.ts` の `config.moodle` の分岐
 - `src/lib/config.ts` の `moodle` / `moodleDatabasePath`、`src/lib/db.ts` の Moodle モードのガード、`src/components/style.tsx` の `moodle-mode.css`
+- `src/lib/forms.ts` の `extraItemFields` / `extraItem`、`src/client.ts` の `setKindOnly`
 - `package.json` の `db:generate:moodle` / `db:check:moodle`、CI の「Check Moodle mode migrations」、`Dockerfile` の `migrations-moodle`、`.dockerignore` の `moodle`
 
 ### Docker で動かす

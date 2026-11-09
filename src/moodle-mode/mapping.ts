@@ -53,8 +53,16 @@ export const toNavCourse = (m: MoodleCourse): NavCourse => ({
   iconImage: null,
 })
 
-/** link と file は STEP Learn の画面で扱い、moodle は Moodle の画面で開く。label はセクションの中に本文を出す。subsection は中のアイテムを入れ子で並べる */
-export type ItemKind = 'link' | 'file' | 'moodle' | 'label' | 'subsection'
+/** link と file は STEP Learn の画面で扱い、moodle は Moodle の画面で開く。label はセクションの中に本文を出す。subsection は中のアイテムを入れ子で並べる。extra は Moodle モードだけにある種類（中身は moodle-mode.db） */
+export type ItemKind = 'link' | 'file' | 'moodle' | 'label' | 'subsection' | 'extra'
+
+/** extra のアイテムの中身。type は extra.tsx の種類 */
+export type ExtraContent = { type: string; data: Record<string, unknown> }
+
+export const EXTRA_PATH = '/m/'
+
+/** extra のアイテムを置く URL の活動のリンク先（/m/<key>）から key を取り出す。ホストを見ないのは、STEP Learn のドメインを変えても読めるようにするため */
+export const extraKeyOf = (url: string) => URL.parse(url)?.pathname.match(/^\/m\/([\w-]{20,64})$/)?.[1] ?? null
 
 /** STEP Learn の完了の条件に、Moodle にしかない「そのほかの自動の条件」（auto）を足したもの */
 export type ItemCompletion = Exclude<Completion, 'play'> | 'auto'
@@ -66,7 +74,7 @@ export type MItem = {
   modname: string
   instance: number
   title: string
-  /** link はリンク先、moodle は Moodle の活動の画面 */
+  /** link と extra はリンク先、moodle は Moodle の活動の画面 */
   url: string
   /** link の開き方。Moodle の表示方法を読み替えたもの */
   linkTarget: LinkTarget
@@ -88,6 +96,9 @@ export type MItem = {
   done: boolean
   /** subsection の中身のセクション */
   childSectionId: number | null
+  /** extra の key と中身。中身はほかのコースからコピーされた活動では null（コピー元のコースでしか使えない） */
+  extraKey: string | null
+  extra: ExtraContent | null
 }
 
 /** parentId はサブセクションの中身のセクションのとき、それを含むセクション。locked はアクセス制限で、まだ開けない */
@@ -155,7 +166,7 @@ function completionOf(m: MoodleModule, tracking: boolean): ItemCompletion {
   return (m.modname === 'url' || m.modname === 'resource') && rules.length === 1 && rules[0] === 'completionview' ? 'view' : 'auto'
 }
 
-function displayOf(m: MoodleModule) {
+export function displayOf(m: MoodleModule) {
   try {
     const data = JSON.parse(m.customdata ?? '') as { display?: unknown }
     // 文字列も受け付けるのは、Moodle が DB の値をそのまま入れるため（自動のときだけ数値になる）
@@ -170,8 +181,9 @@ function displayOf(m: MoodleModule) {
 const KINDS: Partial<Record<string, ItemKind>> = { url: 'link', resource: 'file', label: 'label', subsection: 'subsection' }
 
 function toItem(m: MoodleModule, sectionId: number, tracking: boolean, childSectionId: number | null = null): MItem {
-  const kind = KINDS[m.modname] ?? 'moodle'
   const content = m.contents?.[0]
+  const extraKey = m.modname === 'url' ? extraKeyOf(content?.fileurl ?? '') : null
+  const kind = extraKey ? 'extra' : (KINDS[m.modname] ?? 'moodle')
   const file = kind === 'file' ? content : undefined
   const display = kind === 'link' ? displayOf(m) : null
   return {
@@ -181,7 +193,7 @@ function toItem(m: MoodleModule, sectionId: number, tracking: boolean, childSect
     modname: m.modname,
     instance: m.instance,
     title: m.name,
-    url: kind === 'link' ? (content?.fileurl ?? '') : (m.url ?? ''),
+    url: kind === 'link' || kind === 'extra' ? (content?.fileurl ?? '') : (m.url ?? ''),
     // 表示方法が分からないときに新しいタブにするのは、Moodle の設定を読めなかった以前の STEP Learn の開き方に合わせるため
     linkTarget: display ? linkTargetOf(display) : 'new',
     display,
@@ -197,6 +209,8 @@ function toItem(m: MoodleModule, sectionId: number, tracking: boolean, childSect
     completion: completionOf(m, tracking),
     done: isComplete(m.completiondata?.state),
     childSectionId,
+    extraKey,
+    extra: null,
   }
 }
 
@@ -236,8 +250,9 @@ export function toOutline(list: MoodleSection[], { tracking, manage }: { trackin
   return { sections, items }
 }
 
-/** 前後のナビや「続きから」に並べるアイテム（ラベル・サブセクションと、Moodle が URL を返さない活動は開く画面がないので除く） */
-export const isOpenable = (it: MItem) => it.kind !== 'label' && it.kind !== 'subsection' && !(it.kind === 'moodle' && !it.url)
+/** 前後のナビや「続きから」に並べるアイテム（ラベル・サブセクションと、Moodle が URL を返さない活動、中身のない extra は開く画面がないので除く） */
+export const isOpenable = (it: MItem) =>
+  it.kind !== 'label' && it.kind !== 'subsection' && !(it.kind === 'moodle' && !it.url) && !(it.kind === 'extra' && !it.extra)
 
 export const isTracked = (it: MItem) => it.completion !== 'none'
 

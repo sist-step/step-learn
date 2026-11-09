@@ -27,6 +27,7 @@ import { previewKind } from '../lib/preview'
 import { formatBytes } from '../lib/bytes'
 import { MAX_FILE_SIZE } from '../lib/storage'
 import { MOODLE_DISPLAY_LABELS, isExactDisplay } from '../moodle/display'
+import { EXTRA_KINDS, extraKindOf, type ExtraKind } from './extra-kinds'
 import type { CourseLayout, ItemCompletion, MItem, MSection, Restriction, TilesLayout, TopcollLayout } from './mapping'
 import { PREVIOUS_ITEM, isOpenable, isTracked, sectionHref } from './mapping'
 import { TileArt } from './tile-art'
@@ -63,8 +64,20 @@ const COMPLETION_LABELS: Record<ItemCompletion, string> = {
 
 const hostOf = (url: string) => URL.parse(url)?.host ?? url
 
+const kindOfItem = (it: MItem) => (it.extra ? extraKindOf(it.extra.type) : null)
+
+const ExtraIcon = ({ kind }: { kind: ExtraKind | null }) => {
+  useStyle('/src/components/course.css', '/src/moodle-mode/moodle-mode.css')
+  return (
+    <span class="item-icon kind-extra">
+      <Icon name={kind?.icon ?? 'academicCap'} size={16} />
+    </span>
+  )
+}
+
 const KindIcon = ({ item }: { item: MItem }) => {
   if (item.kind === 'link' || item.kind === 'file') return <ItemIcon type={item.kind} />
+  if (item.kind === 'extra' && !item.locked) return <ExtraIcon kind={kindOfItem(item)} />
   useStyle('/src/components/course.css', '/src/moodle-mode/moodle-mode.css')
   return (
     <span class="item-icon kind-moodle">
@@ -72,6 +85,8 @@ const KindIcon = ({ item }: { item: MItem }) => {
     </span>
   )
 }
+
+const hasEditPage = (it: MItem) => it.kind === 'link' || it.kind === 'file' || (it.kind === 'extra' && !!it.extra)
 
 const isPdf = (it: MItem) => it.kind === 'file' && previewKind(it.fileType, it.fileName) === 'pdf'
 
@@ -166,7 +181,7 @@ const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId:
   const tracked = isTracked(item)
   const actions = manage && (
     <div class="row-actions edit-only">
-      {(item.kind === 'link' || item.kind === 'file') && <IconButton href={`${base}/edit`} icon="pencil" label="編集" />}
+      {hasEditPage(item) && <IconButton href={`${base}/edit`} icon="pencil" label="編集" />}
       <RowMenu base={base} hidden={item.hidden} confirm={`「${item.title}」を削除しますか？`} restriction={`${base}/restriction`} />
     </div>
   )
@@ -188,9 +203,11 @@ const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId:
       ? hostOf(item.url)
       : item.kind === 'file'
         ? `${item.fileName} · ${formatBytes(item.fileSize)}`
-        : item.url
-          ? '旧STEP Learnで開く'
-          : ''
+        : item.kind === 'extra'
+          ? (kindOfItem(item)?.label ?? 'コピー元のコースでだけ使えます')
+          : item.url
+            ? '旧STEP Learnで開く'
+            : ''
   const linkless = item.locked || !isOpenable(item)
   const body = (
     <>
@@ -313,6 +330,18 @@ const KindOptionBody = ({ type }: { type: (typeof KINDS)[number] }) => (
   </>
 )
 
+const ExtraOptionBody = ({ kind }: { kind: ExtraKind }) => (
+  <>
+    <ExtraIcon kind={kind} />
+    <span class="kind-option-text">
+      <span class="strong">{kind.label}</span>
+      <span class="muted small">{kind.description}</span>
+    </span>
+  </>
+)
+
+const extraKinds = () => Object.entries(EXTRA_KINDS)
+
 const CHOICES = ['none', 'manual', 'view'] as const
 
 export const MoodleCompletionField = ({ id, value = 'none', error }: { id?: string; value?: string; error?: string }) => (
@@ -353,12 +382,23 @@ const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sect
             <Icon name="chevronRight" size={16} />
           </button>
         ))}
+        {extraKinds().map(([t, kind]) => (
+          <button type="button" class="kind-option" data-pick-kind={t} data-kind-validate={kind.form}>
+            <ExtraOptionBody kind={kind} />
+            <Icon name="chevronRight" size={16} />
+          </button>
+        ))}
       </div>
       <div class="item-step kind-settings stack">
         <div class="kind-summary">
           {KINDS.map((t) => (
             <span class="kind-summary-body" data-kind-summary={t}>
               <KindOptionBody type={t} />
+            </span>
+          ))}
+          {extraKinds().map(([t, kind]) => (
+            <span class="kind-summary-body" data-kind-only={t} hidden>
+              <ExtraOptionBody kind={kind} />
             </span>
           ))}
           <Button size="sm" variant="ghost" icon="chevronLeft" data-kind-back>
@@ -375,6 +415,11 @@ const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sect
           hint={`最大 ${formatBytes(MAX_FILE_SIZE)}。PDF・画像はブラウザでプレビューできます。`}
           fieldClass="when-file"
         />
+        {extraKinds().map(([t, kind]) => (
+          <fieldset class="stack" data-kind-only={t} hidden disabled>
+            <kind.Fields values={{}} errors={{}} idPrefix={`new-${t}`} />
+          </fieldset>
+        ))}
         <div class="grid-2">
           <SelectField label="セクション" name="section_id" id="new-item-section" options={sectionOptions(sections)} />
           <fieldset class="field">
@@ -840,7 +885,7 @@ export const CoursePage = ({
 export const TEXT_PREVIEW_MAX = 200 * 1024
 
 const COMPLETION_WAITING: Record<'view' | 'auto', Partial<Record<MItem['kind'], string>>> = {
-  view: { link: 'リンクを開くと完了になります', file: 'ファイルを開くと完了になります' },
+  view: { link: 'リンクを開くと完了になります', file: 'ファイルを開くと完了になります', extra: 'このページを開くと完了になります' },
   auto: { moodle: '旧STEP Learn の画面で条件を満たすと完了になります' },
 }
 
@@ -878,7 +923,8 @@ export const ItemPage = ({
   const waitsForView = (o: MItem) => isStudent && o.completion === 'view' && !o.done
   const onOpen = (o: MItem) => (waitsForView(o) ? { 'data-complete-on-open': completeUrl(o) } : {})
   const embedded = item.kind === 'link' && item.linkTarget === 'embed'
-  const opensOnView = embedded || (!!preview && (preview !== 'text' || textPreview !== null))
+  const extraKind = kindOfItem(item)
+  const opensOnView = embedded || item.kind === 'extra' || (!!preview && (preview !== 'text' || textPreview !== null))
   const tracked = outline.filter(isTracked)
   const hiddenSections = new Set(sections.filter((s) => s.hidden).map((s) => s.id))
   const isHidden = (o: MItem) => o.hidden || hiddenSections.has(o.sectionId)
@@ -915,7 +961,7 @@ export const ItemPage = ({
         )}
         <KindIcon item={item} />
         <h1>{item.title}</h1>
-        {access.canManage && (item.kind === 'link' || item.kind === 'file') && (
+        {access.canManage && hasEditPage(item) && (
           <Button href={`${base}/${item.id}/edit`} variant="ghost" size="sm" icon="pencil">
             編集
           </Button>
@@ -981,6 +1027,8 @@ export const ItemPage = ({
               </Button>
             </LinkCard>
           )}
+
+          {item.extra && extraKind && <extraKind.View item={item} data={item.extra.data} access={access} />}
 
           {item.kind === 'moodle' && (
             <LinkCard href={item.url} icon="academicCap" class="link-card-lg kind-moodle" target="_blank" rel="noopener" data-no-prefetch>
@@ -1125,7 +1173,7 @@ export const ItemPage = ({
                           </span>
                         ) : (
                           <Icon
-                            name={o.kind === 'link' ? 'link' : o.kind === 'file' ? 'file' : 'academicCap'}
+                            name={o.kind === 'link' ? 'link' : o.kind === 'file' ? 'file' : (kindOfItem(o)?.icon ?? 'academicCap')}
                             size={14}
                             class="outline-kind"
                           />
@@ -1156,6 +1204,7 @@ export const ItemEditPage = ({
   sections,
   layout,
   values,
+  extraValues,
   errors = {},
 }: {
   access: CourseAccess
@@ -1163,6 +1212,8 @@ export const ItemEditPage = ({
   sections: MSection[]
   layout: CourseLayout
   values?: Partial<ItemEditValues>
+  /** extra の種類ごとの欄に入れる値。省略すると保存済みの中身 */
+  extraValues?: Record<string, unknown>
   errors?: FieldErrors
 }) => {
   const courseId = access.course.id
@@ -1177,7 +1228,8 @@ export const ItemEditPage = ({
     ...values,
   }
   const section = sections.find((s) => s.id === item.sectionId)
-  const typeLabel = item.kind === 'link' ? 'リンク' : 'ファイル'
+  const extraKind = kindOfItem(item)
+  const typeLabel = extraKind ? extraKind.label : item.kind === 'link' ? 'リンク' : 'ファイル'
   return (
     <AppShell tone={access.course.color}>
       <Styles use={['/src/routes/content/content.css']} />
@@ -1213,11 +1265,12 @@ export const ItemEditPage = ({
           enctype="multipart/form-data"
           class="editor-form"
           data-loading-form
-          {...validateWith('itemEdit')}
+          {...validateWith(extraKind ? extraKind.form : 'itemEdit')}
         >
-          <input type="hidden" name="type" value={item.kind} />
+          <input type="hidden" name="type" value={item.extra?.type ?? item.kind} />
           <Card class="editor-main stack">
             <TextField label="タイトル" name="title" value={v.title} error={errors.title} class="editor-title" />
+            {extraKind && <extraKind.Fields values={extraValues ?? item.extra?.data ?? {}} errors={errors} idPrefix="f" />}
             {item.kind === 'link' && (
               <TextField label="URL" name="url" type="url" value={v.url} error={errors.url} placeholder="https://" />
             )}
