@@ -82,7 +82,7 @@ div.course-hero-cover { background: linear-gradient(150deg, var(--c2), var(--c1)
 
 .course-tabs { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 20px 0 24px; }
 .course-tabs .tabs { margin: 0; }
-.course-tabs-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.course-tabs-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
 
 .course-edit-switch {
   height: var(--control-h);
@@ -93,6 +93,7 @@ div.course-hero-cover { background: linear-gradient(150deg, var(--c2), var(--c1)
   color: var(--text-2);
   font-size: var(--fs-sm);
   font-weight: 600;
+  white-space: nowrap;
 }
 .course-edit-switch[aria-checked='true'] {
   background: var(--c-soft);
