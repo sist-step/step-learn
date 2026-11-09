@@ -52,6 +52,13 @@ function loadMoodle() {
   return { url: url.href.replace(/\/+$/, ''), exchangeToken: env.MOODLE_EXCHANGE_TOKEN, backchannelSecret }
 }
 
+// 起動時に止めないのは、移行の CLI を使うときにだけ要る設定で、サーバーには関係ないため
+function loadMoodleMigrate() {
+  const url = env.MOODLE_MIGRATE_URL ? URL.parse(env.MOODLE_MIGRATE_URL) : null
+  if (!url || (url.protocol !== 'https:' && url.protocol !== 'http:') || !env.MOODLE_MIGRATE_TOKEN) return null
+  return { url: url.href.replace(/\/+$/, ''), token: env.MOODLE_MIGRATE_TOKEN }
+}
+
 export const config = {
   port: Number(env.PORT ?? 3000),
   /** 公開 URL のオリジン。リバースプロキシ配下では CSRF 検証に必須（例: https://lms.example.com） */
@@ -78,4 +85,6 @@ export const config = {
   smtp: loadSmtp(),
   /** MOODLE_URL が設定されていれば Moodle モード（Moodle をバックエンドにして、STEP Learn は画面だけを受け持つ） */
   moodle: loadMoodle(),
+  /** 完全移行の CLI（moodle:migrate）が読む Moodle と、すべてのコースを見られるアカウントのトークン */
+  moodleMigrate: loadMoodleMigrate(),
 }

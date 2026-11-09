@@ -189,3 +189,9 @@ a.sec-tile[aria-expanded='true'] .sec-tile-title { color: var(--c-ink); }
 @media (max-width: 640px) {
   .items.is-subtiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ===== Moodle モードだけにある種類のアイテム（extra-kinds.tsx） */
+.kind-extra { --kind: var(--c1, var(--accent)); }
+fieldset[data-kind-only] { min-width: 0; margin: 0; padding: 0; border: 0; }
+[data-kind-only][hidden] { display: none; }
+.kind-summary-body[data-kind-only]:not([hidden]) { display: flex; }

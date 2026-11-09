@@ -61,11 +61,12 @@ async function send(url: string, init: RequestInit) {
   }
 }
 
-export async function call<T>(token: string, wsfunction: string, params: Record<string, Param> = {}): Promise<T> {
+/** site の Moodle を呼ぶ。Moodle モードでない移行ツールからも使うので、MOODLE_URL の Moodle とは限らない */
+export async function callSite<T>(site: string, token: string, wsfunction: string, params: Record<string, Param> = {}): Promise<T> {
   const body = flatten(params)
   body.set('wstoken', token)
   body.set('wsfunction', wsfunction)
-  const res = await send(`${moodle.url}/webservice/rest/server.php?moodlewsrestformat=json`, { method: 'POST', body })
+  const res = await send(`${site}/webservice/rest/server.php?moodlewsrestformat=json`, { method: 'POST', body })
   if (!res.ok) throw new MoodleError('unavailable', `Moodle が ${res.status} を返しました`)
   const data = (await res.json()) as unknown
   if (data && typeof data === 'object' && 'exception' in data) {
@@ -75,21 +76,26 @@ export async function call<T>(token: string, wsfunction: string, params: Record<
   return data as T
 }
 
+export const call = <T>(token: string, wsfunction: string, params: Record<string, Param> = {}) =>
+  callSite<T>(moodle.url, token, wsfunction, params)
+
 // Moodle 以外の URL にトークンを付けないのは、教材の URL が書き換えられたときにトークンを外部に漏らさないため
-function withToken(fileUrl: string, token: string) {
+function withToken(site: string, fileUrl: string, token: string) {
   const url = URL.parse(fileUrl)
-  if (!url || url.origin !== new URL(moodle.url).origin || !url.pathname.includes('/webservice/pluginfile.php/')) return null
+  if (!url || url.origin !== new URL(site).origin || !url.pathname.includes('/webservice/pluginfile.php/')) return null
   url.searchParams.delete('forcedownload')
   url.searchParams.set('token', token)
   return url
 }
 
-/** webservice/pluginfile.php のファイルを取得する。Moodle 以外の URL には null を返す */
-export async function fetchFile(token: string, fileUrl: string, range?: string) {
-  const url = withToken(fileUrl, token)
+/** site の webservice/pluginfile.php のファイルを取得する。ほかの URL には null を返す */
+export async function fetchSiteFile(site: string, token: string, fileUrl: string, range?: string) {
+  const url = withToken(site, fileUrl, token)
   if (!url) return null
   return send(url.href, { headers: range ? { Range: range } : {} })
 }
+
+export const fetchFile = (token: string, fileUrl: string, range?: string) => fetchSiteFile(moodle.url, token, fileUrl, range)
 
 /** ファイルを利用者の下書き領域に上げ、その itemid を返す */
 export async function uploadDraft(token: string, file: File) {
@@ -183,7 +189,7 @@ export type MoodleModule = {
     istrackeduser: boolean
     details: { rulename: string }[]
   }
-  contents?: { type: string; filename: string; fileurl: string; filesize: number; mimetype?: string }[]
+  contents?: { type: string; filename: string; filepath?: string; fileurl: string; filesize: number; mimetype?: string }[]
   /** 活動ごとの追加の情報（JSON）。URL では display（自動を解決したあとの表示方法） */
   customdata?: string
 }

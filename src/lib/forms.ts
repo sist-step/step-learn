@@ -191,6 +191,15 @@ const itemEdit = z
     }),
   )
 
+/** Moodle モードの extra のアイテムに共通の欄。種類ごとのスキーマはこれに中身の欄を足して作る（src/moodle-mode/extra-kinds.tsx） */
+export const extraItemFields = {
+  title: text('タイトル', 200, { required: true }),
+  hidden: flag(),
+  completion: z.optional(z.enum(['none', 'manual', 'view'], '完了の条件が正しくありません。')),
+}
+
+const extraItem = z.object(extraItemFields)
+
 const image = z.object({ image: file('画像を選択してください。') })
 
 export const FORMS = {
@@ -206,6 +215,7 @@ export const FORMS = {
   restriction,
   item,
   itemEdit,
+  extraItem,
   image,
 }
 

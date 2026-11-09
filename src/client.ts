@@ -485,9 +485,22 @@ const riseIn = (el: Element, delay: number) =>
 const visibleChildren = (el: Element, skip?: Element) =>
   [...el.children].filter((child) => child !== skip && child.getClientRects().length > 0)
 
+// 種類ごとの欄を CSS だけで出し分けないのは、Moodle モードの extra の欄は種類の数だけあり、無効にして送らせないため
+function setKindOnly(form: HTMLFormElement, kind: string) {
+  for (const el of $$<HTMLElement>('[data-kind-only]', form)) {
+    el.hidden = el.dataset.kindOnly !== kind
+    if (el instanceof HTMLFieldSetElement) el.disabled = el.hidden
+  }
+  const validateAs = form.querySelector<HTMLElement>(`[data-pick-kind="${kind}"]`)?.dataset.kindValidate
+  form.dataset.validateDefault ??= form.dataset.validate
+  const name = validateAs ?? form.dataset.validateDefault
+  if (name) form.dataset.validate = name
+}
+
 function setItemKind(form: HTMLFormElement, kind: string) {
   const input = form.elements.namedItem('type')
   form.dataset.kind = kind
+  setKindOnly(form, kind)
   if (!(input instanceof HTMLInputElement) || input.value === kind) return
   input.value = kind
   input.dispatchEvent(new Event('change', { bubbles: true }))
