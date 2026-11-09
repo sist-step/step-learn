@@ -1,8 +1,17 @@
 /// <reference lib="dom" />
 /// <reference lib="dom.iterable" />
 
-import { GlobalWorkerOptions, TextLayer, getDocument, version, type PDFPageProxy, type PageViewport, type RenderTask } from 'pdfjs-dist'
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+// legacy でない版を使わないのは、Iterator や Map.prototype.getOrInsertComputed を前提にしていて、iOS 18 までの Safari では読み込んだ時点で止まるため
+import {
+  GlobalWorkerOptions,
+  TextLayer,
+  getDocument,
+  version,
+  type PDFPageProxy,
+  type PageViewport,
+  type RenderTask,
+} from 'pdfjs-dist/legacy/build/pdf.mjs'
+import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 
 GlobalWorkerOptions.workerSrc = workerUrl
 
