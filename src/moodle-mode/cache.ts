@@ -25,6 +25,8 @@ export const coursesKey = (userId: number) => `courses:${userId}`
 // courses: で始めるのは、forgetCourse で参加しているコースの一覧と一緒に捨てるため
 export const otherCoursesKey = (userId: number) => `courses:others:${userId}`
 export const courseKey = (courseId: number, userId: number) => `course:${courseId}:${userId}`
+// course: で始めるのは、forgetCourse でコースの情報と一緒に捨てるため
+export const restrictionsKey = (courseId: number, userId: number) => `course:${courseId}:restrictions:${userId}`
 export const contentsKey = (courseId: number, userId: number) => `contents:${courseId}:${userId}`
 
 /** 教師が内容を変えたとき。参加者全員の見え方と、一覧の進捗が変わる */

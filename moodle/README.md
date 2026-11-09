@@ -17,6 +17,7 @@ dev/               手元で試すための Moodle 5.1（Docker）
 | セクションの開閉 | `local_steplearn_set_sections_collapsed`。STEP Learn で開閉したセクションを、Moodle のコース画面と同じユーザー設定（`coursesectionspreferences_<コース ID>`）に記録する |
 | 新しい STEP Learn の案内 | 設定の「新しい STEP Learn を案内する」をオンにすると、ログイン画面（ログインフォームの中）とダッシュボード（通知）に「新しい STEP Learn を使う」ボタンを出す。ボタンは STEP Learn の `GET /auth/moodle/start` に移り、そのままログインの受け渡しを始める（Moodle にログイン済みなら画面を挟まずに入れる）。STEP Learn の「旧STEP Learnでログイン」から来てログイン画面にいる人には出さない |
 | 教材の編集 | `local_steplearn_save_url` / `local_steplearn_save_resource`（URL・ファイルの活動の作成と更新）、`local_steplearn_create_section` / `local_steplearn_update_section`。Moodle 5.1 のコアには URL・ファイルの活動を作る Web サービスがないため |
+| アクセス制限 | `local_steplearn_get_restrictions` が、編集できる人にセクションと活動の制限（教師向けのすべての条件の説明と、STEP Learn で編集できる形か）を返す（Moodle は条件を満たせる教師には制限の説明を返さないため）。`local_steplearn_set_restriction` は、日付（開始・終了）と活動の完了をすべて満たす形の制限で置き換える。それ以外の条件（グループ・評点・「いずれか」など）を含む制限は書き換えを断り、Moodle の画面で編集してもらう |
 
 並べ替え・表示の切り替え・削除は、コアの `core_courseformat_update_course` を使います（トピック形式・週形式など、コンポーネントに対応したコースフォーマットが必要です）。
 

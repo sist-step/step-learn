@@ -48,4 +48,5 @@ $string['privacy:metadata:steplearn:userid'] = 'ユーザー ID';
 $string['privacy:metadata:steplearn:username'] = 'ユーザー名';
 $string['privacy:metadata:steplearn:fullname'] = '氏名';
 $string['privacy:metadata:steplearn:email'] = 'メールアドレス';
+$string['restrictionnoteditable'] = 'このアクセス制限には STEP Learn で編集できない条件が含まれています。旧STEP Learn の画面で編集してください。';
 $string['steplearn:exchangecode'] = 'ログインのコードを STEP Learn のトークンに交換する';

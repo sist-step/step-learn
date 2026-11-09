@@ -3,18 +3,28 @@ import type { Context } from 'hono'
 import { deleteCookie, getSignedCookie, setSignedCookie } from 'hono/cookie'
 import type { CourseCardData } from '../components/ui'
 import { config } from '../lib/config'
-import { firstError, isFile, validate } from '../lib/forms'
-import { field, intParam, readForm, redirectWith, safeNext, wantsJson } from '../lib/http'
+import { dateTimeInputToUnix } from '../lib/course-period'
+import { firstError, isFile, validate, type FieldErrors } from '../lib/forms'
+import { field, intParam, readForm, redirectWith, safeNext, wantsJson, type Form } from '../lib/http'
 import { previewKind } from '../lib/preview'
 import { EXECUTABLE_NOT_ALLOWED, FILE_TOO_LARGE, MAX_FILE_SIZE, isExecutable } from '../lib/storage'
 import { CoursesPage } from '../routes/courses/views'
 import { DashboardPage } from '../routes/dashboard/views'
 import { createSession, destroyByMoodleSid, destroySession, type MoodleEnv } from './auth'
 import { forgetCourse, forgetProgress, forgetSections } from './cache'
-import { exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
+import { MoodleError, exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
 import { loadCourse, moodle, myCourses, otherCourses, outlineOf, progressOf, revisionOf, type LoadedCourse } from './data'
-import { isInProgress, isOpenable, isUpcoming, sectionHref, toCard, type MItem } from './mapping'
-import { CoursePage, ItemEditPage, ItemPage, LoginPage, TEXT_PREVIEW_MAX } from './views'
+import { PREVIOUS_ITEM, isInProgress, isOpenable, isTracked, isUpcoming, sectionHref, toCard, type MItem, type MSection } from './mapping'
+import {
+  CoursePage,
+  ItemEditPage,
+  ItemPage,
+  LoginPage,
+  RestrictionPage,
+  TEXT_PREVIEW_MAX,
+  type RestrictionTarget,
+  type RestrictionValues,
+} from './views'
 
 type C = Context<MoodleEnv>
 
@@ -441,6 +451,134 @@ export async function removeItem(c: C) {
   if (!loaded || !item) return c.notFound()
   await changeCourse(c, loaded, 'cm_delete', [item.id])
   return redirectWith(c, editUrl(loaded, item.sectionId), `「${item.title}」を削除しました。`, 'info')
+}
+
+// ---------------------------------------------------------------- アクセス制限
+
+type RestrictionSubject = { kind: 'section'; section: MSection } | { kind: 'item'; item: MItem }
+
+function restrictionTarget(loaded: LoadedCourse, subject: RestrictionSubject): RestrictionTarget {
+  const base = `/courses/${loaded.course.id}`
+  if (subject.kind === 'section') {
+    const { section } = subject
+    return {
+      kind: 'section',
+      id: section.id,
+      title: section.title,
+      action: `${base}/sections/${section.id}/restriction`,
+      back: editUrl(loaded, section.id),
+      moodleUrl: moodleUrl(`/course/editsection.php?id=${section.id}`),
+      rule: section.rule,
+    }
+  }
+  const { item } = subject
+  return {
+    kind: 'item',
+    id: item.id,
+    title: item.title,
+    action: `${base}/items/${item.id}/restriction`,
+    back: editUrl(loaded, item.sectionId),
+    moodleUrl: moodleUrl(`/course/modedit.php?update=${item.id}`),
+    rule: item.rule,
+  }
+}
+
+// サブセクションの中身のセクションも対象にするのは、Moodle ではサブセクションの制限をそのセクションの設定で編集するため。一般（0 番）は Moodle でも制限を付けられない
+const findRestrictable = (loaded: LoadedCourse, c: C) => {
+  const sid = intParam(c, 'sid')
+  return loaded.sections.find((s) => s.id === sid && s.number !== 0)
+}
+
+const restrictionPage = (c: C, loaded: LoadedCourse, subject: RestrictionSubject, values?: RestrictionValues, errors?: FieldErrors) => {
+  const target = restrictionTarget(loaded, subject)
+  return c.render(
+    <RestrictionPage
+      access={loaded.access}
+      sections={loaded.sections}
+      items={loaded.items}
+      target={target}
+      restrictable={loaded.restrictable}
+      values={values}
+      errors={errors}
+    />,
+    { title: `アクセス制限 - ${target.title}` },
+  )
+}
+
+const afterIds = (form: Form) => [form['after[]'] ?? []].flat().map(Number)
+
+async function saveRestriction(c: C, loaded: LoadedCourse, subject: RestrictionSubject) {
+  const target = restrictionTarget(loaded, subject)
+  if (!loaded.restrictable || (target.rule && !target.rule.editable)) return c.notFound()
+  const form = await readForm(c)
+  const clear = field(form, 'clear') === '1'
+  const result = validate('restriction', form)
+  const allowed = new Set(
+    loaded.items.filter((it) => isTracked(it) && it.id !== (subject.kind === 'item' ? subject.item.id : 0)).map((it) => it.id),
+  )
+  if (subject.kind === 'item') allowed.add(PREVIOUS_ITEM)
+  const after = loaded.course.completionenabled ? afterIds(form).filter((id) => allowed.has(id)) : []
+  if (!clear && !result.ok) {
+    c.status(422)
+    const values = {
+      from: field(form, 'from', 20),
+      until: field(form, 'until', 20),
+      after,
+      hideUnmet: field(form, 'hide_unmet') === '1' ? 1 : 0,
+    }
+    return restrictionPage(c, loaded, subject, values, result.errors)
+  }
+  const v = !clear && result.ok ? result.values : { from: '', until: '', hide_unmet: 0 }
+  try {
+    await moodle(c).setRestriction({
+      courseid: loaded.course.id,
+      sectionid: subject.kind === 'section' ? subject.section.id : 0,
+      cmid: subject.kind === 'item' ? subject.item.id : 0,
+      from: v.from ? dateTimeInputToUnix(v.from) : 0,
+      until: v.until ? dateTimeInputToUnix(v.until) : 0,
+      after: clear ? [] : after,
+      hideunmet: !!v.hide_unmet,
+    })
+  } catch (e) {
+    // 画面を開いたあとに、Moodle の画面で STEP Learn では扱えない条件が付けられたとき
+    if (e instanceof MoodleError && e.errorcode === 'restrictionnoteditable') {
+      forgetCourse(loaded.course.id)
+      return redirectWith(c, target.action, e.message, 'error')
+    }
+    throw e
+  }
+  forgetCourse(loaded.course.id)
+  const removed = clear || (!v.from && !v.until && after.length === 0)
+  return redirectWith(c, target.back, `「${target.title}」のアクセス制限を${removed ? 'なくしました' : '保存しました'}。`)
+}
+
+export async function editSectionRestriction(c: C) {
+  const loaded = await manageCourse(c)
+  const section = loaded && findRestrictable(loaded, c)
+  if (!loaded || !section) return c.notFound()
+  return restrictionPage(c, loaded, { kind: 'section', section })
+}
+
+export async function updateSectionRestriction(c: C) {
+  const loaded = await manageCourse(c)
+  const section = loaded && findRestrictable(loaded, c)
+  if (!loaded || !section) return c.notFound()
+  return saveRestriction(c, loaded, { kind: 'section', section })
+}
+
+export async function editItemRestriction(c: C) {
+  const loaded = await manageCourse(c)
+  const item = loaded && findItem(loaded, c)
+  if (!loaded || !item) return c.notFound()
+  if (item.childSectionId) return c.redirect(`/courses/${loaded.course.id}/sections/${item.childSectionId}/restriction`)
+  return restrictionPage(c, loaded, { kind: 'item', item })
+}
+
+export async function updateItemRestriction(c: C) {
+  const loaded = await manageCourse(c)
+  const item = loaded && findItem(loaded, c)
+  if (!loaded || !item || item.childSectionId) return c.notFound()
+  return saveRestriction(c, loaded, { kind: 'item', item })
 }
 
 /** 学生に見えるアイテムだけを返す（教師にはすべて）。ラベルとアクセス制限中のものは開く画面がないので除く */
