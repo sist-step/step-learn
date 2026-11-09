@@ -38,7 +38,7 @@ export const LoginPage = ({ next = '', error }: { next?: string; error?: string 
       <h1>おかえりなさい</h1>
       <div class="stack">
         {error && <Alert>{error}</Alert>}
-        <p class="muted">旧STEP Learn のアカウントでログインします。Microsoft アカウントでログインしている方も、こちらからどうぞ。</p>
+        <p class="muted">旧STEP Learn のアカウントでログインできます</p>
         {/* 再読み込みなしの遷移にしないのは、Moodle（別オリジン）のログイン画面に移り、fetch では追えないため */}
         <form method="post" action="/auth/moodle/start" data-reload>
           <input type="hidden" name="next" value={next} />
