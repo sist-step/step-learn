@@ -1,6 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import fs from 'node:fs'
-import path from 'node:path'
 import { styleText } from 'node:util'
 import { NO_PASSWORD } from '../lib/auth'
 import { formatBytes } from '../lib/bytes'
@@ -110,6 +109,7 @@ export const PARTICIPANT_LIMIT = 20
 
 const NATIVE_MODULE: Record<ItemType, string> = { page: 'page', link: 'url', file: 'resource', screen: '' }
 
+/** source はプレビューの見出しに出す取り込み元（ファイル名やコースの URL） */
 export function printPreview(plan: Plan, source: string, { verbose = false } = {}) {
   const { backup, participants } = plan
   const { course } = backup
@@ -120,10 +120,7 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
   const joining = participants.filter((p) => !p.skip)
   const out: string[] = []
 
-  out.push(
-    bold(`Moodle バックアップのプレビュー`) + dim(`（${path.basename(source)}${backup.release ? `、Moodle ${backup.release}` : ''}）`),
-    '',
-  )
+  out.push(bold(`Moodle からの取り込みのプレビュー`) + dim(`（${source}${backup.release ? `、Moodle ${backup.release}` : ''}）`), '')
   out.push(`  コース名      ${bold(line(course.title))}${course.code ? dim(`（${line(course.code)}）`) : ''}`)
   out.push(`  公開          ${course.visible ? 'する' : warn('しない（Moodle で非表示）')}`)
   out.push(`  完了の記録    ${course.completionEnabled ? '使う' : '使わない'}`)
@@ -143,7 +140,7 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
         (joining.length ? dim(`（${breakdown}）`) : '') +
         (participants.length > joining.length ? warn(`・取り込まない ${participants.length - joining.length} 人`) : ''),
     )
-  } else out.push(warn('  参加者なし（ユーザーを含まないバックアップ）'))
+  } else out.push(warn(`  参加者なし（${backup.usersNote ?? 'ユーザーを含まないバックアップ'}）`))
 
   backup.sections.forEach((s, i) => {
     out.push(
