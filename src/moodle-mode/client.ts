@@ -203,6 +203,20 @@ export type MoodleSection = {
   modules: MoodleModule[]
 }
 
+/** 教師に見せるアクセス制限。editable は STEP Learn の画面で扱える（日付と活動の完了をすべて満たす）形 */
+export type MoodleRestriction = {
+  sectionid: number
+  cmid: number
+  /** すべての条件を書いた説明（HTML） */
+  info: string
+  editable: boolean
+  from: number
+  until: number
+  /** 完了が条件の活動。-1 は直前の活動 */
+  after: number[]
+  hideunmet: boolean
+}
+
 export type StateAction =
   'cm_move' | 'cm_hide' | 'cm_show' | 'cm_delete' | 'section_move_after' | 'section_hide' | 'section_show' | 'section_delete'
 
@@ -228,6 +242,17 @@ export const api = (token: string) => ({
   createSection: (courseid: number, name: string) => call<number>(token, 'local_steplearn_create_section', { courseid, name }),
   updateSection: (courseid: number, sectionid: number, name: string, summary: string) =>
     call<null>(token, 'local_steplearn_update_section', { courseid, sectionid, name, summary }),
+  restrictions: (courseid: number) =>
+    call<{ enabled: boolean; restrictions: MoodleRestriction[] }>(token, 'local_steplearn_get_restrictions', { courseid }),
+  setRestriction: (p: {
+    courseid: number
+    sectionid: number
+    cmid: number
+    from: number
+    until: number
+    after: number[]
+    hideunmet: boolean
+  }) => call<null>(token, 'local_steplearn_set_restriction', p),
   setSectionsCollapsed: (courseid: number, sectionids: number[], collapsed: boolean) =>
     call<null>(token, 'local_steplearn_set_sections_collapsed', { courseid, sectionids, collapsed }),
   checkSession: (sidhash: string) => call<{ active: boolean }>(token, 'local_steplearn_check_session', { sidhash }),

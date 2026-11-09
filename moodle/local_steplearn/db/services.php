@@ -70,6 +70,18 @@ $functions = [
         'type' => 'write',
         'capabilities' => 'moodle/course:manageactivities, mod/resource:addinstance',
     ],
+    'local_steplearn_get_restrictions' => [
+        'classname' => 'local_steplearn\external\get_restrictions',
+        'description' => 'Access restrictions of the sections and activities in a course, for users who can edit it.',
+        'type' => 'read',
+        'capabilities' => 'moodle/course:manageactivities',
+    ],
+    'local_steplearn_set_restriction' => [
+        'classname' => 'local_steplearn\external\set_restriction',
+        'description' => 'Replace the access restriction of a section or an activity with date and completion conditions.',
+        'type' => 'write',
+        'capabilities' => 'moodle/course:manageactivities',
+    ],
     'local_steplearn_set_sections_collapsed' => [
         'classname' => 'local_steplearn\external\set_sections_collapsed',
         'description' => 'Remember which sections the current user collapsed on the course page.',
@@ -100,6 +112,8 @@ $services = [
             'local_steplearn_update_section',
             'local_steplearn_save_url',
             'local_steplearn_save_resource',
+            'local_steplearn_get_restrictions',
+            'local_steplearn_set_restriction',
             'local_steplearn_set_sections_collapsed',
             'local_steplearn_check_session',
         ],

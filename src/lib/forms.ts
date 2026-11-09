@@ -1,6 +1,6 @@
 // サーバーの handlers と client.ts の両方が読み込むので、DB や Node の API を使うモジュールを import しない
 import * as z from 'zod/mini'
-import { dateInputToUnix, isDateInput } from './course-period'
+import { dateInputToUnix, dateTimeInputToUnix, isDateInput, isDateTimeInput } from './course-period'
 import { checkPassword } from './password'
 import { isMediaFile } from './preview'
 import { COMPLETIONS, COURSE_COLORS, LINK_TARGETS, type Completion, type ItemType } from './types'
@@ -127,6 +127,17 @@ const course = z
     }),
   )
 
+const dateTime = (label: string) =>
+  z.pipe(trimmed(), z.string().check(rule((s: string) => (!s || isDateTimeInput(s) ? null : `${label}が正しくありません。`))))
+
+// 完了の条件（after[]）をここで確かめないのは、選べる活動がコースの中身で決まり、ハンドラで選択肢と照らし合わせるため
+const restriction = z.object({ from: dateTime('開始日時'), until: dateTime('終了日時'), hide_unmet: flag() }).check(
+  z.superRefine((v, ctx) => {
+    if (isDateTimeInput(v.from) && isDateTimeInput(v.until) && dateTimeInputToUnix(v.until) <= dateTimeInputToUnix(v.from))
+      ctx.issues.push({ code: 'custom', message: '終了日時は開始日時より後にしてください。', input: v, path: ['until'] })
+  }),
+)
+
 const section = z.object({ title: text('セクション名', 120, { required: true }), summary: z.optional(text('説明', 2000)) })
 
 export const completionChoices = (type: ItemType): Completion[] =>
@@ -192,6 +203,7 @@ export const FORMS = {
   password,
   course,
   section,
+  restriction,
   item,
   itemEdit,
   image,

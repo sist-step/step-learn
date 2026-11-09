@@ -48,4 +48,5 @@ $string['privacy:metadata:steplearn:userid'] = 'The user id.';
 $string['privacy:metadata:steplearn:username'] = 'The username.';
 $string['privacy:metadata:steplearn:fullname'] = 'The full name.';
 $string['privacy:metadata:steplearn:email'] = 'The email address.';
+$string['restrictionnoteditable'] = 'This restriction includes conditions that cannot be edited in STEP Learn. Edit it in Moodle.';
 $string['steplearn:exchangecode'] = 'Exchange login codes for STEP Learn tokens';

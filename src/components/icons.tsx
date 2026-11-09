@@ -43,6 +43,7 @@ import zoomOut from 'heroicons/24/outline/magnifying-glass-minus.svg?raw'
 import zoomIn from 'heroicons/24/outline/magnifying-glass-plus.svg?raw'
 import moon from 'heroicons/24/outline/moon.svg?raw'
 import lock from 'heroicons/24/outline/lock-closed.svg?raw'
+import lockOpen from 'heroicons/24/outline/lock-open.svg?raw'
 import listNumbered from 'heroicons/24/outline/numbered-list.svg?raw'
 import pencil from 'heroicons/24/outline/pencil.svg?raw'
 import photo from 'heroicons/24/outline/photo.svg?raw'
@@ -109,6 +110,7 @@ const svgs = {
   listNumbered,
   code,
   lock,
+  lockOpen,
   academicCap,
   calendar,
   folder,
