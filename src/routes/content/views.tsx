@@ -87,7 +87,7 @@ export const ItemEditPage = ({
       <header class="editor-head">
         <ItemIcon type={item.type} />
         <div class="editor-head-text">
-          <span class="eyebrow">{typeLabel}を編集</span>
+          <span class="eyebrow truncate">{typeLabel}を編集</span>
           <h1 class="truncate">{item.title}</h1>
         </div>
         <div class="editor-head-actions">

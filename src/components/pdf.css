@@ -103,6 +103,8 @@
   .pdf-bar > .item-icon, .pdf-bar-text .crumbs, .pdf-bar-hidden, .pdf-toolbar-sep, .pdf-zoom, .pdf-toolbar [data-pdf-action='fit'] { display: none; }
   .pdf-bar { gap: 6px; }
   .pdf-bar-actions { gap: 4px; }
+  .pdf-toolbar { max-width: calc(100% - 16px); }
+  .pdf-toolbar .icon-btn { flex: 0 1 var(--tap); min-width: 0; width: auto; }
   /* 文字を display: none で消さないのは、アイコンだけになっても読み上げでは「ビューアー」「ブラウザ」と伝えるため */
   .pdf-mode span { gap: 0; padding: 6px 10px; font-size: 0; }
   .pdf-pages { padding: 12px 12px 80px; }
