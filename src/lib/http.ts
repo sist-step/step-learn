@@ -71,19 +71,6 @@ export const limitBody = (maxSize: number, message = `送信できるデータ�
     await next()
   })
 
-export type Theme = 'light' | 'dark'
-
-const THEME_COOKIE = 'theme'
-
-// OS の設定に合わせないのは、利用者が自分で選んだときだけダークにするため
-export const getTheme = (c: Context): Theme => (getCookie(c, THEME_COOKIE) === 'dark' ? 'dark' : 'light')
-
-export type PdfMode = 'viewer' | 'browser'
-
-const PDF_COOKIE = 'pdf'
-
-export const getPdfMode = (c: Context): PdfMode => (getCookie(c, PDF_COOKIE) === 'browser' ? 'browser' : 'viewer')
-
 export type Form = Record<string, string | File | (string | File)[]>
 
 export async function readForm(c: Context): Promise<Form> {
