@@ -12,6 +12,7 @@ import {
   type RenderTask,
 } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+import { getSetting, setSetting } from './lib/settings'
 
 GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -22,7 +23,6 @@ const MIN_ZOOM = ZOOM_STEPS[0]
 const MAX_ZOOM = ZOOM_STEPS.at(-1)!
 const MAX_AUTO_ZOOM = 1.25
 const MAX_CANVAS_PIXELS = 16_777_216
-const THUMBS_KEY = 'pdf-thumbs'
 
 type Zoom = number | 'auto' | 'width'
 
@@ -62,22 +62,6 @@ function createThumb(pageNumber: number, width: number, height: number) {
   label.textContent = String(pageNumber)
   el.append(frame, label)
   return { el, frame, canvas: null, task: null }
-}
-
-function readThumbsOpen() {
-  try {
-    return localStorage.getItem(THUMBS_KEY) !== '0'
-  } catch {
-    return true
-  }
-}
-
-function saveThumbsOpen(open: boolean) {
-  try {
-    localStorage.setItem(THUMBS_KEY, open ? '1' : '0')
-  } catch {
-    // 保存できなくても、次に開いたときに既定の開き方に戻るだけなので知らせない
-  }
 }
 
 const viewers = new Set<{ root: HTMLElement; destroy: () => void }>()
@@ -411,7 +395,7 @@ export async function mountPdfViewer(root: HTMLElement) {
     else if (action === 'thumbs') {
       const open = !root.hasAttribute('data-thumbs-open')
       setThumbsOpen(open)
-      if (!narrow.matches) saveThumbsOpen(open)
+      if (!narrow.matches) setSetting('pdfThumbs', open)
     }
   })
 
@@ -441,7 +425,7 @@ export async function mountPdfViewer(root: HTMLElement) {
   pageInput.addEventListener('focus', () => pageInput.select())
 
   // スマホ幅で開いた状態から始めないのは、一覧がページに重なって最初のページが隠れるため
-  setThumbsOpen(!narrow.matches && readThumbsOpen())
+  setThumbsOpen(!narrow.matches && getSetting('pdfThumbs'))
   setZoom('auto')
   markCurrent()
 }

@@ -2,7 +2,7 @@ import { raw } from 'hono/html'
 import { jsxRenderer } from 'hono/jsx-renderer'
 import { Script, ViteClient } from 'vite-ssr-components/hono'
 import { StyleLinks, StyleLinksResolver } from './components/style'
-import { getTheme } from './lib/http'
+import { THEME_BOOT_SCRIPT } from './lib/settings'
 
 declare module 'hono' {
   interface ContextRenderer {
@@ -10,39 +10,37 @@ declare module 'hono' {
   }
 }
 
-export const renderer = jsxRenderer(({ children, title }, c) => {
-  const theme = getTheme(c)
-  return (
-    <html lang="ja" data-theme={theme}>
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="color-scheme" content={theme} />
-        <meta name="theme-color" content="" />
-        <title>{title ? `${title} | STEP Learn` : 'STEP Learn'}</title>
-        <link rel="icon" href="/favicon.ico" sizes="32x32" />
-        <link rel="icon" href="/favicon.png" type="image/png" sizes="160x160" />
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-        <ViteClient />
-        <StyleLinks />
-        <Script src="/src/client.ts" />
-        <noscript>
-          <style>{raw('body > :not(noscript) { display: none !important; }')}</style>
-        </noscript>
-      </head>
-      <body>
-        {children}
-        <StyleLinksResolver />
-        <noscript>
-          <div class="noscript">
-            <img src="/favicon.png" alt="" width={48} height={48} />
-            <h1>JavaScript を有効にしてください</h1>
-            <p class="muted">
-              STEP Learn は JavaScript を使って動作します。ブラウザの設定で JavaScript を有効にしてから、ページを再読み込みしてください。
-            </p>
-          </div>
-        </noscript>
-      </body>
-    </html>
-  )
-})
+export const renderer = jsxRenderer(({ children, title }) => (
+  <html lang="ja" data-theme="light">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <meta name="color-scheme" content="light" />
+      <meta name="theme-color" content="" />
+      <script>{raw(THEME_BOOT_SCRIPT)}</script>
+      <title>{title ? `${title} | STEP Learn` : 'STEP Learn'}</title>
+      <link rel="icon" href="/favicon.ico" sizes="32x32" />
+      <link rel="icon" href="/favicon.png" type="image/png" sizes="160x160" />
+      <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+      <ViteClient />
+      <StyleLinks />
+      <Script src="/src/client.ts" />
+      <noscript>
+        <style>{raw('body > :not(noscript) { display: none !important; }')}</style>
+      </noscript>
+    </head>
+    <body>
+      {children}
+      <StyleLinksResolver />
+      <noscript>
+        <div class="noscript">
+          <img src="/favicon.png" alt="" width={48} height={48} />
+          <h1>JavaScript を有効にしてください</h1>
+          <p class="muted">
+            STEP Learn は JavaScript を使って動作します。ブラウザの設定で JavaScript を有効にしてから、ページを再読み込みしてください。
+          </p>
+        </div>
+      </noscript>
+    </body>
+  </html>
+))
