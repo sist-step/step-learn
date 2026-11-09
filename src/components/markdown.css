@@ -17,7 +17,7 @@
 .prose strong { color: var(--text); }
 
 /* ===== Markdown エディター（CodeMirror は src/markdown-editor.ts） */
-.md-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.md-editor-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .md-modes { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--track); box-shadow: inset 0 0 0 1px var(--track-border); }
 .md-modes button {
   display: inline-flex;
@@ -31,6 +31,7 @@
   font: inherit;
   font-size: var(--fs-xs);
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
