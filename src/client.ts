@@ -93,14 +93,22 @@ function slideSegment(from: HTMLInputElement, to: HTMLInputElement) {
   toSpan.addEventListener('animationend', () => toSpan.classList.remove('is-entering'), { once: true })
 }
 
-// --- PDF の表示方法（components/pdf.tsx の PdfBar。クッキーでサーバーに伝え、今の画面を描き直す）
+// --- PDF の表示方法（components/pdf.tsx の PdfBar / PdfStage。再読み込みするとビューアーに戻る）
+let pdfMode: 'viewer' | 'browser' = 'viewer'
+function applyPdfMode() {
+  $$<HTMLInputElement>('[data-pdf-mode] input').forEach((input) => (input.checked = input.value === pdfMode))
+  $$<HTMLElement>('[data-pdf-viewer]').forEach((el) => (el.hidden = pdfMode !== 'viewer'))
+  $$<HTMLIFrameElement>('iframe[data-pdf-frame]').forEach((frame) => {
+    frame.hidden = pdfMode !== 'browser'
+    if (!frame.hidden && !frame.getAttribute('src')) frame.src = frame.dataset.pdfFrame!
+  })
+}
 document.addEventListener('change', (e) => {
   const input = e.target
   if (!(input instanceof HTMLInputElement) || !input.closest('[data-pdf-mode]')) return
-  document.cookie =
-    input.value === 'browser' ? 'pdf=browser; path=/; max-age=31536000; samesite=lax' : 'pdf=; path=/; max-age=0; samesite=lax'
-  prefetched.clear()
-  void visit(new URL(location.href))
+  pdfMode = input.value === 'browser' ? 'browser' : 'viewer'
+  applyPdfMode()
+  initPdfViewers()
 })
 
 function syncThemeColor() {
@@ -916,7 +924,7 @@ function initAuthArt() {
 let pdfViewer: Promise<typeof import('./pdf-viewer')> | null = null
 function initPdfViewers() {
   void pdfViewer?.then(({ releaseDetachedPdfViewers }) => releaseDetachedPdfViewers())
-  const roots = $$<HTMLElement>('[data-pdf-viewer]:not([data-pdf-ready])')
+  const roots = $$<HTMLElement>('[data-pdf-viewer]:not([data-pdf-ready], [hidden])')
   if (!roots.length) return
   pdfViewer ??= import('./pdf-viewer')
   pdfViewer
@@ -2125,6 +2133,7 @@ function initContent() {
   applyCourseFilter()
   updateToc()
   initMarkdownEditors()
+  applyPdfMode()
   initPdfViewers()
   initMascots()
   initWalkers()

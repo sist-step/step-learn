@@ -71,6 +71,7 @@ function migrateLegacy(): Settings {
   writeSettings(settings)
   LEGACY_KEYS.forEach((key) => localStorage.removeItem(key))
   document.cookie = 'theme=; path=/; max-age=0; samesite=lax'
+  document.cookie = 'pdf=; path=/; max-age=0; samesite=lax'
   return settings
 }
 
