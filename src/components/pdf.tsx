@@ -1,11 +1,9 @@
 import type { Child } from 'hono/jsx'
-import { useRequestContext } from 'hono/jsx-renderer'
 import { IconButton } from './button'
 import { ItemIcon } from './course'
 import { Input, SegmentedControl, type SegmentOption } from './form'
 import { useStyle } from './style'
 import { Breadcrumbs, Chip, type Crumb } from './ui'
-import { getPdfMode } from '../lib/http'
 
 const PDF_MODE_OPTIONS = [
   { value: 'viewer', label: 'ビューアー', icon: 'page' },
@@ -24,7 +22,6 @@ export const PdfBar = ({
   children?: Child
 }) => {
   useStyle('/src/components/pdf.css')
-  const mode = getPdfMode(useRequestContext())
   return (
     <div class="pdf-bar">
       <ItemIcon type="file" />
@@ -40,7 +37,7 @@ export const PdfBar = ({
         </Chip>
       )}
       <div class="pdf-bar-actions">
-        <SegmentedControl name="pdf-mode" label="PDF の表示方法" options={PDF_MODE_OPTIONS} value={mode} class="pdf-mode" data-pdf-mode />
+        <SegmentedControl name="pdf-mode" label="PDF の表示方法" options={PDF_MODE_OPTIONS} class="pdf-mode" data-pdf-mode />
         {children}
       </div>
     </div>
@@ -49,13 +46,6 @@ export const PdfBar = ({
 
 export const PdfStage = ({ src, title }: { src: string; title: string }) => {
   useStyle('/src/components/pdf.css')
-  if (getPdfMode(useRequestContext()) === 'browser') {
-    return (
-      <div class="pdf-stage">
-        <iframe class="pdf-frame" src={src} title={title} />
-      </div>
-    )
-  }
   return (
     <div class="pdf-stage">
       <div class="pdf-viewer" data-pdf-viewer={src}>
@@ -81,6 +71,8 @@ export const PdfStage = ({ src, title }: { src: string; title: string }) => {
           <IconButton icon="fitWidth" label="幅に合わせる" aria-pressed="false" data-pdf-action="fit" />
         </div>
       </div>
+      {/* src を最初から入れないのは、ブラウザの表示に切り替えるまで同じ PDF を二重に読み込まないようにするため */}
+      <iframe class="pdf-frame" title={title} data-pdf-frame={src} hidden />
     </div>
   )
 }
