@@ -95,7 +95,8 @@
   .md-editor-host .cm-scroller { font-size: 16px; }
 }
 @media (max-width: 640px), (pointer: coarse) {
-  .md-toolbar .icon-btn { width: 40px; height: 40px; }
+  .md-toolbar { flex-wrap: nowrap; }
+  .md-toolbar .icon-btn { flex: 0 1 40px; min-width: 0; width: auto; height: 40px; }
   .md-modes button { min-height: 38px; padding-inline: 14px; }
   .md-help summary { display: flex; align-items: center; min-height: var(--tap); }
 }
