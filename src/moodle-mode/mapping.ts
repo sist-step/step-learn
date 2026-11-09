@@ -3,7 +3,7 @@ import type { CourseAccess } from '../lib/courses'
 import { COURSE_COLORS, type Completion, type Course, type LinkTarget, type NavCourse } from '../lib/types'
 import { linkTargetOf, moodleDisplayOf, type MoodleDisplay } from '../moodle/display'
 import { toMarkdown, toPlainText } from '../moodle/html'
-import type { MoodleCourse, MoodleFormat, MoodleModule, MoodleSection } from './client'
+import type { MoodleCourse, MoodleFormat, MoodleModule, MoodleRestriction, MoodleSection } from './client'
 
 // Moodle のコースには色がないので、ID から決めて毎回同じ色にする
 export const courseColor = (id: number) => COURSE_COLORS[id % COURSE_COLORS.length]
@@ -82,6 +82,8 @@ export type MItem = {
   /** アクセス制限で、まだ開けない */
   locked: boolean
   restriction: string
+  /** 教師に見せるアクセス制限。制限がないときと学生には null */
+  rule: Restriction | null
   completion: ItemCompletion
   done: boolean
   /** subsection の中身のセクション */
@@ -98,6 +100,49 @@ export type MSection = {
   parentId: number | null
   locked: boolean
   restriction: string
+  /** 教師に見せるアクセス制限。制限がないときと学生には null */
+  rule: Restriction | null
+}
+
+/** 教師に見せるアクセス制限。editable のときだけ from 以降の値がある */
+export type Restriction = {
+  text: string
+  editable: boolean
+  from: number | null
+  until: number | null
+  /** 完了が条件の活動。-1 は直前の活動 */
+  after: number[]
+  hideUnmet: boolean
+}
+
+/** 完了の条件にできる「直前の活動」 */
+export const PREVIOUS_ITEM = -1
+
+// リンクを外すのは、Moodle が活動の名前を Moodle の画面へのリンクにしており、文字にすると URL が並んで条件が読みにくいため
+const restrictionText = (html: string) => toPlainText(html.replace(/<\/?a\b[^>]*>/gi, ''), 1)
+
+const toRestriction = (r: MoodleRestriction): Restriction => ({
+  text: restrictionText(r.info),
+  editable: r.editable,
+  from: r.from || null,
+  until: r.until || null,
+  after: r.after,
+  hideUnmet: r.hideunmet,
+})
+
+/** 教師のときに、セクションとアイテムに制限を付ける */
+export function withRestrictions<T extends { sections: MSection[]; items: MItem[] }>(outline: T, list: MoodleRestriction[]): T {
+  const bySection = new Map(list.filter((r) => r.sectionid).map((r) => [r.sectionid, toRestriction(r)]))
+  const byItem = new Map(list.filter((r) => r.cmid).map((r) => [r.cmid, toRestriction(r)]))
+  return {
+    ...outline,
+    sections: outline.sections.map((s) => ({ ...s, rule: bySection.get(s.id) ?? null })),
+    // サブセクションに中身のセクションの制限を使うのは、Moodle の画面でもサブセクションの制限はセクションの設定で編集し、活動の側はそれを写したものなため
+    items: outline.items.map((it) => ({
+      ...it,
+      rule: (it.childSectionId ? bySection.get(it.childSectionId) : byItem.get(it.id)) ?? null,
+    })),
+  }
 }
 
 // 状態の値は Moodle の COMPLETION_COMPLETE（1）と COMPLETION_COMPLETE_PASS（2）
@@ -147,7 +192,8 @@ function toItem(m: MoodleModule, sectionId: number, tracking: boolean, childSect
     body: m.description ? toMarkdown(m.description, 1).markdown : '',
     hidden: !m.visible || !m.visibleoncoursepage,
     locked: !m.uservisible,
-    restriction: m.availabilityinfo ? toPlainText(m.availabilityinfo, 1) : '',
+    restriction: m.availabilityinfo ? restrictionText(m.availabilityinfo) : '',
+    rule: null,
     completion: completionOf(m, tracking),
     done: isComplete(m.completiondata?.state),
     childSectionId,
@@ -162,7 +208,8 @@ const toSection = (s: MoodleSection, parentId: number | null, hidden: boolean): 
   hidden,
   parentId,
   locked: s.uservisible === false,
-  restriction: s.availabilityinfo ? toPlainText(s.availabilityinfo, 1) : '',
+  restriction: s.availabilityinfo ? restrictionText(s.availabilityinfo) : '',
+  rule: null,
 })
 
 /** core_course_get_contents の結果を、セクションとアイテムの一覧にする。items は上から読む順に並ぶ */

@@ -1,8 +1,8 @@
 import type { Context } from 'hono'
 import type { MoodleEnv } from './auth'
-import { cached, contentsKey, courseKey, coursesKey, otherCoursesKey } from './cache'
+import { cached, contentsKey, courseKey, coursesKey, otherCoursesKey, restrictionsKey } from './cache'
 import { api, isTokenError, type MoodleFormat } from './client'
-import { isOpenable, isTracked, toAccess, toLayout, toOutline } from './mapping'
+import { isOpenable, isTracked, toAccess, toLayout, toOutline, withRestrictions } from './mapping'
 
 export const moodle = (c: Context<MoodleEnv>) => api(c.var.token!)
 
@@ -19,6 +19,20 @@ export async function otherCourses(c: Context<MoodleEnv>) {
   }
 }
 
+const NO_RESTRICTIONS = { enabled: false, restrictions: [] }
+
+async function restrictionsOf(c: Context<MoodleEnv>, courseId: number, fresh: boolean) {
+  const load = () => moodle(c).restrictions(courseId)
+  try {
+    return await (fresh ? load() : cached(restrictionsKey(courseId, c.var.user!.id), load))
+  } catch (e) {
+    // コースページごと失敗させないのは、プラグインを更新する前の Moodle にはこの API がなく、制限を出さなくても教材は編集できるため
+    if (isTokenError(e)) throw e
+    console.error('[moodle] restrictions', e)
+    return NO_RESTRICTIONS
+  }
+}
+
 /** コースとその教材。アクセスできなければ Moodle の notfound で例外になる（app.tsx の onError が 404 にする） */
 export async function loadCourse(c: Context<MoodleEnv>, courseId: number, { fresh = false } = {}) {
   const userId = c.var.user!.id
@@ -31,7 +45,15 @@ export async function loadCourse(c: Context<MoodleEnv>, courseId: number, { fres
       ])
   const access = toAccess(course)
   const outline = toOutline(contents, { tracking: course.completionenabled, manage: course.canmanage })
-  return { course, access, layout: toLayout(course.format), ...outline }
+  // 学生に問い合わせないのは、制限の中身は編集できる人にしか返さず、学生には Moodle が開けない理由だけを返すため
+  const restrictions = course.canmanage ? await restrictionsOf(c, courseId, fresh) : NO_RESTRICTIONS
+  return {
+    course,
+    access,
+    layout: toLayout(course.format),
+    restrictable: restrictions.enabled,
+    ...withRestrictions(outline, restrictions.restrictions),
+  }
 }
 
 export type LoadedCourse = Awaited<ReturnType<typeof loadCourse>>
