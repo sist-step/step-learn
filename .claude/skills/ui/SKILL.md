@@ -134,7 +134,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | 部品 | 用途 |
 | --- | --- |
 | `PdfBar` | PDF のアイテムで `AppShell` の `topbar` に渡す帯（パンくず・タイトル・「ビューアー / ブラウザ」の切り替え・`children` の操作ボタン）。切り替えは `pdf` クッキーに保存し、サーバーが読んで描き分ける |
-| `PdfStage` | ヘッダーの下いっぱいの PDF 表示。既定は pdf.js の自作ビューアー（`src/pdf-viewer.ts`。`client.ts` が PDF のある画面でだけ読み込む）、ブラウザを選ぶと iframe でブラウザ標準のビューアー。ビューアーは左にページのサムネイルの一覧を出し（ツールバーの左端のボタンで開閉。開閉は localStorage に保存し、スマホ幅では閉じた状態から始めてページに重ねて出す）、今のページを `aria-current` で示す |
+| `PdfStage` | ヘッダーの下いっぱいの PDF 表示。既定は pdf.js の自作ビューアー（`src/pdf-viewer.ts`。`client.ts` が PDF のある画面でだけ読み込む）、ブラウザを選ぶと iframe でブラウザ標準のビューアー。ビューアーは左にページのサムネイルの一覧を出し（ツールバーの左端のボタンで開閉。開閉は端末ごとの設定（`pdfThumbs`）に保存し、スマホ幅では閉じた状態から始めてページに重ねて出す）、今のページを `aria-current` で示す |
 
 ログイン前の画面（`AuthShell`）の右側は、`src/auth-art.ts` が three.js で描く 3D アニメーション（背景は無地で、台座の上で小さなキューブが 14 種類の形（ロケット・ネコ・家・アイスクリームなど。`MODELS`）に組み上がっては組み替わる。クリックでつつくとキューブが弾け、3 回続けると次の形へ。ドラッグで回せる）。`data-auth-art` の要素に `client.ts` が canvas を置き、再読み込みなしの遷移では同じ canvas を新しい要素へ移して続きから動かす。色は `--art-deep` / `--art-mid` / `--art-bright` / `--art-shine` とコースの色（`tone-*`）を読み取る。スマホ幅（非表示）では three.js を読み込まない
 
@@ -186,7 +186,7 @@ CSS は 1 ファイルにまとめず、使う部品・画面の隣に置く。�
 - 白い面（カード・タイル・表など）は `border: 1px solid var(--card-border)` と `box-shadow: var(--shadow-card)` で背景から分ける。ホバーで持ち上げるのは `@media (hover: hover)` の中で `--border-strong` ＋ `--shadow` ＋ `translateY(-1px)`
 - 状態色を文字に使うときは `--danger-text` / `--success-text` / `--warning-text` / `--info-text`（`--danger` などは背景や枠用。白地で文字にすると薄い）。塗りのボタンは `--danger-strong` / `--success-strong`
 - フォーカスは全体の `:focus-visible`（`--focus` の outline）に任せる。入力欄は `border-color: var(--focus)` と `box-shadow: var(--ring-field)`、角丸の小さな部品のリングは `var(--ring)`
-- トークンを足すときは `:root` と `:root[data-theme='dark']` の両方に定義する。ダークモードは OS の設定ではなく、利用者がヘッダーのユーザーメニューで選んだときだけ（`theme` クッキー → `<html data-theme>`）。ダーク用の上書きは `[data-theme='dark'] .foo` で書き、`prefers-color-scheme` は使わない。ダークモードで必ず見た目を確認する
+- トークンを足すときは `:root` と `:root[data-theme='dark']` の両方に定義する。ダークモードは OS の設定ではなく、利用者がヘッダーのユーザーメニューで選んだときだけ（端末ごとの設定の `theme` → `<html data-theme>`。サーバーは常にライトで描き、`renderer.tsx` の `<head>` の小さなスクリプトが描画前にダークへ切り替える）。ダーク用の上書きは `[data-theme='dark'] .foo` で書き、`prefers-color-scheme` は使わない。ダークモードで必ず見た目を確認する
 - 薄い色は `color-mix(in srgb, var(--primary) 12%, transparent)` で作る
 - コースの色は `tone-${color}` クラスと `--c1` / `--c2` を使う
 - 選択中のタブ・メニュー・セクション番号など「今いる場所」の色は `--c-ink`（文字）/ `--c-soft`（背景）を使う。コースの外ではブランドのシアン、`AppShell` に `tone={access.course.color}` を渡したコース配下の画面ではそのコースの色になる。主ボタンは `--primary`（ライトでは黒）のまま
@@ -224,7 +224,7 @@ CSS は 1 ファイルにまとめず、使う部品・画面の隣に置く。�
 - 先読みさせたくないリンク（ログアウト・ダウンロードなど）は `data-no-prefetch`
 - リンクとフォーム送信は `client.ts` が fetch に置き換え、body を差し替えて再読み込みなしで遷移する。通常の遷移で開かせたいリンク・フォームには `data-reload`（`download` 付きのリンクと `target` 付きは自動で対象外）
 - 遷移しても DOM ごと残したい要素（開いたまま保ちたいサイドバーなど）には `id` と `data-persist` を付ける。その要素は丸ごと差し替えず、新しいページとの違い（属性・文字・増減した子要素）だけを書き換える。入力途中の値まで持ち越されるので、フォームには付けない
-- ダッシュボード・レールのマイコースには、サーバーが進行中のコースだけを描く。コース一覧には、参加しているコースのうち開始前のもの（教師として登録しているコースは除く）以外を描き、管理者にはすべてのコースを描く。コース一覧の絞り込み（「進行中 / すべて」と管理者の「登録外も表示」）は端末ごとの設定で、`client.ts` が localStorage から `<html>` に `data-courses-all` / `data-courses-others` を付け、`base.css` が `data-course-ended` / `data-course-unenrolled` の要素を隠す。サーバーは候補のコースをすべて描き、件数や空の表示は既定（進行中・参加しているコースだけ）で描く。件数は `[data-course-list]` の中の `[data-course-count]`、絞り込みで空になったときの案内は `[data-courses-empty]` に置くと `client.ts` が合わせる
+- ダッシュボード・レールのマイコースには、サーバーが進行中のコースだけを描く。コース一覧には、参加しているコースのうち開始前のもの（教師として登録しているコースは除く）以外を描き、管理者にはすべてのコースを描く。コース一覧の絞り込み（「進行中 / すべて」と管理者の「登録外も表示」）は端末ごとの設定で、`client.ts` が端末ごとの設定（`coursesAll` / `coursesOthers`）から `<html>` に `data-courses-all` / `data-courses-others` を付け、`base.css` が `data-course-ended` / `data-course-unenrolled` の要素を隠す。サーバーは候補のコースをすべて描き、件数や空の表示は既定（進行中・参加しているコースだけ）で描く。件数は `[data-course-list]` の中の `[data-course-count]`、絞り込みで空になったときの案内は `[data-courses-empty]` に置くと `client.ts` が合わせる
 - コースの内容を見せる画面（コースページ・アイテム）には `components/course.tsx` の `CourseLiveSync` を置く。`client.ts` が 10 秒ごとにコースの版（`lib/courses.ts` の `courseRevision`。`/courses/:id/` 配下の POST で進む）を確かめ、変わっていたら同じ URL を取り直して、前回描いた内容との差分だけを `<main>` に当てる。入力中の欄・開いているポップオーバーやモーダル・再生中の動画を含む部分は、使い終わるまで差し替えない。描画前に版を読むこと（読み出しの後だと変更を取りこぼす）
 - body を差し替えても `<script>` は実行されないので、専用スクリプトを読み込むページは自動で通常の読み込みになる。毎回の表示で必要な初期化は `client.ts` の `initPage()` に足す
 - 入力欄には `label`、アイコンボタンには `aria-label`、状態は `aria-pressed` / `aria-invalid` で伝える
@@ -232,12 +232,13 @@ CSS は 1 ファイルにまとめず、使う部品・画面の隣に置く。�
 
 ## クライアント JS（src/client.ts）
 
-- データを変える操作はフォーム送信で作り、`client.ts` で画面遷移なしに反映する。テーマのような表示だけの状態は、`client.ts` がクッキーを書き、サーバーはそれを読んで描く（POST のルートは作らない）
+- データを変える操作はフォーム送信で作り、`client.ts` で画面遷移なしに反映する。テーマのような表示だけの状態は端末ごとの設定に保存し、`client.ts` が読んで表示を切り替える（POST のルートは作らない）。サーバーが描き分ける必要があるもの（PDF の表示方法）だけはクッキーにする
 - 要素には `data-*` 属性で目印を付け、`document` へのイベント委譲で拾う（要素ごとに addEventListener しない）
 - 区切りは `// --- 何の処理か` の見出しに合わせる
 - `fetch` するときは `Accept: application/json` を付け、サーバー側は `wantsJson(c)` で分岐する（`add-page` スキル参照）
 - 失敗したら元の状態に戻し、`toast('〜できませんでした。', 'error')` を出す
-- `localStorage` は try/catch で包む
+- 端末ごとの設定は `lib/settings.ts` の `getSetting('theme')` / `setSetting('editMode', true)` / `updateSetting('collapsedSections', (ids) => …)` で読み書きする。中身は localStorage の `settings` 1 つに JSON でまとめて保存する。項目を足すときは `SETTINGS` のスキーマに `.catch(既定値)` 付きで足す（キー名と値の型が補完・型チェックされる）。localStorage を直接触るキーを新しく作らない
+- それ以外で `localStorage` を使うときは try/catch で包む
 - ライブラリは入れない。`alert` / `confirm` は使わず、確認は `data-confirm` の独自ダイアログを使う
 
 ## 確認

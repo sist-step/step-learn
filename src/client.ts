@@ -5,6 +5,7 @@
 import checkSvg from 'heroicons/24/outline/check.svg?raw'
 import { formatBytes } from './lib/bytes'
 import { isFormName, validate, type FieldErrors, type FormInput } from './lib/forms'
+import { getSetting, setSetting, updateSetting, type Theme } from './lib/settings'
 
 const $$ = <T extends Element>(sel: string, root: ParentNode = document) => [...root.querySelectorAll<T>(sel)]
 
@@ -17,39 +18,27 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') document.body.classList.remove('nav-open')
 })
 
-// --- テーマの切り替え（クッキーでサーバーにも伝え、次の表示から同じテーマで描く）
-document.addEventListener('click', (e) => {
-  const t = (e.target as Element).closest<HTMLButtonElement>('[data-theme-toggle]')
-  if (!t) return
-  e.preventDefault()
-  const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'
+// --- テーマの切り替え（端末ごと。最初の描画前に当てるのは lib/settings.ts の THEME_BOOT_SCRIPT）
+function applyTheme(theme: Theme) {
   document.documentElement.dataset.theme = theme
   $$('[data-theme-toggle]').forEach((el) => el.setAttribute('aria-checked', String(theme === 'dark')))
   document.querySelector('meta[name=color-scheme]')?.setAttribute('content', theme)
   syncThemeColor()
-  document.cookie = `theme=${theme}; path=/; max-age=31536000; samesite=lax`
+}
+document.addEventListener('click', (e) => {
+  const t = (e.target as Element).closest<HTMLButtonElement>('[data-theme-toggle]')
+  if (!t) return
+  e.preventDefault()
+  const theme = getSetting('theme') === 'dark' ? 'light' : 'dark'
+  setSetting('theme', theme)
+  applyTheme(theme)
 })
 
 // --- 表示するコースの絞り込み（端末ごと）
 // サーバーに伝えないのは、絞り込む候補のコースをすべて描いてあり、ここでは見せるかどうかを切り替えるだけで済むため
-const COURSES_ALL_KEY = 'sl:courses-all'
-const COURSES_OTHERS_KEY = 'sl:courses-others'
-const readFlag = (key: string) => {
-  try {
-    return localStorage.getItem(key) === '1'
-  } catch {
-    return false
-  }
-}
-const writeFlag = (key: string, on: boolean) => {
-  try {
-    if (on) localStorage.setItem(key, '1')
-    else localStorage.removeItem(key)
-  } catch {}
-}
 function applyCourseFilter() {
-  const all = readFlag(COURSES_ALL_KEY)
-  const others = readFlag(COURSES_OTHERS_KEY)
+  const all = getSetting('coursesAll')
+  const others = getSetting('coursesOthers')
   const root = document.documentElement
   root.toggleAttribute('data-courses-all', all)
   root.toggleAttribute('data-courses-others', others)
@@ -66,7 +55,7 @@ function applyCourseFilter() {
 document.addEventListener('click', (e) => {
   const t = (e.target as Element).closest('[data-courses-others-toggle]')
   if (!t) return
-  writeFlag(COURSES_OTHERS_KEY, t.getAttribute('aria-pressed') !== 'true')
+  setSetting('coursesOthers', t.getAttribute('aria-pressed') !== 'true')
   applyCourseFilter()
 })
 document.addEventListener('change', (e) => {
@@ -74,8 +63,8 @@ document.addEventListener('change', (e) => {
   const scope = input instanceof HTMLInputElement && input.closest('[data-course-scope]')
   if (!scope) return
   const inputs = $$<HTMLInputElement>('input', scope)
-  const from = inputs.find((i) => i.value === (readFlag(COURSES_ALL_KEY) ? 'all' : 'current'))
-  writeFlag(COURSES_ALL_KEY, input.value === 'all')
+  const from = inputs.find((i) => i.value === (getSetting('coursesAll') ? 'all' : 'current'))
+  setSetting('coursesAll', input.value === 'all')
   if (!from || from === input || !document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches) {
     return applyCourseFilter()
   }
@@ -121,14 +110,6 @@ function syncThemeColor() {
 
 // --- 編集モード（端末ごと）
 // サーバーに伝えないのは、編集用の部品は管理できる人にだけ描いてあり、ここでは見せるかどうかを切り替えるだけで済むため
-const EDIT_MODE_KEY = 'sl:edit-mode'
-const readEditMode = () => {
-  try {
-    return localStorage.getItem(EDIT_MODE_KEY) === '1'
-  } catch {
-    return false
-  }
-}
 function applyEditMode(on: boolean) {
   const switches = $$('[data-edit-mode-toggle]')
   document.documentElement.toggleAttribute('data-edit-mode', on && switches.length > 0)
@@ -139,10 +120,7 @@ document.addEventListener('click', (e) => {
   if (!t) return
   const on = t.getAttribute('aria-checked') !== 'true'
   applyEditMode(on)
-  try {
-    if (on) localStorage.setItem(EDIT_MODE_KEY, '1')
-    else localStorage.removeItem(EDIT_MODE_KEY)
-  } catch {}
+  setSetting('editMode', on)
 })
 
 // --- トースト
@@ -598,21 +576,14 @@ document.addEventListener('keydown', (e) => {
 })
 
 // --- セクションの開閉状態を記憶（端末ごと。Moodle モードの折りたたみ型トピックは data-collapse-url に送って Moodle に記録する）
-const KEY = 'sl:collapsed'
-const readCollapsed = (): string[] => {
-  try {
-    return JSON.parse(localStorage.getItem(KEY) ?? '[]')
-  } catch {
-    return []
-  }
-}
-const collapsed = new Set(readCollapsed())
 const collapseUrlOf = (d: HTMLDetailsElement) => d.parentElement?.closest<HTMLElement>('[data-collapse-url]')?.dataset.collapseUrl
 const hashTarget = () => (location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null)
-const restoreCollapsed = () =>
+function restoreCollapsed() {
+  const collapsed = new Set(getSetting('collapsedSections'))
   $$<HTMLDetailsElement>('details.section-card:not(.is-fixed)').forEach((d) => {
     if (!collapseUrlOf(d) && collapsed.has(d.id) && location.hash !== `#${d.id}`) d.open = false
   })
+}
 // 内容の差し替えのたびに開かないのは、URL の # のセクションを利用者が閉じても、確認のたびに開き直してしまうため
 const openHashTarget = () => {
   const target = hashTarget()?.closest<HTMLDetailsElement>('details.section-card')
@@ -652,10 +623,7 @@ document.addEventListener(
       toggleTimer = window.setTimeout(flushToggles, 500)
       return
     }
-    d.open ? collapsed.delete(d.id) : collapsed.add(d.id)
-    try {
-      localStorage.setItem(KEY, JSON.stringify([...collapsed].slice(-200)))
-    } catch {}
+    updateSetting('collapsedSections', (ids) => [...ids.filter((id) => id !== d.id), ...(d.open ? [] : [d.id])].slice(-200))
   },
   true,
 )
@@ -2143,7 +2111,7 @@ document.addEventListener('visibilitychange', () => {
 // --- 表示のたびに行う初期化（最初の表示と再読み込みなしの遷移の両方）
 function initPage() {
   $$('[data-toast]').forEach((el) => dismissLater(el, 5000))
-  syncThemeColor()
+  applyTheme(getSetting('theme'))
   initContent()
   openHashTarget()
   watchLive()
@@ -2153,7 +2121,7 @@ function initPage() {
 function initContent() {
   completeOnView()
   restoreCollapsed()
-  applyEditMode(readEditMode())
+  applyEditMode(getSetting('editMode'))
   applyCourseFilter()
   updateToc()
   initMarkdownEditors()
