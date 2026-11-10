@@ -5,6 +5,7 @@ import { createGrader } from '../lib/code-grader'
 import type { CodeSettings, CodeStore } from '../lib/code-store'
 import { intParam } from '../lib/http'
 import type { CodeBackend } from '../routes/code/handlers'
+import { aiLedger } from './ai-usage'
 import type { MoodleEnv } from './auth'
 import { loadCourse, outlineOf } from './data'
 import { db, type MoodleDB } from './db'
@@ -110,6 +111,7 @@ const grader = createGrader({
       .set({ ...result, output })
       .where(eq(codeSubmissions.id, id))
       .run(),
+  ledger: aiLedger,
 })
 
 /** Moodle モード: 設定を extra_items に、書きかけのコードと提出を moodle-mode.db に置き、権限を Moodle のコースから確かめる */
