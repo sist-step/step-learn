@@ -87,4 +87,6 @@ export const config = {
   moodle: loadMoodle(),
   /** 完全移行の CLI（moodle:migrate）が読む Moodle と、すべてのコースを見られるアカウントのトークン */
   moodleMigrate: loadMoodleMigrate(),
+  /** OPENROUTER_API_KEY が設定されていれば AI を使える（lib/ai.ts）。なければ AI の呼び出しは失敗する */
+  openRouter: env.OPENROUTER_API_KEY ? { apiKey: env.OPENROUTER_API_KEY } : null,
 }
