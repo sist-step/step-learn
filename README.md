@@ -17,11 +17,12 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
   - コース一覧と検索（参加しているコースのみ。管理者は登録していないコースも表示できる）。「進行中」と「すべて」の切り替え（開始日・終了日で判定。端末ごとに記憶。「すべて」では終了したコースも出し、開始前のコースは教師として登録している人と管理者にだけ出す。ダッシュボードとサイドバーは進行中のコースだけ）、ダッシュボード（受講中・担当コース、進捗、「続きから学習」）
   - 作成（管理者がコース一覧や管理画面のモーダルから）・編集・削除、開始日と終了日、カラー、コースアイコンとヒーロー画像（PNG / JPEG / WebP / GIF、最大 5MB。アイコンは未設定なら頭文字を表示）
   - 学生の自己登録はなく、管理者か教師が参加者として追加したコースだけが見える
-  - セクションとアイテム（ページ＝Markdown / リンク / ファイル / 画面共有）
+  - セクションとアイテム（ページ＝Markdown / リンク / ファイル / 画面共有 / コード）
   - 編集モードでの追加・並べ替え・削除（オンにするとブラウザを閉じるかログアウトするまで、どのコースでも続く）。オフのときは教師にも学生と同じ見え方で表示する
   - セクション・アイテムごとの「学生に非表示」（学生には一覧にも出さず、URL を開いても 404。進捗の計算からも外す）
   - 学生ごとの完了チェックと進捗表示、前後ナビと目次付きの閲覧画面
   - 参加者管理（メールで追加、ロール変更、除外）
+  - コード：セクションに「コード」アイテムを追加すると、学生がブラウザのエディターでコードを書いて提出できる。言語は Web（HTML / CSS / JavaScript。書きながら隣にプレビューとコンソールを表示）か Python（sandbox のコンテナで実行して結果を表示。下の「コードを実行する sandbox」）。書きかけのコードは自動で保存され、提出は出し直せる（前の提出も残る）。教師は問題文と、最初に入れておくコードを設定する
   - 画面共有：セクションに「画面共有」アイテムを追加すると、教師がブラウザから画面をライブ配信でき、参加者はアイテムを開くと別タブいっぱいに映像を視聴できる（最大 1920×1080・30fps、回線と画面の動きに応じた可変ビットレート）
 - **管理画面**（管理者、`/admin`）：ユーザーのロール変更、全コースの一覧と作成
 - **テーマ**：既定はライト。ヘッダーのユーザーメニューで選んだときだけダークにし、選択はブラウザ（localStorage）に保持する
@@ -33,7 +34,7 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
 | 速さ | SSR（hono/jsx）＋ 小さなクライアント JS。リンクとフォーム送信を fetch に置き換え、ホバー時の先読みと View Transitions で再読み込みなしに遷移する（SPA）。JavaScript は必須で、無効なブラウザには有効化を求める案内だけを表示する |
 | DB | `better-sqlite3`（WAL モード）＋ Drizzle ORM。DB サーバーは要らない。テーブル定義は `src/lib/schema.ts` で、マイグレーションは drizzle-kit で生成する。クエリも Drizzle のクエリビルダーで書き、結果に型が付く |
 | コスト | 必要なのは Node.js が動くサーバー 1 台だけ。R2 を使う場合、ダウンロードは署名付き URL で R2 から直接配信されるので、サーバーの帯域を使わない（R2 は転送料無料） |
-| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）・`nodemailer`（確認メールの SMTP 送信）・`better-sqlite3`・`drizzle-orm`・`socket.io`（画面共有の中継）・`zod`（入力の検証。同じ規則をブラウザでも使うので、ブラウザ側は軽量版の `zod/mini`）だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる。ブラウザ側のライブラリは入力の検証の `zod/mini` と、Markdown エディターの CodeMirror、ログイン画面の 3D アニメーションの three.js、PDF ビューアーの pdf.js だけ。CodeMirror はエディターのある画面でだけ、three.js はログイン前の画面でだけ、pdf.js は PDF のアイテムをビューアーで開いたときだけ読み込む |
+| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）・`nodemailer`（確認メールの SMTP 送信）・`better-sqlite3`・`drizzle-orm`・`socket.io`（画面共有の中継）・`zod`（入力の検証。同じ規則をブラウザでも使うので、ブラウザ側は軽量版の `zod/mini`）だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる。ブラウザ側のライブラリは入力の検証の `zod/mini` と、Markdown エディターの CodeMirror、ログイン画面の 3D アニメーションの three.js、PDF ビューアーの pdf.js だけ。CodeMirror はエディターのある画面でだけ（HTML / CSS / JavaScript / Python の文法は、コードのアイテムとその編集画面でだけ）、three.js はログイン前の画面でだけ、pdf.js は PDF のアイテムをビューアーで開いたときだけ読み込む |
 | セキュリティ | PBKDF2（60 万回、ログイン時に旧設定のハッシュを再計算）、推測されやすいパスワードの拒否、ログイン失敗と確認メール・再設定メール送信のレート制限、登録画面と再設定画面からメールアドレスの登録有無がわからない設計、セッション Cookie は HMAC-SHA256 で署名しトークンは SHA-256 で保存、CSRF 対策は Origin 検証と SameSite=Lax、ファイルは権限を確認したうえで配信（PDF と画像以外は添付として返す） |
 
 ## 開発
@@ -190,7 +191,7 @@ docker compose up -d --build   # http://127.0.0.1:3000
 
 ### コードを実行する sandbox
 
-学生が書いた Python は、アプリとは別のコンテナ（`sandbox/`、Compose の `sandbox` サービス）で実行します。`docker compose up` でアプリと一緒に起動し、アプリからは共有ボリュームの UNIX ドメインソケット（`SANDBOX_URL=unix:/run/sandbox/sandbox.sock`）で呼びます。
+コードのアイテムで学生が書いた Python は、アプリとは別のコンテナ（`sandbox/`、Compose の `sandbox` サービス）で実行します（`SANDBOX_URL` が未設定のサーバーでは、コードのアイテムで Python を選べません）。HTML / CSS / JavaScript はサーバーでは実行せず、学生のブラウザの中の、STEP Learn とは別オリジンとして扱われる iframe（`sandbox` 属性）でプレビューします。`docker compose up` でアプリと一緒に起動し、アプリからは共有ボリュームの UNIX ドメインソケット（`SANDBOX_URL=unix:/run/sandbox/sandbox.sock`）で呼びます。
 
 sandbox のコンテナには、次の制限をかけています。
 
@@ -267,6 +268,6 @@ src/moodle-mode/     Moodle モード（MOODLE_URL を設定したときだけ�
 moodle/              Moodle モード用の Moodle プラグイン（local_steplearn）と検証用の Moodle（moodle/dev）
 sandbox/             学生が書いたコードを実行するコンテナ（server.py が要求を受け、jail.py が権限を落として実行する）
 src/components/      レイアウトと UI 部品
-src/routes/<ルート>/ auth / account / admin / dashboard / courses / content / participants / screen。
+src/routes/<ルート>/ auth / account / admin / dashboard / courses / content / participants / screen / code。
                      ルートごとに index.ts（ルーティング）・handlers.tsx（処理）・views.tsx（画面）・<ルート>.css に分ける
 ```
