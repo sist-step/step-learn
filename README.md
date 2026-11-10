@@ -157,8 +157,9 @@ MOODLE_MIGRATE_URL=https://moodle.example.ac.jp MOODLE_MIGRATE_TOKEN=<トーク�
   - 折りたたみ型トピック: セクションを開閉でき、開閉は Moodle の画面と同じく利用者ごとに記録されます。並べ方（最新の週を先頭に など）・現在のセクション・すべて開く/閉じる・1 つだけ開く・段組み・閉じたときの概要の表示の設定に従います（色やアイコンの設定は使いません）
 - STEP Learn にしかない機能（新規登録・パスワードの再設定・Markdown のページ・CLI）は使えません
 - 画面共有は、Moodle モードだけにある種類のアイテム（下）として追加できます。一覧や目次から開くと、新しいタブで画面共有の画面を開きます（Moodle の画面から開いたときも新しいタブで開きます）。視聴できるのはアイテムを開ける参加者、配信できるのはコースを編集できる人で、接続している間も確かめ直し、見られなくなった人の接続は切ります
+- コード（コードを書いて提出し、AI が採点するアイテム）も、Moodle モードだけにある種類のアイテム（下）として追加できます。機能は通常モードと同じで、一覧や目次から開くと、新しいタブでエディターの画面を開きます。提出の一覧に並ぶのは提出した学生だけです（参加者は Moodle にあるため）。書きかけのコード・提出・採点は `data/moodle-mode.db` に置き、Moodle の評定には反映しません。完全移行では引き継ぎません
 - Moodle モードだけにある種類のアイテム（`src/moodle-mode/extra-kinds.tsx` に定義する）は、中身を `data/moodle-mode.db` に保存し、Moodle には同じ位置に STEP Learn へ移る URL の活動（リンク先は `/m/<キー>`）を置きます。並び順・表示・アクセス制限・完了は Moodle の活動のものを使います。Moodle でコースをコピーしたときは、コピー先では開けません。完全移行では引き継ぎません
-- STEP Learn 側の DB は `data/moodle-mode.db`（ユーザーの写し・セッション・暗号化したトークンと、Moodle モードだけにある種類のアイテムの中身）で、`data/step-learn.db` は作りも開きもしません。完全移行のときに引き継ぐ必要はありません
+- STEP Learn 側の DB は `data/moodle-mode.db`（ユーザーの写し・セッション・暗号化したトークンと、Moodle モードだけにある種類のアイテムの中身、コードのアイテムの書きかけのコードと提出）で、`data/step-learn.db` は作りも開きもしません。完全移行のときに引き継ぐ必要はありません
 
 Moodle 側には、このリポジトリの `moodle/local_steplearn/` のプラグインを入れて設定します。手順は [moodle/README.md](moodle/README.md) を参照してください。
 
@@ -173,7 +174,8 @@ Moodle 側には、このリポジトリの `moodle/local_steplearn/` のプラ�
 - `src/moodle-mode/`・`migrations-moodle/`・`drizzle.moodle.config.ts`・`moodle/`
 - `src/index.tsx` のモードの切り替え（`./app` だけを読み込む形に戻す）と、`src/server.ts`・`vite.config.ts` の `config.moodle` の分岐
 - `src/lib/config.ts` の `moodle` / `moodleDatabasePath` / `moodleMigrate`、`src/lib/db.ts` の Moodle モードのガード、`src/components/style.tsx` の `moodle-mode.css`
-- `src/moodle/remote.ts` と `src/cli.ts` の `moodle:migrate`、`src/lib/forms.ts` の `extraItemFields` / `extraItem`、`src/client.ts` の `setKindOnly`
+- `src/moodle/remote.ts` と `src/cli.ts` の `moodle:migrate`、`src/lib/forms.ts` の `extraItemFields` / `extraItem` / `extraCode`、`src/client.ts` の `setKindOnly`
+- コードのアイテムを 2 つのモードで使い回すための分け方（`src/routes/code/handlers.tsx` の `CodeBackend`、`src/lib/code-store.ts` の `CodeStore`、`src/lib/code-grader.ts` の `createGrader`、`src/routes/code/views.tsx` の `CodePage`）は、通常モードの実装（`src/routes/code/backend.ts`・`src/lib/code-items.ts`・`src/lib/code-grading.ts`）だけになるので、まとめてかまいません
 - `package.json` の `moodle:migrate` / `db:generate:moodle` / `db:check:moodle`、CI の「Check Moodle mode migrations」、`Dockerfile` の `migrations-moodle`、`.dockerignore` の `moodle`
 
 ### Docker で動かす
