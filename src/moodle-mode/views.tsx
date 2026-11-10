@@ -90,18 +90,23 @@ const hasEditPage = (it: MItem) => it.kind === 'link' || it.kind === 'file' || (
 
 const isPdf = (it: MItem) => it.kind === 'file' && previewKind(it.fileType, it.fileName) === 'pdf'
 
+const tabPathOf = (it: MItem) => kindOfItem(it)?.tabPath ?? null
+
 /** アイテムを開く a 要素の属性 */
 function openAttrs(courseId: number, it: MItem) {
   const page = `/courses/${courseId}/items/${it.id}`
   if (it.kind === 'link') return linkOpenAttrs(it.url, it.linkTarget, page)
   const newTab = { target: '_blank', rel: 'noopener', 'data-no-prefetch': '' }
   if (it.kind === 'moodle') return { href: it.url, ...newTab }
+  const tabPath = tabPathOf(it)
+  if (tabPath) return { href: `${page}/${tabPath}`, ...newTab }
   return isPdf(it) ? { href: page, ...newTab } : { href: page }
 }
 
-const leavesPage = (it: MItem) => it.kind === 'moodle' || (it.kind === 'link' && it.linkTarget !== 'embed') || isPdf(it)
+const leavesPage = (it: MItem) => it.kind === 'moodle' || (it.kind === 'link' && it.linkTarget !== 'embed') || isPdf(it) || !!tabPathOf(it)
 
-const completesOnOpen = (it: MItem) => it.kind === 'link' && it.linkTarget !== 'embed' && it.completion === 'view' && !it.done
+const completesOnOpen = (it: MItem) =>
+  ((it.kind === 'link' && it.linkTarget !== 'embed') || !!tabPathOf(it)) && it.completion === 'view' && !it.done
 
 const HiddenChip = () => <Chip icon="eyeSlash">学生に非表示</Chip>
 
@@ -223,6 +228,7 @@ const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId:
           {COMPLETION_LABELS[item.completion]}
         </Chip>
       )}
+      {item.extra?.live && <Chip tone="live">配信中</Chip>}
       {!linkless &&
         (leavesPage(item) ? <Icon name="external" size={14} class="item-ext" /> : <Icon name="chevronRight" size={16} class="item-ext" />)}
     </>

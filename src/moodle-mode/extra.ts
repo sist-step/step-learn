@@ -21,13 +21,18 @@ export function withExtras<T extends { items: MItem[] }>(courseId: number, outli
     ...outline,
     items: outline.items.map((it) => {
       const row = it.extraKey ? byKey.get(it.extraKey) : undefined
-      return row ? { ...it, extra: { type: row.type, data: row.data } } : it
+      const live = !!row && !!extraKindOf(row.type)?.isLive?.(it.id)
+      return row ? { ...it, extra: { type: row.type, data: row.data, live } } : it
     }),
   }
 }
 
 export const findExtra = (key: string) =>
-  db.select({ courseId: extraItems.courseId, cmid: extraItems.cmid }).from(extraItems).where(eq(extraItems.key, key)).get()
+  db
+    .select({ courseId: extraItems.courseId, cmid: extraItems.cmid, type: extraItems.type })
+    .from(extraItems)
+    .where(eq(extraItems.key, key))
+    .get()
 
 export const insertExtra = (row: { key: string; courseId: number; cmid: number; type: string; data: ExtraData }) =>
   db.insert(extraItems).values(row).run()

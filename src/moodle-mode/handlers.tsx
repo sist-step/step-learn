@@ -10,6 +10,7 @@ import { previewKind } from '../lib/preview'
 import { EXECUTABLE_NOT_ALLOWED, FILE_TOO_LARGE, MAX_FILE_SIZE, isExecutable } from '../lib/storage'
 import { CoursesPage } from '../routes/courses/views'
 import { DashboardPage } from '../routes/dashboard/views'
+import { ScreenPage } from '../routes/screen/views'
 import { createSession, destroyByMoodleSid, destroySession, type MoodleEnv } from './auth'
 import { forgetCourse, forgetProgress, forgetSections } from './cache'
 import { MoodleError, exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
@@ -29,6 +30,7 @@ import {
   type MItem,
   type MSection,
 } from './mapping'
+import { findScreenItem } from './screen-share'
 import {
   CoursePage,
   ItemEditPage,
@@ -392,7 +394,8 @@ async function createExtraItem(c: C, loaded: LoadedCourse, sectionId: number, ki
   const { title, hidden } = result.common
   const completion = loaded.course.completionenabled ? (result.common.completion ?? 'none') : 'none'
   const key = newExtraKey()
-  // Moodle の画面で開いたときにそのまま STEP Learn に移るよう、同じウィンドウで開く（RESOURCELIB_DISPLAY_OPEN）表示方法にする
+  // Moodle の画面で開いたときにそのまま STEP Learn に移るよう、同じウィンドウで開く（RESOURCELIB_DISPLAY_OPEN）表示方法にする。
+  // 新しいタブで開く種類は、STEP Learn の一覧と同じく新しいタブ（RESOURCELIB_DISPLAY_NEW）にする
   const cmid = await moodle(c).saveUrl({
     courseid: id,
     cmid: 0,
@@ -401,7 +404,7 @@ async function createExtraItem(c: C, loaded: LoadedCourse, sectionId: number, ki
     externalurl: extraUrl(c, key),
     completion,
     visible: !hidden,
-    display: 'same',
+    display: kind.tabPath ? 'new' : 'same',
   })
   insertExtra({ key, courseId: id, cmid, type: field(form, 'type', 50), data: result.data })
   forgetCourse(id)
@@ -556,7 +559,8 @@ export async function removeItem(c: C) {
 export function openExtra(c: C) {
   const found = findExtra(c.req.param('key') ?? '')
   if (!found) return c.notFound()
-  return c.redirect(`/courses/${found.courseId}/items/${found.cmid}`)
+  const tabPath = extraKindOf(found.type)?.tabPath
+  return c.redirect(`/courses/${found.courseId}/items/${found.cmid}${tabPath ? `/${tabPath}` : ''}`)
 }
 
 // ---------------------------------------------------------------- アクセス制限
@@ -736,6 +740,15 @@ export async function showItem(c: C) {
     />,
     { title: item.title },
   )
+}
+
+export async function showScreen(c: C) {
+  const id = intParam(c, 'id')
+  const iid = intParam(c, 'iid')
+  const loaded = id && iid && (await loadCourse(c, id))
+  const item = loaded && findScreenItem(loaded, iid)
+  if (!loaded || !item) return c.notFound()
+  return c.render(<ScreenPage access={loaded.access} item={item} />, { title: item.title })
 }
 
 export async function toggleComplete(c: C) {

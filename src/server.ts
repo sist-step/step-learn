@@ -25,10 +25,11 @@ server.all('*', (c) => app.fetch(c.req.raw, c.env))
 const httpServer = serve({ fetch: server.fetch, port: config.port }, (info) => {
   console.log(`STEP Learn listening on http://localhost:${info.port}`)
 })
-// Moodle モードで読み込まないのは、画面共有を使わないうえ、読み込むと step-learn.db を開いてしまうため
-const io = config.moodle ? null : (await import('./lib/screen-share')).attachScreenShare(httpServer as HttpServer)
+// 両方を静的に import しないのは、通常モードの権限の確認が step-learn.db を開くので、Moodle モードでも作られてしまうため
+const { attach } = config.moodle ? await import('./moodle-mode/screen-share') : await import('./lib/screen-share-access')
+const io = attach(httpServer as HttpServer)
 
 // httpServer.close だけにしないのは、開いたままの socket.io の接続が残って終了できなくなるため
-const shutdown = () => (io ? io.close(() => process.exit(0)) : httpServer.close(() => process.exit(0)))
+const shutdown = () => io.close(() => process.exit(0))
 process.on('SIGINT', shutdown)
 process.on('SIGTERM', shutdown)

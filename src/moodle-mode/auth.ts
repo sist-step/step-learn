@@ -2,6 +2,7 @@ import { and, eq, gt, lte } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { deleteCookie, getCookie, getSignedCookie, setSignedCookie } from 'hono/cookie'
 import { createMiddleware } from 'hono/factory'
+import { parseSigned } from 'hono/utils/cookie'
 import { config } from '../lib/config'
 import type { AppEnv, User } from '../lib/types'
 import { coursesKey, cached } from './cache'
@@ -46,6 +47,14 @@ async function readSessionId(c: Context) {
   const token = await getSignedCookie(c, config.sessionSecret, SESSION_COOKIE)
   return typeof token === 'string' ? sha256(token) : null
 }
+
+const toUser = (row: { id: number; email: string; name: string; username: string; siteAdmin: number }): User => ({
+  id: row.id,
+  email: row.email,
+  name: row.name,
+  username: row.username,
+  role: row.siteAdmin ? 'admin' : 'student',
+})
 
 /** コードを交換して受け取ったユーザーで、STEP Learn のセッションを始める */
 export async function createSession(c: Context<MoodleEnv>, ex: Exchanged) {
@@ -121,23 +130,39 @@ const findSession = (id: string) =>
     .where(and(eq(sessions.id, id), gt(sessions.expiresAt, now())))
     .get()
 
+/** セッションの行と、セッションが続いていればトークン（続いていなければ token が null。行は呼び出し側で消す） */
+async function activeSession(id: string) {
+  const row = findSession(id)
+  const token = row ? decryptToken(row.token) : null
+  // トークンの期限が切れたら Moodle にログインし直してもらう。Moodle のセッションが残っていれば画面は出ずに戻ってくる
+  const expired = !!row && row.tokenExpiresAt > 0 && row.tokenExpiresAt <= now()
+  // ログアウトの通知だけに頼らないのは、Moodle の時間切れや管理者による強制ログアウトでは user_loggedout が起きないため
+  if (!row || !token || expired || !(await moodleSessionActive(id, token, row.moodleSid))) return { row, token: null }
+  return { row, token }
+}
+
+/** 画面共有の接続（socket.io）のように、Hono を通らない要求の Cookie ヘッダーから利用者とトークンを読む */
+export async function sessionFromCookieHeader(header: string | undefined) {
+  if (!header) return null
+  const cookie = (await parseSigned(header, config.sessionSecret, SESSION_COOKIE))[SESSION_COOKIE]
+  if (typeof cookie !== 'string') return null
+  const { row, token } = await activeSession(await sha256(cookie))
+  return row && token ? { user: toUser(row), token } : null
+}
+
 export const session = createMiddleware<MoodleEnv>(async (c, next) => {
   c.set('user', null)
   c.set('navCourses', [])
 
   const id = await readSessionId(c)
-  const row = id && findSession(id)
-  const token = row ? decryptToken(row.token) : null
-  // トークンの期限が切れたら Moodle にログインし直してもらう。Moodle のセッションが残っていれば画面は出ずに戻ってくる
-  const expired = !!row && row.tokenExpiresAt > 0 && row.tokenExpiresAt <= now()
-  // ログアウトの通知だけに頼らないのは、Moodle の時間切れや管理者による強制ログアウトでは user_loggedout が起きないため
-  if (!id || !row || !token || expired || !(await moodleSessionActive(id, token, row.moodleSid))) {
+  const { row, token } = id ? await activeSession(id) : { row: undefined, token: null }
+  if (!id || !row || !token) {
     if (id && row) db.delete(sessions).where(eq(sessions.id, id)).run()
     if (getCookie(c, SESSION_COOKIE) !== undefined) deleteCookie(c, SESSION_COOKIE, { path: '/' })
     return next()
   }
 
-  const user: User = { id: row.id, email: row.email, name: row.name, username: row.username, role: row.siteAdmin ? 'admin' : 'student' }
+  const user = toUser(row)
   c.set('user', user)
   c.set('token', token)
   if (c.req.method === 'GET') {
