@@ -59,6 +59,19 @@ function loadMoodleMigrate() {
   return { url: url.href.replace(/\/+$/, ''), token: env.MOODLE_MIGRATE_TOKEN }
 }
 
+function loadSandbox() {
+  if (!env.SANDBOX_URL) return null
+  if (env.SANDBOX_URL.startsWith('unix:')) {
+    const socketPath = env.SANDBOX_URL.slice('unix:'.length)
+    if (!path.isAbsolute(socketPath)) throw new Error('SANDBOX_URL の unix: の後ろは、ソケットの絶対パスにしてください')
+    return { socketPath }
+  }
+  const url = URL.parse(env.SANDBOX_URL)
+  if (!url || url.protocol !== 'http:' || !url.port)
+    throw new Error('SANDBOX_URL は unix:/ で始まるソケットのパスか、http://ホスト:ポート の形にしてください')
+  return { host: url.hostname, port: Number(url.port) }
+}
+
 export const config = {
   port: Number(env.PORT ?? 3000),
   /** 公開 URL のオリジン。リバースプロキシ配下では CSRF 検証に必須（例: https://lms.example.com） */
@@ -89,4 +102,6 @@ export const config = {
   moodleMigrate: loadMoodleMigrate(),
   /** OPENROUTER_API_KEY が設定されていれば AI を使える（lib/ai.ts）。なければ AI の呼び出しは失敗する */
   openRouter: env.OPENROUTER_API_KEY ? { apiKey: env.OPENROUTER_API_KEY } : null,
+  /** SANDBOX_URL が設定されていれば、学生のコードを sandbox のコンテナで実行できる（lib/sandbox.ts）。なければ実行は失敗する */
+  sandbox: loadSandbox(),
 }

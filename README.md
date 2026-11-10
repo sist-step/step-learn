@@ -78,6 +78,7 @@ npm start            # = node dist/server/index.js
 - `SESSION_SECRET`：セッション Cookie の署名鍵（32 文字以上）。未設定なら `data/session-secret` を自動生成して使います。変更すると全員がログアウトされます
 - `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM`：確認メールの送信に使う SMTP サーバー。`SMTP_HOST` を設定する場合は `MAIL_FROM` と `APP_ORIGIN` も必須です
 - `OPENROUTER_API_KEY`：AI の機能に使う [OpenRouter](https://openrouter.ai/) の API キー。未設定なら AI の機能は使えません。使うモデルは `src/lib/ai.ts` の `AI_MODELS` に並べたものだけです
+- `SANDBOX_URL`：学生が書いたコードを実行する sandbox のコンテナ（下の「コードを実行する sandbox」）の接続先。未設定ならコードの実行は使えません。Docker Compose で動かす場合は自動で設定されます
 - `TRUST_PROXY`：リバースプロキシの後ろで動かす場合は `1` にしてください。`X-Forwarded-For` からクライアントの IP を取ってレート制限に使います（未設定だと全員がプロキシの IP として扱われます）
 - 画面共有は `/socket.io/` で WebSocket を使います。リバースプロキシでは WebSocket の Upgrade を通してください（nginx なら `proxy_http_version 1.1;` と `Upgrade` / `Connection` ヘッダーの転送）。通らない場合は HTTP のロングポーリングに切り替わって動きますが、遅延と負荷が増えます
 - 配信中の状態はプロセスのメモリに持つため、複数のプロセスやサーバーに分散させないでください
@@ -185,6 +186,37 @@ docker compose up -d --build   # http://127.0.0.1:3000
   - Docker の公開ポートは ufw / firewalld の INPUT ルールを通りません。送信元をリバースプロキシに絞るには、iptables の `DOCKER-USER` チェーンかホストの外のファイアウォールで制限してください
   - 例：`iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 3000 ! -s <リバースプロキシの IP> -j DROP`
 - SQLite とローカル保存の教材ファイルは Docker ボリューム `step-learn_data` に保存されます。**このボリュームをバックアップ対象にしてください**
+- 一緒に起動する `sandbox` サービスは、学生が書いたコードを実行するコンテナです（下の「コードを実行する sandbox」）。ボリューム `step-learn_sandbox-socket` はアプリとの通信用のソケットを置くだけなので、バックアップは要りません
+
+### コードを実行する sandbox
+
+学生が書いた Python は、アプリとは別のコンテナ（`sandbox/`、Compose の `sandbox` サービス）で実行します。`docker compose up` でアプリと一緒に起動し、アプリからは共有ボリュームの UNIX ドメインソケット（`SANDBOX_URL=unix:/run/sandbox/sandbox.sock`）で呼びます。
+
+sandbox のコンテナには、次の制限をかけています。
+
+- ネットワークにつながない（`network_mode: none`）。インターネットにも、アプリやホストのポートにも届きません
+- ルートファイルシステムは読み取り専用で、書き込めるのは実行ごとの作業ディレクトリ（16MB の tmpfs）だけ。秘密情報・環境変数・データのボリュームは置きません
+- ケーパビリティは、実行ごとに別の UID へ切り替えるための `SETUID` / `SETGID` 以外をすべて外し、`no-new-privileges` を付けます。コードを実行するプロセスは、どのケーパビリティも持たない一般ユーザーです
+- コンテナ全体でメモリ 512MB・CPU 1 コア・256 プロセスまで
+- 1 回の実行は、実時間 10 秒・CPU 時間 5 秒・メモリ 256MB・16 プロセス・出力 64KB（標準出力と標準エラー出力のそれぞれ）・ファイル 1 つ 8MB まで。超えたら止めます
+- 同時に実行できるのは 4 つまでで、それぞれ別の UID と作業ディレクトリで動かすので、ほかの人のコードや出力は読めません。空きがなければ 20 秒まで待ち、それでも空かなければ「混み合っています」と返します
+- 実行が終わるたびに、その UID のプロセスをすべて止め、作業ディレクトリを空にします。止められない・消せないときは sandbox を終了させ、Docker の再起動で作り直します
+
+同時に実行できる数は `compose.yaml` の `tmpfs` の行の数で決まります（8 まで）。増やすときは `mem_limit` も合わせて見直してください。
+
+コンテナはホストとカーネルを共有するので、カーネルの脆弱性を突かれた場合までは防げません。もう一段固くしたい場合は、サーバーに [gVisor](https://gvisor.dev/) を入れ、`SANDBOX_RUNTIME=runsc` を付けて起動すると、sandbox だけを gVisor で動かせます（gVisor での動作は未確認です。共有ボリュームにソケットを作るので、runsc の `--host-uds=create` が必要になるはずです）。
+
+Docker Compose を使わずに `npm start` で動かす場合は、下の開発用と同じくポートで待ち受ける形になりますが、この形では実行中のコードが外部と通信できます。本番では Docker Compose で動かしてください。
+
+開発サーバー（`npm run dev`）から使うときは、sandbox だけを起動し、`.env` に接続先を書きます。
+
+```sh
+docker compose -f sandbox/compose.dev.yaml up -d --build   # 127.0.0.1:8091 で待ち受ける
+```
+
+```sh
+SANDBOX_URL=http://127.0.0.1:8091
+```
 
 ### 自動デプロイ（GitHub Actions のセルフホストランナー）
 
@@ -229,10 +261,11 @@ src/server.ts        本番用 Node.js エントリ（静的ファイル配信�
 src/renderer.tsx     HTML の外枠
 src/client.ts        クライアント側の小さな拡張（再読み込みなしの画面遷移、トースト、確認ダイアログ、完了トグルなど）
 src/styles/base.css  デザイントークンと共通スタイル（ダークモード対応）。部品・画面ごとの CSS は各 .tsx の隣に置き、使うページでだけ読み込む
-src/lib/             設定・DB・認証・HTTP ヘルパー・Markdown・ストレージ・画像アップロード・コースの権限・AI（OpenRouter）
+src/lib/             設定・DB・認証・HTTP ヘルパー・Markdown・ストレージ・画像アップロード・コースの権限・AI（OpenRouter）・sandbox の呼び出し
 src/moodle/          Moodle のバックアップの展開・読み取り・取り込み（CLI の moodle:import）
 src/moodle-mode/     Moodle モード（MOODLE_URL を設定したときだけ使う。完全移行のあとは削除する）
 moodle/              Moodle モード用の Moodle プラグイン（local_steplearn）と検証用の Moodle（moodle/dev）
+sandbox/             学生が書いたコードを実行するコンテナ（server.py が要求を受け、jail.py が権限を落として実行する）
 src/components/      レイアウトと UI 部品
 src/routes/<ルート>/ auth / account / admin / dashboard / courses / content / participants / screen。
                      ルートごとに index.ts（ルーティング）・handlers.tsx（処理）・views.tsx（画面）・<ルート>.css に分ける
