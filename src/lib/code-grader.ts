@@ -7,7 +7,7 @@ import type { CodeSettings, GradingResult } from './code-store'
 import { SandboxError, runCode, sandboxEnabled, type RunResult } from './sandbox'
 
 // 学生の提出のたびに呼ぶので、安いモデルにする
-const MODEL: AiModel = 'deepseek/deepseek-v4.1-flash'
+const MODEL: AiModel = 'deepseek/deepseek-v4.1-flash-1017'
 // 提出が重なったときに一度に流さないのは、AI の同時呼び出しの上限と、4 つしか同時に動かせない sandbox を、採点だけで使い切らないため
 const CONCURRENCY = 2
 const MAX_OUTPUT_LENGTH = 4000

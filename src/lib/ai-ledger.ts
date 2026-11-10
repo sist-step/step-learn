@@ -1,7 +1,16 @@
 // DB を読み込まず、渡された DB とテーブルで動かすのは、通常モード（step-learn.db）と Moodle モード（moodle-mode.db）の両方で同じ計算を使うため
 import { and, countDistinct, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
-import { AI_PROVIDER_MODELS, AI_PROVIDERS, aiProvider, isProviderEnabled, type AiModel, type AiProvider, type AiUsage } from './ai'
+import {
+  AI_PROVIDER_MODELS,
+  AI_PROVIDERS,
+  AI_RETIRED_PROVIDER_MODELS,
+  aiProvider,
+  isProviderEnabled,
+  type AiModel,
+  type AiProvider,
+  type AiUsage,
+} from './ai'
 import { AI_ACTIVE_WINDOW, AI_DEFAULT_MONTHLY_LIMITS, aiPeriod, aiPool, aiQuota, type AiQuota } from './ai-quota'
 import type { aiUsage as aiUsageTable, appSettings as appSettingsTable } from './schema'
 
@@ -47,7 +56,8 @@ export function createAiLedger<S extends Record<string, unknown>>({
   const weekCost = (start: number) => sql<number>`coalesce(sum(case when ${aiUsage.createdAt} >= ${start} then ${aiUsage.cost} end), 0)`
 
   // 提供元の列を持たないのは、モデルから決まるので、記録と一覧がずれる余地を作らないため
-  const ofProvider = (provider: AiProvider) => inArray(aiUsage.model, [...AI_PROVIDER_MODELS[provider]])
+  const ofProvider = (provider: AiProvider) =>
+    inArray(aiUsage.model, [...AI_PROVIDER_MODELS[provider], ...AI_RETIRED_PROVIDER_MODELS[provider]])
 
   /** 月の上限（USD）。0 なら、その提供元のモデルは使えない */
   function getMonthlyLimit(provider: AiProvider) {

@@ -1,6 +1,6 @@
 // lib/ai.ts に置かないのは、提供元ごとの実装（ai-openrouter.ts・ai-anthropic.ts）と lib/ai.ts が互いを読み込む循環になるため
 
-export const OPENROUTER_MODELS = ['deepseek/deepseek-v4.1-flash'] as const
+export const OPENROUTER_MODELS = ['deepseek/deepseek-v4.1-flash-1017'] as const
 export const ANTHROPIC_MODELS = ['claude-sonnet-5-5'] as const
 
 export const AI_MODELS = [...OPENROUTER_MODELS, ...ANTHROPIC_MODELS] as const
@@ -14,7 +14,7 @@ export const isAiModel = (model: string): model is AiModel => (AI_MODELS as read
 export const isAnthropicModel = (model: AiModel): model is AnthropicModel => (ANTHROPIC_MODELS as readonly string[]).includes(model)
 
 export const AI_MODEL_LABELS: Record<AiModel, string> = {
-  'deepseek/deepseek-v4.1-flash': 'DeepSeek V4.1 Flash',
+  'deepseek/deepseek-v4.1-flash-1017': 'DeepSeek V4.1 Flash 1017',
   'claude-sonnet-5-5': 'Claude Sonnet 5.5',
 }
 
@@ -26,6 +26,12 @@ export type AiProvider = (typeof AI_PROVIDERS)[number]
 export const AI_PROVIDER_LABELS: Record<AiProvider, string> = { openrouter: 'OpenRouter', anthropic: 'Anthropic' }
 
 export const AI_PROVIDER_MODELS: Record<AiProvider, readonly AiModel[]> = { openrouter: OPENROUTER_MODELS, anthropic: ANTHROPIC_MODELS }
+
+// 使わなくなったモデルを消すだけにしないのは、そのモデルで記録した今月の使用量が、月の上限の計算から漏れるため
+export const AI_RETIRED_PROVIDER_MODELS: Record<AiProvider, readonly string[]> = {
+  openrouter: ['deepseek/deepseek-v4.1-flash'],
+  anthropic: [],
+}
 
 export const aiProvider = (model: AiModel): AiProvider => (isAnthropicModel(model) ? 'anthropic' : 'openrouter')
 
