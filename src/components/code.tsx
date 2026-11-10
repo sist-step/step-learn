@@ -1,12 +1,13 @@
 import type { Child, JSX } from 'hono/jsx'
-import { CODE_FILES, type CodeLanguage } from '../lib/code'
+import { CODE_FILES, finalScore, type CodeLanguage, type GradingStatus } from '../lib/code'
 import { Button, IconButton } from './button'
+import { Card } from './card'
 import { cx } from './cx'
 import { FormField, Textarea } from './form'
 import { Icon } from './icons'
 import { Markdown } from './markdown'
 import { useStyle } from './style'
-import { Alert } from './ui'
+import { Alert, Chip, formatDateTime } from './ui'
 
 /** エディターの色分けに使う種類。text は色分けなし */
 export type CodeSyntax = 'html' | 'css' | 'js' | 'py' | 'text'
@@ -178,5 +179,76 @@ export const CodeWorkspace = ({
         </div>
       )}
     </div>
+  )
+}
+
+/** 学生に見せる、いちばん新しい提出の採点 */
+export type GradeView = {
+  status: GradingStatus
+  score: number | null
+  feedback: string
+  teacherScore: number | null
+  teacherComment: string
+  createdAt: number
+  maxScore: number
+}
+
+/** ヘッダーの帯に出す、提出の状況の短い表示 */
+export const gradeLabel = (grade: GradeView) => {
+  const score = finalScore(grade)
+  if (score !== null) return `${score} / ${grade.maxScore} 点`
+  return grade.status === 'pending' ? '採点中…' : `${formatDateTime(grade.createdAt)} に提出`
+}
+
+export const GRADE_CARD = 'code-grade'
+
+/**
+ * 学生に見せる提出と採点の結果。採点中は data-code-grade（確かめる先の URL）を付け、src/code-editor.ts が採点の終わりを待って、
+ * このカードとヘッダーの帯の表示（data-code-grade-chip）を取り直す。帯の表示は、このカードへのリンクにする
+ */
+export const CodeGrade = ({ grade, pollUrl }: { grade: GradeView; pollUrl: string }) => {
+  useStyle('/src/components/code.css')
+  const score = finalScore(grade)
+  const pending = grade.status === 'pending' && score === null
+  return (
+    <Card
+      id={GRADE_CARD}
+      class="code-grade"
+      heading="提出と採点"
+      description={`${formatDateTime(grade.createdAt)} に提出`}
+      data-code-grade={pending ? pollUrl : undefined}
+    >
+      {score !== null ? (
+        <p class="code-grade-score">
+          <strong>{score}</strong>
+          <span class="muted">/ {grade.maxScore} 点</span>
+          {grade.teacherScore !== null ? <Chip icon="check">教師が採点</Chip> : <Chip>AI が採点</Chip>}
+        </p>
+      ) : pending ? (
+        <p class="code-grade-waiting muted">
+          <span class="code-grade-spinner" aria-hidden="true" />
+          AI が採点しています。終わると、ここに結果が出ます。
+        </p>
+      ) : grade.status === 'failed' ? (
+        <Alert tone="warning">AI で採点できませんでした。教師の採点を待つか、少し待ってから出し直してください。</Alert>
+      ) : (
+        <p class="muted">提出を受け付けました。教師が確認します。</p>
+      )}
+      {grade.status === 'graded' && grade.feedback && (
+        <div class="code-grade-note">
+          <h3>AI の講評</h3>
+          <p>{grade.feedback}</p>
+        </div>
+      )}
+      {grade.teacherComment && (
+        <div class="code-grade-note">
+          <h3>教師のコメント</h3>
+          <p>{grade.teacherComment}</p>
+        </div>
+      )}
+      {grade.status === 'graded' && grade.teacherScore === null && (
+        <p class="muted small">AI による採点です。教師が確認して、点数を変えることがあります。</p>
+      )}
+    </Card>
   )
 }

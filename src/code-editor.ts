@@ -318,6 +318,39 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
   })
 }
 
+// --- 採点の終わりを待つ（components/code.tsx の CodeGrade）
+const GRADING_INTERVAL = 3000
+
+// サーバーから知らせを送らないのは、採点は本人にしか関係がなく、コースの版を進めると開いている全員が画面を取り直すことになるため
+function watchGrading(card: HTMLElement, toast: Toast) {
+  const url = card.dataset.codeGrade
+  if (!url || card.hasAttribute('data-code-watching')) return
+  card.setAttribute('data-code-watching', '')
+  const check = async () => {
+    if (!card.isConnected) return
+    try {
+      const res = await fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      const { pending } = (await res.json()) as { pending: boolean }
+      if (!pending) return await showGrade(card, toast)
+    } catch {}
+    window.setTimeout(() => void check(), GRADING_INTERVAL)
+  }
+  window.setTimeout(() => void check(), GRADING_INTERVAL)
+}
+
+// 結果を JSON で受け取って組み立てないのは、サーバーが描くカードと同じ見た目を、ここでもう一度作ることになるため
+async function showGrade(card: HTMLElement, toast: Toast) {
+  const res = await fetch(location.href, { headers: { Accept: 'text/html' } })
+  const doc = new DOMParser().parseFromString(await res.text(), 'text/html')
+  const next = doc.getElementById(card.id)
+  if (!card.isConnected || !next) return
+  card.replaceWith(document.importNode(next, true))
+  const chip = document.querySelector('[data-code-grade-chip]')
+  const nextChip = doc.querySelector('[data-code-grade-chip]')
+  if (chip && nextChip) chip.replaceWith(document.importNode(nextChip, true))
+  toast('採点が終わりました。')
+}
+
 /** 画面から外れたエディターを片づける。保存を待っている書きかけのコードは、その場で送る */
 export function releaseDetachedCodeEditors() {
   for (const entry of mounted) {
@@ -328,6 +361,7 @@ export function releaseDetachedCodeEditors() {
 }
 
 export function mountCodeEditors(toast: Toast) {
+  for (const card of document.querySelectorAll<HTMLElement>('[data-code-grade]')) watchGrading(card, toast)
   for (const root of document.querySelectorAll<HTMLElement>('[data-code-workspace]:not([data-code-ready])'))
     void mountCodeWorkspace(root, toast)
   for (const input of document.querySelectorAll<HTMLElement>('[data-code-input]:not([data-code-ready])')) {

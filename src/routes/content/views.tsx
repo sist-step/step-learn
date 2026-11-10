@@ -1,4 +1,4 @@
-import { CODE_FORM, CodeField, CodeWorkspace } from '../../components/code'
+import { CODE_FORM, CodeField, CodeGrade, CodeWorkspace, GRADE_CARD, gradeLabel, type GradeView } from '../../components/code'
 import {
   CompletionField,
   CompletionStatus,
@@ -15,11 +15,20 @@ import { Icon } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
 import { Button } from '../../components/button'
-import { FileChip, FileInput, FormField, SegmentedControl, SelectField, TextField, validateWith } from '../../components/form'
+import {
+  FileChip,
+  FileInput,
+  FormField,
+  SegmentedControl,
+  SelectField,
+  TextAreaField,
+  TextField,
+  validateWith,
+} from '../../components/form'
 import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, DangerRow, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
-import { Alert, Breadcrumbs, Chip, formatDateTime } from '../../components/ui'
+import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import { CODE_FILES, CODE_LANGUAGE_LABELS, type CodeFiles, type CodeLanguage } from '../../lib/code'
 import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
@@ -36,10 +45,12 @@ export type ItemInput = {
   file: File | null
   starter: CodeFiles
   stdin: string
+  criteria: string
+  maxScore: string
 }
 
-/** コードのアイテムの言語と、見ている人の提出の状況 */
-export type CodeView = { language: CodeLanguage; submittedAt: number | null; canRun: boolean }
+/** コードのアイテムの言語と、見ている学生のいちばん新しい提出の採点 */
+export type CodeView = { language: CodeLanguage; canRun: boolean; grade: GradeView | null }
 
 export type OutlineItem = Pick<
   Item,
@@ -64,6 +75,7 @@ export const ItemEditPage = ({
   access,
   item,
   code,
+  gradingEnabled,
   sections,
   values,
   errors = {},
@@ -71,6 +83,8 @@ export const ItemEditPage = ({
   access: CourseAccess
   item: Item
   code?: CodeItem
+  /** AI が設定されていて、提出を自動で採点するか */
+  gradingEnabled: boolean
   sections: Section[]
   values?: Partial<ItemInput> & { hidden?: number; sectionId?: number; completion?: string }
   errors?: FieldErrors
@@ -87,6 +101,8 @@ export const ItemEditPage = ({
     completion: item.completion as string,
     starter: code?.starter ?? {},
     stdin: code?.stdin ?? '',
+    criteria: code?.criteria ?? '',
+    maxScore: String(code?.maxScore ?? ''),
     ...values,
   }
   const section = sections.find((s) => s.id === item.sectionId)
@@ -172,6 +188,38 @@ export const ItemEditPage = ({
                       hint="プログラムが input() で読む内容です。学生の画面の入力欄に最初から入ります。"
                     />
                   )}
+                </div>
+              </fieldset>
+            )}
+            {code && (
+              <fieldset class="field">
+                <legend>採点</legend>
+                <p class="field-hint">
+                  {gradingEnabled
+                    ? '学生が提出すると、AI が採点基準に沿って点数と講評を付けます。点数は、提出の画面で教師が変えられます。'
+                    : 'AI が設定されていないため、自動では採点されません。提出の画面で教師が点数を付けます。'}
+                </p>
+                <div class="stack">
+                  <TextAreaField
+                    label="採点基準"
+                    name="criteria"
+                    id="f-criteria"
+                    rows={6}
+                    value={v.criteria}
+                    error={errors.criteria}
+                    hint="学生には表示されません。配点や、見てほしい点を書きます。"
+                    placeholder={
+                      '例：\n- h1 に名前が表示されている（40 点）\n- ボタンを押すと挨拶が出る（40 点）\n- 読みやすく書けている（20 点）'
+                    }
+                  />
+                  <TextField
+                    label="満点"
+                    name="max_score"
+                    id="f-max-score"
+                    inputmode="numeric"
+                    value={v.maxScore}
+                    error={errors.max_score}
+                  />
                 </div>
               </fieldset>
             )}
@@ -356,14 +404,21 @@ export const ItemPage = ({
   const codeBar = code ? (
     <ItemBar type="code" crumbs={barCrumbs} title={item.title} hiddenNote={hiddenNote}>
       {editButton}
-      {isStudent && code.submittedAt !== null && (
-        <Chip tone="success" icon="check">
-          {formatDateTime(code.submittedAt)} に提出
-        </Chip>
+      {access.canManage && (
+        <Button href={`${base}/${item.id}/code/submissions`} size="sm" icon="users" aria-label="提出">
+          <span class="hide-sm">提出</span>
+        </Button>
+      )}
+      {code.grade && (
+        <a href={`#${GRADE_CARD}`} class="item-bar-status" data-code-grade-chip>
+          <Chip tone="success" icon="check">
+            {gradeLabel(code.grade)}
+          </Chip>
+        </a>
       )}
       {isStudent && (
         <Button type="submit" form={CODE_FORM} variant="primary" size="sm" icon="upload">
-          {code.submittedAt === null ? '提出' : '出し直す'}
+          {code.grade ? '出し直す' : '提出'}
         </Button>
       )}
     </ItemBar>
@@ -382,6 +437,7 @@ export const ItemPage = ({
       <div class="reader">
         <article class="reader-main">
           {!pdf && !code && head}
+          {code?.grade && <CodeGrade grade={code.grade} pollUrl={`${base}/${item.id}/code/grading`} />}
 
           {item.type === 'link' && embedded && <LinkEmbed url={item.url} title={item.title} />}
 

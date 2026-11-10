@@ -925,7 +925,7 @@ function initMarkdownEditors() {
 let codeEditor: Promise<typeof import('./code-editor')> | null = null
 function initCodeEditors() {
   void codeEditor?.then(({ releaseDetachedCodeEditors }) => releaseDetachedCodeEditors())
-  if (!document.querySelector('[data-code-input]:not([data-code-ready])')) return
+  if (!document.querySelector('[data-code-input]:not([data-code-ready]), [data-code-grade]:not([data-code-watching])')) return
   codeEditor ??= import('./code-editor')
   codeEditor
     .then(({ mountCodeEditors }) => mountCodeEditors(toast))

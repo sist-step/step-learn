@@ -1,6 +1,6 @@
 // サーバーの handlers と client.ts の両方が読み込むので、DB や Node の API を使うモジュールを import しない
 import * as z from 'zod/mini'
-import { CODE_LANGUAGES, MAX_CODE_LENGTH, MAX_STDIN_LENGTH } from './code'
+import { CODE_LANGUAGES, MAX_CODE_LENGTH, MAX_MAX_SCORE, MAX_STDIN_LENGTH } from './code'
 import { dateInputToUnix, dateTimeInputToUnix, isDateInput, isDateTimeInput } from './course-period'
 import { checkPassword } from './password'
 import { isMediaFile } from './preview'
@@ -174,6 +174,27 @@ const codeFields = {
 /** コードのアイテムで、実行・下書きの保存・提出のときに送るコード */
 const code = z.object(codeFields)
 
+const points = (label: string, { min, max }: { min: number; max: number }) =>
+  z.pipe(
+    trimmed(),
+    z
+      .string()
+      .check(
+        rule((s: string) =>
+          !s || (/^\d{1,6}$/.test(s) && Number(s) >= min && Number(s) <= max)
+            ? null
+            : `${label}は ${min} から ${max} までの整数で入力してください。`,
+        ),
+      ),
+  )
+
+// 点数が満点を超えていないかをここで確かめないのは、満点がアイテムの設定で決まり、ハンドラで照らし合わせるため
+const codeReview = z.object({
+  submission: hidden(20),
+  score: points('点数', { min: 0, max: MAX_MAX_SCORE }),
+  comment: text('コメント', 2000),
+})
+
 const itemFields = {
   title: text('タイトル', 200, { required: true }),
   body: text('本文', 100_000),
@@ -203,6 +224,8 @@ const itemEdit = z
   .object({
     ...itemFields,
     ...codeFields,
+    criteria: z.optional(text('採点基準', 5000)),
+    max_score: z.optional(points('満点', { min: 1, max: MAX_MAX_SCORE })),
     url: z.optional(z.pipe(text('URL', 2000), z.string().check(rule((s: string) => (isHttpUrl(s) ? null : URL_INVALID))))),
   })
   .check(
@@ -237,6 +260,7 @@ export const FORMS = {
   item,
   itemEdit,
   code,
+  codeReview,
   extraItem,
   image,
 }

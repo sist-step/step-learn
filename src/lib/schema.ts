@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { check, customType, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import { CODE_LANGUAGES, type CodeFiles } from './code'
+import { CODE_LANGUAGES, GRADING_STATUSES, type CodeFiles } from './code'
+import type { RunResult } from './sandbox'
 
 const now = sql`(unixepoch())`
 
@@ -191,8 +192,11 @@ export const codeItems = sqliteTable(
     language: text('language', { enum: CODE_LANGUAGES }).notNull(),
     /** 学生が最初に開いたときに入っているコード */
     starter: text('starter', { mode: 'json' }).$type<CodeFiles>().notNull(),
-    /** Python の標準入力の例。学生の入力欄に最初から入れておく */
+    /** Python の標準入力の例。学生の入力欄に最初から入れておき、採点のときの実行にも使う */
     stdin: text('stdin').notNull().default(''),
+    /** AI に渡す採点基準。学生には見せない */
+    criteria: text('criteria').notNull().default(''),
+    maxScore: integer('max_score').notNull().default(100),
   },
   (t) => [check('code_items_language', sql`${t.language} IN ('web', 'python')`)],
 )
@@ -229,7 +233,21 @@ export const codeSubmissions = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     files: text('files', { mode: 'json' }).$type<CodeFiles>().notNull(),
+    /** AI の採点の状態。none は採点しない（AI が設定されていない）提出 */
+    status: text('status', { enum: GRADING_STATUSES }).notNull().default('none'),
+    /** AI が付けた点数と講評 */
+    score: integer('score'),
+    feedback: text('feedback').notNull().default(''),
+    /** 採点のときに sandbox で実行した結果（Python） */
+    output: text('output', { mode: 'json' }).$type<RunResult>(),
+    /** 教師が付けた点数とコメント。点数があれば、AI の点数よりこちらを成績にする */
+    teacherScore: integer('teacher_score'),
+    teacherComment: text('teacher_comment').notNull().default(''),
     createdAt: integer('created_at').notNull().default(now),
   },
-  (t) => [index('code_submissions_item_user').on(t.itemId, t.userId, t.id), index('code_submissions_user').on(t.userId)],
+  (t) => [
+    index('code_submissions_item_user').on(t.itemId, t.userId, t.id),
+    index('code_submissions_user').on(t.userId),
+    check('code_submissions_status', sql`${t.status} IN ('none', 'pending', 'graded', 'failed')`),
+  ],
 )
