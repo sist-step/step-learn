@@ -135,6 +135,9 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | --- | --- |
 | `CodeInput` | コードの入力欄。`src/code-editor.ts` が中の textarea を CodeMirror のエディター（行番号・色分け・かっこの補完）に置き換える。`syntax`（`html` / `css` / `js` / `py` / `text`）/ `rows`（最低の高さ）/ `fill`（親の高さいっぱいに広げ、枠を消す）。送信されるのは textarea（`name`）の値で、書き換えるたびに textarea に `input` イベントが出る |
 | `CodeField` | ラベル・エラー・ヒント付きの `CodeInput`（`label` / `name` / `syntax` / `value` / `rows` / `error` / `hint`）。コードを受け取る入力欄では `TextAreaField` ではなくこれを使う |
+| `CodeStarterFields` / `CodeGradingFields` | アイテムの編集画面の「最初のコード」（言語ごとのファイルと、Python の入力の例）と「採点」（採点基準・満点）の欄。通常モードの編集画面と、Moodle モードの種類ごとの入力欄（`extra-kinds.tsx`）の両方で使う |
+| `CodeBarActions` | ヘッダーの帯（`ItemBar`）に置く、提出の一覧への入口（教師）と、提出の状況・提出ボタン（学生） |
+| `CodeGrade` | 学生に見せる提出と採点の結果のカード。採点中は `code-editor.ts` が終わりを待ち、カードとヘッダーの帯の表示を取り直す |
 | `CodeWorkspace` | コードのアイテムの本体（`AppShell` の `topbar` と一緒に使う）。左に問題文とファイルのタブ付きのエディター、右にプレビューとコンソール（Web）か入力と実行結果（Python）。コードはサーバーで描かず、`code-editor.ts` が `${base}/state` から読み込み、書きかけのコードを `${base}/draft` に自動で保存する。提出は `CODE_FORM` のフォームの送信（ヘッダーの帯のボタンに `form={CODE_FORM}` を付ける） |
 
 ### PDF — `src/components/pdf.tsx`
