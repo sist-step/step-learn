@@ -10,11 +10,14 @@ import {
   trackedItemCount,
   visibleItem,
 } from '../../lib/courses'
+import { DEFAULT_STARTER, MAX_CODE_LENGTH, MAX_STDIN_LENGTH } from '../../lib/code'
+import { availableCodeLanguages, getCodeItem, latestSubmission, updateCodeItem } from '../../lib/code-items'
 import { db } from '../../lib/db'
 import { completionError, firstError, isFile, validate, type FieldErrors } from '../../lib/forms'
 import { field, fileField, intParam, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
 import { previewKind } from '../../lib/preview'
-import { completions, items, sections } from '../../lib/schema'
+import { sandboxEnabled } from '../../lib/sandbox'
+import { codeItems, completions, items, sections } from '../../lib/schema'
 import { isSharing } from '../../lib/screen-share'
 import {
   EXECUTABLE_NOT_ALLOWED,
@@ -132,6 +135,12 @@ export async function removeSection(c: Context<AppEnv>) {
 const fileColumns = (stored: StoredFile | null) =>
   stored ? { fileKey: stored.key, fileName: stored.name, fileSize: stored.size, fileType: stored.type } : {}
 
+// field() を使わないのは、前後の空白を削ると、コードの字下げや末尾の改行が変わるため
+const sourceField = (form: Form, key: string, max: number) => {
+  const v = form[key]
+  return typeof v === 'string' ? v.slice(0, max) : ''
+}
+
 function readItemInput(form: Form): ItemInput {
   return {
     title: field(form, 'title', 200),
@@ -139,6 +148,13 @@ function readItemInput(form: Form): ItemInput {
     url: field(form, 'url', 2000),
     linkTarget: field(form, 'link_target', 10),
     file: fileField(form, 'file'),
+    starter: {
+      html: sourceField(form, 'html', MAX_CODE_LENGTH),
+      css: sourceField(form, 'css', MAX_CODE_LENGTH),
+      js: sourceField(form, 'js', MAX_CODE_LENGTH),
+      py: sourceField(form, 'py', MAX_CODE_LENGTH),
+    },
+    stdin: sourceField(form, 'stdin', MAX_STDIN_LENGTH),
   }
 }
 
@@ -158,30 +174,37 @@ export async function createItem(c: Context<AppEnv>) {
   if (!getSection(courseId, sectionId)) return c.notFound()
   const result = validate('item', form)
   if (!result.ok) return redirectWith(c, editUrl(courseId, sectionId), firstError(result.errors), 'error')
-  const { type, hidden, ...input } = result.values
+  const { type, hidden, language, ...input } = result.values
+  if (type === 'code' && !availableCodeLanguages.includes(language))
+    return redirectWith(c, editUrl(courseId, sectionId), 'Python を実行する環境が設定されていないため、Python は選べません。', 'error')
   const file = type === 'file' && isFile(input.file) ? input.file : null
   const uploadError = await checkUpload(file)
   if (uploadError) return redirectWith(c, editUrl(courseId, sectionId), uploadError, 'error')
 
   const stored = file && (await putCourseFile(courseId, file))
 
-  const created = db
-    .insert(items)
-    .values({
-      courseId,
-      sectionId,
-      type,
-      title: input.title,
-      body: input.body,
-      url: type === 'link' ? input.url : '',
-      linkTarget: type === 'link' ? input.link_target : 'new',
-      hidden,
-      completion: access.course.completionEnabled ? (input.completion ?? 'none') : 'none',
-      ...fileColumns(stored),
-      position: nextPosition(items, eq(items.sectionId, sectionId)),
-    })
-    .returning({ id: items.id })
-    .get()
+  const position = nextPosition(items, eq(items.sectionId, sectionId))
+  const created = db.transaction((tx) => {
+    const row = tx
+      .insert(items)
+      .values({
+        courseId,
+        sectionId,
+        type,
+        title: input.title,
+        body: input.body,
+        url: type === 'link' ? input.url : '',
+        linkTarget: type === 'link' ? input.link_target : 'new',
+        hidden,
+        completion: access.course.completionEnabled ? (input.completion ?? 'none') : 'none',
+        ...fileColumns(stored),
+        position,
+      })
+      .returning({ id: items.id })
+      .get()
+    if (type === 'code') tx.insert(codeItems).values({ itemId: row.id, language, starter: DEFAULT_STARTER[language] }).run()
+    return row
+  })
   const next = field(form, 'then') === 'view' ? `/courses/${courseId}/items/${created.id}` : editUrl(courseId, sectionId)
   return redirectWith(c, next, `「${input.title}」を追加しました。`)
 }
@@ -192,7 +215,7 @@ export async function editItem(c: Context<AppEnv>) {
   if (!access || !iid) return c.notFound()
   const item = getItem(access.course.id, iid)
   if (!item) return c.notFound()
-  return c.render(<ItemEditPage access={access} item={item} sections={listSections(access.course.id)} />, {
+  return c.render(<ItemEditPage access={access} item={item} code={getCodeItem(iid)} sections={listSections(access.course.id)} />, {
     title: `編集 - ${item.title}`,
   })
 }
@@ -204,6 +227,7 @@ export async function updateItem(c: Context<AppEnv>) {
   const courseId = access.course.id
   const item = getItem(courseId, iid)
   if (!item) return c.notFound()
+  const code = getCodeItem(iid)
 
   const form = await readForm(c)
   const requestedSection = Number(field(form, 'section_id'))
@@ -230,9 +254,10 @@ export async function updateItem(c: Context<AppEnv>) {
       completion: field(form, 'completion', 10),
     }
     c.status(422)
-    return c.render(<ItemEditPage access={access} item={item} sections={listSections(courseId)} values={values} errors={errors ?? {}} />, {
-      title: `編集 - ${item.title}`,
-    })
+    return c.render(
+      <ItemEditPage access={access} item={item} code={code} sections={listSections(courseId)} values={values} errors={errors ?? {}} />,
+      { title: `編集 - ${item.title}` },
+    )
   }
   const { hidden, ...input } = result.values
   const stored = file && (await putCourseFile(courseId, file))
@@ -250,6 +275,7 @@ export async function updateItem(c: Context<AppEnv>) {
     })
     .where(eq(items.id, iid))
     .run()
+  if (code) updateCodeItem(iid, code.language, input, input.stdin)
   if (stored && item.fileKey) inBackground(deleteKeys([item.fileKey]))
   return redirectWith(c, `/courses/${courseId}/items/${iid}/edit`, '保存しました。')
 }
@@ -356,6 +382,12 @@ export async function showItem(c: Context<AppEnv>) {
   const prev = ordered[idx - 1]
   const next = ordered[idx + 1]
   const section = sectionList.find((s) => s.id === item.sectionId)
+  const codeItem = item.type === 'code' ? getCodeItem(iid) : undefined
+  const code = codeItem && {
+    language: codeItem.language,
+    submittedAt: latestSubmission(iid, userId)?.createdAt ?? null,
+    canRun: sandboxEnabled,
+  }
   const textPreview =
     item.type === 'file' && item.fileKey && item.fileSize && previewKind(item.fileType ?? '', item.fileName ?? '') === 'text'
       ? await readTextPreview(item.fileKey)
@@ -373,6 +405,7 @@ export async function showItem(c: Context<AppEnv>) {
       next={next}
       sharing={isSharing(item.id)}
       textPreview={textPreview}
+      code={code}
       revision={revision}
     />,
     { title: item.title },
