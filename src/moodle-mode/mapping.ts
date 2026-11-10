@@ -56,8 +56,8 @@ export const toNavCourse = (m: MoodleCourse): NavCourse => ({
 /** link と file は STEP Learn の画面で扱い、moodle は Moodle の画面で開く。label はセクションの中に本文を出す。subsection は中のアイテムを入れ子で並べる。extra は Moodle モードだけにある種類（中身は moodle-mode.db） */
 export type ItemKind = 'link' | 'file' | 'moodle' | 'label' | 'subsection' | 'extra'
 
-/** extra のアイテムの中身。type は extra.tsx の種類 */
-export type ExtraContent = { type: string; data: Record<string, unknown> }
+/** extra のアイテムの中身。type は extra-kinds.tsx の種類。live は画面共有の配信中のように、今まさに使われているか */
+export type ExtraContent = { type: string; data: Record<string, unknown>; live: boolean }
 
 export const EXTRA_PATH = '/m/'
 

@@ -22,10 +22,15 @@ export async function otherCourses(c: Context<MoodleEnv>) {
 
 const NO_RESTRICTIONS = { enabled: false, restrictions: [] }
 
-async function restrictionsOf(c: Context<MoodleEnv>, courseId: number, fresh: boolean) {
-  const load = () => moodle(c).restrictions(courseId)
+/** Moodle に問い合わせる利用者。Hono を通らない要求（画面共有の接続）でも使えるよう、Context から分けている */
+export type Viewer = { token: string; userId: number }
+
+const viewerOf = (c: Context<MoodleEnv>): Viewer => ({ token: c.var.token!, userId: c.var.user!.id })
+
+async function restrictionsOf(viewer: Viewer, courseId: number, fresh: boolean) {
+  const load = () => api(viewer.token).restrictions(courseId)
   try {
-    return await (fresh ? load() : cached(restrictionsKey(courseId, c.var.user!.id), load))
+    return await (fresh ? load() : cached(restrictionsKey(courseId, viewer.userId), load))
   } catch (e) {
     // コースページごと失敗させないのは、プラグインを更新する前の Moodle にはこの API がなく、制限を出さなくても教材は編集できるため
     if (isTokenError(e)) throw e
@@ -35,19 +40,22 @@ async function restrictionsOf(c: Context<MoodleEnv>, courseId: number, fresh: bo
 }
 
 /** コースとその教材。アクセスできなければ Moodle の notfound で例外になる（app.tsx の onError が 404 にする） */
-export async function loadCourse(c: Context<MoodleEnv>, courseId: number, { fresh = false } = {}) {
-  const userId = c.var.user!.id
-  const load = () => Promise.all([moodle(c).course(courseId), moodle(c).contents(courseId)])
+export const loadCourse = (c: Context<MoodleEnv>, courseId: number, options?: { fresh?: boolean }) =>
+  loadCourseAs(viewerOf(c), courseId, options)
+
+export async function loadCourseAs({ token, userId }: Viewer, courseId: number, { fresh = false } = {}) {
+  const moodle = api(token)
+  const load = () => Promise.all([moodle.course(courseId), moodle.contents(courseId)])
   const [course, contents] = fresh
     ? await load()
     : await Promise.all([
-        cached(courseKey(courseId, userId), () => moodle(c).course(courseId)),
-        cached(contentsKey(courseId, userId), () => moodle(c).contents(courseId)),
+        cached(courseKey(courseId, userId), () => moodle.course(courseId)),
+        cached(contentsKey(courseId, userId), () => moodle.contents(courseId)),
       ])
   const access = toAccess(course)
   const outline = toOutline(contents, { tracking: course.completionenabled, manage: course.canmanage })
   // 学生に問い合わせないのは、制限の中身は編集できる人にしか返さず、学生には Moodle が開けない理由だけを返すため
-  const restrictions = course.canmanage ? await restrictionsOf(c, courseId, fresh) : NO_RESTRICTIONS
+  const restrictions = course.canmanage ? await restrictionsOf({ token, userId }, courseId, fresh) : NO_RESTRICTIONS
   return {
     course,
     access,
@@ -57,7 +65,7 @@ export async function loadCourse(c: Context<MoodleEnv>, courseId: number, { fres
   }
 }
 
-export type LoadedCourse = Awaited<ReturnType<typeof loadCourse>>
+export type LoadedCourse = Awaited<ReturnType<typeof loadCourseAs>>
 
 /** 学生に見える、完了の対象のアイテム（進捗の分母） */
 export function progressOf({ sections, items }: Pick<LoadedCourse, 'sections' | 'items'>) {

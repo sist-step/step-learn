@@ -1,11 +1,6 @@
 import type { IncomingHttpHeaders, Server as HttpServer } from 'node:http'
-import { and, eq } from 'drizzle-orm'
 import { Server, type Socket } from 'socket.io'
-import { userFromCookieHeader } from './auth'
 import { config } from './config'
-import { getCourseAccessFor, isVisibleItem, touchCourse } from './courses'
-import { db } from './db'
-import { items } from './schema'
 import {
   MAX_FRAME_BYTES,
   MAX_HEIGHT,
@@ -17,9 +12,19 @@ import {
   type ShareMode,
   type StreamConfig,
 } from './screen-share-protocol'
-import type { User } from './types'
 
-type SocketData = { user: User; courseId: number; itemId: number; mode: ShareMode }
+export type Sharer = { id: number; name: string }
+
+// このファイルで DB を読まないのは、Moodle モードでも読み込むので、step-learn.db を開くと Moodle モードでも作られてしまうため
+/** 通常モード（src/lib/screen-share-access.ts）と Moodle モード（src/moodle-mode/screen-share.ts）で違う部分 */
+export type ShareBackend = {
+  /** その時点で接続してよいなら利用者を、だめなら null を返す */
+  authorize: (cookie: string | undefined, courseId: number, itemId: number, mode: ShareMode) => Promise<Sharer | null>
+  /** 共有が始まった・終わったとき。開いているコースの画面に「配信中」を出し入れする */
+  onChange: (courseId: number) => void
+}
+
+type SocketData = { user: Sharer; courseId: number; itemId: number; mode: ShareMode }
 type ShareServer = Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>
 type ShareSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>
 
@@ -75,13 +80,6 @@ const isMode = (m: unknown): m is ShareMode => m === 'present' || m === 'view'
 
 const isId = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n > 0
 
-const isScreenItem = async (courseId: number, itemId: number) =>
-  !!db
-    .select({ id: items.id })
-    .from(items)
-    .where(and(eq(items.id, itemId), eq(items.courseId, courseId), eq(items.type, 'screen')))
-    .get()
-
 const isDimension = (n: unknown, max: number): n is number => typeof n === 'number' && Number.isInteger(n) && n > 0 && n <= max
 
 function parseStreamConfig(v: unknown): StreamConfig | null {
@@ -113,21 +111,11 @@ function isAllowedOrigin(headers: IncomingHttpHeaders) {
 
 const shareError = (code: ShareError) => new Error(code)
 
-/** その時点で接続してよいなら利用者を、だめなら null を返す */
-async function authorize(cookie: string | undefined, courseId: number, itemId: number, mode: ShareMode) {
-  const user = await userFromCookieHeader(cookie)
-  if (!user) return null
-  const access = await getCourseAccessFor(user, courseId)
-  if (!access || (mode === 'present' && !access.canManage)) return null
-  if (!(await isScreenItem(courseId, itemId))) return null
-  if (!access.canManage && !isVisibleItem(itemId)) return null
-  return user
-}
-
-function recheckPeriodically(socket: ShareSocket) {
+function recheckPeriodically(backend: ShareBackend, socket: ShareSocket) {
   const { courseId, itemId, mode } = socket.data
   const timer = setInterval(() => {
-    authorize(socket.handshake.headers.cookie, courseId, itemId, mode)
+    backend
+      .authorize(socket.handshake.headers.cookie, courseId, itemId, mode)
       .then((user) => {
         if (user) return
         socket.emit('revoked')
@@ -154,11 +142,11 @@ function forwardFrame(room: Room, meta: FrameMeta, data: Uint8Array) {
   }
 }
 
-function present(socket: ShareSocket, itemId: number, room: Room) {
+function present(backend: ShareBackend, socket: ShareSocket, itemId: number, room: Room) {
   const previous = room.presenter
   room.presenter = socket
   room.stream = null
-  if (!previous) touchCourse(socket.data.courseId)
+  if (!previous) backend.onChange(socket.data.courseId)
   // 同じ人が別のタブや再接続で共有し直したときは、古い接続を閉じて引き継ぐ
   previous?.disconnect(true)
 
@@ -185,7 +173,7 @@ function present(socket: ShareSocket, itemId: number, room: Room) {
     room.presenter = null
     room.stream = null
     for (const viewer of room.viewers.values()) viewer.socket.emit('idle')
-    touchCourse(socket.data.courseId)
+    backend.onChange(socket.data.courseId)
     releaseRoom(itemId, room)
   })
 }
@@ -211,7 +199,7 @@ function view(socket: ShareSocket, itemId: number, room: Room) {
   })
 }
 
-export function attachScreenShare(httpServer: HttpServer) {
+export function attachScreenShare(httpServer: HttpServer, backend: ShareBackend) {
   const io: ShareServer = new Server(httpServer, {
     serveClient: false,
     maxHttpBufferSize: MAX_FRAME_BYTES + 1_024,
@@ -224,7 +212,7 @@ export function attachScreenShare(httpServer: HttpServer) {
     try {
       const { courseId, itemId, mode } = socket.handshake.auth as Partial<Record<string, unknown>>
       if (!isId(courseId) || !isId(itemId) || !isMode(mode)) return next(shareError('not_found'))
-      const user = await authorize(socket.handshake.headers.cookie, courseId, itemId, mode)
+      const user = await backend.authorize(socket.handshake.headers.cookie, courseId, itemId, mode)
       if (!user) return next(shareError('not_found'))
       const presenter = rooms.get(itemId)?.presenter
       if (mode === 'present' && presenter && presenter.data.user.id !== user.id) return next(shareError('busy'))
@@ -238,8 +226,8 @@ export function attachScreenShare(httpServer: HttpServer) {
   io.on('connection', (socket) => {
     const { itemId, mode } = socket.data
     const room = roomOf(itemId)
-    recheckPeriodically(socket)
-    if (mode === 'present') present(socket, itemId, room)
+    recheckPeriodically(backend, socket)
+    if (mode === 'present') present(backend, socket, itemId, room)
     else view(socket, itemId, room)
   })
 

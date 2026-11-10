@@ -54,11 +54,11 @@ export default defineConfig(({ command }) => ({
         const httpServer = server.httpServer
         // ここで直接 import しないのは、アプリとは別のモジュールインスタンスになり、ページ側から配信中かどうかを参照できなくなるため
         httpServer?.once('listening', async () => {
-          // Moodle モードで読み込まないのは、画面共有を使わないうえ、読み込むと step-learn.db を開いてしまうため
           const { config } = await server.ssrLoadModule('/src/lib/config.ts')
-          if (config.moodle) return
-          const { attachScreenShare } = await server.ssrLoadModule('/src/lib/screen-share.ts')
-          attachScreenShare(httpServer)
+          const { attach } = await server.ssrLoadModule(
+            config.moodle ? '/src/moodle-mode/screen-share.ts' : '/src/lib/screen-share-access.ts',
+          )
+          attach(httpServer)
         })
       },
     },
