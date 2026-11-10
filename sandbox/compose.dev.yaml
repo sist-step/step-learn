@@ -1,0 +1,18 @@
+name: step-learn-sandbox
+
+# ホストで動かす開発サーバー（npm run dev）から Python を実行するための sandbox。本番には使わない
+services:
+  sandbox:
+    extends:
+      file: ../compose.yaml
+      service: sandbox
+    # ソケットを使わないのは、macOS では Docker のボリュームの中のソケットにホストからつなげないため。
+    # ポートを公開するためにネットワークにつなぐので、本番と違って実行中のコードから外部に出られる
+    network_mode: bridge
+    environment:
+      SANDBOX_LISTEN: tcp:8091
+    ports:
+      - '127.0.0.1:8091:8091'
+
+volumes:
+  sandbox-socket:

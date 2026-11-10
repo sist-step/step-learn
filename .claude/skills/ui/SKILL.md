@@ -5,7 +5,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 
 # UI の作り方
 
-方針は「SSR ＋ 小さなクライアント JS」。JavaScript は必須で、無効なときは renderer の noscript が案内だけを出すので、JS なしの代替は作らない。CSS は部品・画面ごとのファイルに分け、そのページで使う分だけを読み込む（下の「CSS の置き場所と読み込み」）。JS は `src/client.ts` の 1 ファイル（重いライブラリを使うものは分けて、使う画面でだけ `client.ts` が動的に読み込む。Markdown エディターの CodeMirror は `src/markdown-editor.ts`、ログイン画面の three.js は `src/auth-art.ts`、PDF ビューアーの pdf.js は `src/pdf-viewer.ts`）。CSS フレームワークや UI ライブラリは入れない。
+方針は「SSR ＋ 小さなクライアント JS」。JavaScript は必須で、無効なときは renderer の noscript が案内だけを出すので、JS なしの代替は作らない。CSS は部品・画面ごとのファイルに分け、そのページで使う分だけを読み込む（下の「CSS の置き場所と読み込み」）。JS は `src/client.ts` の 1 ファイル（重いライブラリを使うものは分けて、使う画面でだけ `client.ts` が動的に読み込む。Markdown エディターの CodeMirror は `src/markdown-editor.ts`、コードのエディターの CodeMirror と各言語の文法は `src/code-editor.ts`、ログイン画面の three.js は `src/auth-art.ts`、PDF ビューアーの pdf.js は `src/pdf-viewer.ts`）。CSS フレームワークや UI ライブラリは入れない。
 
 ## まず既存の部品を使う
 
@@ -129,11 +129,22 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 <Mascot mood="sleepy" motion="none" stand={false} size={64} label="眠っている STEP のキャラクター" />
 ```
 
+### コード — `src/components/code.tsx`
+
+| 部品 | 用途 |
+| --- | --- |
+| `CodeInput` | コードの入力欄。`src/code-editor.ts` が中の textarea を CodeMirror のエディター（行番号・色分け・かっこの補完）に置き換える。`syntax`（`html` / `css` / `js` / `py` / `text`）/ `rows`（最低の高さ）/ `fill`（親の高さいっぱいに広げ、枠を消す）。送信されるのは textarea（`name`）の値で、書き換えるたびに textarea に `input` イベントが出る |
+| `CodeField` | ラベル・エラー・ヒント付きの `CodeInput`（`label` / `name` / `syntax` / `value` / `rows` / `error` / `hint`）。コードを受け取る入力欄では `TextAreaField` ではなくこれを使う |
+| `CodeStarterFields` / `CodeGradingFields` | アイテムの編集画面の「最初のコード」（言語ごとのファイルと、Python の入力の例）と「採点」（採点基準・満点）の欄。通常モードの編集画面と、Moodle モードの種類ごとの入力欄（`extra-kinds.tsx`）の両方で使う |
+| `CodeBarActions` | ヘッダーの帯（`ItemBar`）に置く、提出の一覧への入口（教師）と、提出の状況・提出ボタン（学生） |
+| `CodeGrade` | 学生に見せる提出と採点の結果のカード。採点中は `code-editor.ts` が終わりを待ち、カードとヘッダーの帯の表示を取り直す |
+| `CodeWorkspace` | コードのアイテムの本体（`AppShell` の `topbar` と一緒に使う）。左に問題文とファイルのタブ付きのエディター、右にプレビューとコンソール（Web）か入力と実行結果（Python）。コードはサーバーで描かず、`code-editor.ts` が `${base}/state` から読み込み、書きかけのコードを `${base}/draft` に自動で保存する。提出は `CODE_FORM` のフォームの送信（ヘッダーの帯のボタンに `form={CODE_FORM}` を付ける） |
+
 ### PDF — `src/components/pdf.tsx`
 
 | 部品 | 用途 |
 | --- | --- |
-| `PdfBar` | PDF のアイテムで `AppShell` の `topbar` に渡す帯（パンくず・タイトル・「ビューアー / ブラウザ」の切り替え・`children` の操作ボタン）。切り替えは保存せず、`client.ts` がその場で `PdfStage` の中身を入れ替える（開いているあいだは再読み込みなしの遷移でも保ち、再読み込みすると既定のビューアーに戻る） |
+| `PdfBar` | PDF のアイテムで `AppShell` の `topbar` に渡す帯（パンくず・タイトル・「ビューアー / ブラウザ」の切り替え・`children` の操作ボタン）。帯そのものは `components/course.tsx` の `ItemBar`（`type` / `crumbs` / `title` / `hiddenNote` / `children`）で、アイテムを画面いっぱいに出すほかの画面（コード）もこれを使う。切り替えは保存せず、`client.ts` がその場で `PdfStage` の中身を入れ替える（開いているあいだは再読み込みなしの遷移でも保ち、再読み込みすると既定のビューアーに戻る） |
 | `PdfStage` | ヘッダーの下いっぱいの PDF 表示。既定は pdf.js の自作ビューアー（`src/pdf-viewer.ts`。`client.ts` が PDF のある画面でだけ読み込む）、ブラウザを選ぶと iframe でブラウザ標準のビューアー（サーバーは両方を描き、iframe は選ばれるまで `hidden` のまま `src` を入れない）。ビューアーは左にページのサムネイルの一覧を出し（ツールバーの左端のボタンで開閉。開閉は端末ごとの設定（`pdfThumbs`）に保存し、スマホ幅では閉じた状態から始めてページに重ねて出す）、今のページを `aria-current` で示す |
 
 ログイン前の画面（`AuthShell`）の右側は、`src/auth-art.ts` が three.js で描く 3D アニメーション（背景は無地で、台座の上で小さなキューブが 14 種類の形（ロケット・ネコ・家・アイスクリームなど。`MODELS`）に組み上がっては組み替わる。クリックでつつくとキューブが弾け、3 回続けると次の形へ。ドラッグで回せる）。`data-auth-art` の要素に `client.ts` が canvas を置き、再読み込みなしの遷移では同じ canvas を新しい要素へ移して続きから動かす。色は `--art-deep` / `--art-mid` / `--art-bright` / `--art-shine` とコースの色（`tone-*`）を読み取る。スマホ幅（非表示）では three.js を読み込まない

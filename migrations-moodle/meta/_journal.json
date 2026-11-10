@@ -15,6 +15,13 @@
       "when": 1794230073697,
       "tag": "0001_lonely_maestro",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794290588312,
+      "tag": "0002_code_items",
+      "breakpoints": true
     }
   ]
 }

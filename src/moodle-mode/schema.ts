@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm'
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import type { CodeFiles, GradingStatus } from '../lib/code'
+import type { RunResult } from '../lib/sandbox'
 
 const now = sql`(unixepoch())`
 
@@ -56,4 +58,48 @@ export const extraItems = sqliteTable(
       .$onUpdate(() => now),
   },
   (t) => [index('extra_items_course').on(t.courseId)],
+)
+
+/** コードのアイテム（extra-kinds.tsx の code）の、書きかけのコード。利用者ごとに 1 つで、編集のたびに上書きする。完全移行では引き継がない */
+export const codeDrafts = sqliteTable(
+  'code_drafts',
+  {
+    key: text('key')
+      .notNull()
+      .references(() => extraItems.key, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    files: text('files', { mode: 'json' }).$type<CodeFiles>().notNull(),
+    stdin: text('stdin').notNull().default(''),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .default(now)
+      .$onUpdate(() => now),
+  },
+  (t) => [primaryKey({ columns: [t.key, t.userId] })],
+)
+
+/** コードのアイテムに提出したコードと採点。出し直しても前の提出は残す。完全移行では引き継がない */
+export const codeSubmissions = sqliteTable(
+  'code_submissions',
+  {
+    id: integer('id').primaryKey(),
+    key: text('key')
+      .notNull()
+      .references(() => extraItems.key, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    files: text('files', { mode: 'json' }).$type<CodeFiles>().notNull(),
+    // CHECK を付けないのは、完全移行で捨てる一時的なデータで、状態を足すたびにテーブルを作り直すマイグレーションを作らずに済ませるため
+    status: text('status').$type<GradingStatus>().notNull().default('none'),
+    score: integer('score'),
+    feedback: text('feedback').notNull().default(''),
+    output: text('output', { mode: 'json' }).$type<RunResult>(),
+    teacherScore: integer('teacher_score'),
+    teacherComment: text('teacher_comment').notNull().default(''),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [index('code_submissions_key_user').on(t.key, t.userId, t.id)],
 )

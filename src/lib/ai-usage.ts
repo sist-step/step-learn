@@ -58,7 +58,8 @@ export function setMonthlyLimits(limits: Record<AiProvider, number>) {
   })
 }
 
-export function recordUsage(userId: number, model: AiModel, usage: AiUsage) {
+/** userId が null のものは、特定の利用者に数えない使用量（コードのアイテムの採点） */
+export function recordUsage(userId: number | null, model: AiModel, usage: AiUsage) {
   db.insert(aiUsage)
     .values({ userId, model, ...usage })
     .run()

@@ -18,6 +18,7 @@ export const STYLESHEETS = [
   '/src/components/card.css',
   '/src/components/course.css',
   '/src/components/pdf.css',
+  '/src/components/code.css',
   '/src/components/auth.css',
   '/src/routes/dashboard/dashboard.css',
   '/src/routes/courses/courses.css',
@@ -26,6 +27,7 @@ export const STYLESHEETS = [
   '/src/routes/account/account.css',
   '/src/routes/admin/admin.css',
   '/src/routes/screen/screen.css',
+  '/src/routes/code/code.css',
   '/src/moodle-mode/moodle-mode.css',
 ] as const
 

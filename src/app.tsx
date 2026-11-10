@@ -15,6 +15,7 @@ import { renderer } from './renderer'
 import account from './routes/account'
 import admin from './routes/admin'
 import auth from './routes/auth'
+import code from './routes/code'
 import content from './routes/content'
 import courses from './routes/courses'
 import dashboard from './routes/dashboard'
@@ -37,12 +38,13 @@ app.use((c, next) => (c.var.user ? userBodyLimit : guestBodyLimit)(c, next))
 app.use(renderer)
 
 // 各ハンドラで呼ばないのは、内容を変える操作を足したときに呼び忘れると、開いている画面に反映されなくなるため
-// 完了の切り替えを除くのは、本人にしか関係がないのに、コースを開いている全員に取り直させることになるため
+// 完了の切り替えと、コードのアイテムの実行・保存・提出を除くのは、本人にしか関係がないのに、コースを開いている全員に取り直させることになるため
+const PERSONAL_POST = /\/complete$|\/items\/\d+\/code\//
 app.post('/courses/:id/*', async (c, next) => {
   await next()
   const id = Number(c.req.param('id'))
   // ログインしていない要求を除くのは、requireAuth のログイン画面へのリダイレクト（302）も 400 未満なので、誰でも任意のコースを進められてしまうため
-  if (c.var.user && Number.isSafeInteger(id) && c.res.status < 400 && !c.req.path.endsWith('/complete')) touchCourse(id)
+  if (c.var.user && Number.isSafeInteger(id) && c.res.status < 400 && !PERSONAL_POST.test(c.req.path)) touchCourse(id)
 })
 
 app.get('/', (c) => c.redirect(c.var.user ? '/dashboard' : '/login'))
@@ -53,6 +55,7 @@ app.route('/courses', courses)
 app.route('/courses', content)
 app.route('/courses', participants)
 app.route('/courses', screen)
+app.route('/courses', code)
 app.route('/account', account)
 app.route('/admin', admin)
 

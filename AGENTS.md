@@ -42,7 +42,7 @@ npm run db:check     # マイグレーションの整合性を確認（CI と同
 ## 守ること（要点）
 
 - JavaScript は必須。無効な環境では全画面で「JavaScript を有効にしてください」だけを出す（`src/renderer.tsx` の noscript）ので、JS なしの代替は作らない
-- データを変える操作はフォーム送信（POST → 303 リダイレクト）で作り、`src/client.ts` が再読み込みなしの遷移にする。クライアント JS は `src/client.ts` の 1 ファイル（例外は、使う画面でだけ `client.ts` が動的に読み込む `src/markdown-editor.ts`・`src/auth-art.ts`・`src/pdf-viewer.ts`）
+- データを変える操作はフォーム送信（POST → 303 リダイレクト）で作り、`src/client.ts` が再読み込みなしの遷移にする。クライアント JS は `src/client.ts` の 1 ファイル（例外は、使う画面でだけ `client.ts` が動的に読み込む `src/markdown-editor.ts`・`src/code-editor.ts`・`src/auth-art.ts`・`src/pdf-viewer.ts`）
 - 権限がないリソースは 403 ではなく `c.notFound()` を返す（存在を知らせない）
 - 入力の検証は `src/lib/forms.ts` の zod スキーマに書き、サーバー（`validate`）とクライアント（フォームの `validateWith`）で同じものを使う。HTML の `required` / `maxlength` などは書かない
 - DB の読み書きは Drizzle のクエリビルダーで書く。生 SQL の文字列は書かず、`sql` テンプレートを使うときも値を文字列連結しない

@@ -17,11 +17,14 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
   - コース一覧と検索（参加しているコースのみ。管理者は登録していないコースも表示できる）。「進行中」と「すべて」の切り替え（開始日・終了日で判定。端末ごとに記憶。「すべて」では終了したコースも出し、開始前のコースは教師として登録している人と管理者にだけ出す。ダッシュボードとサイドバーは進行中のコースだけ）、ダッシュボード（受講中・担当コース、進捗、「続きから学習」）
   - 作成（管理者がコース一覧や管理画面のモーダルから）・編集・削除、開始日と終了日、カラー、コースアイコンとヒーロー画像（PNG / JPEG / WebP / GIF、最大 5MB。アイコンは未設定なら頭文字を表示）
   - 学生の自己登録はなく、管理者か教師が参加者として追加したコースだけが見える
-  - セクションとアイテム（ページ＝Markdown / リンク / ファイル / 画面共有）
+  - セクションとアイテム（ページ＝Markdown / リンク / ファイル / 画面共有 / コード）
   - 編集モードでの追加・並べ替え・削除（オンにするとブラウザを閉じるかログアウトするまで、どのコースでも続く）。オフのときは教師にも学生と同じ見え方で表示する
   - セクション・アイテムごとの「学生に非表示」（学生には一覧にも出さず、URL を開いても 404。進捗の計算からも外す）
   - 学生ごとの完了チェックと進捗表示、前後ナビと目次付きの閲覧画面
   - 参加者管理（メールで追加、ロール変更、除外）
+  - コード：セクションに「コード」アイテムを追加すると、学生がブラウザのエディターでコードを書いて提出できる。言語は Web（HTML / CSS / JavaScript。書きながら隣にプレビューとコンソールを表示）か Python（sandbox のコンテナで実行して結果を表示。下の「コードを実行する sandbox」）。書きかけのコードは自動で保存され、提出は出し直せる（前の提出も残る）。教師は問題文・最初に入れておくコード・採点基準・満点を設定する
+    - 採点：`OPENROUTER_API_KEY` を設定していると、提出のたびに AI が採点基準に沿って点数と講評を付ける（Python は、提出されたコードを sandbox で実行した結果も AI に渡す）。採点は順番に行い、終わると学生の画面に結果が出る。AI が採点するときは、続けて提出できるのは 1 分に 1 回まで。設定していなければ自動では採点しない
+    - 教師はアイテムの「提出」から、学生ごとの提出（コード・プレビュー・実行結果・AI の採点・提出の履歴）を見て、点数とコメントを付けられる。教師が付けた点数は AI の点数より優先して成績になる。AI の採点はやり直せる
   - 画面共有：セクションに「画面共有」アイテムを追加すると、教師がブラウザから画面をライブ配信でき、参加者はアイテムを開くと別タブいっぱいに映像を視聴できる（最大 1920×1080・30fps、回線と画面の動きに応じた可変ビットレート）
 - **管理画面**（管理者、`/admin`）：ユーザーのロール変更、全コースの一覧と作成
 - **テーマ**：既定はライト。ヘッダーのユーザーメニューで選んだときだけダークにし、選択はブラウザ（localStorage）に保持する
@@ -33,7 +36,7 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
 | 速さ | SSR（hono/jsx）＋ 小さなクライアント JS。リンクとフォーム送信を fetch に置き換え、ホバー時の先読みと View Transitions で再読み込みなしに遷移する（SPA）。JavaScript は必須で、無効なブラウザには有効化を求める案内だけを表示する |
 | DB | `better-sqlite3`（WAL モード）＋ Drizzle ORM。DB サーバーは要らない。テーブル定義は `src/lib/schema.ts` で、マイグレーションは drizzle-kit で生成する。クエリも Drizzle のクエリビルダーで書き、結果に型が付く |
 | コスト | 必要なのは Node.js が動くサーバー 1 台だけ。R2 を使う場合、ダウンロードは署名付き URL で R2 から直接配信されるので、サーバーの帯域を使わない（R2 は転送料無料） |
-| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）・`nodemailer`（確認メールの SMTP 送信）・`better-sqlite3`・`drizzle-orm`・`socket.io`（画面共有の中継）・`zod`（入力の検証。同じ規則をブラウザでも使うので、ブラウザ側は軽量版の `zod/mini`）・`@anthropic-ai/sdk`（Claude の呼び出し）だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる。ブラウザ側のライブラリは入力の検証の `zod/mini` と、Markdown エディターの CodeMirror、ログイン画面の 3D アニメーションの three.js、PDF ビューアーの pdf.js だけ。CodeMirror はエディターのある画面でだけ、three.js はログイン前の画面でだけ、pdf.js は PDF のアイテムをビューアーで開いたときだけ読み込む |
+| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）・`nodemailer`（確認メールの SMTP 送信）・`better-sqlite3`・`drizzle-orm`・`socket.io`（画面共有の中継）・`zod`（入力の検証。同じ規則をブラウザでも使うので、ブラウザ側は軽量版の `zod/mini`）・`@anthropic-ai/sdk`（Claude の呼び出し）だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる。ブラウザ側のライブラリは入力の検証の `zod/mini` と、Markdown エディターの CodeMirror、ログイン画面の 3D アニメーションの three.js、PDF ビューアーの pdf.js だけ。CodeMirror はエディターのある画面でだけ（HTML / CSS / JavaScript / Python の文法は、コードのアイテムとその編集画面でだけ）、three.js はログイン前の画面でだけ、pdf.js は PDF のアイテムをビューアーで開いたときだけ読み込む |
 | セキュリティ | PBKDF2（60 万回、ログイン時に旧設定のハッシュを再計算）、推測されやすいパスワードの拒否、ログイン失敗と確認メール・再設定メール送信のレート制限、登録画面と再設定画面からメールアドレスの登録有無がわからない設計、セッション Cookie は HMAC-SHA256 で署名しトークンは SHA-256 で保存、CSRF 対策は Origin 検証と SameSite=Lax、ファイルは権限を確認したうえで配信（PDF と画像以外は添付として返す） |
 
 ## 開発
@@ -77,13 +80,14 @@ npm start            # = node dist/server/index.js
 - `APP_ORIGIN`：nginx や Caddy などのリバースプロキシの後ろで動かす場合は、公開 URL（例 `https://lms.example.com`）を必ず設定してください
 - `SESSION_SECRET`：セッション Cookie の署名鍵（32 文字以上）。未設定なら `data/session-secret` を自動生成して使います。変更すると全員がログアウトされます
 - `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM`：確認メールの送信に使う SMTP サーバー。`SMTP_HOST` を設定する場合は `MAIL_FROM` と `APP_ORIGIN` も必須です
-- `OPENROUTER_API_KEY`：[OpenRouter](https://openrouter.ai/) 経由のモデル（DeepSeek V4.1 Flash）に使う API キー。未設定ならこのモデルは使えません
+- `OPENROUTER_API_KEY`：[OpenRouter](https://openrouter.ai/) 経由のモデル（DeepSeek V4.1 Flash）に使う API キー。未設定ならこのモデルは使えません。コードのアイテムの採点はこのモデルを使い、学生が提出したコードと問題文・採点基準が OpenRouter を通してモデルに送られます
 - `CLAUDE_API_KEY`：Claude（Claude Sonnet 5.5）に使う [Anthropic](https://platform.claude.com/) の API キー。未設定ならこのモデルは使えません
-- 使うモデルは `src/lib/ai-models.ts` に並べたものだけです。月の上限（USD）は提供元ごとに管理 > AI で設定します（保存するまでは OpenRouter が $3、Anthropic が $15）
+- 使うモデルは `src/lib/ai-models.ts` に並べたものだけです。月の上限（USD）は提供元ごとに管理 > AI で設定します（保存するまでは OpenRouter が $3、Anthropic が $15）。コードのアイテムの採点にかかった額も OpenRouter の使用量に数え、月の上限に達している間は、提出しても自動では採点しません
 - `AI_EMAIL_DOMAIN`：AI エージェントを使えるメールアドレスのドメイン（`@` より後ろの完全一致）。未設定なら `sist.ac.jp`
+- `SANDBOX_URL`：学生が書いたコードを実行する sandbox のコンテナ（下の「コードを実行する sandbox」）の接続先。未設定ならコードの実行は使えません。Docker Compose で動かす場合は自動で設定されます
 - `TRUST_PROXY`：リバースプロキシの後ろで動かす場合は `1` にしてください。`X-Forwarded-For` からクライアントの IP を取ってレート制限に使います（未設定だと全員がプロキシの IP として扱われます）
 - 画面共有は `/socket.io/` で WebSocket を使います。リバースプロキシでは WebSocket の Upgrade を通してください（nginx なら `proxy_http_version 1.1;` と `Upgrade` / `Connection` ヘッダーの転送）。通らない場合は HTTP のロングポーリングに切り替わって動きますが、遅延と負荷が増えます
-- 配信中の状態はプロセスのメモリに持つため、複数のプロセスやサーバーに分散させないでください
+- 配信中の状態と、コードの採点の順番待ちはプロセスのメモリに持つため、複数のプロセスやサーバーに分散させないでください。採点の途中で再起動すると、その提出は「採点できませんでした」になり、教師が採点し直せます
 - 実行時に必要なのは `dist/`・`migrations/`・`migrations-moodle/`（Moodle モードのとき）・`.env` と、`better-sqlite3` を入れた `node_modules` です（`npm ci --omit=dev` で入ります）。起動したディレクトリを基準に読み込みます
 - SQLite・セッション署名鍵・（ローカル保存時の）教材ファイルは、起動したディレクトリの `data/` に保存されます（変更はできません）。**このディレクトリをバックアップ対象にしてください**
 
@@ -156,8 +160,9 @@ MOODLE_MIGRATE_URL=https://moodle.example.ac.jp MOODLE_MIGRATE_TOKEN=<トーク�
   - 折りたたみ型トピック: セクションを開閉でき、開閉は Moodle の画面と同じく利用者ごとに記録されます。並べ方（最新の週を先頭に など）・現在のセクション・すべて開く/閉じる・1 つだけ開く・段組み・閉じたときの概要の表示の設定に従います（色やアイコンの設定は使いません）
 - STEP Learn にしかない機能（新規登録・パスワードの再設定・Markdown のページ・CLI）は使えません
 - 画面共有は、Moodle モードだけにある種類のアイテム（下）として追加できます。一覧や目次から開くと、新しいタブで画面共有の画面を開きます（Moodle の画面から開いたときも新しいタブで開きます）。視聴できるのはアイテムを開ける参加者、配信できるのはコースを編集できる人で、接続している間も確かめ直し、見られなくなった人の接続は切ります
+- コード（コードを書いて提出し、AI が採点するアイテム）も、Moodle モードだけにある種類のアイテム（下）として追加できます。機能は通常モードと同じで、一覧や目次から開くと、新しいタブでエディターの画面を開きます。提出の一覧に並ぶのは提出した学生だけです（参加者は Moodle にあるため）。書きかけのコード・提出・採点は `data/moodle-mode.db` に置き、Moodle の評定には反映しません。完全移行では引き継ぎません
 - Moodle モードだけにある種類のアイテム（`src/moodle-mode/extra-kinds.tsx` に定義する）は、中身を `data/moodle-mode.db` に保存し、Moodle には同じ位置に STEP Learn へ移る URL の活動（リンク先は `/m/<キー>`）を置きます。並び順・表示・アクセス制限・完了は Moodle の活動のものを使います。Moodle でコースをコピーしたときは、コピー先では開けません。完全移行では引き継ぎません
-- STEP Learn 側の DB は `data/moodle-mode.db`（ユーザーの写し・セッション・暗号化したトークンと、Moodle モードだけにある種類のアイテムの中身）で、`data/step-learn.db` は作りも開きもしません。完全移行のときに引き継ぐ必要はありません
+- STEP Learn 側の DB は `data/moodle-mode.db`（ユーザーの写し・セッション・暗号化したトークンと、Moodle モードだけにある種類のアイテムの中身、コードのアイテムの書きかけのコードと提出）で、`data/step-learn.db` は作りも開きもしません。完全移行のときに引き継ぐ必要はありません
 
 Moodle 側には、このリポジトリの `moodle/local_steplearn/` のプラグインを入れて設定します。手順は [moodle/README.md](moodle/README.md) を参照してください。
 
@@ -172,7 +177,8 @@ Moodle 側には、このリポジトリの `moodle/local_steplearn/` のプラ�
 - `src/moodle-mode/`・`migrations-moodle/`・`drizzle.moodle.config.ts`・`moodle/`
 - `src/index.tsx` のモードの切り替え（`./app` だけを読み込む形に戻す）と、`src/server.ts`・`vite.config.ts` の `config.moodle` の分岐
 - `src/lib/config.ts` の `moodle` / `moodleDatabasePath` / `moodleMigrate`、`src/lib/db.ts` の Moodle モードのガード、`src/components/style.tsx` の `moodle-mode.css`
-- `src/moodle/remote.ts` と `src/cli.ts` の `moodle:migrate`、`src/lib/forms.ts` の `extraItemFields` / `extraItem`、`src/client.ts` の `setKindOnly`
+- `src/moodle/remote.ts` と `src/cli.ts` の `moodle:migrate`、`src/lib/forms.ts` の `extraItemFields` / `extraItem` / `extraCode`、`src/client.ts` の `setKindOnly`
+- コードのアイテムを 2 つのモードで使い回すための分け方（`src/routes/code/handlers.tsx` の `CodeBackend`、`src/lib/code-store.ts` の `CodeStore`、`src/lib/code-grader.ts` の `createGrader`、`src/routes/code/views.tsx` の `CodePage`）は、通常モードの実装（`src/routes/code/backend.ts`・`src/lib/code-items.ts`・`src/lib/code-grading.ts`）だけになるので、まとめてかまいません
 - `package.json` の `moodle:migrate` / `db:generate:moodle` / `db:check:moodle`、CI の「Check Moodle mode migrations」、`Dockerfile` の `migrations-moodle`、`.dockerignore` の `moodle`
 
 ### Docker で動かす
@@ -188,6 +194,37 @@ docker compose up -d --build   # http://127.0.0.1:3000
   - Docker の公開ポートは ufw / firewalld の INPUT ルールを通りません。送信元をリバースプロキシに絞るには、iptables の `DOCKER-USER` チェーンかホストの外のファイアウォールで制限してください
   - 例：`iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 3000 ! -s <リバースプロキシの IP> -j DROP`
 - SQLite とローカル保存の教材ファイルは Docker ボリューム `step-learn_data` に保存されます。**このボリュームをバックアップ対象にしてください**
+- 一緒に起動する `sandbox` サービスは、学生が書いたコードを実行するコンテナです（下の「コードを実行する sandbox」）。ボリューム `step-learn_sandbox-socket` はアプリとの通信用のソケットを置くだけなので、バックアップは要りません
+
+### コードを実行する sandbox
+
+コードのアイテムで学生が書いた Python は、アプリとは別のコンテナ（`sandbox/`、Compose の `sandbox` サービス）で実行します（`SANDBOX_URL` が未設定のサーバーでは、コードのアイテムで Python を選べません）。HTML / CSS / JavaScript はサーバーでは実行せず、学生のブラウザの中の、STEP Learn とは別オリジンとして扱われる iframe（`sandbox` 属性）でプレビューします。`docker compose up` でアプリと一緒に起動し、アプリからは共有ボリュームの UNIX ドメインソケット（`SANDBOX_URL=unix:/run/sandbox/sandbox.sock`）で呼びます。
+
+sandbox のコンテナには、次の制限をかけています。
+
+- ネットワークにつながない（`network_mode: none`）。インターネットにも、アプリやホストのポートにも届きません
+- ルートファイルシステムは読み取り専用で、書き込めるのは実行ごとの作業ディレクトリ（16MB の tmpfs）だけ。秘密情報・環境変数・データのボリュームは置きません
+- ケーパビリティは、実行ごとに別の UID へ切り替えるための `SETUID` / `SETGID` 以外をすべて外し、`no-new-privileges` を付けます。コードを実行するプロセスは、どのケーパビリティも持たない一般ユーザーです
+- コンテナ全体でメモリ 512MB・CPU 1 コア・256 プロセスまで
+- 1 回の実行は、実時間 10 秒・CPU 時間 5 秒・メモリ 256MB・16 プロセス・出力 64KB（標準出力と標準エラー出力のそれぞれ）・ファイル 1 つ 8MB まで。超えたら止めます
+- 同時に実行できるのは 4 つまでで、それぞれ別の UID と作業ディレクトリで動かすので、ほかの人のコードや出力は読めません。空きがなければ 20 秒まで待ち、それでも空かなければ「混み合っています」と返します
+- 実行が終わるたびに、その UID のプロセスをすべて止め、作業ディレクトリを空にします。止められない・消せないときは sandbox を終了させ、Docker の再起動で作り直します
+
+同時に実行できる数は `compose.yaml` の `tmpfs` の行の数で決まります（8 まで）。増やすときは `mem_limit` も合わせて見直してください。
+
+コンテナはホストとカーネルを共有するので、カーネルの脆弱性を突かれた場合までは防げません。もう一段固くしたい場合は、サーバーに [gVisor](https://gvisor.dev/) を入れ、`SANDBOX_RUNTIME=runsc` を付けて起動すると、sandbox だけを gVisor で動かせます（gVisor での動作は未確認です。共有ボリュームにソケットを作るので、runsc の `--host-uds=create` が必要になるはずです）。
+
+Docker Compose を使わずに `npm start` で動かす場合は、下の開発用と同じくポートで待ち受ける形になりますが、この形では実行中のコードが外部と通信できます。本番では Docker Compose で動かしてください。
+
+開発サーバー（`npm run dev`）から使うときは、sandbox だけを起動し、`.env` に接続先を書きます。
+
+```sh
+docker compose -f sandbox/compose.dev.yaml up -d --build   # 127.0.0.1:8091 で待ち受ける
+```
+
+```sh
+SANDBOX_URL=http://127.0.0.1:8091
+```
 
 ### 自動デプロイ（GitHub Actions のセルフホストランナー）
 
@@ -232,11 +269,12 @@ src/server.ts        本番用 Node.js エントリ（静的ファイル配信�
 src/renderer.tsx     HTML の外枠
 src/client.ts        クライアント側の小さな拡張（再読み込みなしの画面遷移、トースト、確認ダイアログ、完了トグルなど）
 src/styles/base.css  デザイントークンと共通スタイル（ダークモード対応）。部品・画面ごとの CSS は各 .tsx の隣に置き、使うページでだけ読み込む
-src/lib/             設定・DB・認証・HTTP ヘルパー・Markdown・ストレージ・画像アップロード・コースの権限・AI（OpenRouter）
+src/lib/             設定・DB・認証・HTTP ヘルパー・Markdown・ストレージ・画像アップロード・コースの権限・AI（OpenRouter）・sandbox の呼び出し
 src/moodle/          Moodle のバックアップの展開・読み取り・取り込み（CLI の moodle:import）
 src/moodle-mode/     Moodle モード（MOODLE_URL を設定したときだけ使う。完全移行のあとは削除する）
 moodle/              Moodle モード用の Moodle プラグイン（local_steplearn）と検証用の Moodle（moodle/dev）
+sandbox/             学生が書いたコードを実行するコンテナ（server.py が要求を受け、jail.py が権限を落として実行する）
 src/components/      レイアウトと UI 部品
-src/routes/<ルート>/ auth / account / admin / dashboard / courses / content / participants / screen。
+src/routes/<ルート>/ auth / account / admin / dashboard / courses / content / participants / screen / code。
                      ルートごとに index.ts（ルーティング）・handlers.tsx（処理）・views.tsx（画面）・<ルート>.css に分ける
 ```
