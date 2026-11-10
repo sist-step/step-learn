@@ -69,6 +69,10 @@
   scrollbar-width: thin;
 }
 .pdf-thumbs[hidden] { display: none; }
+.pdf-viewer:not([data-thumbs-open]) .pdf-thumbs { translate: -100% 0; }
+/* 最初から transition を付けないのは、読み込み直後に開いた状態から始めるときまで一覧が滑り込んでくるため */
+.pdf-viewer[data-thumbs-motion] .pdf-thumbs { transition: translate 0.25s var(--ease); }
+.pdf-viewer[data-thumbs-motion] :is(.pdf-pages, .pdf-toolbar) { transition: left 0.25s var(--ease); }
 .pdf-thumb { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; margin-bottom: 14px; padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--muted); font: inherit; font-size: var(--fs-xs); font-variant-numeric: tabular-nums; cursor: pointer; }
 .pdf-thumb-page { position: relative; display: block; width: 100%; overflow: hidden; border-radius: 2px; background: var(--surface); box-shadow: var(--shadow-card); outline: 2px solid transparent; outline-offset: 3px; transition: outline-color 0.12s; }
 .pdf-thumb-page > canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
