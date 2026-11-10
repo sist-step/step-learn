@@ -60,6 +60,7 @@ jobs:
           MOODLE_URL: ${{ vars.MOODLE_URL }}
           MOODLE_EXCHANGE_TOKEN: ${{ secrets.MOODLE_EXCHANGE_TOKEN }}
           MOODLE_BACKCHANNEL_SECRET: ${{ secrets.MOODLE_BACKCHANNEL_SECRET }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           ENV_FILE="$RUNNER_TEMP/step-learn.env"
           echo "ENV_FILE=$ENV_FILE" >> "$GITHUB_ENV"
@@ -68,7 +69,8 @@ jobs:
           for name in SESSION_SECRET APP_ORIGIN TRUST_PROXY \
             R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET \
             SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS MAIL_FROM \
-            MOODLE_URL MOODLE_EXCHANGE_TOKEN MOODLE_BACKCHANNEL_SECRET; do
+            MOODLE_URL MOODLE_EXCHANGE_TOKEN MOODLE_BACKCHANNEL_SECRET \
+            OPENROUTER_API_KEY; do
             value="${!name}"
             [ -z "$value" ] && continue
             # 引用符なしやダブルクォートで書かないのは、Compose が値の中の $ を変数として展開してしまうため
