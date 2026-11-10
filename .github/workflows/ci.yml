@@ -38,6 +38,20 @@ jobs:
         run: docker compose build
       - name: Smoke test
         run: docker compose up -d --wait --wait-timeout 60
+      # sandbox のヘルスチェックだけで済ませないのは、アプリのコンテナのユーザーがソケットにつなげることまでは確かめられないため
+      - name: Run code in the sandbox
+        run: |
+          docker compose exec -T app node -e '
+            const req = require("node:http").request({ socketPath: "/run/sandbox/sandbox.sock", path: "/run", method: "POST" }, (res) => {
+              let body = ""
+              res.on("data", (chunk) => (body += chunk))
+              res.on("end", () => {
+                console.log(body)
+                process.exit(JSON.parse(body).stdout === "ok\n" ? 0 : 1)
+              })
+            })
+            req.end(JSON.stringify({ language: "python", code: "print(\"ok\")" }))
+          '
       - name: Show logs
         if: failure()
         run: docker compose logs
