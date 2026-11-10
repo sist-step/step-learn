@@ -18,7 +18,7 @@ const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
 // usage.cost だけに頼らないのは、cost のない応答を 0 として数えると、上限の計算から漏れるため。
 // 提供元ごとに料金が違うので、OpenRouter のモデル一覧に載っている額で見積もる
 const FALLBACK_PRICES: Record<OpenRouterModel, { prompt: number; completion: number }> = {
-  'deepseek/deepseek-v4.1-flash': { prompt: 0.051e-6, completion: 0.567e-6 },
+  'deepseek/deepseek-v4.1-flash-1017': { prompt: 0.006e-6, completion: 0.5e-6 },
 }
 
 type WireToolCall = { index?: number; id?: string; function?: { name?: string; arguments?: string } }
