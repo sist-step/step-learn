@@ -2,14 +2,17 @@ import { Hono, type Context } from 'hono'
 import { csrf } from 'hono/csrf'
 import { HTTPException } from 'hono/http-exception'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
+import { createMiddleware } from 'hono/factory'
 import { secureHeaders } from 'hono/secure-headers'
 import { config } from '../lib/config'
 import { flashMiddleware, limitBody, wantsJson } from '../lib/http'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE } from '../lib/storage'
 import { renderer } from '../renderer'
+import { createAiAdminHandlers } from '../routes/admin/ai'
 import { codeRoutes, createCodeHandlers } from '../routes/code/handlers'
+import { aiLedger, usageByUser } from './ai-usage'
 import { destroySession, requireAuth, session, type MoodleEnv } from './auth'
-import { MoodleError, isAccessDenied, isNotFound, isTokenError, isUnavailable } from './client'
+import { MoodleError, isAccessDenied, isNotFound, isTokenError, isUnavailable, moodleUrl } from './client'
 import { codeBackend } from './code'
 import { CODE_KIND } from './extra-kinds'
 import * as h from './handlers'
@@ -47,10 +50,12 @@ auth.get(
   '/account',
   h.toMoodle(() => '/user/edit.php'),
 )
-auth.get(
-  '/admin',
-  h.toMoodle((c) => (c.var.user!.role === 'admin' ? '/admin/search.php' : null)),
-)
+const adminOnly = createMiddleware<MoodleEnv>(async (c, next) => (c.var.user!.role === 'admin' ? next() : c.notFound()))
+const ai = createAiAdminHandlers({ ledger: aiLedger, usageByUser, moodleAdminUrl: moodleUrl('/admin/search.php') })
+// /admin を Moodle のサイト管理へ移さないのは、AI の上限と使用量は moodle-mode.db にあり、STEP Learn でしか管理できないため
+auth.get('/admin', adminOnly, (c) => c.redirect('/admin/ai'))
+auth.get('/admin/ai', adminOnly, ai.show)
+auth.post('/admin/ai', adminOnly, ai.update)
 auth.get('/courses', h.listCourses)
 auth.get('/courses/:id', h.showCourse)
 auth.get('/courses/:id/revision', h.revision)

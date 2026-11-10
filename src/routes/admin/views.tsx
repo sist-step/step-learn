@@ -8,7 +8,7 @@ import { Block, Card, Stat, Stats, Table } from '../../components/card'
 import { Styles } from '../../components/style'
 import { Alert, Avatar, EmptyState, PageHeader, Person, TabPanel, Tabs, formatDate, userMeta } from '../../components/ui'
 import { AI_MODEL_LABELS, AI_PROVIDER_LABELS, AI_PROVIDER_MODELS, isAiModel, type AiProvider } from '../../lib/ai-models'
-import type { AiOverview, AiUserUsage } from '../../lib/ai-usage'
+import type { AiOverview, AiUserUsage } from '../../lib/ai-ledger'
 import type { FieldErrors } from '../../lib/forms'
 import { ROLE_LABELS, type Role } from '../../lib/types'
 
@@ -24,13 +24,28 @@ const ROLE_OPTIONS = (['student', 'teacher', 'admin'] as Role[]).map((r) => ({ v
 
 const ROLE_ICONS: Record<Role, IconName> = { admin: 'shield', teacher: 'book', student: 'users' }
 
-const AdminShell = ({ tab, children }: { tab: Tab; children: Child }) => (
-  <AppShell>
-    <PageHeader title="管理" description="ユーザー・コース・AI の利用をまとめて管理します。" />
-    <Tabs label="管理メニュー" items={TABS.map((t) => ({ href: t.href, label: t.label, active: tab === t.tab }))} />
-    <TabPanel>{children}</TabPanel>
-  </AppShell>
-)
+/** moodleAdminUrl は Moodle モードのときの Moodle のサイト管理の URL。ユーザーとコースのタブを出さず、Moodle の画面への移動を置く */
+const AdminShell = ({ tab, moodleAdminUrl, children }: { tab: Tab; moodleAdminUrl?: string; children: Child }) =>
+  moodleAdminUrl ? (
+    <AppShell>
+      <PageHeader
+        title="管理"
+        description="AI の利用を管理します。ユーザーとコースは旧STEP Learn のサイト管理で管理します。"
+        actions={
+          <Button href={moodleAdminUrl} variant="ghost" icon="external" target="_blank" rel="noopener" data-no-prefetch>
+            旧STEP Learnのサイト管理
+          </Button>
+        }
+      />
+      {children}
+    </AppShell>
+  ) : (
+    <AppShell>
+      <PageHeader title="管理" description="ユーザー・コース・AI の利用をまとめて管理します。" />
+      <Tabs label="管理メニュー" items={TABS.map((t) => ({ href: t.href, label: t.label, active: tab === t.tab }))} />
+      <TabPanel>{children}</TabPanel>
+    </AppShell>
+  )
 
 // ---------------------------------------------------------------- ユーザー
 
@@ -240,13 +255,15 @@ export const AiPage = ({
   list,
   values,
   errors = {},
+  moodleAdminUrl,
 }: {
   overviews: AiOverview[]
   list: AiUserUsage[]
   values: Record<AiProvider, string>
   errors?: FieldErrors
+  moodleAdminUrl?: string
 }) => (
-  <AdminShell tab="ai">
+  <AdminShell tab="ai" moodleAdminUrl={moodleAdminUrl}>
     <Styles use={['/src/routes/admin/admin.css']} />
     {overviews.map((overview) => (
       <ProviderUsage overview={overview} />
