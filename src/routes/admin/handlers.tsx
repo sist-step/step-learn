@@ -1,14 +1,13 @@
 import { and, count, desc, eq, or } from 'drizzle-orm'
 import type { Context } from 'hono'
-import { AI_PROVIDERS, type AiProvider } from '../../lib/ai'
-import { aiOverview, setMonthlyLimits, usageByUser } from '../../lib/ai-usage'
+import { aiLedger, usageByUser } from '../../lib/ai-usage'
 import { teacherNames } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
-import { validate, type FieldErrors } from '../../lib/forms'
 import { field, intParam, readForm, redirectWith } from '../../lib/http'
 import { courses, enrollments, items, users } from '../../lib/schema'
 import { ROLE_LABELS, type AppEnv, type Role } from '../../lib/types'
-import { AiPage, CoursesPage, UsersPage, aiLimitField, type CourseRow, type UserRow } from './views'
+import { createAiAdminHandlers } from './ai'
+import { CoursesPage, UsersPage, type CourseRow, type UserRow } from './views'
 
 // ---------------------------------------------------------------- ユーザー
 
@@ -71,28 +70,4 @@ export async function listCourses(c: Context<AppEnv>) {
 
 // ---------------------------------------------------------------- AI
 
-const perProvider = <T,>(value: (provider: AiProvider) => T) =>
-  Object.fromEntries(AI_PROVIDERS.map((p) => [p, value(p)])) as Record<AiProvider, T>
-
-const renderAi = (c: Context<AppEnv>, form?: { values: Record<AiProvider, string>; errors: FieldErrors }) => {
-  const overviews = AI_PROVIDERS.map((p) => aiOverview(p))
-  const saved = Object.fromEntries(overviews.map((o) => [o.provider, String(o.monthlyLimit)])) as Record<AiProvider, string>
-  return c.render(<AiPage overviews={overviews} list={usageByUser()} values={form?.values ?? saved} errors={form?.errors} />, {
-    title: 'AI - 管理',
-  })
-}
-
-export async function showAi(c: Context<AppEnv>) {
-  return renderAi(c)
-}
-
-export async function updateAi(c: Context<AppEnv>) {
-  const form = await readForm(c)
-  const result = validate('aiSettings', form)
-  if (!result.ok) {
-    c.status(422)
-    return renderAi(c, { values: perProvider((p) => field(form, aiLimitField(p), 20)), errors: result.errors })
-  }
-  setMonthlyLimits(perProvider((p) => result.values[aiLimitField(p)]))
-  return redirectWith(c, '/admin/ai', '月の上限を保存しました。')
-}
+export const { show: showAi, update: updateAi } = createAiAdminHandlers({ ledger: aiLedger, usageByUser })

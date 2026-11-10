@@ -1,6 +1,7 @@
 // 通常モードと Moodle モードの両方が読み込むので、DB を開くモジュールを import しない
 import crypto from 'node:crypto'
-import { AiError, aiProvider, complete, isProviderEnabled, type AiMessage, type AiModel, type AiUsage } from './ai'
+import { AiError, aiProvider, complete, isProviderEnabled, type AiMessage, type AiModel } from './ai'
+import type { AiLedger } from './ai-ledger'
 import { CODE_FILES, type CodeFiles, type GradingStatus } from './code'
 import type { CodeSettings, GradingResult } from './code-store'
 import { SandboxError, runCode, sandboxEnabled, type RunResult } from './sandbox'
@@ -14,16 +15,6 @@ const MAX_FEEDBACK_LENGTH = 2000
 
 /** 採点に使うモデルの提供元の API キーが設定されている */
 export const gradingEnabled = isProviderEnabled(aiProvider(MODEL))
-
-/**
- * AI の月の上限と使用量の置き場所。通常モードは step-learn.db（lib/ai-usage.ts）。
- * 渡さなければ、上限を確かめず、使用量も記録しない（使用量の置き場所がまだない Moodle モード）
- */
-export type GradingBudget = {
-  /** 月の上限に達していないか */
-  available: (model: AiModel) => boolean
-  record: (model: AiModel, usage: AiUsage) => void
-}
 
 const section = (boundary: string, label: string, body: string) => `【${label}】\n${boundary}\n${body}\n${boundary}`
 
@@ -96,7 +87,7 @@ export function parseGrade(text: string, maxScore: number) {
   return { score: Math.min(maxScore, Math.max(0, Math.round(score))), feedback: feedback.trim().slice(0, MAX_FEEDBACK_LENGTH) }
 }
 
-async function gradeOne(input: GradingInput, budget?: GradingBudget): Promise<{ result: GradingResult; run: RunResult | null }> {
+async function gradeOne(input: GradingInput, ledger: AiLedger): Promise<{ result: GradingResult; run: RunResult | null }> {
   let run: RunResult | null = null
   if (input.language === 'python' && sandboxEnabled) {
     try {
@@ -108,7 +99,8 @@ async function gradeOne(input: GradingInput, budget?: GradingBudget): Promise<{ 
   }
   try {
     const reply = await complete({ model: MODEL, messages: buildGradingMessages(input, run), maxTokens: 1000, temperature: 0 })
-    budget?.record(MODEL, reply.usage)
+    // 提出した学生の使用量にしないのは、AI エージェントの今週の枠が利用者の人数で割って決まり、学生の人数だけ教師の枠が小さくなるため
+    ledger.recordUsage(null, MODEL, reply.usage)
     const parsed = parseGrade(reply.text, input.maxScore)
     if (parsed) return { result: { status: 'graded', ...parsed }, run }
     console.error('[grading] 採点結果を読み取れません', reply.stop, reply.text.slice(0, 300))
@@ -122,16 +114,17 @@ export type Grader = ReturnType<typeof createGrader>
 
 /**
  * 提出を順番に採点する仕組みを作る。提出の読み書きは、モードごとの DB に合わせて渡す。
- * load は採点する提出とアイテムの設定を返し（なくなっていれば null）、save は採点の結果と、採点のときに実行した結果を書き込む
+ * load は採点する提出とアイテムの設定を返し（なくなっていれば null）、save は採点の結果と、採点のときに実行した結果を書き込む。
+ * ledger は、そのモードの DB に置く AI の月の上限と使用量
  */
 export function createGrader({
   load,
   save,
-  budget,
+  ledger,
 }: {
   load: (submissionId: number) => GradingInput | null
   save: (submissionId: number, result: GradingResult, run: RunResult | null) => void
-  budget?: GradingBudget
+  ledger: AiLedger
 }) {
   const waiting: number[] = []
   const grading = new Set<number>()
@@ -139,7 +132,7 @@ export function createGrader({
   async function grade(id: number) {
     const input = load(id)
     if (!input) return
-    const { result, run } = await gradeOne(input, budget)
+    const { result, run } = await gradeOne(input, ledger)
     save(id, result, run)
   }
 
@@ -157,7 +150,7 @@ export function createGrader({
 
   return {
     /** いま提出を採点に回せるか。AI が設定されていないときと、月の上限に達しているときは回せない */
-    canGrade: () => gradingEnabled && (budget?.available(MODEL) ?? true),
+    canGrade: () => gradingEnabled && ledger.withinMonthlyLimit(aiProvider(MODEL)),
     enqueue(submissionId: number) {
       grading.add(submissionId)
       waiting.push(submissionId)

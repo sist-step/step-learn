@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { index, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import type { CodeFiles, GradingStatus } from '../lib/code'
 import type { RunResult } from '../lib/sandbox'
 
@@ -103,3 +103,29 @@ export const codeSubmissions = sqliteTable(
   },
   (t) => [index('code_submissions_key_user').on(t.key, t.userId, t.id)],
 )
+
+/**
+ * AI の呼び出しごとの使用量。月の上限と週の枠の計算（lib/ai-ledger.ts）に使う。完全移行では引き継がない。
+ * 通常モードの ai_usage（lib/schema.ts）と同じ形にしておく（ai-ledger.ts が両方のテーブルを同じ型で受け取る）
+ */
+export const aiUsage = sqliteTable(
+  'ai_usage',
+  {
+    id: integer('id').primaryKey(),
+    // cascade にしないのは、ユーザーを消すとその月の消費が減り、月の上限に余裕ができてしまうため
+    userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+    model: text('model').notNull(),
+    promptTokens: integer('prompt_tokens').notNull().default(0),
+    completionTokens: integer('completion_tokens').notNull().default(0),
+    // 整数（セント）にしないのは、1 回の呼び出しが 1 セントに満たず、丸めると 0 になるため
+    cost: real('cost').notNull().default(0),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [index('ai_usage_created').on(t.createdAt), index('ai_usage_user').on(t.userId, t.createdAt)],
+)
+
+/** アプリ全体の設定（AI の月の上限など）。通常モードの app_settings と同じ形。完全移行では引き継がない */
+export const appSettings = sqliteTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+})
