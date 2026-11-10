@@ -82,6 +82,7 @@ function setup(root: HTMLElement) {
   function setPresenting(presenting: boolean) {
     if (startBtn) startBtn.hidden = presenting || !canCapture
     if (stopBtn) stopBtn.hidden = !presenting
+    if (statsText) statsText.hidden = !presenting
   }
 
   const connect = (mode: ShareMode): ShareSocket => io({ auth: { courseId, itemId, mode } satisfies ShareAuth, forceNew: true })
@@ -125,9 +126,6 @@ function setup(root: HTMLElement) {
           ctx.drawImage(frame, 0, 0)
           frame.close()
           decoded = true
-          stats.frames++
-          stats.width = canvas.width
-          stats.height = canvas.height
           if (canvas.hidden) showMedia(canvas)
         },
         error: () => {
@@ -152,7 +150,6 @@ function setup(root: HTMLElement) {
       if (startBtn) startBtn.disabled = false
       closeDecoder()
       decoderConfig = null
-      stats.width = 0
       showMessage('現在、画面共有は行われていません。始まると自動で表示されます。')
       setState('待機中', false)
     })
@@ -169,7 +166,6 @@ function setup(root: HTMLElement) {
       if (waitingKey && !meta.key) return
       if (decoder.decodeQueueSize > MAX_DECODE_QUEUE) return resync()
       waitingKey = false
-      stats.bytes += data.byteLength
       decoder.decode(new EncodedVideoChunk({ type: meta.key ? 'key' : 'delta', timestamp: meta.timestamp, data }))
     })
     socket.on('connect_error', () => {
@@ -179,7 +175,6 @@ function setup(root: HTMLElement) {
     socket.on('revoked', () => {
       if (socket === viewer) viewer = null
       closeDecoder()
-      stats.width = 0
       showMessage('この画面共有を表示できなくなりました。ページを再読み込みしてください。')
       setState('終了', false)
     })
