@@ -89,7 +89,10 @@ export default defineConfig(({ command }) => ({
   },
   // 依存もまとめて 1 ファイルにバンドルする。better-sqlite3 だけはネイティブアドオン（.node）を
   // 実行時に読み込むためバンドルできず、本番でも node_modules に置く
-  // 開発時に socket.io もバンドルしないのは、Vite の SSR モジュールランナーが CommonJS をそのまま評価できないため
-  // （本番ビルドでは rolldown が変換するのでバンドルできる）
-  ssr: { noExternal: true, external: command === 'serve' ? ['better-sqlite3', 'socket.io'] : ['better-sqlite3'] },
+  // 開発時に socket.io と @anthropic-ai/sdk もバンドルしないのは、Vite の SSR モジュールランナーが CommonJS
+  // （SDK は依存の standardwebhooks）をそのまま評価できないため（本番ビルドでは rolldown が変換するのでバンドルできる）
+  ssr: {
+    noExternal: true,
+    external: command === 'serve' ? ['better-sqlite3', 'socket.io', '@anthropic-ai/sdk'] : ['better-sqlite3'],
+  },
 }))
