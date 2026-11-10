@@ -244,6 +244,17 @@ export const extraItemFields = {
 
 const extraItem = z.object(extraItemFields)
 
+/** Moodle モードのコードのアイテム。starter_set は、最初のコードの欄を出している画面（編集画面）から送られたときに 1 になる */
+const extraCode = z.object({
+  ...extraItemFields,
+  ...codeFields,
+  body: text('問題文', 100_000),
+  language: choice(CODE_LANGUAGES, 'web'),
+  starter_set: flag(),
+  criteria: text('採点基準', 5000),
+  max_score: points('満点', { min: 1, max: MAX_MAX_SCORE }),
+})
+
 const image = z.object({ image: file('画像を選択してください。') })
 
 export const FORMS = {
@@ -262,6 +273,7 @@ export const FORMS = {
   code,
   codeReview,
   extraItem,
+  extraCode,
   image,
 }
 

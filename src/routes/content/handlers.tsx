@@ -11,8 +11,9 @@ import {
   visibleItem,
 } from '../../lib/courses'
 import { DEFAULT_MAX_SCORE, DEFAULT_STARTER, MAX_CODE_LENGTH, MAX_STDIN_LENGTH } from '../../lib/code'
-import { gradingEnabled, gradingStatusOf } from '../../lib/code-grading'
-import { availableCodeLanguages, getCodeItem, latestSubmission, updateCodeItem } from '../../lib/code-items'
+import { gradingEnabled } from '../../lib/code-grader'
+import { grader } from '../../lib/code-grading'
+import { availableCodeLanguages, codeStore, getCodeItem, updateCodeItem } from '../../lib/code-items'
 import { db } from '../../lib/db'
 import { completionError, firstError, isFile, validate, type FieldErrors } from '../../lib/forms'
 import { field, fileField, intParam, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
@@ -408,11 +409,11 @@ export async function showItem(c: Context<AppEnv>) {
   const next = ordered[idx + 1]
   const section = sectionList.find((s) => s.id === item.sectionId)
   const codeItem = item.type === 'code' ? getCodeItem(iid) : undefined
-  const submitted = codeItem && access.role === 'student' ? latestSubmission(iid, userId) : undefined
+  const submitted = codeItem && access.role === 'student' ? codeStore(id, iid).latestSubmission(userId) : undefined
   const code = codeItem && {
     language: codeItem.language,
     canRun: sandboxEnabled,
-    grade: submitted ? { ...submitted, status: gradingStatusOf(submitted), maxScore: codeItem.maxScore } : null,
+    grade: submitted ? { ...submitted, status: grader.statusOf(submitted), maxScore: codeItem.maxScore } : null,
   }
   const textPreview =
     item.type === 'file' && item.fileKey && item.fileSize && previewKind(item.fileType ?? '', item.fileName ?? '') === 'text'

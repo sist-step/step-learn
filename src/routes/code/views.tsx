@@ -1,54 +1,75 @@
 import { Button } from '../../components/button'
 import { Card, Stat, Stats, Table } from '../../components/card'
+import { CodeBarActions, CodeGrade, CodeWorkspace, type GradeView } from '../../components/code'
+import { ItemBar } from '../../components/course'
 import { TextAreaField, TextField, validateWith } from '../../components/form'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
 import { Alert, Avatar, Breadcrumbs, Chip, EmptyState, PageHeader, Person, formatDateTime, userMeta } from '../../components/ui'
-import {
-  CODE_FILES,
-  GRADING_STATUS_LABELS,
-  buildWebDocument,
-  finalScore,
-  type CodeFiles,
-  type CodeLanguage,
-  type GradingStatus,
-} from '../../lib/code'
+import { CODE_FILES, GRADING_STATUS_LABELS, buildWebDocument, finalScore, type CodeLanguage, type GradingStatus } from '../../lib/code'
+import type { Student, StudentRow, Submission, SubmissionSummary } from '../../lib/code-store'
 import type { CourseAccess } from '../../lib/courses'
 import type { RunResult } from '../../lib/sandbox'
 
-export type Student = { id: number; name: string; username: string | null; email: string }
-
-/** 提出の一覧に出す項目。status は、画面に出す採点の状態（lib/code-grading.ts の gradingStatusOf） */
-export type SubmissionSummary = {
-  id: number
-  status: GradingStatus
-  score: number | null
-  teacherScore: number | null
-  createdAt: number
-}
-
-export type Submission = SubmissionSummary & {
-  files: CodeFiles
-  feedback: string
-  output: RunResult | null
-  teacherComment: string
-}
-
-export type StudentRow = { student: Student; count: number; latest: SubmissionSummary | null }
-
 type CodeTarget = { id: number; title: string; language: CodeLanguage; maxScore: number }
-
-const itemUrl = (access: CourseAccess, item: CodeTarget) => `/courses/${access.course.id}/items/${item.id}`
 
 export const submissionsUrl = (courseId: number, itemId: number, userId?: number, submissionId?: number) =>
   `/courses/${courseId}/items/${itemId}/code/submissions${userId ? `/${userId}` : ''}${submissionId ? `?submission=${submissionId}` : ''}`
 
-const crumbs = (access: CourseAccess, item: CodeTarget, student?: Student) => [
+const crumbs = (access: CourseAccess, item: CodeTarget, pageUrl: string, student?: Student) => [
   { href: '/courses', label: 'コース一覧' },
   { href: `/courses/${access.course.id}`, label: access.course.title },
-  { href: itemUrl(access, item), label: item.title },
+  { href: pageUrl, label: item.title },
   ...(student ? [{ href: submissionsUrl(access.course.id, item.id), label: '提出' }] : []),
 ]
+
+/** エディターだけの画面。Moodle モードのように、アイテムの画面にエディターを組み込まないときに使う */
+export const CodePage = ({
+  access,
+  item,
+  body,
+  canRun,
+  grade,
+}: {
+  access: CourseAccess
+  item: CodeTarget
+  body: string
+  canRun: boolean
+  /** 見ている学生のいちばん新しい提出の採点 */
+  grade: GradeView | null
+}) => {
+  const itemUrl = `/courses/${access.course.id}/items/${item.id}`
+  const base = `${itemUrl}/code`
+  return (
+    <AppShell
+      tone={access.course.color}
+      topbar={
+        <ItemBar
+          type="code"
+          crumbs={[
+            { href: '/courses', label: 'コース一覧' },
+            { href: `/courses/${access.course.id}`, label: access.course.title },
+          ]}
+          title={item.title}
+        >
+          {access.canManage && (
+            <Button href={`${itemUrl}/edit`} variant="ghost" size="sm" icon="pencil" aria-label="編集">
+              <span class="hide-sm">編集</span>
+            </Button>
+          )}
+          <CodeBarActions base={base} canManage={access.canManage} isStudent={access.role === 'student'} grade={grade} />
+        </ItemBar>
+      }
+    >
+      <CodeWorkspace base={base} language={item.language} body={body} canRun={canRun} />
+      {grade && (
+        <div class="code-below">
+          <CodeGrade grade={grade} pollUrl={`${base}/grading`} />
+        </div>
+      )}
+    </AppShell>
+  )
+}
 
 const StatusChip = ({ status }: { status: GradingStatus }) =>
   status === 'pending' ? (
@@ -67,19 +88,30 @@ const Score = ({ value, max }: { value: number | null; max: number }) =>
     </span>
   )
 
-export const SubmissionsPage = ({ access, item, rows }: { access: CourseAccess; item: CodeTarget; rows: StudentRow[] }) => {
+export const SubmissionsPage = ({
+  access,
+  item,
+  pageUrl,
+  rows,
+}: {
+  access: CourseAccess
+  item: CodeTarget
+  /** エディターのある画面（戻る先） */
+  pageUrl: string
+  rows: StudentRow[]
+}) => {
   const submitted = rows.filter((r) => r.latest)
   const scores = submitted.map((r) => finalScore(r.latest!)).filter((s): s is number => s !== null)
   const average = scores.length ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : null
   return (
     <AppShell tone={access.course.color}>
       <Styles use={['/src/routes/code/code.css']} />
-      <Breadcrumbs items={crumbs(access, item)} />
+      <Breadcrumbs items={crumbs(access, item, pageUrl)} />
       <PageHeader
         title="提出"
         description="学生ごとに、いちばん新しい提出を表示しています。"
         actions={
-          <Button href={itemUrl(access, item)} variant="ghost" icon="chevronLeft">
+          <Button href={pageUrl} variant="ghost" icon="chevronLeft">
             アイテムへ戻る
           </Button>
         }
@@ -90,7 +122,7 @@ export const SubmissionsPage = ({ access, item, rows }: { access: CourseAccess; 
         <Stat label="平均点" value={average === null ? '—' : String(average)} />
       </Stats>
       {rows.length === 0 ? (
-        <EmptyState icon="users" title="学生がいません" text="コースに学生を追加すると、ここに提出が並びます。" />
+        <EmptyState icon="users" title="まだ提出がありません" text="学生が提出すると、ここに並びます。" />
       ) : (
         <Table
           columns={[
@@ -162,6 +194,7 @@ const RUN_STATUS_LABELS: Record<RunResult['status'], string> = {
 export const SubmissionPage = ({
   access,
   item,
+  pageUrl,
   student,
   submission,
   history,
@@ -169,6 +202,7 @@ export const SubmissionPage = ({
 }: {
   access: CourseAccess
   item: CodeTarget
+  pageUrl: string
   student: Student
   submission: Submission
   history: SubmissionSummary[]
@@ -179,7 +213,7 @@ export const SubmissionPage = ({
   return (
     <AppShell tone={access.course.color}>
       <Styles use={['/src/routes/code/code.css']} />
-      <Breadcrumbs items={crumbs(access, item, student)} />
+      <Breadcrumbs items={crumbs(access, item, pageUrl, student)} />
       <PageHeader
         title={`${student.name} さんの提出`}
         description={`${formatDateTime(submission.createdAt)} に提出${history.length > 1 ? `（${history.length} 回のうち ${history.length - history.findIndex((h) => h.id === submission.id)} 回目）` : ''}`}

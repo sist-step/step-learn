@@ -153,6 +153,9 @@ details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
 }
 .code-output pre.is-error { border-color: color-mix(in srgb, var(--danger) 40%, var(--card-border)); color: var(--danger-text); }
 
+/* ===== エディターだけの画面で、エディターの下に置くもの（routes/code/views.tsx の CodePage） */
+.code-below { max-width: 800px; margin: 40px auto 0; padding: 0 32px 64px; }
+
 /* ===== 提出と採点の結果（CodeGrade） */
 .code-grade { margin-bottom: 24px; scroll-margin-top: calc(var(--topbar-h) + 16px); }
 .code-grade-score { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 0 0 12px; }
@@ -172,6 +175,7 @@ details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
 @media (max-width: 900px) {
   .code-stage { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 0; }
   .code-stage + .reader { margin-top: 28px; padding: 0 16px; }
+  .code-below { margin-top: 28px; padding: 0 16px 48px; }
   .code-task, .code-console { max-height: none; }
   .code-task > summary, .code-console > summary { position: static; }
   .code-pane { flex: none; height: 60dvh; min-height: 320px; }
