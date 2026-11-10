@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, customType, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { check, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { CODE_LANGUAGES, GRADING_STATUSES, type CodeFiles } from './code'
 import type { RunResult } from './sandbox'
 
@@ -181,6 +181,28 @@ export const completions = sqliteTable(
     index('completions_item').on(t.itemId),
   ],
 )
+
+export const aiUsage = sqliteTable(
+  'ai_usage',
+  {
+    id: integer('id').primaryKey(),
+    // cascade にしないのは、ユーザーを消すとその月の消費が減り、月の上限に余裕ができてしまうため
+    userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+    model: text('model').notNull(),
+    promptTokens: integer('prompt_tokens').notNull().default(0),
+    completionTokens: integer('completion_tokens').notNull().default(0),
+    // 整数（セント）にしないのは、1 回の呼び出しが 1 セントに満たず、丸めると 0 になるため
+    cost: real('cost').notNull().default(0),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [index('ai_usage_created').on(t.createdAt), index('ai_usage_user').on(t.userId, t.createdAt)],
+)
+
+/** 管理画面で変える、アプリ全体の設定（端末ごとの設定は lib/settings.ts） */
+export const appSettings = sqliteTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+})
 
 /** コード採点のアイテム（items.type が code）の設定 */
 export const codeItems = sqliteTable(

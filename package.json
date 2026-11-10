@@ -20,6 +20,7 @@
     "worktree:setup": "node scripts/worktree.ts setup"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.7.0",
     "@hono/node-server": "^2.1.5",
     "aws4fetch": "^1.0.20",
     "better-sqlite3": "^13.0.3",

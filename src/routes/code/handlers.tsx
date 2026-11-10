@@ -127,9 +127,10 @@ export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
     const wait = submitLimit.retryAfter(key)
     if (wait) return redirectWith(c, page, `続けて提出できません。${wait} 秒ほど待ってから、もう一度お試しください。`, 'error')
     submitLimit.hit(key)
-    const id = store.submit(userId, input.files, input.stdin, gradingEnabled ? 'pending' : 'none')
-    if (gradingEnabled) grader.enqueue(id)
-    return redirectWith(c, page, gradingEnabled ? '提出しました。採点が終わると、結果が出ます。' : '提出しました。')
+    const graded = grader.canGrade()
+    const id = store.submit(userId, input.files, input.stdin, graded ? 'pending' : 'none')
+    if (graded) grader.enqueue(id)
+    return redirectWith(c, page, graded ? '提出しました。採点が終わると、結果が出ます。' : '提出しました。')
   }
 
   async function reset(c: C) {
@@ -247,6 +248,7 @@ export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
     if (!target) return c.notFound()
     const url = submissionsUrl(courseId, itemId, student.id, target.id)
     if (target.status === 'pending') return redirectWith(c, url, 'すでに採点しています。', 'info')
+    if (!grader.canGrade()) return redirectWith(c, url, 'AI の今月の上限に達しているため、採点できません。', 'error')
     store.setStatus(target.id, 'pending')
     grader.enqueue(target.id)
     return redirectWith(c, url, 'AI が採点しています。少し待ってから、ページを読み込み直してください。', 'info')

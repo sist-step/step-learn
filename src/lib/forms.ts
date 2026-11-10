@@ -257,6 +257,27 @@ const extraCode = z.object({
 
 const image = z.object({ image: file('画像を選択してください。') })
 
+const usd = (label: string, max: number) =>
+  z.pipe(
+    z.pipe(
+      text(label, 20, { required: true }),
+      z
+        .string()
+        .check(
+          rule((s: string) => (/^\d+(\.\d{1,2})?$/.test(s) ? null : `${label}は 0 以上の数値（小数第 2 位まで）で入力してください。`)),
+        ),
+    ),
+    z.pipe(
+      z.transform((s: string) => Number(s)),
+      z.number().check(z.maximum(max, `${label}は ${max} 以下で入力してください。`)),
+    ),
+  )
+
+const aiSettings = z.object({
+  openrouter_limit: usd('OpenRouter の月の上限', 10_000),
+  anthropic_limit: usd('Anthropic の月の上限', 10_000),
+})
+
 export const FORMS = {
   login,
   register,
@@ -275,6 +296,7 @@ export const FORMS = {
   extraItem,
   extraCode,
   image,
+  aiSettings,
 }
 
 export type FormName = keyof typeof FORMS
