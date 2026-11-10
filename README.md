@@ -36,7 +36,7 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
 | 速さ | SSR（hono/jsx）＋ 小さなクライアント JS。リンクとフォーム送信を fetch に置き換え、ホバー時の先読みと View Transitions で再読み込みなしに遷移する（SPA）。JavaScript は必須で、無効なブラウザには有効化を求める案内だけを表示する |
 | DB | `better-sqlite3`（WAL モード）＋ Drizzle ORM。DB サーバーは要らない。テーブル定義は `src/lib/schema.ts` で、マイグレーションは drizzle-kit で生成する。クエリも Drizzle のクエリビルダーで書き、結果に型が付く |
 | コスト | 必要なのは Node.js が動くサーバー 1 台だけ。R2 を使う場合、ダウンロードは署名付き URL で R2 から直接配信されるので、サーバーの帯域を使わない（R2 は転送料無料） |
-| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）・`nodemailer`（確認メールの SMTP 送信）・`better-sqlite3`・`drizzle-orm`・`socket.io`（画面共有の中継）・`zod`（入力の検証。同じ規則をブラウザでも使うので、ブラウザ側は軽量版の `zod/mini`）だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる。ブラウザ側のライブラリは入力の検証の `zod/mini` と、Markdown エディターの CodeMirror、ログイン画面の 3D アニメーションの three.js、PDF ビューアーの pdf.js だけ。CodeMirror はエディターのある画面でだけ（HTML / CSS / JavaScript / Python の文法は、コードのアイテムとその編集画面でだけ）、three.js はログイン前の画面でだけ、pdf.js は PDF のアイテムをビューアーで開いたときだけ読み込む |
+| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）・`nodemailer`（確認メールの SMTP 送信）・`better-sqlite3`・`drizzle-orm`・`socket.io`（画面共有の中継）・`zod`（入力の検証。同じ規則をブラウザでも使うので、ブラウザ側は軽量版の `zod/mini`）・`@anthropic-ai/sdk`（Claude の呼び出し）だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる。ブラウザ側のライブラリは入力の検証の `zod/mini` と、Markdown エディターの CodeMirror、ログイン画面の 3D アニメーションの three.js、PDF ビューアーの pdf.js だけ。CodeMirror はエディターのある画面でだけ（HTML / CSS / JavaScript / Python の文法は、コードのアイテムとその編集画面でだけ）、three.js はログイン前の画面でだけ、pdf.js は PDF のアイテムをビューアーで開いたときだけ読み込む |
 | セキュリティ | PBKDF2（60 万回、ログイン時に旧設定のハッシュを再計算）、推測されやすいパスワードの拒否、ログイン失敗と確認メール・再設定メール送信のレート制限、登録画面と再設定画面からメールアドレスの登録有無がわからない設計、セッション Cookie は HMAC-SHA256 で署名しトークンは SHA-256 で保存、CSRF 対策は Origin 検証と SameSite=Lax、ファイルは権限を確認したうえで配信（PDF と画像以外は添付として返す） |
 
 ## 開発
@@ -80,7 +80,10 @@ npm start            # = node dist/server/index.js
 - `APP_ORIGIN`：nginx や Caddy などのリバースプロキシの後ろで動かす場合は、公開 URL（例 `https://lms.example.com`）を必ず設定してください
 - `SESSION_SECRET`：セッション Cookie の署名鍵（32 文字以上）。未設定なら `data/session-secret` を自動生成して使います。変更すると全員がログアウトされます
 - `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM`：確認メールの送信に使う SMTP サーバー。`SMTP_HOST` を設定する場合は `MAIL_FROM` と `APP_ORIGIN` も必須です
-- `OPENROUTER_API_KEY`：AI の機能（コードのアイテムの採点）に使う [OpenRouter](https://openrouter.ai/) の API キー。未設定なら AI の機能は使えません。設定すると、学生が提出したコードと問題文・採点基準が OpenRouter を通して AI のモデルに送られます。使うモデルは `src/lib/ai.ts` の `AI_MODELS` に並べたものだけです
+- `OPENROUTER_API_KEY`：[OpenRouter](https://openrouter.ai/) 経由のモデル（DeepSeek V4.1 Flash）に使う API キー。未設定ならこのモデルは使えません。コードのアイテムの採点はこのモデルを使い、学生が提出したコードと問題文・採点基準が OpenRouter を通してモデルに送られます
+- `CLAUDE_API_KEY`：Claude（Claude Sonnet 5.5）に使う [Anthropic](https://platform.claude.com/) の API キー。未設定ならこのモデルは使えません
+- 使うモデルは `src/lib/ai-models.ts` に並べたものだけです。月の上限（USD）は提供元ごとに管理 > AI で設定します（保存するまでは OpenRouter が $3、Anthropic が $15）。コードのアイテムの採点にかかった額も OpenRouter の使用量に数え、月の上限に達している間は、提出しても自動では採点しません
+- `AI_EMAIL_DOMAIN`：AI エージェントを使えるメールアドレスのドメイン（`@` より後ろの完全一致）。未設定なら `sist.ac.jp`
 - `SANDBOX_URL`：学生が書いたコードを実行する sandbox のコンテナ（下の「コードを実行する sandbox」）の接続先。未設定ならコードの実行は使えません。Docker Compose で動かす場合は自動で設定されます
 - `TRUST_PROXY`：リバースプロキシの後ろで動かす場合は `1` にしてください。`X-Forwarded-For` からクライアントの IP を取ってレート制限に使います（未設定だと全員がプロキシの IP として扱われます）
 - 画面共有は `/socket.io/` で WebSocket を使います。リバースプロキシでは WebSocket の Upgrade を通してください（nginx なら `proxy_http_version 1.1;` と `Upgrade` / `Connection` ヘッダーの転送）。通らない場合は HTTP のロングポーリングに切り替わって動きますが、遅延と負荷が増えます
@@ -239,8 +242,8 @@ CI はチェックだけを行い、デプロイはしません。Actions の画
 
 1. Docker（Compose v2.24 以上）を入れ、ラベル `self-hosted` / `linux` と、上の表のラベル（`production` か `beta`）を付けたランナーを登録する（ランナーのユーザーが `docker` を実行できること）
 2. GitHub の Environment（`production` / `beta`）に設定値を登録する。デプロイのたびに、ここから `.env` をランナーの一時ディレクトリに書き出してコンテナに渡し、終わったら消します
-   - Secrets：`SESSION_SECRET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `SMTP_PASS` / `MOODLE_EXCHANGE_TOKEN` / `MOODLE_BACKCHANNEL_SECRET` / `OPENROUTER_API_KEY`
-   - Variables：`APP_ORIGIN` / `TRUST_PROXY` / `R2_ACCOUNT_ID` / `R2_BUCKET` / `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `MAIL_FROM` / `MOODLE_URL`
+   - Secrets：`SESSION_SECRET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `SMTP_PASS` / `MOODLE_EXCHANGE_TOKEN` / `MOODLE_BACKCHANNEL_SECRET` / `OPENROUTER_API_KEY` / `CLAUDE_API_KEY`
+   - Variables：`APP_ORIGIN` / `TRUST_PROXY` / `R2_ACCOUNT_ID` / `R2_BUCKET` / `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `MAIL_FROM` / `MOODLE_URL` / `AI_EMAIL_DOMAIN`
    - 使わない項目は登録しなくてかまいません。値に `'` と改行は使えません
    - Moodle モードで動かすサーバーの Environment にだけ `MOODLE_URL` などを登録します
 3. ホスト側のポートを変える場合は変数 `DEPLOY_HOST_PORT` を、公開するアドレスを変える場合は変数 `DEPLOY_HOST_BIND` を、それぞれの Environment に設定する（両方のサーバーで同じ値ならリポジトリに設定してもかまいません）。2 つのランナーが同じホストにある場合は、`DEPLOY_HOST_PORT` を別々にしてください

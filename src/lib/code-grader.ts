@@ -1,17 +1,29 @@
 // 通常モードと Moodle モードの両方が読み込むので、DB を開くモジュールを import しない
 import crypto from 'node:crypto'
-import { AI_MODELS, AiError, aiEnabled, generateText, type AiMessage } from './ai'
+import { AiError, aiProvider, complete, isProviderEnabled, type AiMessage, type AiModel, type AiUsage } from './ai'
 import { CODE_FILES, type CodeFiles, type GradingStatus } from './code'
 import type { CodeSettings, GradingResult } from './code-store'
 import { SandboxError, runCode, sandboxEnabled, type RunResult } from './sandbox'
 
-const MODEL = AI_MODELS[0]
+// 学生の提出のたびに呼ぶので、安いモデルにする
+const MODEL: AiModel = 'deepseek/deepseek-v4.1-flash'
 // 提出が重なったときに一度に流さないのは、AI の同時呼び出しの上限と、4 つしか同時に動かせない sandbox を、採点だけで使い切らないため
 const CONCURRENCY = 2
 const MAX_OUTPUT_LENGTH = 4000
 const MAX_FEEDBACK_LENGTH = 2000
 
-export const gradingEnabled = aiEnabled
+/** 採点に使うモデルの提供元の API キーが設定されている */
+export const gradingEnabled = isProviderEnabled(aiProvider(MODEL))
+
+/**
+ * AI の月の上限と使用量の置き場所。通常モードは step-learn.db（lib/ai-usage.ts）。
+ * 渡さなければ、上限を確かめず、使用量も記録しない（使用量の置き場所がまだない Moodle モード）
+ */
+export type GradingBudget = {
+  /** 月の上限に達していないか */
+  available: (model: AiModel) => boolean
+  record: (model: AiModel, usage: AiUsage) => void
+}
 
 const section = (boundary: string, label: string, body: string) => `【${label}】\n${boundary}\n${body}\n${boundary}`
 
@@ -84,7 +96,7 @@ export function parseGrade(text: string, maxScore: number) {
   return { score: Math.min(maxScore, Math.max(0, Math.round(score))), feedback: feedback.trim().slice(0, MAX_FEEDBACK_LENGTH) }
 }
 
-async function gradeOne(input: GradingInput): Promise<{ result: GradingResult; run: RunResult | null }> {
+async function gradeOne(input: GradingInput, budget?: GradingBudget): Promise<{ result: GradingResult; run: RunResult | null }> {
   let run: RunResult | null = null
   if (input.language === 'python' && sandboxEnabled) {
     try {
@@ -95,10 +107,11 @@ async function gradeOne(input: GradingInput): Promise<{ result: GradingResult; r
     }
   }
   try {
-    const text = await generateText({ model: MODEL, messages: buildGradingMessages(input, run), maxTokens: 1000, temperature: 0 })
-    const parsed = parseGrade(text, input.maxScore)
+    const reply = await complete({ model: MODEL, messages: buildGradingMessages(input, run), maxTokens: 1000, temperature: 0 })
+    budget?.record(MODEL, reply.usage)
+    const parsed = parseGrade(reply.text, input.maxScore)
     if (parsed) return { result: { status: 'graded', ...parsed }, run }
-    console.error('[grading] 採点結果を読み取れません', text.slice(0, 300))
+    console.error('[grading] 採点結果を読み取れません', reply.stop, reply.text.slice(0, 300))
   } catch (e) {
     if (!(e instanceof AiError)) console.error('[grading]', e)
   }
@@ -114,9 +127,11 @@ export type Grader = ReturnType<typeof createGrader>
 export function createGrader({
   load,
   save,
+  budget,
 }: {
   load: (submissionId: number) => GradingInput | null
   save: (submissionId: number, result: GradingResult, run: RunResult | null) => void
+  budget?: GradingBudget
 }) {
   const waiting: number[] = []
   const grading = new Set<number>()
@@ -124,7 +139,7 @@ export function createGrader({
   async function grade(id: number) {
     const input = load(id)
     if (!input) return
-    const { result, run } = await gradeOne(input)
+    const { result, run } = await gradeOne(input, budget)
     save(id, result, run)
   }
 
@@ -141,6 +156,8 @@ export function createGrader({
   }
 
   return {
+    /** いま提出を採点に回せるか。AI が設定されていないときと、月の上限に達しているときは回せない */
+    canGrade: () => gradingEnabled && (budget?.available(MODEL) ?? true),
     enqueue(submissionId: number) {
       grading.add(submissionId)
       waiting.push(submissionId)

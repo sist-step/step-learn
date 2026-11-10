@@ -100,8 +100,12 @@ export const config = {
   moodle: loadMoodle(),
   /** 完全移行の CLI（moodle:migrate）が読む Moodle と、すべてのコースを見られるアカウントのトークン */
   moodleMigrate: loadMoodleMigrate(),
-  /** OPENROUTER_API_KEY が設定されていれば AI を使える（lib/ai.ts）。なければ AI の呼び出しは失敗する */
+  /** OPENROUTER_API_KEY が設定されていれば、OpenRouter 経由のモデルを使える（lib/ai.ts）。なければ呼び出しは失敗する */
   openRouter: env.OPENROUTER_API_KEY ? { apiKey: env.OPENROUTER_API_KEY } : null,
+  /** CLAUDE_API_KEY が設定されていれば、Claude を使える（lib/ai.ts）。なければ呼び出しは失敗する */
+  anthropic: env.CLAUDE_API_KEY ? { apiKey: env.CLAUDE_API_KEY } : null,
+  /** AI エージェントを使えるメールアドレスのドメイン（@ より後ろの完全一致） */
+  aiEmailDomain: (env.AI_EMAIL_DOMAIN || 'sist.ac.jp').toLowerCase(),
   /** SANDBOX_URL が設定されていれば、学生のコードを sandbox のコンテナで実行できる（lib/sandbox.ts）。なければ実行は失敗する */
   sandbox: loadSandbox(),
 }

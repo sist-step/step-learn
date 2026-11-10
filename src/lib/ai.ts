@@ -1,54 +1,27 @@
+import { completeAnthropic } from './ai-anthropic'
+import { AI_PROVIDERS, AiError, isAiModel, isAnthropicModel, type AiProvider, type AiReply, type AiRequest } from './ai-models'
+import { completeOpenRouter } from './ai-openrouter'
 import { config } from './config'
 
-export const AI_MODELS = ['deepseek/deepseek-v4.1-flash'] as const
+export * from './ai-models'
 
-export type AiModel = (typeof AI_MODELS)[number]
+export const isProviderEnabled = (provider: AiProvider) => (provider === 'anthropic' ? config.anthropic : config.openRouter) !== null
 
-export const isAiModel = (model: string): model is AiModel => (AI_MODELS as readonly string[]).includes(model)
+/** どれかの提供元の API キーが設定されている。モデルごとに使えるかは isProviderEnabled(aiProvider(model)) で確かめる */
+export const aiEnabled = AI_PROVIDERS.some(isProviderEnabled)
 
-export type AiMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+export const hasAiEmail = (email: string) => email.slice(email.lastIndexOf('@') + 1).toLowerCase() === config.aiEmailDomain
 
-export type AiRequest = { model: AiModel; messages: AiMessage[]; maxTokens?: number; temperature?: number }
-
-/** AI を呼べなかった・応答を得られなかった。message はそのまま画面に出せる */
-export class AiError extends Error {}
-
-const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
-
-// Moodle の呼び出し（15 秒）より長いのは、文章の生成には数十秒かかることがあるため
-const TIMEOUT = 60_000
-
-type Completion = {
-  choices?: { message?: { content?: string | null } }[]
-  error?: { code?: number | string; message?: string }
+export async function complete(request: AiRequest): Promise<AiReply> {
+  const { model } = request
+  // 型だけに任せないのは、as でのキャストや設定・入力から来た文字列が、一覧にないモデルのまま提供元に届くのを防ぐため
+  if (!isAiModel(model)) throw new AiError(`利用できないモデルです（${String(model)}）`)
+  return isAnthropicModel(model) ? completeAnthropic({ ...request, model }) : completeOpenRouter({ ...request, model })
 }
 
-export const aiEnabled = config.openRouter !== null
-
-export async function generateText({ model, messages, maxTokens, temperature }: AiRequest): Promise<string> {
-  // 型だけに任せないのは、as でのキャストや設定・入力から来た文字列が、一覧にないモデルのまま OpenRouter に届くのを防ぐため
-  if (!isAiModel(model)) throw new AiError(`利用できないモデルです（${String(model)}）`)
-  if (!config.openRouter) throw new AiError('OPENROUTER_API_KEY が設定されていないため、AI を利用できません')
-  let res: Response
-  try {
-    res = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${config.openRouter.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature }),
-      signal: AbortSignal.timeout(TIMEOUT),
-    })
-  } catch (e) {
-    console.error('[ai]', e)
-    throw new AiError('AI に接続できません')
-  }
-  const data = (await res.json().catch(() => null)) as Completion | null
-  // ステータスだけで判定しないのは、OpenRouter がモデル側の失敗を 200 のまま error に入れて返すことがあるため
-  if (!res.ok || !data || data.error) {
-    // OpenRouter のメッセージを AiError に入れないのは、画面に出す文言に外部の英語のエラーを混ぜないため
-    console.error('[ai]', model, res.status, data?.error)
-    throw new AiError('AI が応答を返せませんでした')
-  }
-  const text = data.choices?.[0]?.message?.content
+export async function generateText(request: Omit<AiRequest, 'tools' | 'onText'>): Promise<string> {
+  const { text, stop } = await complete(request)
+  if (stop === 'refusal') throw new AiError('AI がこの依頼には応答できませんでした')
   if (!text) throw new AiError('AI の応答が空でした')
   return text
 }
