@@ -77,6 +77,7 @@ npm start            # = node dist/server/index.js
 - `APP_ORIGIN`：nginx や Caddy などのリバースプロキシの後ろで動かす場合は、公開 URL（例 `https://lms.example.com`）を必ず設定してください
 - `SESSION_SECRET`：セッション Cookie の署名鍵（32 文字以上）。未設定なら `data/session-secret` を自動生成して使います。変更すると全員がログアウトされます
 - `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM`：確認メールの送信に使う SMTP サーバー。`SMTP_HOST` を設定する場合は `MAIL_FROM` と `APP_ORIGIN` も必須です
+- `OPENROUTER_API_KEY`：AI の機能に使う [OpenRouter](https://openrouter.ai/) の API キー。未設定なら AI の機能は使えません。使うモデルは `src/lib/ai.ts` の `AI_MODELS` に並べたものだけです
 - `TRUST_PROXY`：リバースプロキシの後ろで動かす場合は `1` にしてください。`X-Forwarded-For` からクライアントの IP を取ってレート制限に使います（未設定だと全員がプロキシの IP として扱われます）
 - 画面共有は `/socket.io/` で WebSocket を使います。リバースプロキシでは WebSocket の Upgrade を通してください（nginx なら `proxy_http_version 1.1;` と `Upgrade` / `Connection` ヘッダーの転送）。通らない場合は HTTP のロングポーリングに切り替わって動きますが、遅延と負荷が増えます
 - 配信中の状態はプロセスのメモリに持つため、複数のプロセスやサーバーに分散させないでください
@@ -201,7 +202,7 @@ CI はチェックだけを行い、デプロイはしません。Actions の画
 
 1. Docker（Compose v2.24 以上）を入れ、ラベル `self-hosted` / `linux` と、上の表のラベル（`production` か `beta`）を付けたランナーを登録する（ランナーのユーザーが `docker` を実行できること）
 2. GitHub の Environment（`production` / `beta`）に設定値を登録する。デプロイのたびに、ここから `.env` をランナーの一時ディレクトリに書き出してコンテナに渡し、終わったら消します
-   - Secrets：`SESSION_SECRET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `SMTP_PASS` / `MOODLE_EXCHANGE_TOKEN` / `MOODLE_BACKCHANNEL_SECRET`
+   - Secrets：`SESSION_SECRET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `SMTP_PASS` / `MOODLE_EXCHANGE_TOKEN` / `MOODLE_BACKCHANNEL_SECRET` / `OPENROUTER_API_KEY`
    - Variables：`APP_ORIGIN` / `TRUST_PROXY` / `R2_ACCOUNT_ID` / `R2_BUCKET` / `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `MAIL_FROM` / `MOODLE_URL`
    - 使わない項目は登録しなくてかまいません。値に `'` と改行は使えません
    - Moodle モードで動かすサーバーの Environment にだけ `MOODLE_URL` などを登録します
@@ -228,7 +229,7 @@ src/server.ts        本番用 Node.js エントリ（静的ファイル配信�
 src/renderer.tsx     HTML の外枠
 src/client.ts        クライアント側の小さな拡張（再読み込みなしの画面遷移、トースト、確認ダイアログ、完了トグルなど）
 src/styles/base.css  デザイントークンと共通スタイル（ダークモード対応）。部品・画面ごとの CSS は各 .tsx の隣に置き、使うページでだけ読み込む
-src/lib/             設定・DB・認証・HTTP ヘルパー・Markdown・ストレージ・画像アップロード・コースの権限
+src/lib/             設定・DB・認証・HTTP ヘルパー・Markdown・ストレージ・画像アップロード・コースの権限・AI（OpenRouter）
 src/moodle/          Moodle のバックアップの展開・読み取り・取り込み（CLI の moodle:import）
 src/moodle-mode/     Moodle モード（MOODLE_URL を設定したときだけ使う。完全移行のあとは削除する）
 moodle/              Moodle モード用の Moodle プラグイン（local_steplearn）と検証用の Moodle（moodle/dev）
