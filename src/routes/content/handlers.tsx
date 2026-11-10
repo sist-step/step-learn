@@ -10,7 +10,8 @@ import {
   trackedItemCount,
   visibleItem,
 } from '../../lib/courses'
-import { DEFAULT_STARTER, MAX_CODE_LENGTH, MAX_STDIN_LENGTH } from '../../lib/code'
+import { DEFAULT_MAX_SCORE, DEFAULT_STARTER, MAX_CODE_LENGTH, MAX_STDIN_LENGTH } from '../../lib/code'
+import { gradingEnabled, gradingStatusOf } from '../../lib/code-grading'
 import { availableCodeLanguages, getCodeItem, latestSubmission, updateCodeItem } from '../../lib/code-items'
 import { db } from '../../lib/db'
 import { completionError, firstError, isFile, validate, type FieldErrors } from '../../lib/forms'
@@ -155,6 +156,8 @@ function readItemInput(form: Form): ItemInput {
       py: sourceField(form, 'py', MAX_CODE_LENGTH),
     },
     stdin: sourceField(form, 'stdin', MAX_STDIN_LENGTH),
+    criteria: field(form, 'criteria', 5000),
+    maxScore: field(form, 'max_score', 6),
   }
 }
 
@@ -215,9 +218,16 @@ export async function editItem(c: Context<AppEnv>) {
   if (!access || !iid) return c.notFound()
   const item = getItem(access.course.id, iid)
   if (!item) return c.notFound()
-  return c.render(<ItemEditPage access={access} item={item} code={getCodeItem(iid)} sections={listSections(access.course.id)} />, {
-    title: `編集 - ${item.title}`,
-  })
+  return c.render(
+    <ItemEditPage
+      access={access}
+      item={item}
+      code={getCodeItem(iid)}
+      gradingEnabled={gradingEnabled}
+      sections={listSections(access.course.id)}
+    />,
+    { title: `編集 - ${item.title}` },
+  )
 }
 
 export async function updateItem(c: Context<AppEnv>) {
@@ -255,7 +265,15 @@ export async function updateItem(c: Context<AppEnv>) {
     }
     c.status(422)
     return c.render(
-      <ItemEditPage access={access} item={item} code={code} sections={listSections(courseId)} values={values} errors={errors ?? {}} />,
+      <ItemEditPage
+        access={access}
+        item={item}
+        code={code}
+        gradingEnabled={gradingEnabled}
+        sections={listSections(courseId)}
+        values={values}
+        errors={errors ?? {}}
+      />,
       { title: `編集 - ${item.title}` },
     )
   }
@@ -275,7 +293,14 @@ export async function updateItem(c: Context<AppEnv>) {
     })
     .where(eq(items.id, iid))
     .run()
-  if (code) updateCodeItem(iid, code.language, input, input.stdin)
+  if (code) {
+    updateCodeItem(iid, code.language, {
+      starter: input,
+      stdin: input.stdin,
+      criteria: input.criteria ?? '',
+      maxScore: Number(input.max_score) || DEFAULT_MAX_SCORE,
+    })
+  }
   if (stored && item.fileKey) inBackground(deleteKeys([item.fileKey]))
   return redirectWith(c, `/courses/${courseId}/items/${iid}/edit`, '保存しました。')
 }
@@ -383,10 +408,11 @@ export async function showItem(c: Context<AppEnv>) {
   const next = ordered[idx + 1]
   const section = sectionList.find((s) => s.id === item.sectionId)
   const codeItem = item.type === 'code' ? getCodeItem(iid) : undefined
+  const submitted = codeItem && access.role === 'student' ? latestSubmission(iid, userId) : undefined
   const code = codeItem && {
     language: codeItem.language,
-    submittedAt: latestSubmission(iid, userId)?.createdAt ?? null,
     canRun: sandboxEnabled,
+    grade: submitted ? { ...submitted, status: gradingStatusOf(submitted), maxScore: codeItem.maxScore } : null,
   }
   const textPreview =
     item.type === 'file' && item.fileKey && item.fileSize && previewKind(item.fileType ?? '', item.fileName ?? '') === 'text'

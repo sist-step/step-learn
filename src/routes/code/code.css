@@ -1,0 +1,43 @@
+/* ==========================================================================
+   コードのアイテムの提出（教師の一覧と、学生ごとの提出）
+   ========================================================================== */
+
+.score { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.col-submitted, .col-score { white-space: nowrap; }
+.col-score .chip { margin-left: 6px; }
+.col-open { width: 1%; text-align: right; }
+
+.submission { display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 28vw, 360px); gap: 24px; align-items: start; }
+.submission-main, .submission-side { min-width: 0; }
+/* 背景をトークンにしないのは、学生のページが背景を指定していないとき、ダークモードでも白地に黒い文字というブラウザの既定で見せるため */
+.submission-preview { display: block; width: 100%; height: 420px; border: 1px solid var(--card-border); border-radius: var(--radius); background: Canvas; color-scheme: light; }
+.submission-code {
+  max-height: 60vh;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  overflow: auto;
+  font: var(--fs-sm)/1.6 var(--mono);
+  white-space: pre;
+  tab-size: 4;
+}
+.submission-code.is-error { color: var(--danger-text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.submission-score { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 0; }
+.submission-score .score strong { font-size: var(--fs-2xl); font-weight: 700; }
+.submission-score + .submission-note { margin-top: 12px; }
+.submission-note { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.submission-history { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.submission-history a { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; padding: 4px 10px; border-radius: var(--radius-sm); color: inherit; text-decoration: none; }
+.submission-history a.active { background: var(--c-soft); color: var(--c-ink); font-weight: 600; }
+@media (hover: hover) {
+  .submission-history a:not(.active):hover { background: var(--surface-2); }
+}
+
+@media (max-width: 900px) {
+  .submission { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .submission-history a { min-height: var(--tap); }
+}

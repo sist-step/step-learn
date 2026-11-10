@@ -11,6 +11,24 @@ export const CODE_LANGUAGE_LABELS: Record<CodeLanguage, string> = {
   python: 'Python',
 }
 
+export const GRADING_STATUSES = ['none', 'pending', 'graded', 'failed'] as const
+
+export type GradingStatus = (typeof GRADING_STATUSES)[number]
+
+export const GRADING_STATUS_LABELS: Record<GradingStatus, string> = {
+  none: '採点なし',
+  pending: '採点中',
+  graded: '採点済み',
+  failed: '採点できませんでした',
+}
+
+export const DEFAULT_MAX_SCORE = 100
+export const MAX_MAX_SCORE = 1000
+
+/** 成績にする点数。教師が付けた点数があればそれを、なければ AI の点数を使う */
+export const finalScore = (s: { status: GradingStatus; score: number | null; teacherScore: number | null }) =>
+  s.teacherScore ?? (s.status === 'graded' ? s.score : null)
+
 export const CODE_FILE_KEYS = ['html', 'css', 'js', 'py'] as const
 
 export type CodeFileKey = (typeof CODE_FILE_KEYS)[number]
