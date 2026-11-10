@@ -7,8 +7,11 @@ import { config } from '../lib/config'
 import { flashMiddleware, limitBody, wantsJson } from '../lib/http'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE } from '../lib/storage'
 import { renderer } from '../renderer'
+import { codeRoutes, createCodeHandlers } from '../routes/code/handlers'
 import { destroySession, requireAuth, session, type MoodleEnv } from './auth'
 import { MoodleError, isAccessDenied, isNotFound, isTokenError, isUnavailable } from './client'
+import { codeBackend } from './code'
+import { CODE_KIND } from './extra-kinds'
 import * as h from './handlers'
 import { ErrorPage, errorContent, type ErrorContent } from './views'
 
@@ -81,6 +84,9 @@ auth.get('/courses/:id/items/:iid', h.showItem)
 auth.post('/courses/:id/items/:iid/complete', h.toggleComplete)
 auth.get('/courses/:id/items/:iid/file', h.downloadFile)
 auth.get('/courses/:id/items/:iid/screen', h.showScreen)
+const code = createCodeHandlers(codeBackend)
+auth.get(`/courses/:id/items/:iid/${CODE_KIND}`, code.showPage)
+auth.route('/courses', codeRoutes(code))
 auth.get('/m/:key', h.openExtra)
 app.route('/', auth)
 

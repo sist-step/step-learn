@@ -1,9 +1,9 @@
 import type { Child } from 'hono/jsx'
 import { IconButton } from './button'
-import { ItemIcon } from './course'
+import { ItemBar } from './course'
 import { Input, SegmentedControl, type SegmentOption } from './form'
 import { useStyle } from './style'
-import { Breadcrumbs, Chip, type Crumb } from './ui'
+import type { Crumb } from './ui'
 
 const PDF_MODE_OPTIONS = [
   { value: 'viewer', label: 'ビューアー', icon: 'page' },
@@ -23,24 +23,10 @@ export const PdfBar = ({
 }) => {
   useStyle('/src/components/pdf.css')
   return (
-    <div class="pdf-bar">
-      <ItemIcon type="file" />
-      <div class="pdf-bar-text">
-        <Breadcrumbs items={crumbs} />
-        <h1 class="truncate" title={title}>
-          {title}
-        </h1>
-      </div>
-      {hiddenNote && (
-        <Chip icon="eyeSlash" class="pdf-bar-hidden" title={hiddenNote}>
-          非表示
-        </Chip>
-      )}
-      <div class="pdf-bar-actions">
-        <SegmentedControl name="pdf-mode" label="PDF の表示方法" options={PDF_MODE_OPTIONS} class="pdf-mode" data-pdf-mode />
-        {children}
-      </div>
-    </div>
+    <ItemBar type="file" crumbs={crumbs} title={title} hiddenNote={hiddenNote}>
+      <SegmentedControl name="pdf-mode" label="PDF の表示方法" options={PDF_MODE_OPTIONS} class="pdf-mode" data-pdf-mode />
+      {children}
+    </ItemBar>
   )
 }
 

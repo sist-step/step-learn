@@ -1,4 +1,4 @@
-import type { courses, items, sections } from './schema'
+import type { codeItems, courses, items, sections } from './schema'
 
 export type Role = 'admin' | 'teacher' | 'student'
 export type CourseRole = 'teacher' | 'student'
@@ -29,13 +29,16 @@ export type Course = typeof courses.$inferSelect
 export type Section = typeof sections.$inferSelect
 export type Item = typeof items.$inferSelect
 
-export type ItemType = 'page' | 'link' | 'file' | 'screen'
+export type CodeItem = typeof codeItems.$inferSelect
+
+export type ItemType = 'page' | 'link' | 'file' | 'screen' | 'code'
 
 export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   page: 'ページ',
   link: 'リンク',
   file: 'ファイル',
   screen: '画面共有',
+  code: 'コード',
 }
 
 export const COMPLETIONS = ['none', 'manual', 'view', 'play'] as const

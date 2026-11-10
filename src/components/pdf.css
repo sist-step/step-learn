@@ -1,15 +1,8 @@
 /* ==========================================================================
-   PDF（ヘッダーの帯・ビューアー）
+   PDF（表示方法の切り替え・ビューアー）
    ========================================================================== */
 
-/* ===== ヘッダーの帯 */
-.pdf-bar { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding-left: 12px; }
-.pdf-bar > .item-icon { width: 32px; height: 32px; border-radius: 8px; flex: none; }
-.pdf-bar-text { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.35; }
-.pdf-bar-text .crumbs { font-size: var(--fs-xs); }
-.pdf-bar h1 { font-size: var(--fs-md); font-weight: 650; }
-.pdf-bar-hidden { flex: none; }
-.pdf-bar-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+/* ===== ヘッダーの帯（components/course.tsx の ItemBar）に置く切り替え */
 .pdf-mode { align-self: center; padding: 3px; }
 .pdf-mode span { padding: 4px 12px; }
 
@@ -96,14 +89,11 @@
 .pdf-text ::selection { background: color-mix(in srgb, var(--focus) 30%, transparent); color: transparent; }
 
 @media (max-width: 900px) {
-  .pdf-bar { padding-left: 4px; gap: 10px; }
   .pdf-stage + .reader { padding: 0 16px; margin-top: 28px; }
 }
 @media (max-width: 640px) {
   /* 幅に合わせるボタンを隠すのは、狭い画面では自動の倍率がすでに幅いっぱいで、押しても変わらないため */
-  .pdf-bar > .item-icon, .pdf-bar-text .crumbs, .pdf-bar-hidden, .pdf-toolbar-sep, .pdf-zoom, .pdf-toolbar [data-pdf-action='fit'] { display: none; }
-  .pdf-bar { gap: 6px; }
-  .pdf-bar-actions { gap: 4px; }
+  .pdf-toolbar-sep, .pdf-zoom, .pdf-toolbar [data-pdf-action='fit'] { display: none; }
   .pdf-toolbar { max-width: calc(100% - 16px); }
   .pdf-toolbar .icon-btn { flex: 0 1 var(--tap); min-width: 0; width: auto; }
   /* 文字を display: none で消さないのは、アイコンだけになっても読み上げでは「ビューアー」「ブラウザ」と伝えるため */

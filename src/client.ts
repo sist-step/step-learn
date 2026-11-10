@@ -920,6 +920,21 @@ function initMarkdownEditors() {
     .catch(() => toast('エディターを読み込めませんでした。', 'error'))
 }
 
+// --- コードのエディター（components/code.tsx の CodeInput / CodeWorkspace）
+// ここに直接 import しないのは、CodeMirror と各言語の文法が大きく、コードの入力欄のない画面でも毎回読み込むことになるため
+let codeEditor: Promise<typeof import('./code-editor')> | null = null
+function initCodeEditors() {
+  void codeEditor?.then(({ releaseDetachedCodeEditors }) => releaseDetachedCodeEditors())
+  if (!document.querySelector('[data-code-input]:not([data-code-ready]), [data-code-grade]:not([data-code-watching])')) return
+  codeEditor ??= import('./code-editor')
+  codeEditor
+    .then(({ mountCodeEditors }) => mountCodeEditors(toast))
+    .catch(() => {
+      codeEditor = null
+      toast('エディターを読み込めませんでした。', 'error')
+    })
+}
+
 // --- ログイン画面の 3D アニメーション（components/layout.tsx の AuthShell）
 // ここに直接 import しないのは、three.js が大きく、ログイン後の画面でも毎回読み込むことになるため
 let authArt: Promise<typeof import('./auth-art')> | null = null
@@ -2146,6 +2161,7 @@ function initContent() {
   applyCourseFilter()
   updateToc()
   initMarkdownEditors()
+  initCodeEditors()
   applyPdfMode()
   initPdfViewers()
   initMascots()

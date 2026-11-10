@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { check, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { CODE_LANGUAGES, GRADING_STATUSES, type CodeFiles } from './code'
+import type { RunResult } from './sandbox'
 
 const now = sql`(unixepoch())`
 
@@ -128,7 +130,7 @@ export const items = sqliteTable(
     sectionId: integer('section_id')
       .notNull()
       .references(() => sections.id, { onDelete: 'cascade' }),
-    type: text('type', { enum: ['page', 'link', 'file', 'screen'] }).notNull(),
+    type: text('type', { enum: ['page', 'link', 'file', 'screen', 'code'] }).notNull(),
     title: text('title').notNull(),
     body: text('body').notNull().default(''),
     url: text('url').notNull().default(''),
@@ -153,7 +155,7 @@ export const items = sqliteTable(
   (t) => [
     index('items_section').on(t.sectionId, t.position),
     index('items_course').on(t.courseId),
-    check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen')`),
+    check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code')`),
     check('items_completion', sql`${t.completion} IN ('none', 'manual', 'view', 'play')`),
     check('items_link_target', sql`${t.linkTarget} IN ('new', 'same', 'embed')`),
   ],
@@ -201,3 +203,73 @@ export const appSettings = sqliteTable('app_settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
 })
+
+/** コード採点のアイテム（items.type が code）の設定 */
+export const codeItems = sqliteTable(
+  'code_items',
+  {
+    itemId: integer('item_id')
+      .primaryKey()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    language: text('language', { enum: CODE_LANGUAGES }).notNull(),
+    /** 学生が最初に開いたときに入っているコード */
+    starter: text('starter', { mode: 'json' }).$type<CodeFiles>().notNull(),
+    /** Python の標準入力の例。学生の入力欄に最初から入れておき、採点のときの実行にも使う */
+    stdin: text('stdin').notNull().default(''),
+    /** AI に渡す採点基準。学生には見せない */
+    criteria: text('criteria').notNull().default(''),
+    maxScore: integer('max_score').notNull().default(100),
+  },
+  (t) => [check('code_items_language', sql`${t.language} IN ('web', 'python')`)],
+)
+
+/** 書きかけのコード。利用者ごとに 1 つで、編集のたびに上書きする */
+export const codeDrafts = sqliteTable(
+  'code_drafts',
+  {
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    files: text('files', { mode: 'json' }).$type<CodeFiles>().notNull(),
+    stdin: text('stdin').notNull().default(''),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .default(now)
+      .$onUpdate(() => now),
+  },
+  (t) => [primaryKey({ columns: [t.itemId, t.userId] }), index('code_drafts_user').on(t.userId)],
+)
+
+/** 提出したコード。出し直しても前の提出は残す */
+export const codeSubmissions = sqliteTable(
+  'code_submissions',
+  {
+    id: integer('id').primaryKey(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    files: text('files', { mode: 'json' }).$type<CodeFiles>().notNull(),
+    /** AI の採点の状態。none は採点しない（AI が設定されていない）提出 */
+    status: text('status', { enum: GRADING_STATUSES }).notNull().default('none'),
+    /** AI が付けた点数と講評 */
+    score: integer('score'),
+    feedback: text('feedback').notNull().default(''),
+    /** 採点のときに sandbox で実行した結果（Python） */
+    output: text('output', { mode: 'json' }).$type<RunResult>(),
+    /** 教師が付けた点数とコメント。点数があれば、AI の点数よりこちらを成績にする */
+    teacherScore: integer('teacher_score'),
+    teacherComment: text('teacher_comment').notNull().default(''),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [
+    index('code_submissions_item_user').on(t.itemId, t.userId, t.id),
+    index('code_submissions_user').on(t.userId),
+    check('code_submissions_status', sql`${t.status} IN ('none', 'pending', 'graded', 'failed')`),
+  ],
+)

@@ -1,8 +1,10 @@
+import { CodeBarActions, CodeGrade, CodeGradingFields, CodeStarterFields, CodeWorkspace, type GradeView } from '../../components/code'
 import {
   CompletionField,
   CompletionStatus,
   CourseLiveSync,
   ITEM_ICONS,
+  ItemBar,
   ItemIcon,
   LinkEmbed,
   LinkTargetField,
@@ -18,14 +20,28 @@ import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, DangerRow, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
+import type { CodeFiles, CodeLanguage } from '../../lib/code'
 import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
 import { previewKind } from '../../lib/preview'
 import { formatBytes } from '../../lib/bytes'
 import { MAX_FILE_SIZE } from '../../lib/storage'
-import { ITEM_TYPE_LABELS, type Item, type Section } from '../../lib/types'
+import { ITEM_TYPE_LABELS, type CodeItem, type Item, type Section } from '../../lib/types'
 
-export type ItemInput = { title: string; body: string; url: string; linkTarget: string; file: File | null }
+export type ItemInput = {
+  title: string
+  body: string
+  url: string
+  linkTarget: string
+  file: File | null
+  starter: CodeFiles
+  stdin: string
+  criteria: string
+  maxScore: string
+}
+
+/** コードのアイテムの言語と、見ている学生のいちばん新しい提出の採点 */
+export type CodeView = { language: CodeLanguage; canRun: boolean; grade: GradeView | null }
 
 export type OutlineItem = Pick<
   Item,
@@ -49,12 +65,17 @@ const hostName = (url: string) => {
 export const ItemEditPage = ({
   access,
   item,
+  code,
+  gradingEnabled,
   sections,
   values,
   errors = {},
 }: {
   access: CourseAccess
   item: Item
+  code?: CodeItem
+  /** AI が設定されていて、提出を自動で採点するか */
+  gradingEnabled: boolean
   sections: Section[]
   values?: Partial<ItemInput> & { hidden?: number; sectionId?: number; completion?: string }
   errors?: FieldErrors
@@ -69,6 +90,10 @@ export const ItemEditPage = ({
     hidden: item.hidden,
     sectionId: item.sectionId,
     completion: item.completion as string,
+    starter: code?.starter ?? {},
+    stdin: code?.stdin ?? '',
+    criteria: code?.criteria ?? '',
+    maxScore: String(code?.maxScore ?? ''),
     ...values,
   }
   const section = sections.find((s) => s.id === item.sectionId)
@@ -118,12 +143,14 @@ export const ItemEditPage = ({
             )}
             {item.type === 'link' && <LinkTargetField id="f-link-target" value={v.linkTarget} />}
             <MarkdownEditor
-              label={item.type === 'page' ? '本文' : '説明（任意）'}
+              label={item.type === 'page' ? '本文' : item.type === 'code' ? '問題文' : '説明（任意）'}
               name="body"
               value={v.body}
               error={errors.body}
-              rows={item.type === 'page' ? 18 : 5}
+              rows={item.type === 'page' ? 18 : item.type === 'code' ? 10 : 5}
             />
+            {code && <CodeStarterFields language={code.language} starter={v.starter} stdin={v.stdin} errors={errors} />}
+            {code && <CodeGradingFields gradingEnabled={gradingEnabled} criteria={v.criteria} maxScore={v.maxScore} errors={errors} />}
           </Card>
 
           <aside class="editor-side">
@@ -177,7 +204,7 @@ export const ItemEditPage = ({
         </form>
 
         <Card tone="danger" class="editor-danger">
-          <DangerRow heading="アイテムを削除" description="学生の完了記録も消え、元に戻せません。">
+          <DangerRow heading="アイテムを削除" description={`学生の${code ? '提出と' : ''}完了記録も消え、元に戻せません。`}>
             <form method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`}>
               <Button type="submit" variant="danger-outline" size="sm" icon="trash">
                 削除
@@ -201,6 +228,7 @@ export const ItemPage = ({
   next,
   sharing,
   textPreview,
+  code,
   revision,
 }: {
   access: CourseAccess
@@ -213,6 +241,7 @@ export const ItemPage = ({
   next?: OutlineItem
   sharing: boolean
   textPreview: string | null
+  code?: CodeView
   revision: string
 }) => {
   const id = access.course.id
@@ -230,7 +259,7 @@ export const ItemPage = ({
     isStudent && isTracked(o) && o.completion === completion && !done.has(o.id)
   const onOpen = (o: OutlineItem) => (waitsFor(o, 'view') ? { 'data-complete-on-open': completeUrl(o) } : {})
   const embedded = item.type === 'link' && item.linkTarget === 'embed'
-  const opensOnView = item.type === 'page' || embedded || (!!preview && (preview !== 'text' || textPreview !== null))
+  const opensOnView = item.type === 'page' || embedded || !!code || (!!preview && (preview !== 'text' || textPreview !== null))
   const tracked = outline.filter(isTracked)
 
   const navHref = (o: OutlineItem) => `${base}/${o.id}`
@@ -278,38 +307,49 @@ export const ItemPage = ({
     </>
   )
 
+  const barCrumbs = [
+    { href: '/courses', label: 'コース一覧' },
+    { href: `/courses/${id}`, label: access.course.title },
+    ...(section && position > 0 ? [{ href: editUrl(id, section.id), label: `${section.title} · ${position} / ${siblings.length}` }] : []),
+  ]
+  const hiddenNote =
+    access.canManage && isHidden(item) ? `${item.hidden ? 'このアイテム' : 'このアイテムのセクション'}は学生に非表示です。` : undefined
+  const editButton = access.canManage && (
+    <Button href={`${base}/${item.id}/edit`} variant="ghost" size="sm" icon="pencil" aria-label="編集">
+      <span class="hide-sm">編集</span>
+    </Button>
+  )
+
   const pdfBar = pdf ? (
-    <PdfBar
-      crumbs={[
-        { href: '/courses', label: 'コース一覧' },
-        { href: `/courses/${id}`, label: access.course.title },
-        ...(section && position > 0
-          ? [{ href: editUrl(id, section.id), label: `${section.title} · ${position} / ${siblings.length}` }]
-          : []),
-      ]}
-      title={item.title}
-      hiddenNote={
-        access.canManage && isHidden(item) ? `${item.hidden ? 'このアイテム' : 'このアイテムのセクション'}は学生に非表示です。` : undefined
-      }
-    >
-      {access.canManage && (
-        <Button href={`${base}/${item.id}/edit`} variant="ghost" size="sm" icon="pencil" aria-label="編集">
-          <span class="hide-sm">編集</span>
-        </Button>
-      )}
+    <PdfBar crumbs={barCrumbs} title={item.title} hiddenNote={hiddenNote}>
+      {editButton}
       <Button href={fileUrl} size="sm" icon="download" aria-label="ダウンロード" data-no-prefetch download {...onOpen(item)}>
         <span class="hide-sm">ダウンロード</span>
       </Button>
     </PdfBar>
   ) : undefined
 
+  const codeBar = code ? (
+    <ItemBar type="code" crumbs={barCrumbs} title={item.title} hiddenNote={hiddenNote}>
+      {editButton}
+      <CodeBarActions base={`${base}/${item.id}/code`} canManage={access.canManage} isStudent={isStudent} grade={code.grade} />
+    </ItemBar>
+  ) : undefined
+
   return (
-    <AppShell tone={access.course.color} topbar={pdfBar}>
+    <AppShell tone={access.course.color} topbar={pdfBar ?? codeBar}>
       <Styles use={['/src/routes/content/content.css']} />
-      {pdf ? <PdfStage src={previewUrl} title={item.fileName ?? 'プレビュー'} /> : crumbs}
+      {pdf ? (
+        <PdfStage src={previewUrl} title={item.fileName ?? 'プレビュー'} />
+      ) : code ? (
+        <CodeWorkspace base={`${base}/${item.id}/code`} language={code.language} body={item.body} canRun={code.canRun} />
+      ) : (
+        crumbs
+      )}
       <div class="reader">
         <article class="reader-main">
-          {!pdf && head}
+          {!pdf && !code && head}
+          {code?.grade && <CodeGrade grade={code.grade} pollUrl={`${base}/${item.id}/code/grading`} />}
 
           {item.type === 'link' && embedded && <LinkEmbed url={item.url} title={item.title} />}
 
@@ -396,7 +436,7 @@ export const ItemPage = ({
             </>
           )}
 
-          {(item.body || item.type === 'page') && (
+          {!code && (item.body || item.type === 'page') && (
             <div class="reader-sheet">{item.body ? <Markdown source={item.body} /> : <p class="muted">本文はまだありません。</p>}</div>
           )}
 

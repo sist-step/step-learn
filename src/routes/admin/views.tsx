@@ -297,7 +297,7 @@ export const AiPage = ({
               <tr>
                 <td>
                   {u.name === null ? (
-                    <span class="muted">削除されたユーザー</span>
+                    <span class="muted">利用者なし（コードの採点・削除されたユーザー）</span>
                   ) : (
                     <Person
                       avatar={<Avatar name={u.name} />}
