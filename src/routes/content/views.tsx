@@ -1,4 +1,4 @@
-import { CODE_FORM, CodeField, CodeGrade, CodeWorkspace, GRADE_CARD, gradeLabel, type GradeView } from '../../components/code'
+import { CodeBarActions, CodeGrade, CodeGradingFields, CodeStarterFields, CodeWorkspace, type GradeView } from '../../components/code'
 import {
   CompletionField,
   CompletionStatus,
@@ -15,21 +15,12 @@ import { Icon } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
 import { Button } from '../../components/button'
-import {
-  FileChip,
-  FileInput,
-  FormField,
-  SegmentedControl,
-  SelectField,
-  TextAreaField,
-  TextField,
-  validateWith,
-} from '../../components/form'
+import { FileChip, FileInput, FormField, SegmentedControl, SelectField, TextField, validateWith } from '../../components/form'
 import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, DangerRow, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
-import { CODE_FILES, CODE_LANGUAGE_LABELS, type CodeFiles, type CodeLanguage } from '../../lib/code'
+import type { CodeFiles, CodeLanguage } from '../../lib/code'
 import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
 import { previewKind } from '../../lib/preview'
@@ -158,71 +149,8 @@ export const ItemEditPage = ({
               error={errors.body}
               rows={item.type === 'page' ? 18 : item.type === 'code' ? 10 : 5}
             />
-            {code && (
-              <fieldset class="field">
-                <legend>最初のコード</legend>
-                <p class="field-hint">
-                  学生が最初に開いたときに入っているコードです（{CODE_LANGUAGE_LABELS[code.language]}。言語はあとから変えられません）。
-                </p>
-                <div class="stack">
-                  {CODE_FILES[code.language].map((f) => (
-                    <CodeField
-                      label={f.name}
-                      name={f.key}
-                      id={`f-starter-${f.key}`}
-                      syntax={f.key}
-                      value={v.starter[f.key]}
-                      rows={8}
-                      error={errors[f.key]}
-                    />
-                  ))}
-                  {code.language === 'python' && (
-                    <CodeField
-                      label="入力の例"
-                      name="stdin"
-                      id="f-starter-stdin"
-                      syntax="text"
-                      value={v.stdin}
-                      rows={3}
-                      error={errors.stdin}
-                      hint="プログラムが input() で読む内容です。学生の画面の入力欄に最初から入ります。"
-                    />
-                  )}
-                </div>
-              </fieldset>
-            )}
-            {code && (
-              <fieldset class="field">
-                <legend>採点</legend>
-                <p class="field-hint">
-                  {gradingEnabled
-                    ? '学生が提出すると、AI が採点基準に沿って点数と講評を付けます。点数は、提出の画面で教師が変えられます。'
-                    : 'AI が設定されていないため、自動では採点されません。提出の画面で教師が点数を付けます。'}
-                </p>
-                <div class="stack">
-                  <TextAreaField
-                    label="採点基準"
-                    name="criteria"
-                    id="f-criteria"
-                    rows={6}
-                    value={v.criteria}
-                    error={errors.criteria}
-                    hint="学生には表示されません。配点や、見てほしい点を書きます。"
-                    placeholder={
-                      '例：\n- h1 に名前が表示されている（40 点）\n- ボタンを押すと挨拶が出る（40 点）\n- 読みやすく書けている（20 点）'
-                    }
-                  />
-                  <TextField
-                    label="満点"
-                    name="max_score"
-                    id="f-max-score"
-                    inputmode="numeric"
-                    value={v.maxScore}
-                    error={errors.max_score}
-                  />
-                </div>
-              </fieldset>
-            )}
+            {code && <CodeStarterFields language={code.language} starter={v.starter} stdin={v.stdin} errors={errors} />}
+            {code && <CodeGradingFields gradingEnabled={gradingEnabled} criteria={v.criteria} maxScore={v.maxScore} errors={errors} />}
           </Card>
 
           <aside class="editor-side">
@@ -404,23 +332,7 @@ export const ItemPage = ({
   const codeBar = code ? (
     <ItemBar type="code" crumbs={barCrumbs} title={item.title} hiddenNote={hiddenNote}>
       {editButton}
-      {access.canManage && (
-        <Button href={`${base}/${item.id}/code/submissions`} size="sm" icon="users" aria-label="提出">
-          <span class="hide-sm">提出</span>
-        </Button>
-      )}
-      {code.grade && (
-        <a href={`#${GRADE_CARD}`} class="item-bar-status" data-code-grade-chip>
-          <Chip tone="success" icon="check">
-            {gradeLabel(code.grade)}
-          </Chip>
-        </a>
-      )}
-      {isStudent && (
-        <Button type="submit" form={CODE_FORM} variant="primary" size="sm" icon="upload">
-          {code.grade ? '出し直す' : '提出'}
-        </Button>
-      )}
+      <CodeBarActions base={`${base}/${item.id}/code`} canManage={access.canManage} isStudent={isStudent} grade={code.grade} />
     </ItemBar>
   ) : undefined
 

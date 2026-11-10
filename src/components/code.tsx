@@ -1,9 +1,10 @@
 import type { Child, JSX } from 'hono/jsx'
-import { CODE_FILES, finalScore, type CodeLanguage, type GradingStatus } from '../lib/code'
+import { CODE_FILES, CODE_LANGUAGE_LABELS, finalScore, type CodeFiles, type CodeLanguage, type GradingStatus } from '../lib/code'
+import type { FieldErrors } from '../lib/forms'
 import { Button, IconButton } from './button'
 import { Card } from './card'
 import { cx } from './cx'
-import { FormField, Textarea } from './form'
+import { FormField, TextAreaField, TextField, Textarea } from './form'
 import { Icon } from './icons'
 import { Markdown } from './markdown'
 import { useStyle } from './style'
@@ -65,6 +66,91 @@ export const CodeField = ({
       aria-describedby={hint ? `${id}-error ${id}-desc` : `${id}-error`}
     />
   </FormField>
+)
+
+/** アイテムの編集画面の、最初に入れておくコードの欄（教師） */
+export const CodeStarterFields = ({
+  language,
+  starter,
+  stdin,
+  errors,
+  idPrefix = 'f',
+}: {
+  language: CodeLanguage
+  starter: CodeFiles
+  stdin: string
+  errors: FieldErrors
+  idPrefix?: string
+}) => (
+  <fieldset class="field">
+    <legend>最初のコード</legend>
+    <p class="field-hint">
+      学生が最初に開いたときに入っているコードです（{CODE_LANGUAGE_LABELS[language]}。言語はあとから変えられません）。
+    </p>
+    <div class="stack">
+      {CODE_FILES[language].map((f) => (
+        <CodeField
+          label={f.name}
+          name={f.key}
+          id={`${idPrefix}-starter-${f.key}`}
+          syntax={f.key}
+          value={starter[f.key]}
+          rows={8}
+          error={errors[f.key]}
+        />
+      ))}
+      {language === 'python' && (
+        <CodeField
+          label="入力の例"
+          name="stdin"
+          id={`${idPrefix}-starter-stdin`}
+          syntax="text"
+          value={stdin}
+          rows={3}
+          error={errors.stdin}
+          hint="プログラムが input() で読む内容です。学生の画面の入力欄に最初から入り、AI が採点するときの実行にも使います。"
+        />
+      )}
+    </div>
+  </fieldset>
+)
+
+/** アイテムの編集画面の、採点基準と満点の欄（教師） */
+export const CodeGradingFields = ({
+  gradingEnabled,
+  criteria,
+  maxScore,
+  errors,
+  idPrefix = 'f',
+}: {
+  /** AI が設定されていて、提出を自動で採点するか */
+  gradingEnabled: boolean
+  criteria: string
+  maxScore: string
+  errors: FieldErrors
+  idPrefix?: string
+}) => (
+  <fieldset class="field">
+    <legend>採点</legend>
+    <p class="field-hint">
+      {gradingEnabled
+        ? '学生が提出すると、AI が採点基準に沿って点数と講評を付けます。点数は、提出の画面で教師が変えられます。'
+        : 'AI が設定されていないため、自動では採点されません。提出の画面で教師が点数を付けます。'}
+    </p>
+    <div class="stack">
+      <TextAreaField
+        label="採点基準"
+        name="criteria"
+        id={`${idPrefix}-criteria`}
+        rows={6}
+        value={criteria}
+        error={errors.criteria}
+        hint="学生には表示されません。配点や、見てほしい点を書きます。"
+        placeholder={'例：\n- h1 に名前が表示されている（40 点）\n- ボタンを押すと挨拶が出る（40 点）\n- 読みやすく書けている（20 点）'}
+      />
+      <TextField label="満点" name="max_score" id={`${idPrefix}-max-score`} inputmode="numeric" value={maxScore} error={errors.max_score} />
+    </div>
+  </fieldset>
 )
 
 export const CODE_FORM = 'code-form'
@@ -201,6 +287,39 @@ export const gradeLabel = (grade: GradeView) => {
 }
 
 export const GRADE_CARD = 'code-grade'
+
+/** ヘッダーの帯（ItemBar）に置く、提出の一覧への入口（教師）と、提出の状況・提出ボタン（学生） */
+export const CodeBarActions = ({
+  base,
+  canManage,
+  isStudent,
+  grade,
+}: {
+  base: string
+  canManage: boolean
+  isStudent: boolean
+  grade: GradeView | null
+}) => (
+  <>
+    {canManage && (
+      <Button href={`${base}/submissions`} size="sm" icon="users" aria-label="提出">
+        <span class="hide-sm">提出</span>
+      </Button>
+    )}
+    {grade && (
+      <a href={`#${GRADE_CARD}`} class="item-bar-status" data-code-grade-chip>
+        <Chip tone="success" icon="check">
+          {gradeLabel(grade)}
+        </Chip>
+      </a>
+    )}
+    {isStudent && (
+      <Button type="submit" form={CODE_FORM} variant="primary" size="sm" icon="upload">
+        {grade ? '出し直す' : '提出'}
+      </Button>
+    )}
+  </>
+)
 
 /**
  * 学生に見せる提出と採点の結果。採点中は data-code-grade（確かめる先の URL）を付け、src/code-editor.ts が採点の終わりを待って、
