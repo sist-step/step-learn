@@ -36,6 +36,7 @@ import type { CourseAccess } from '../../lib/courses'
 import { MAX_IMAGE_SIZE } from '../../lib/images'
 import { previewKind } from '../../lib/preview'
 import { formatBytes } from '../../lib/bytes'
+import { CODE_LANGUAGE_LABELS, type CodeLanguage } from '../../lib/code'
 import { COMPLETION_LABELS, ITEM_TYPE_LABELS, type Completion, type Item, type ItemType, type Section } from '../../lib/types'
 
 export type ItemLite = Pick<
@@ -270,6 +271,7 @@ const ITEM_TYPE_DESCRIPTIONS: Record<ItemType, string> = {
   link: '外部のサイトを紹介する',
   file: 'PDF や画像などを配る',
   screen: '授業中に画面を配信する',
+  code: 'コードを書いて提出する',
 }
 
 const AddItemButton = ({ sectionId }: { sectionId: number }) => (
@@ -278,7 +280,7 @@ const AddItemButton = ({ sectionId }: { sectionId: number }) => (
   </button>
 )
 
-const ITEM_TYPES = ['page', 'link', 'file', 'screen'] as const
+const ITEM_TYPES = ['page', 'link', 'file', 'screen', 'code'] as const
 
 const KindOptionBody = ({ type }: { type: ItemType }) => (
   <>
@@ -291,7 +293,17 @@ const KindOptionBody = ({ type }: { type: ItemType }) => (
 )
 
 // 種類の選択と設定を別のフォームにしないのは、設定まで進んでから種類を選び直しても入力した値を残すため
-const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sections: Section[]; tracking: boolean }) => (
+const AddItemModal = ({
+  courseId,
+  sections,
+  tracking,
+  codeLanguages,
+}: {
+  courseId: number
+  sections: Section[]
+  tracking: boolean
+  codeLanguages: readonly CodeLanguage[]
+}) => (
   <Modal id={ADD_ITEM_MODAL} heading="アイテムを追加" description="種類を選んでから、最初の設定をします。内容はあとから編集できます。">
     <form
       method="post"
@@ -334,11 +346,20 @@ const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sect
           hint="最大 30MB。PDF・画像はブラウザでプレビューできます。"
           fieldClass="when-file"
         />
+        <SelectField
+          label="言語"
+          name="language"
+          id="new-item-language"
+          options={codeLanguages.map((l) => ({ value: l, label: CODE_LANGUAGE_LABELS[l] }))}
+          hint="あとから変えられません。最初に入れておくコードは、追加したあとに編集画面で設定します。"
+          fieldClass="when-code"
+        />
         <MarkdownEditor
           label={
             <>
               <span class="when-page-inline">本文（任意）</span>
               <span class="when-other-inline">説明（任意）</span>
+              <span class="when-code-inline">問題文</span>
             </>
           }
           name="body"
@@ -436,6 +457,7 @@ export const CoursePage = ({
   done,
   sharing,
   revision,
+  codeLanguages,
 }: {
   access: CourseAccess
   sectionList: Section[]
@@ -444,6 +466,8 @@ export const CoursePage = ({
   /** 画面共有を配信中のアイテムの ID */
   sharing: Set<number>
   revision: string
+  /** コードのアイテムで選べる言語 */
+  codeLanguages: readonly CodeLanguage[]
 }) => {
   const id = access.course.id
   const manage = access.canManage
@@ -587,7 +611,9 @@ export const CoursePage = ({
         )}
 
         {manage && <AddSectionModal courseId={id} />}
-        {manage && sectionList.length > 0 && <AddItemModal courseId={id} sections={sectionList} tracking={tracking} />}
+        {manage && sectionList.length > 0 && (
+          <AddItemModal courseId={id} sections={sectionList} tracking={tracking} codeLanguages={codeLanguages} />
+        )}
       </TabPanel>
       <CourseLiveSync courseId={id} revision={revision} />
       <WalkingMascot />

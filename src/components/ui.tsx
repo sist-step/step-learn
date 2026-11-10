@@ -294,3 +294,8 @@ export const formatDate = (unix: number) =>
   new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: 'short', day: 'numeric' }).format(
     new Date(unix * 1000),
   )
+
+export const formatDateTime = (unix: number) =>
+  new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(
+    new Date(unix * 1000),
+  )

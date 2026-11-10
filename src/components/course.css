@@ -138,6 +138,25 @@ div.course-hero-cover { background: linear-gradient(150deg, var(--c2), var(--c1)
 .kind-link { --kind: var(--info); }
 .kind-file { --kind: var(--warning); }
 .kind-screen { --kind: var(--success); }
+.kind-code { --kind: var(--accent); }
+
+/* ===== アイテムを画面いっぱいに出すときのヘッダーの帯（ItemBar） */
+.item-bar { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding-left: 12px; }
+.item-bar > .item-icon { width: 32px; height: 32px; border-radius: 8px; flex: none; }
+.item-bar-text { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.35; }
+.item-bar-text .crumbs { font-size: var(--fs-xs); }
+.item-bar h1 { font-size: var(--fs-md); font-weight: 650; }
+.item-bar-hidden { flex: none; }
+.item-bar-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+@media (max-width: 900px) {
+  .item-bar { padding-left: 4px; gap: 10px; }
+}
+@media (max-width: 640px) {
+  /* .hide-sm に任せないのは、後から読み込まれる ui.css の .chip の display に負けるため */
+  .item-bar > .item-icon, .item-bar-text .crumbs, .item-bar-hidden, .item-bar-actions > .chip { display: none; }
+  .item-bar { gap: 6px; }
+  .item-bar-actions { gap: 4px; }
+}
 
 /* ===== 自動で付く完了の状態（アイテム画面） */
 .completion-status { display: inline-flex; align-items: center; gap: 8px; min-height: var(--control-h-lg); padding: 0 20px; border: 1px dashed var(--border-strong); border-radius: 999px; color: var(--muted); font-size: var(--fs-base); font-weight: 500; }

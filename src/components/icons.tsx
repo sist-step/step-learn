@@ -5,6 +5,7 @@ import arrowDown from 'heroicons/24/outline/arrow-down.svg?raw'
 import download from 'heroicons/24/outline/arrow-down-tray.svg?raw'
 import arrowPath from 'heroicons/24/outline/arrow-path.svg?raw'
 import logout from 'heroicons/24/outline/arrow-right-start-on-rectangle.svg?raw'
+import undo from 'heroicons/24/outline/arrow-uturn-left.svg?raw'
 import external from 'heroicons/24/outline/arrow-top-right-on-square.svg?raw'
 import arrowUp from 'heroicons/24/outline/arrow-up.svg?raw'
 import upload from 'heroicons/24/outline/arrow-up-tray.svg?raw'
@@ -21,6 +22,7 @@ import chevronDown from 'heroicons/24/outline/chevron-down.svg?raw'
 import chevronLeft from 'heroicons/24/outline/chevron-left.svg?raw'
 import chevronRight from 'heroicons/24/outline/chevron-right.svg?raw'
 import code from 'heroicons/24/outline/code-bracket.svg?raw'
+import terminal from 'heroicons/24/outline/command-line.svg?raw'
 import monitor from 'heroicons/24/outline/computer-desktop.svg?raw'
 import file from 'heroicons/24/outline/document-arrow-down.svg?raw'
 import copy from 'heroicons/24/outline/document-duplicate.svg?raw'
@@ -47,6 +49,7 @@ import lockOpen from 'heroicons/24/outline/lock-open.svg?raw'
 import listNumbered from 'heroicons/24/outline/numbered-list.svg?raw'
 import pencil from 'heroicons/24/outline/pencil.svg?raw'
 import photo from 'heroicons/24/outline/photo.svg?raw'
+import play from 'heroicons/24/outline/play.svg?raw'
 import plus from 'heroicons/24/outline/plus.svg?raw'
 import pages from 'heroicons/24/outline/rectangle-stack.svg?raw'
 import shield from 'heroicons/24/outline/shield-check.svg?raw'
@@ -116,6 +119,9 @@ const svgs = {
   folder,
   arrowPath,
   heart,
+  terminal,
+  play,
+  undo,
 } as const
 
 export type IconName = keyof typeof svgs

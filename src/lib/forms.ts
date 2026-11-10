@@ -1,5 +1,6 @@
 // サーバーの handlers と client.ts の両方が読み込むので、DB や Node の API を使うモジュールを import しない
 import * as z from 'zod/mini'
+import { CODE_LANGUAGES, MAX_CODE_LENGTH, MAX_STDIN_LENGTH } from './code'
 import { dateInputToUnix, dateTimeInputToUnix, isDateInput, isDateTimeInput } from './course-period'
 import { checkPassword } from './password'
 import { isMediaFile } from './preview'
@@ -155,11 +156,30 @@ export function completionError(type: ItemType, completion: Completion | undefin
 const completionIssue = (v: { type: ItemType; completion?: Completion; file?: unknown }) =>
   completionError(v.type, v.completion, isFile(v.file) ? v.file : null)
 
+// trimmed() を通さないのは、Python では行頭の空白が意味を持つため。改行をそろえるのは、フォームの送信で CRLF になるため
+const source = (label: string, max: number) =>
+  z.pipe(
+    z.transform((v: unknown) => (typeof v === 'string' ? v.replace(/\r\n?/g, '\n') : '')),
+    z.string().check(z.maxLength(max, `${label}は${max}文字以内で入力してください。`)),
+  )
+
+const codeFields = {
+  html: source('HTML', MAX_CODE_LENGTH),
+  css: source('CSS', MAX_CODE_LENGTH),
+  js: source('JavaScript', MAX_CODE_LENGTH),
+  py: source('Python', MAX_CODE_LENGTH),
+  stdin: source('入力', MAX_STDIN_LENGTH),
+}
+
+/** コードのアイテムで、実行・下書きの保存・提出のときに送るコード */
+const code = z.object(codeFields)
+
 const itemFields = {
   title: text('タイトル', 200, { required: true }),
   body: text('本文', 100_000),
   hidden: flag(),
-  type: choice(['page', 'link', 'file', 'screen'], 'page'),
+  type: choice(['page', 'link', 'file', 'screen', 'code'], 'page'),
+  language: choice(CODE_LANGUAGES, 'web'),
   link_target: choice(LINK_TARGETS, 'new'),
   completion: z.optional(z.enum(COMPLETIONS, '完了の条件が正しくありません。')),
   // 必須にしないのは、ファイルの欄がファイルのアイテムのフォームにしかないため
@@ -182,6 +202,7 @@ const item = z.object({ ...itemFields, url: text('URL', 2000) }).check(
 const itemEdit = z
   .object({
     ...itemFields,
+    ...codeFields,
     url: z.optional(z.pipe(text('URL', 2000), z.string().check(rule((s: string) => (isHttpUrl(s) ? null : URL_INVALID))))),
   })
   .check(
@@ -215,6 +236,7 @@ export const FORMS = {
   restriction,
   item,
   itemEdit,
+  code,
   extraItem,
   image,
 }

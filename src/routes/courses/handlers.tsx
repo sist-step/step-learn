@@ -3,6 +3,7 @@ import type { Context } from 'hono'
 import type { CourseFormValues } from '../../components/course'
 import type { CourseCardData } from '../../components/ui'
 import { canCreateCourse } from '../../lib/auth'
+import { availableCodeLanguages } from '../../lib/code-items'
 import { courseRevision, getCourseAccess, memberCount, trackedDoneCount, trackedItemCount, visibleItem } from '../../lib/courses'
 import { courseImagePrefix, type CourseImageKind } from '../../lib/course-images'
 import { dateInputToUnix, isInPeriod, isUpcoming, unixToDateInput } from '../../lib/course-period'
@@ -142,7 +143,15 @@ export async function show(c: Context<AppEnv>) {
   const sharing = new Set(itemList.filter((it) => it.type === 'screen' && isSharing(it.id)).map((it) => it.id))
 
   return c.render(
-    <CoursePage access={access} sectionList={sectionList} itemList={itemList} done={done} sharing={sharing} revision={revision} />,
+    <CoursePage
+      access={access}
+      sectionList={sectionList}
+      itemList={itemList}
+      done={done}
+      sharing={sharing}
+      revision={revision}
+      codeLanguages={availableCodeLanguages}
+    />,
     {
       title: access.course.title,
     },

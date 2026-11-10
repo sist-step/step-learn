@@ -19,7 +19,7 @@ import { cx } from './cx'
 import { SegmentedControl, SelectField, Switch, TextAreaField, TextField, validateWith } from './form'
 import { Icon, type IconName } from './icons'
 import { Modal } from './overlay'
-import { CourseIcon, ProgressRing, Tabs, courseInitials, type TabItem } from './ui'
+import { Breadcrumbs, Chip, CourseIcon, ProgressRing, Tabs, courseInitials, type Crumb, type TabItem } from './ui'
 import { useStyle } from './style'
 
 type Tab = 'content' | 'participants' | 'settings'
@@ -253,7 +253,7 @@ export const CreateCourseButton = () => (
   </>
 )
 
-export const ITEM_ICONS: Record<ItemType, IconName> = { page: 'page', link: 'link', file: 'file', screen: 'monitor' }
+export const ITEM_ICONS: Record<ItemType, IconName> = { page: 'page', link: 'link', file: 'file', screen: 'monitor', code: 'terminal' }
 
 export const ItemIcon = ({ type }: { type: ItemType }) => {
   useStyle('/src/components/course.css')
@@ -261,6 +261,40 @@ export const ItemIcon = ({ type }: { type: ItemType }) => {
     <span class={`item-icon kind-${type}`}>
       <Icon name={ITEM_ICONS[type]} size={16} />
     </span>
+  )
+}
+
+/** アイテムを画面いっぱいに出すとき（PDF・コード）に、AppShell の topbar に渡す帯 */
+export const ItemBar = ({
+  type,
+  crumbs,
+  title,
+  hiddenNote,
+  children,
+}: {
+  type: ItemType
+  crumbs: readonly Crumb[]
+  title: string
+  hiddenNote?: string
+  children?: Child
+}) => {
+  useStyle('/src/components/course.css')
+  return (
+    <div class="item-bar">
+      <ItemIcon type={type} />
+      <div class="item-bar-text">
+        <Breadcrumbs items={crumbs} />
+        <h1 class="truncate" title={title}>
+          {title}
+        </h1>
+      </div>
+      {hiddenNote && (
+        <Chip icon="eyeSlash" class="item-bar-hidden" title={hiddenNote}>
+          非表示
+        </Chip>
+      )}
+      <div class="item-bar-actions">{children}</div>
+    </div>
   )
 }
 
@@ -324,6 +358,7 @@ const COMPLETION_HINTS: Record<ItemType | 'any', string> = {
   link: '「開いたら完了」は、学生がリンクを開いたときに完了になります。',
   file: '「開いたら完了」はプレビューを表示するかダウンロードしたとき、「最後まで再生したら完了」は動画・音声を最後まで再生したときに完了になります。',
   screen: '画面共有では「なし」か「学生が自分で完了にする」を選べます。',
+  code: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
   any: '「開いたら完了」はページ・リンク・ファイルで、「最後まで再生したら完了」は動画・音声のファイルで選べます。',
 }
 
@@ -340,7 +375,12 @@ export const CompletionField = ({ type, id, value = 'none', error }: { type?: It
 )
 
 const COMPLETION_WAITING: Record<Exclude<Completion, 'none' | 'manual'>, Partial<Record<ItemType, string>>> = {
-  view: { page: 'このページを開くと完了になります', link: 'リンクを開くと完了になります', file: 'ファイルを開くと完了になります' },
+  view: {
+    page: 'このページを開くと完了になります',
+    link: 'リンクを開くと完了になります',
+    file: 'ファイルを開くと完了になります',
+    code: 'このアイテムを開くと完了になります',
+  },
   play: { file: '最後まで再生すると完了になります' },
 }
 

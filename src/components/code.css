@@ -1,0 +1,172 @@
+/* ==========================================================================
+   コードのアイテム（コードの入力欄・エディターと結果の画面）
+   ========================================================================== */
+
+/* ===== コードの入力欄（CodeInput） */
+.code-input {
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-field);
+  background: var(--surface);
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.code-input:focus-within { border-color: var(--focus); box-shadow: var(--ring-field); }
+.has-error .code-input { border-color: var(--danger); }
+.code-mono { font: var(--fs-sm)/1.6 var(--mono); tab-size: 4; }
+.code-input .code-input-source,
+.code-input .code-input-source:focus { display: block; width: 100%; padding: 8px 12px; border: 0; border-radius: 0; box-shadow: none; font: var(--fs-sm)/1.6 var(--mono); tab-size: 4; white-space: pre; resize: vertical; }
+.code-input .code-input-source[hidden] { display: none; }
+/* .cm-editor を重ねて書くのは、CodeMirror が自分で差し込む既定の見た目（後から読み込まれる）に、同じ詳細度では負けるため */
+.code-input .cm-editor { max-height: 60vh; background: none; color: var(--text); }
+.code-input .cm-editor.cm-focused { outline: none; }
+/* 全体の :focus-visible の枠を中に出さないのは、外側の .code-input が枠の色とリングでフォーカスを示しているため */
+.code-input .cm-editor .cm-content:focus-visible { outline: none; }
+.code-input .cm-editor .cm-scroller { overflow: auto; font: var(--fs-sm)/1.6 var(--mono); }
+.code-input .cm-editor .cm-content { min-height: calc(var(--code-rows) * 1.6em + 16px); padding: 8px 0; caret-color: var(--text); }
+.code-input .cm-editor .cm-line { padding: 0 12px 0 8px; }
+.code-input .cm-editor .cm-gutters { border-right: 1px solid var(--border); background: var(--surface-2); color: var(--muted); }
+.code-input .cm-editor .cm-lineNumbers .cm-gutterElement { min-width: 36px; padding: 0 8px 0 6px; }
+.code-input .cm-editor .cm-activeLine { background: color-mix(in srgb, var(--text) 4%, transparent); }
+.code-input .cm-editor .cm-activeLineGutter { background: var(--surface-3); color: var(--text-2); }
+.code-input .cm-editor .cm-cursor { border-left-color: var(--text); }
+.code-input .cm-editor .cm-selectionBackground { background: color-mix(in srgb, var(--primary) 22%, transparent) !important; }
+.code-input .cm-editor .cm-matchingBracket { background: color-mix(in srgb, var(--info) 24%, transparent); outline: none; }
+.code-input .cm-editor .cm-tooltip { border: 1px solid var(--overlay-border); border-radius: var(--radius-sm); background: var(--surface-raised); color: var(--text); box-shadow: var(--shadow); overflow: hidden; }
+.code-input .cm-editor .cm-tooltip-autocomplete ul li { padding: 3px 10px; font: var(--fs-sm)/1.6 var(--mono); }
+.code-input .cm-editor .cm-tooltip-autocomplete ul li[aria-selected] { background: var(--c-soft); color: var(--c-ink); }
+
+.code-input-fill { height: 100%; border: 0; border-radius: 0; }
+.code-input-fill:focus-within { box-shadow: none; }
+.code-input-fill .code-input-host,
+.code-input-fill .cm-editor { height: 100%; max-height: none; }
+.code-input-fill .code-input-source,
+.code-input-fill .code-input-source:focus { height: 100%; resize: none; }
+
+.code-tok-keyword { color: var(--danger-text); }
+.code-tok-string { color: var(--success-text); }
+.code-tok-number { color: var(--warning-text); }
+.code-tok-comment { color: var(--muted); font-style: italic; }
+.code-tok-tag { color: var(--info-text); }
+.code-tok-attr { color: var(--warning-text); }
+.code-tok-prop { color: var(--info-text); }
+.code-tok-def { color: var(--primary-text); }
+.code-tok-punct { color: var(--text-2); }
+
+/* ===== エディターと結果の画面（CodeWorkspace） */
+.code-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  height: calc(100dvh - var(--topbar-h));
+  min-height: 480px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.code-stage + .reader { max-width: 1120px; margin: 40px auto 0; padding: 0 32px; }
+.code-edit, .code-result { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.code-result { border-left: 1px solid var(--border); background: var(--surface-2); }
+
+.code-task, .code-console { flex: none; max-height: 40%; overflow: auto; }
+.code-task { border-bottom: 1px solid var(--border); }
+.code-console { border-top: 1px solid var(--border); background: var(--surface); }
+.code-task > summary, .code-console > summary {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  background: var(--surface);
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  cursor: pointer;
+  list-style: none;
+}
+.code-task > summary::-webkit-details-marker, .code-console > summary::-webkit-details-marker { display: none; }
+.code-task-arrow { margin-left: auto; color: var(--muted); transition: transform 0.15s var(--ease); }
+details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
+.code-task > .prose { max-width: 80ch; padding: 0 16px 16px; }
+
+.code-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.code-pane-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-height: 44px;
+  padding: 4px 8px 4px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.code-pane-title { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; padding-left: 4px; font-size: var(--fs-sm); font-weight: 650; }
+.code-tabs { display: flex; gap: 2px; min-width: 0; margin-right: auto; overflow-x: auto; scrollbar-width: none; }
+.code-tabs button {
+  flex: none;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font: var(--fs-sm) var(--mono);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.code-tabs button[aria-selected='true'] { background: var(--c-soft); color: var(--c-ink); font-weight: 600; }
+@media (hover: hover) {
+  .code-tabs button:not([aria-selected='true']):hover { background: var(--surface-3); color: var(--text); }
+}
+.code-save { flex: none; font-size: var(--fs-xs); white-space: nowrap; }
+.code-file { flex: 1; min-height: 0; }
+.code-file[hidden] { display: none; }
+
+/* 背景をトークンにしないのは、プレビューするページが背景を指定していないとき、ダークモードでも白地に黒い文字というブラウザの既定で見せるため */
+.code-preview { flex: 1; width: 100%; min-height: 0; border: 0; background: Canvas; color-scheme: light; }
+.code-console-count { min-width: 20px; padding: 0 6px; border-radius: 999px; background: var(--danger-soft); color: var(--danger-text); font-size: var(--fs-xs); text-align: center; }
+.code-console-lines { padding: 0 16px 12px; font: var(--fs-sm)/1.6 var(--mono); }
+.code-console-lines:empty::before { content: '出力はまだありません。'; color: var(--muted); font-family: var(--font); }
+.code-console-line { padding: 2px 0; border-bottom: 1px solid var(--border); white-space: pre-wrap; overflow-wrap: anywhere; }
+.code-console-line.is-warn { color: var(--warning-text); }
+.code-console-line.is-error { color: var(--danger-text); }
+
+.code-result > .alert { margin: 12px 16px 0; }
+.code-stdin { flex: none; padding: 12px 16px 0; }
+.code-stdin textarea { resize: vertical; }
+.code-output { flex: 1; min-height: 0; padding: 12px 16px 16px; overflow: auto; }
+.code-output > p { margin: 0; }
+.code-output-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 0 10px; font-size: var(--fs-sm); font-weight: 600; }
+.code-output-status.is-ok { color: var(--success-text); }
+.code-output-status.is-warn { color: var(--warning-text); }
+.code-output-status.is-error { color: var(--danger-text); }
+.code-output-status > .muted { font-weight: 400; }
+.code-output pre {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font: var(--fs-sm)/1.6 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+.code-output pre.is-error { border-color: color-mix(in srgb, var(--danger) 40%, var(--card-border)); color: var(--danger-text); }
+
+@media (max-width: 900px) {
+  .code-stage { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 0; }
+  .code-stage + .reader { margin-top: 28px; padding: 0 16px; }
+  .code-task, .code-console { max-height: none; }
+  .code-task > summary, .code-console > summary { position: static; }
+  .code-pane { flex: none; height: 60dvh; min-height: 320px; }
+  .code-result { border-top: 1px solid var(--border); border-left: 0; }
+  .code-preview { flex: none; height: 60dvh; min-height: 320px; }
+  .code-output { flex: none; min-height: 160px; }
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .code-tabs button { height: 40px; }
+  /* 16px 未満にしないのは、iOS が入力欄にフォーカスしたときに画面を拡大するため */
+  .code-input .cm-editor .cm-scroller,
+  .code-input .code-input-source,
+  .code-stdin textarea { font-size: 16px; }
+}
