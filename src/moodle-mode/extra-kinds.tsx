@@ -1,7 +1,11 @@
 import type { FC } from 'hono/jsx'
+import { Button } from '../components/button'
+import { LinkCard } from '../components/card'
 import type { IconName } from '../components/icons'
+import { Chip } from '../components/ui'
 import type { CourseAccess } from '../lib/courses'
 import type { FieldErrors, FormName } from '../lib/forms'
+import { isSharing } from '../lib/screen-share'
 import type { MItem } from './mapping'
 
 export type ExtraData = Record<string, unknown>
@@ -23,8 +27,47 @@ export type ExtraKind = {
   Fields: FC<{ values: Record<string, unknown>; errors: FieldErrors; idPrefix: string }>
   /** アイテムの画面の本体 */
   View: FC<{ item: MItem; data: ExtraData; access: CourseAccess }>
+  /**
+   * 付けると、一覧や目次からはアイテムの画面ではなく、その下のこのパスの画面を新しいタブで開く。
+   * Moodle の画面からも新しいタブで開き、/m/<key> からもこの画面に移る
+   */
+  tabPath?: string
+  /** 一覧に「配信中」を出すか。引数は活動の cmid */
+  isLive?: (cmid: number) => boolean
 }
 
-export const EXTRA_KINDS: Record<string, ExtraKind> = {}
+const SCREEN_PATH = 'screen'
+
+const screen: ExtraKind = {
+  label: '画面共有',
+  description: '授業中に画面を配信する',
+  icon: 'monitor',
+  form: 'extraItem',
+  toData: () => ({}),
+  Fields: () => null,
+  View: ({ item, access }) => (
+    <LinkCard
+      href={`/courses/${access.course.id}/items/${item.id}/${SCREEN_PATH}`}
+      icon="monitor"
+      class="link-card-lg kind-extra"
+      target="_blank"
+      rel="noopener"
+      data-no-prefetch
+    >
+      <span class="file-name">
+        <span class="strong">画面共有を開く</span>
+        <span class="muted small truncate">別のタブで開きます</span>
+      </span>
+      {item.extra?.live && <Chip tone="live">配信中</Chip>}
+      <Button as="span" variant="primary" iconEnd="external">
+        開く
+      </Button>
+    </LinkCard>
+  ),
+  tabPath: SCREEN_PATH,
+  isLive: isSharing,
+}
+
+export const EXTRA_KINDS: Record<string, ExtraKind> = { screen }
 
 export const extraKindOf = (type: string): ExtraKind | null => (Object.hasOwn(EXTRA_KINDS, type) ? EXTRA_KINDS[type] : null)
