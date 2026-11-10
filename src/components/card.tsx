@@ -122,9 +122,9 @@ export const Table = ({ columns, children }: { columns: readonly (TableColumn | 
   )
 }
 
-export const Stats = ({ compact, children }: { compact?: boolean; children: Child }) => {
+export const Stats = ({ compact, class: cls, children }: { compact?: boolean; class?: string; children: Child }) => {
   useStyle('/src/components/card.css')
-  return <div class={cx('stats', compact && 'stats-compact')}>{children}</div>
+  return <div class={cx('stats', compact && 'stats-compact', cls)}>{children}</div>
 }
 
 export const Stat = ({
