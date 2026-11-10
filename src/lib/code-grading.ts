@@ -1,6 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { aiProvider } from './ai'
-import { aiOverview, recordUsage } from './ai-usage'
+import { aiLedger } from './ai-usage'
 import { createGrader } from './code-grader'
 import { db } from './db'
 import { codeItems, codeSubmissions, items } from './schema'
@@ -29,12 +28,5 @@ export const grader = createGrader({
       .set({ ...result, output })
       .where(eq(codeSubmissions.id, id))
       .run(),
-  budget: {
-    available(model) {
-      const { monthlyLimit, monthSpent } = aiOverview(aiProvider(model))
-      return monthSpent < monthlyLimit
-    },
-    // 提出した学生の使用量にしないのは、AI エージェントの今週の枠が利用者の人数で割って決まり、学生の人数だけ教師の枠が小さくなるため
-    record: (model, usage) => recordUsage(null, model, usage),
-  },
+  ledger: aiLedger,
 })
