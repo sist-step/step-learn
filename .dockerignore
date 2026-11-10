@@ -9,5 +9,7 @@ data
 .DS_Store
 # Moodle のプラグインと検証環境（アプリのイメージには要らない）
 moodle
+# sandbox のイメージは sandbox/ だけでビルドする（アプリのイメージには要らない）
+sandbox
 # 並行作業用の worktree（それぞれ node_modules と data を持つ）
 .claude/worktrees

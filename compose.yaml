@@ -12,11 +12,56 @@ services:
     environment:
       PORT: 3000
       DATA_DIR: /app/data
+      SANDBOX_URL: unix:/run/sandbox/sandbox.sock
     # 0.0.0.0 を既定にしないのは、Docker の公開ポートはホストの ufw / firewalld を素通りし、リバースプロキシを経由しない直接アクセスで APP_ORIGIN の CSRF 検証と TLS を迂回されるため
     ports:
       - '${HOST_BIND:-127.0.0.1}:${HOST_PORT:-3000}:3000'
     volumes:
       - data:/app/data
+      - sandbox-socket:/run/sandbox
+
+  # 学生が書いたコードを app のコンテナで動かさないのは、秘密情報とデータのある場所で他人のコードを動かすことになるため。
+  # こちらには env_file もデータのボリュームも渡さず、乗っ取られても持ち出せるものがない状態にする
+  sandbox:
+    build: ./sandbox
+    image: step-learn-sandbox:latest
+    restart: unless-stopped
+    # ネットワークでつながないのは、内部ネットワークでも app の 3000 番にリバースプロキシを通さずに届いてしまうため。app とは共有ボリュームのソケットで話す
+    network_mode: none
+    # init を挟まないと、実行中のコードが残したプロセスの終了を誰も回収せず、プロセス数の上限を使い切る
+    init: true
+    read_only: true
+    # /dev/shm を残さないのは、実行をまたいでファイルを置いておける場所になるため
+    ipc: none
+    # SysV の共有メモリ・セマフォ・メッセージキューと POSIX のメッセージキューを作れるままにしないのは、プロセスが終わっても残り、実行をまたいでデータを置いておけるため
+    sysctls:
+      kernel.shmmni: 0
+      kernel.msgmni: 0
+      kernel.sem: '0 0 0 0'
+      fs.mqueue.queues_max: 0
+    cap_drop:
+      - ALL
+    # すべて外したままにしないのは、実行ごとに別の UID へ切り替えるのに SETUID と SETGID が要るため
+    cap_add:
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    runtime: ${SANDBOX_RUNTIME:-runc}
+    pids_limit: 256
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 1
+    # 1 つにまとめないのは、ある実行が容量を使い切っても、同時に動いているほかの実行が書けなくならないようにするため。
+    # 同時に実行できる数はこの行の数で決まる（8 まで。uid と gid は 20000 + 番号）
+    tmpfs:
+      - /work/0/home:size=16m,mode=0700,uid=20000,gid=20000,noexec,nosuid,nodev
+      - /work/1/home:size=16m,mode=0700,uid=20001,gid=20001,noexec,nosuid,nodev
+      - /work/2/home:size=16m,mode=0700,uid=20002,gid=20002,noexec,nosuid,nodev
+      - /work/3/home:size=16m,mode=0700,uid=20003,gid=20003,noexec,nosuid,nodev
+    volumes:
+      - sandbox-socket:/run/sandbox
 
 volumes:
   data:
+  sandbox-socket:
