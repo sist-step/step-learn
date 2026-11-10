@@ -348,8 +348,13 @@ export async function mountPdfViewer(root: HTMLElement) {
     markCurrent()
   }
 
+  // hidden の切り替えを CSS（display の allow-discrete と @starting-style）に任せないのは、Firefox では閉じるときに滑らず一瞬で消えるため
   function setThumbsOpen(open: boolean) {
-    thumbsEl.hidden = !open
+    if (open && thumbsEl.hidden) {
+      thumbsEl.hidden = false
+      thumbsEl.getBoundingClientRect()
+    }
+    if (!open && !root.hasAttribute('data-thumbs-motion')) thumbsEl.hidden = true
     root.toggleAttribute('data-thumbs-open', open)
     thumbsBtn.setAttribute('aria-pressed', String(open))
     if (open && current) revealThumb(current)
@@ -406,6 +411,12 @@ export async function mountPdfViewer(root: HTMLElement) {
     if (narrow.matches) setThumbsOpen(false)
   })
 
+  const hideClosedThumbs = (e: TransitionEvent) => {
+    if (e.target === thumbsEl && e.propertyName === 'translate' && !root.hasAttribute('data-thumbs-open')) thumbsEl.hidden = true
+  }
+  thumbsEl.addEventListener('transitionend', hideClosedThumbs)
+  thumbsEl.addEventListener('transitioncancel', hideClosedThumbs)
+
   thumbsEl.addEventListener('keydown', (e) => {
     const step = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0
     const thumb = (e.target as Element).closest<HTMLElement>('[data-pdf-thumb]')
@@ -428,4 +439,5 @@ export async function mountPdfViewer(root: HTMLElement) {
   setThumbsOpen(!narrow.matches && getSetting('pdfThumbs'))
   setZoom('auto')
   markCurrent()
+  root.toggleAttribute('data-thumbs-motion', true)
 }
