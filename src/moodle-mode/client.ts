@@ -145,6 +145,8 @@ export type MoodleCourse = {
   imageurl: string
   /** local_steplearn_get_course だけが返す */
   format?: MoodleFormat
+  /** local_steplearn_get_course だけが返す。ファイル自動配布の活動（mod_stepbundle）が Moodle に入っているか */
+  bundle?: boolean
 }
 
 export type MoodleFormat = {
@@ -190,7 +192,7 @@ export type MoodleModule = {
     details: { rulename: string }[]
   }
   contents?: { type: string; filename: string; filepath?: string; fileurl: string; filesize: number; mimetype?: string }[]
-  /** 活動ごとの追加の情報（JSON）。URL では display（自動を解決したあとの表示方法） */
+  /** 活動ごとの追加の情報（JSON）。URL では display（自動を解決したあとの表示方法）、ファイル自動配布では key（中身を見分ける鍵） */
   customdata?: string
 }
 
@@ -221,6 +223,16 @@ export type MoodleRestriction = {
   /** 完了が条件の活動。-1 は直前の活動 */
   after: number[]
   hideunmet: boolean
+}
+
+/** 活動を作る・変えるときに、どの種類でも送る値。cmid が 0 なら sectionid のセクションに作る */
+export type SaveActivity = {
+  courseid: number
+  cmid: number
+  sectionid: number
+  name: string
+  completion: string
+  visible: boolean
 }
 
 export type StateAction =
@@ -262,25 +274,10 @@ export const api = (token: string) => ({
   setSectionsCollapsed: (courseid: number, sectionids: number[], collapsed: boolean) =>
     call<null>(token, 'local_steplearn_set_sections_collapsed', { courseid, sectionids, collapsed }),
   checkSession: (sidhash: string) => call<{ active: boolean }>(token, 'local_steplearn_check_session', { sidhash }),
-  saveUrl: (p: {
-    courseid: number
-    cmid: number
-    sectionid: number
-    name: string
-    externalurl: string
-    completion: string
-    visible: boolean
-    display: LinkTarget | 'keep'
-  }) => call<number>(token, 'local_steplearn_save_url', p),
-  saveResource: (p: {
-    courseid: number
-    cmid: number
-    sectionid: number
-    name: string
-    draftitemid: number
-    completion: string
-    visible: boolean
-  }) => call<number>(token, 'local_steplearn_save_resource', p),
+  saveUrl: (p: SaveActivity & { externalurl: string; display: LinkTarget | 'keep' }) => call<number>(token, 'local_steplearn_save_url', p),
+  saveResource: (p: SaveActivity & { draftitemid: number }) => call<number>(token, 'local_steplearn_save_resource', p),
+  saveBundle: (p: SaveActivity) => call<number>(token, 'mod_stepbundle_save', p),
+  viewBundle: (cmid: number) => call<unknown>(token, 'mod_stepbundle_view', { cmid }),
 })
 
 export type Api = ReturnType<typeof api>
