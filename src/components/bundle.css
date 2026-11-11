@@ -30,7 +30,6 @@
 
 /* アップロード */
 .bundle-upload { display: flex; flex-direction: column; gap: 10px; }
-.bundle-upload > p { margin: 0; }
 .bundle-drop {
   display: flex;
   flex-direction: column;
@@ -60,8 +59,20 @@
 .bundle-drop-busy { display: none; align-items: center; gap: 8px; min-height: 32px; font-weight: 600; }
 .bundle-drop-busy::before { content: ''; width: 16px; height: 16px; border: 2px solid var(--border-strong); border-top-color: var(--c-ink); border-radius: 50%; animation: spin 0.8s linear infinite; }
 .bundle-upload[data-uploading] .bundle-drop { border-style: solid; }
-.bundle-upload[data-uploading] .bundle-drop-text, .bundle-upload[data-uploading] .bundle-drop-actions { display: none; }
+.bundle-upload[data-uploading] .bundle-drop-text, .bundle-upload[data-uploading] .bundle-drop-actions, .bundle-upload[data-uploading] .bundle-drop-limit { display: none; }
 .bundle-upload[data-uploading] .bundle-drop-busy { display: flex; }
+.bundle-excluded { align-self: flex-start; }
+.bundle-excluded-trigger { display: inline-flex; border-radius: 999px; cursor: pointer; }
+.bundle-excluded-trigger > .chip { color: var(--muted); }
+.bundle-excluded[open] .bundle-excluded-trigger > .chip { color: var(--text-2); }
+.bundle-excluded-panel { right: auto; left: 0; display: flex; flex-direction: column; gap: 10px; }
+.bundle-excluded-panel > p { margin: 0; color: var(--text-2); }
+.bundle-drop-limit > span { display: inline-block; }
+.bundle-excluded-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.bundle-excluded-list code { display: inline-block; padding: 2px 8px; border-radius: 6px; background: var(--surface-3); color: var(--text-2); font: 500 var(--fs-xs) var(--mono); }
+@media (hover: hover) {
+  .bundle-excluded-trigger:hover > .chip { color: var(--text-2); }
+}
 @media (prefers-reduced-motion: reduce) {
   .bundle-drop-busy::before { animation-duration: 3s; }
 }
