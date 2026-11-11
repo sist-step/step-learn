@@ -1,4 +1,4 @@
-import { BundleFilesCard, BundleOpen, bundleBase } from '../../components/bundle'
+import { BundleEditPanel, BundleOpen, type BundleView } from '../../components/bundle'
 import { CodeBarActions, CodeGrade, CodeGradingFields, CodeStarterFields, CodeWorkspace, type GradeView } from '../../components/code'
 import {
   CompletionField,
@@ -21,7 +21,7 @@ import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, DangerRow, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
-import type { BundleFile } from '../../lib/bundle'
+import { bundleBase } from '../../lib/bundle'
 import type { CodeFiles, CodeLanguage } from '../../lib/code'
 import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
@@ -68,7 +68,7 @@ export const ItemEditPage = ({
   access,
   item,
   code,
-  bundleFiles,
+  bundle,
   gradingEnabled,
   sections,
   values,
@@ -77,8 +77,8 @@ export const ItemEditPage = ({
   access: CourseAccess
   item: Item
   code?: CodeItem
-  /** ファイル自動配布のアイテムで配るファイル */
-  bundleFiles?: BundleFile[]
+  /** ファイル自動配布のアイテムで配るファイルと、同期の状態 */
+  bundle?: BundleView
   /** AI が設定されていて、提出を自動で採点するか */
   gradingEnabled: boolean
   sections: Section[]
@@ -205,23 +205,22 @@ export const ItemEditPage = ({
                 </div>
               </Card>
             )}
+            <Card tone="danger" class="editor-danger">
+              <DangerRow
+                heading="アイテムを削除"
+                description={`${bundle ? '配布するファイルと、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : ''}完了記録も消え、元に戻せません。`}
+              >
+                <Button type="submit" form="item-delete-form" variant="danger-outline" size="sm" icon="trash">
+                  削除
+                </Button>
+              </DangerRow>
+            </Card>
           </aside>
         </form>
 
-        {bundleFiles && <BundleFilesCard base={bundleBase(courseId, item.id)} files={bundleFiles} class="editor-extra" />}
+        {bundle && <BundleEditPanel base={bundleBase(courseId, item.id)} {...bundle} class="editor-extra" />}
 
-        <Card tone="danger" class="editor-danger">
-          <DangerRow
-            heading="アイテムを削除"
-            description={`${bundleFiles ? '配布するファイルと、' : ''}学生の${code ? '提出と' : ''}完了記録も消え、元に戻せません。`}
-          >
-            <form method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`}>
-              <Button type="submit" variant="danger-outline" size="sm" icon="trash">
-                削除
-              </Button>
-            </form>
-          </DangerRow>
-        </Card>
+        <form id="item-delete-form" method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`} hidden />
       </div>
     </AppShell>
   )
@@ -239,7 +238,7 @@ export const ItemPage = ({
   sharing,
   textPreview,
   code,
-  bundleFiles,
+  bundle,
   revision,
 }: {
   access: CourseAccess
@@ -253,7 +252,7 @@ export const ItemPage = ({
   sharing: boolean
   textPreview: string | null
   code?: CodeView
-  bundleFiles?: BundleFile[]
+  bundle?: BundleView
   revision: string
 }) => {
   const id = access.course.id
@@ -383,12 +382,8 @@ export const ItemPage = ({
             </LinkCard>
           )}
 
-          {bundleFiles && (
-            <BundleOpen
-              base={bundleBase(id, item.id)}
-              files={bundleFiles}
-              editHref={access.canManage ? `${base}/${item.id}/edit` : undefined}
-            />
+          {bundle && (
+            <BundleOpen base={bundleBase(id, item.id)} {...bundle} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />
           )}
 
           {item.type === 'screen' && (

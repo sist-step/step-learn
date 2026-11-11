@@ -1357,20 +1357,19 @@ export const ItemEditPage = ({
                 </div>
               </Card>
             )}
+            <Card tone="danger" class="editor-danger">
+              <DangerRow heading="アイテムを削除" description="旧STEP Learn からも削除され、学生の完了記録も消えます。">
+                <Button type="submit" form="item-delete-form" variant="danger-outline" size="sm" icon="trash">
+                  削除
+                </Button>
+              </DangerRow>
+            </Card>
           </aside>
         </form>
 
         {extraKind?.Panel && <extraKind.Panel item={item} access={access} />}
 
-        <Card tone="danger" class="editor-danger">
-          <DangerRow heading="アイテムを削除" description="旧STEP Learn からも削除され、学生の完了記録も消えます。">
-            <form method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`}>
-              <Button type="submit" variant="danger-outline" size="sm" icon="trash">
-                削除
-              </Button>
-            </form>
-          </DangerRow>
-        </Card>
+        <form id="item-delete-form" method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`} hidden />
       </div>
     </AppShell>
   )
