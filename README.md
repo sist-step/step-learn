@@ -248,7 +248,7 @@ Marketplace への公開（無料）:
 
 1. Microsoft アカウントで [Azure DevOps](https://dev.azure.com/) の組織を作り、「Personal access tokens」で Organization を「All accessible organizations」、Scopes を「Marketplace の Manage」にしたトークンを作る
 2. [Marketplace の管理画面](https://marketplace.visualstudio.com/manage) で publisher `mint1535` を作る
-3. `cd vscode-extension && npx vsce login mint1535`（トークンを入力）→ `npm run publish`。更新するときは `package.json` の `version` を上げてから `npm run publish`
+3. `cd vscode-extension && npm ci && npx vsce login mint1535`（トークンを入力）→ `npm run publish`。`npm ci` を省くと、グローバルに入っている古い vsce が使われて `unknown option '--skip-license'` で失敗することがある。更新するときは `package.json` の `version` を上げてから `npm run publish`
 
 拡張機能の ID は `mint1535.step-learn-for-vscode`（publisher と `package.json` の `name`）です。publisher か名前を変えるときは、`vscode-extension/package.json` と `src/lib/bundle.ts` の `VSCODE_EXTENSION_ID` をそろえてください。そろっていないと、「VS Code で開く」のリンクが拡張機能に届きません。
 
