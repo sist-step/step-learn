@@ -1,5 +1,6 @@
 import type { FC } from 'hono/jsx'
-import { BundleFilesCard, BundleOpen, bundleBase } from '../components/bundle'
+import { useRequestContext } from 'hono/jsx-renderer'
+import { BundleEditPanel, BundleOpen, type BundleView } from '../components/bundle'
 import { Button } from '../components/button'
 import { LinkCard } from '../components/card'
 import { CodeGradingFields, CodeStarterFields } from '../components/code'
@@ -17,13 +18,15 @@ import {
   isCodeLanguage,
   type CodeFiles,
 } from '../lib/code'
-import { BUNDLE_KIND } from '../lib/bundle'
+import { BUNDLE_KIND, bundleBase } from '../lib/bundle'
+import { syncStateOf } from '../lib/bundle-sync'
 import { gradingEnabled } from '../lib/code-grader'
 import type { CourseAccess } from '../lib/courses'
 import type { FieldErrors, FormName } from '../lib/forms'
 import { sandboxEnabled } from '../lib/sandbox'
 import { isSharing } from '../lib/screen-share'
-import { bundleStore } from './bundle-store'
+import type { AppEnv } from '../lib/types'
+import { bundleStore, bundleSyncStore } from './bundle-store'
 import type { MItem } from './mapping'
 
 export type ExtraData = Record<string, unknown>
@@ -181,7 +184,15 @@ const code: ExtraKind = {
   tabPath: CODE_KIND,
 }
 
-const bundleFilesOf = (item: MItem) => (item.extraKey ? bundleStore(item.extraKey).list() : [])
+// 見ている人を引数で受け取らないのは、ほかの種類の View と Panel には要らず、種類の定義の形を変えずに済ませるため
+function useBundleView(item: MItem, access: CourseAccess): BundleView {
+  const viewer = { id: useRequestContext<AppEnv>().var.user!.id, canManage: access.canManage }
+  if (!item.extraKey) return { files: [], sync: { enabled: false } }
+  return {
+    files: bundleStore(item.extraKey).list(),
+    sync: syncStateOf(bundleSyncStore(item.extraKey), bundleBase(access.course.id, item.id), viewer),
+  }
+}
 
 const bundle: ExtraKind = {
   label: 'ファイル自動配布',
@@ -194,12 +205,12 @@ const bundle: ExtraKind = {
   View: ({ item, access }) => (
     <BundleOpen
       base={bundleBase(access.course.id, item.id)}
-      files={bundleFilesOf(item)}
+      {...useBundleView(item, access)}
       editHref={access.canManage ? `/courses/${access.course.id}/items/${item.id}/edit` : undefined}
     />
   ),
   Panel: ({ item, access }) => (
-    <BundleFilesCard base={bundleBase(access.course.id, item.id)} files={bundleFilesOf(item)} class="editor-extra" />
+    <BundleEditPanel base={bundleBase(access.course.id, item.id)} {...useBundleView(item, access)} class="editor-extra" />
   ),
   editAfterCreate: true,
 }

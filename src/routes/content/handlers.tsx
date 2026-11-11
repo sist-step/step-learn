@@ -9,8 +9,12 @@ import {
   trackedDoneCount,
   trackedItemCount,
   visibleItem,
+  type CourseAccess,
 } from '../../lib/courses'
-import { bundleKeysOf, bundleStore } from '../../lib/bundle-items'
+import type { BundleView } from '../../components/bundle'
+import { bundleBase } from '../../lib/bundle'
+import { bundleKeysOf, bundleStore, bundleSyncStore } from '../../lib/bundle-items'
+import { syncStateOf } from '../../lib/bundle-sync'
 import { DEFAULT_MAX_SCORE, DEFAULT_STARTER, MAX_CODE_LENGTH, MAX_STDIN_LENGTH } from '../../lib/code'
 import { gradingEnabled } from '../../lib/code-grader'
 import { grader } from '../../lib/code-grading'
@@ -40,6 +44,15 @@ async function manageAccess(c: Context<AppEnv>) {
   const id = intParam(c, 'id')
   const access = id && (await getCourseAccess(c, id))
   return access && access.canManage ? access : null
+}
+
+function bundleView(c: Context<AppEnv>, access: CourseAccess, itemId: number): BundleView {
+  const courseId = access.course.id
+  const viewer = { id: c.var.user!.id, canManage: access.canManage }
+  return {
+    files: bundleStore(itemId).list(),
+    sync: syncStateOf(bundleSyncStore(courseId, itemId), bundleBase(courseId, itemId), viewer),
+  }
 }
 
 const getItem = (courseId: number, itemId: number) =>
@@ -238,7 +251,7 @@ export async function editItem(c: Context<AppEnv>) {
       access={access}
       item={item}
       code={getCodeItem(iid)}
-      bundleFiles={item.type === 'bundle' ? bundleStore(iid).list() : undefined}
+      bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
       gradingEnabled={gradingEnabled}
       sections={listSections(access.course.id)}
     />,
@@ -285,7 +298,7 @@ export async function updateItem(c: Context<AppEnv>) {
         access={access}
         item={item}
         code={code}
-        bundleFiles={item.type === 'bundle' ? bundleStore(iid).list() : undefined}
+        bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
         gradingEnabled={gradingEnabled}
         sections={listSections(courseId)}
         values={values}
@@ -450,7 +463,7 @@ export async function showItem(c: Context<AppEnv>) {
       sharing={isSharing(item.id)}
       textPreview={textPreview}
       code={code}
-      bundleFiles={item.type === 'bundle' ? bundleStore(iid).list() : undefined}
+      bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
       revision={revision}
     />,
     { title: item.title },
