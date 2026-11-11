@@ -2,7 +2,7 @@ import type { Context } from 'hono'
 import type { MoodleEnv } from './auth'
 import { cached, contentsKey, courseKey, coursesKey, otherCoursesKey, restrictionsKey } from './cache'
 import { api, isTokenError, type MoodleFormat } from './client'
-import { withExtras } from './extra'
+import { removeRetired, withExtras } from './extra'
 import { isOpenable, isTracked, toAccess, toLayout, toOutline, withRestrictions } from './mapping'
 
 export const moodle = (c: Context<MoodleEnv>) => api(c.var.token!)
@@ -56,13 +56,10 @@ export async function loadCourseAs({ token, userId }: Viewer, courseId: number, 
   const outline = toOutline(contents, { tracking: course.completionenabled, manage: course.canmanage })
   // 学生に問い合わせないのは、制限の中身は編集できる人にしか返さず、学生には Moodle が開けない理由だけを返すため
   const restrictions = course.canmanage ? await restrictionsOf({ token, userId }, courseId, fresh) : NO_RESTRICTIONS
-  return {
-    course,
-    access,
-    layout: toLayout(course.format),
-    restrictable: restrictions.enabled,
-    ...withExtras(courseId, withRestrictions(outline, restrictions.restrictions)),
-  }
+  const { retired, ...shown } = withExtras(courseId, withRestrictions(outline, restrictions.restrictions))
+  // 学生が開いたときに消さないのは、Moodle の活動を消せるのが教師だけなため。学生には一覧から外すだけにする
+  if (retired.length && course.canmanage) await removeRetired(moodle, courseId, retired)
+  return { course, access, layout: toLayout(course.format), restrictable: restrictions.enabled, ...shown }
 }
 
 export type LoadedCourse = Awaited<ReturnType<typeof loadCourseAs>>

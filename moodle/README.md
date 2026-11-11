@@ -4,6 +4,7 @@ STEP Learn の Moodle モード（README の「Moodle モード」）で使う M
 
 ```
 local_steplearn/   Moodle 5.1 のプラグイン（public/local/steplearn/ に置く）
+mod_stepbundle/    活動「ファイル自動配布」のプラグイン（public/mod/stepbundle/ に置く。local_steplearn が要る）
 dev/               手元で試すための Moodle 5.1（Docker）
 ```
 
@@ -21,10 +22,24 @@ dev/               手元で試すための Moodle 5.1（Docker）
 
 並べ替え・表示の切り替え・削除は、コアの `core_courseformat_update_course` を使います（トピック形式・週形式など、コンポーネントに対応したコースフォーマットが必要です）。
 
+## ファイル自動配布の活動（mod_stepbundle）
+
+STEP Learn の「ファイル自動配布」のアイテムを、Moodle のコースに活動として置くためのプラグインです。配布するファイル・zip・「VS Code で開く」は STEP Learn にあり、Moodle が持つのは活動の名前・説明と、STEP Learn がファイルを見分けるための鍵だけです。
+
+| 機能 | 中身 |
+| --- | --- |
+| 開く | `view.php` が開いたことを記録して（「開いたら完了」の条件を満たす）、STEP Learn のアイテムの画面（`<STEP Learn の URL>/courses/<コース ID>/items/<cmid>`）に移す。`local_steplearn` の「STEP Learn の URL」が空のときは、設定されていないことを表示する |
+| 作る・変える | Moodle の活動の追加・編集の画面（名前と説明だけ。ファイルの欄はない）と、STEP Learn が呼ぶ `mod_stepbundle_save` |
+| 開いたことの記録 | STEP Learn の画面で開いたときに呼ぶ `mod_stepbundle_view` |
+| 鍵 | 活動を作るときに決め、`core_course_get_contents` の `customdata` で STEP Learn に渡す。バックアップにも含め、ごみ箱から戻したときは同じ鍵（前のファイルにつながる）、複製やコースのコピーで元の活動が残っているときは新しい鍵（ファイルのない状態から始まる）にする |
+
+2 つの Web サービスの関数は、`local_steplearn` の外部サービス「STEP Learn」に登録してあります。STEP Learn は、`local_steplearn_get_course` の `bundle` でこのプラグインが入っているかを確かめ、入っていなければファイル自動配布を追加できないようにします。
+
 ## 本番の Moodle での設定
 
-1. `local_steplearn/` を Moodle の `public/local/steplearn/` に置き、管理画面からインストールする
-   - サイト管理 > プラグイン > プラグインをインストールする から入れる場合は、次のコマンドで作った `moodle/local_steplearn.zip`（git では管理しない）をアップロードする。zip の中のディレクトリ名はプラグインの名前の `steplearn` にする必要がある
+1. `local_steplearn/` を Moodle の `public/local/steplearn/` に置き、管理画面からインストールする。ファイル自動配布を使うときは、続けて `mod_stepbundle/` を `public/mod/stepbundle/` に置いてインストールする（`local_steplearn` を先に入れる。すでに入っているときは、先に新しいものに更新する）
+   - サイト管理 > プラグイン > プラグインをインストールする から入れる場合は、次のコマンドで作った `moodle/local_steplearn.zip`・`moodle/mod_stepbundle.zip`（git では管理しない）をアップロードする。zip の中のディレクトリ名はプラグインの名前の `steplearn`・`stepbundle` にする必要がある
+   - `mod_stepbundle` を入れるときは、STEP Learn を先に新しいものに更新しておく。古い STEP Learn はこの活動を知らず、Moodle の画面へのリンクとして出すので、開くと STEP Learn と Moodle の間を行き来してしまう
 
      ```sh
      make moodle-zip    # リポジトリのルートで実行する。消すときは make moodle-zip-clean
@@ -64,6 +79,12 @@ docker compose exec -u www-data moodle php /opt/steplearn-dev/seed.php
 - Moodle は http://localhost:8080（管理者 `admin`、教師 `teacher1`、学生 `student1`、パスワードはすべて `Moodle-dev-pass-1`）
 - `seed.php` が Web サービスとプラグインの設定、コード交換用のアカウント、テスト用のコース（リンク・ファイル・ラベル・課題・非表示のリンク）を作り、STEP Learn に渡す環境変数を表示します。何度実行してもかまいません
 - Microsoft ログインは Entra ID の設定が要るので、この環境では試せません
+- `compose.yaml` は `local_steplearn/` と `mod_stepbundle/` をコンテナに差し込みます。プラグインを足したり版を上げたりしたあとは、次のコマンドで Moodle に反映します（`compose.yaml` に差し込みが増えたときは、コンテナも作り直されます）
+
+  ```sh
+  docker compose up -d
+  docker compose exec -u www-data moodle php admin/cli/upgrade.php --non-interactive
+  ```
 - タイルと折りたたみ型トピックを試すときは、プラグインを `.moodle/moodle/public/course/format/` に入れてから `seed.php` を実行し直すと、それぞれのコースも作ります
 
   ```sh

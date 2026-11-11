@@ -49,7 +49,10 @@ class get_course extends external_api {
         // 存在しないコースと区別できる応答になるため
         self::validate_context(\context_system::instance());
         [$course, $access] = courses::require_access($courseid);
-        return courses::export($course, $access) + ['format' => formats::export($course)];
+        return courses::export($course, $access) + [
+            'format' => formats::export($course),
+            'bundle' => array_key_exists('stepbundle', \core_plugin_manager::instance()->get_enabled_plugins('mod')),
+        ];
     }
 
     /**
@@ -59,6 +62,7 @@ class get_course extends external_api {
         // コース一覧（get_my_courses）に含めないのは、フォーマットの設定はコースの画面でしか使わず、コースの数だけ計算することになるため
         $structure = courses::structure();
         $structure->keys['format'] = formats::structure();
+        $structure->keys['bundle'] = new external_value(PARAM_BOOL, 'mod_stepbundle (file distribution) is installed and enabled');
         return $structure;
     }
 }

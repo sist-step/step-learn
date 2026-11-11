@@ -105,6 +105,10 @@ $services = [
             'core_completion_update_activity_completion_status_manually',
             'mod_url_view_url',
             'mod_resource_view_resource',
+            // mod_stepbundle（ファイル自動配布）の側から足さないのは、このサービスで呼べる関数をこの一覧だけで見渡せるようにするため。
+            // mod_stepbundle を入れていない Moodle では、呼べない名前として残るだけになる
+            'mod_stepbundle_save',
+            'mod_stepbundle_view',
             'local_steplearn_get_my_courses',
             'local_steplearn_get_other_courses',
             'local_steplearn_get_course',
