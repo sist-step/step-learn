@@ -72,11 +72,11 @@ cp config.php .moodle/moodle/config.php
 docker compose up -d
 docker compose exec moodle chown -R www-data:www-data /var/www/moodledata
 docker compose exec -u www-data moodle php admin/cli/install_database.php --agree-license \
-  --fullname="STEP Learn 検証" --shortname=steplearn-dev --adminuser=admin --adminpass='Moodle-dev-pass-1' --adminemail=admin@example.com
+  --fullname="STEP Learn 検証" --shortname=steplearn-dev --adminuser=admin --adminpass='admin' --adminemail=admin@example.com
 docker compose exec -u www-data moodle php /opt/steplearn-dev/seed.php
 ```
 
-- Moodle は http://localhost:8080（管理者 `admin`、教師 `teacher1`、学生 `student1`、パスワードはすべて `Moodle-dev-pass-1`）
+- Moodle は http://localhost:8080（管理者 `admin`、教師 `teacher`、学生 `student`。パスワードはどれもユーザー名と同じ）
 - `seed.php` が Web サービスとプラグインの設定、コード交換用のアカウント、テスト用のコース（リンク・ファイル・ラベル・課題・非表示のリンク）を作り、STEP Learn に渡す環境変数を表示します。何度実行してもかまいません
 - Microsoft ログインは Entra ID の設定が要るので、この環境では試せません
 - `compose.yaml` は `local_steplearn/` と `mod_stepbundle/` をコンテナに差し込みます。プラグインを足したり版を上げたりしたあとは、次のコマンドで Moodle に反映します（`compose.yaml` に差し込みが増えたときは、コンテナも作り直されます）
