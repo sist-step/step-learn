@@ -43,6 +43,13 @@
       "when": 1794385118892,
       "tag": "0005_bundle_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794396818347,
+      "tag": "0006_faulty_blazing_skull",
+      "breakpoints": true
     }
   ]
 }
