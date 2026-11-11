@@ -3,6 +3,9 @@ import { z } from 'zod'
 
 export const SETTINGS_KEY = 'settings'
 
+/** AI のパネルを本文の横に並べる幅。これより狭いと本文に重ねて出す */
+export const AI_PANEL_DOCKED = '(min-width: 1100px)'
+
 // 項目ごとに .catch で既定値に戻すのは、壊れた値や古い形式の値が 1 つあるだけで、ほかの設定まで失わないようにするため
 const SETTINGS = z.object({
   // OS の設定に合わせないのは、利用者が自分で選んだときだけダークにするため
@@ -12,6 +15,7 @@ const SETTINGS = z.object({
   editMode: z.boolean().catch(false),
   pdfThumbs: z.boolean().catch(true),
   collapsedSections: z.array(z.string()).catch([]),
+  aiPanel: z.boolean().catch(false),
 })
 
 export type Settings = z.infer<typeof SETTINGS>
@@ -75,5 +79,6 @@ function migrateLegacy(): Settings {
   return settings
 }
 
-// client.ts で当てないのは、module のスクリプトは描画のあとに動くので、ダークの人に一瞬ライトの画面が見えてしまうため
-export const THEME_BOOT_SCRIPT = `try{if(JSON.parse(localStorage.getItem(${JSON.stringify(SETTINGS_KEY)})).theme==='dark'){document.documentElement.dataset.theme='dark';document.querySelector('meta[name=color-scheme]').content='dark'}}catch(e){}`
+// client.ts で当てないのは、module のスクリプトは描画のあとに動くので、ダークの人に一瞬ライトの画面が見えてしまい、AI のパネルを開いている人には本文の幅が一瞬広く見えてしまうため
+// 幅の狭い画面で AI のパネルを開き直さないのは、本文を覆って出るので、ページを開くたびに本文が隠れてしまうため
+export const BOOT_SCRIPT = `try{var s=JSON.parse(localStorage.getItem(${JSON.stringify(SETTINGS_KEY)}));if(s.theme==='dark'){document.documentElement.dataset.theme='dark';document.querySelector('meta[name=color-scheme]').content='dark'}if(s.aiPanel&&matchMedia(${JSON.stringify(AI_PANEL_DOCKED)}).matches)document.documentElement.dataset.aiOpen=''}catch(e){}`

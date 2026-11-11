@@ -180,6 +180,30 @@ export const aiUsage = sqliteTable(
   (t) => [index('ai_usage_created').on(t.createdAt), index('ai_usage_user').on(t.userId, t.createdAt)],
 )
 
+/**
+ * AI エージェントのチャット（lib/ai-chat.ts）。完全移行では引き継がない。
+ * 通常モードの ai_chats（lib/schema.ts）と同じ形にしておく（ai-chat.ts が両方のテーブルを同じ型で受け取る）
+ */
+export const aiChats = sqliteTable(
+  'ai_chats',
+  {
+    id: integer('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // CHECK を付けないのは、モデルを入れ替えたときに、それまでに始めたチャットの行が制約に引っかかるため
+    model: text('model').notNull(),
+    /** AES-256-GCM で暗号化した会話 */
+    content: blob('content', { mode: 'buffer' }).notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .default(now)
+      .$onUpdate(() => now),
+  },
+  (t) => [index('ai_chats_user').on(t.userId), index('ai_chats_updated').on(t.updatedAt)],
+)
+
 /** アプリ全体の設定（AI の月の上限など）。通常モードの app_settings と同じ形。完全移行では引き継がない */
 export const appSettings = sqliteTable('app_settings', {
   key: text('key').primaryKey(),

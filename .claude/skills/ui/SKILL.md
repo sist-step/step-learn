@@ -148,6 +148,13 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `BundleEditPanel` | 編集画面の、配るファイルのアップロード（フォルダー・ファイルの選択とドラッグ＆ドロップ。`client.ts` がフォルダーの中の場所を `paths` として一緒に送る）と削除ボタン付きの木、その下の「データを同期する」の切り替え（`${base}/sync` へのフォーム）。保存のフォームの外に置く（通常モードの `ItemEditPage` と、Moodle モードの `ExtraKind` の `Panel`） |
 | `BundleTree` | 配るファイルのフォルダーの木（`files`、`deleteAction` を渡すと行ごとの削除ボタン） |
 
+### AI アシスタント — `src/components/ai-panel.tsx`
+
+| 部品 | 用途 |
+| --- | --- |
+| `AiPanel` | 右に出す AI のパネル。`AppShell` が `c.var.aiPanel`（通常モードは `app.tsx`、Moodle モードは `moodle-mode/app.tsx` で設定。AI を使えない利用者には設定しない）を呼んで、本文の後ろに置く。会話は描いた時点のものをサーバーが出し、そのあと `client.ts` が `template[data-ai-template]` を複製して書き足す（`data-keep` があるので、再読み込みなしの遷移では中身を差し替えない）。送信は `/ai/chat` への POST で、応答は NDJSON（`lib/ai-agent.ts` の `AiAgentEvent`）で届いた分から出す。AI が確認の要るツールを呼ぶと、会話に確認カード（変更前と変更後。複数行の文章は `lib/diff.ts` の差分）を出し、「実行する／取り消す」は `/ai/chat/confirm` への送信で、応答は同じく NDJSON で流れる。カードを出したあとや送信のあとは、`client.ts` が `/ai/chat`（パネルだけのページ）を取り直して、サーバーの描いたものに置き換える。開閉は端末ごとの設定（`aiPanel`）で、`<html data-ai-open>`。幅 1100px 以上では本文を狭めて横に並べ、それより狭いと本文に重ねる |
+| `AiPanelToggle` | ヘッダーの右に置く開閉ボタン |
+
 ### PDF — `src/components/pdf.tsx`
 
 | 部品 | 用途 |

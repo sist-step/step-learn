@@ -15,6 +15,7 @@ import type { AppEnv } from './lib/types'
 import { renderer } from './renderer'
 import account from './routes/account'
 import admin from './routes/admin'
+import ai, { renderAiPanel } from './routes/ai'
 import auth from './routes/auth'
 import bundle, { isSyncRequest, api as vscodeApi } from './routes/bundle'
 import code from './routes/code'
@@ -39,6 +40,11 @@ app.use(session)
 const syncBodyLimit = limitBody(SYNC_BODY_LIMIT)
 app.use((c, next) => (c.var.user ? userBodyLimit : isSyncRequest(c) ? syncBodyLimit : guestBodyLimit)(c, next))
 app.use(renderer)
+// 要求ごとに描いておかず、AppShell が呼ぶまで待つのは、JSON やファイルを返す要求のたびに会話を復号することになるため
+app.use(async (c, next) => {
+  c.set('aiPanel', () => renderAiPanel(c.var.user))
+  await next()
+})
 
 // 各ハンドラで呼ばないのは、内容を変える操作を足したときに呼び忘れると、開いている画面に反映されなくなるため
 // 完了の切り替えと、コードのアイテムの実行・保存・提出と、VS Code で開くリンクの発行を除くのは、本人にしか関係がないのに、コースを開いている全員に取り直させることになるため
@@ -63,6 +69,7 @@ app.route('/courses', bundle)
 app.route('/api/vscode', vscodeApi)
 app.route('/account', account)
 app.route('/admin', admin)
+app.route('/ai', ai)
 
 const NotFound = ({ loggedIn }: { loggedIn: boolean }) => (
   <EmptyState

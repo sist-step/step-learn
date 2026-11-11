@@ -198,6 +198,27 @@ export const aiUsage = sqliteTable(
   (t) => [index('ai_usage_created').on(t.createdAt), index('ai_usage_user').on(t.userId, t.createdAt)],
 )
 
+/** AI エージェントのチャット。閉じたら消し、閉じずに置かれたものも最後の発言から AI_CHAT_TTL で消す（lib/ai-chat.ts） */
+export const aiChats = sqliteTable(
+  'ai_chats',
+  {
+    id: integer('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // CHECK を付けないのは、モデルを入れ替えたときに、それまでに始めたチャットの行が制約に引っかかるため
+    model: text('model').notNull(),
+    /** AES-256-GCM で暗号化した会話（lib/ai-chat.ts の sealChat） */
+    content: blob('content', { mode: 'buffer' }).notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .default(now)
+      .$onUpdate(() => now),
+  },
+  (t) => [index('ai_chats_user').on(t.userId), index('ai_chats_updated').on(t.updatedAt)],
+)
+
 /** 管理画面で変える、アプリ全体の設定（端末ごとの設定は lib/settings.ts） */
 export const appSettings = sqliteTable('app_settings', {
   key: text('key').primaryKey(),

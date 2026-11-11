@@ -1,0 +1,126 @@
+/* ==========================================================================
+   AI アシスタントのパネル（components/ai-panel.tsx。開閉と会話は client.ts）
+   ========================================================================== */
+
+:root { --ai-panel-w: 400px; }
+
+.ai-panel {
+  position: fixed;
+  top: var(--topbar-h);
+  right: 0;
+  bottom: 0;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  width: var(--ai-panel-w);
+  border-left: 1px solid var(--overlay-border);
+  background: var(--chrome);
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform 0.25s var(--ease), visibility 0s 0.25s;
+}
+:root[data-ai-open] .ai-panel { transform: none; visibility: visible; transition: transform 0.25s var(--ease); }
+/* 広い画面でパネルを本文に重ねないのは、開いたまま教材を見ながら頼めるようにするため */
+@media (min-width: 1100px) {
+  .app:has(> .ai-panel) { transition: padding-right 0.25s var(--ease); }
+  :root[data-ai-open] .app:has(> .ai-panel) { padding-right: var(--ai-panel-w); }
+}
+@media (max-width: 1099px) {
+  .ai-panel { box-shadow: none; }
+  :root[data-ai-open] .ai-panel { box-shadow: var(--shadow-lg); background: var(--surface-raised); }
+}
+@media (max-width: 640px) {
+  .ai-panel { top: 0; z-index: 45; width: 100%; border-left: 0; }
+}
+
+:root[data-ai-open] .ai-panel-toggle { background: var(--c-soft); color: var(--c-ink); }
+
+.ai-panel-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 16px; border-bottom: 1px solid var(--border); }
+.ai-panel-mark { flex: none; color: var(--c-ink); }
+.ai-panel-heading { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.3; }
+.ai-panel-heading strong { font-size: var(--fs-base); }
+.ai-panel-model { font-size: var(--fs-xs); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ai-log { display: flex; flex-direction: column; gap: 14px; flex: 1; min-height: 0; padding: 16px; overflow-y: auto; overscroll-behavior: contain; }
+
+.ai-intro { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: auto 0; text-align: center; }
+.ai-intro-title { font-size: var(--fs-lg); }
+.ai-intro-text { font-size: var(--fs-sm); color: var(--muted); line-height: 1.7; }
+.ai-suggestions { display: flex; flex-direction: column; align-self: stretch; gap: 6px; margin-top: 6px; }
+.ai-suggestion {
+  padding: 9px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+@media (hover: hover) {
+  .ai-suggestion:hover { border-color: var(--border-strong); background: var(--surface-2); }
+}
+.ai-problems { align-self: stretch; padding: 10px 12px; border-radius: var(--radius); background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning-text); font-size: var(--fs-sm); text-align: left; list-style: none; }
+.ai-problems li + li { margin-top: 4px; }
+
+.ai-msg { max-width: 100%; animation: rise 0.2s var(--ease); }
+.ai-msg-user { align-self: flex-end; max-width: 88%; padding: 9px 13px; border-radius: 16px 16px 4px 16px; background: var(--c-soft); color: var(--text); font-size: var(--fs-sm); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-prose { font-size: var(--fs-sm); line-height: 1.8; }
+.ai-prose > * + * { margin-top: 0.7em; }
+.ai-prose h2, .ai-prose h3, .ai-prose h4 { margin-top: 1.2em; font-size: var(--fs-base); }
+.ai-prose pre { padding: 10px 12px; font-size: var(--fs-xs); }
+
+.ai-tool { display: flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--muted); animation: rise 0.2s var(--ease); }
+.ai-tool .icon { flex: none; color: var(--success-text); }
+.ai-error { display: flex; align-items: flex-start; gap: 6px; padding: 8px 10px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger-text); font-size: var(--fs-sm); }
+.ai-error .icon { flex: none; margin-top: 3px; }
+
+/* ===== 確認カード */
+.ai-card { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-card); animation: rise 0.2s var(--ease); }
+.ai-card[data-state='pending'] { border-color: color-mix(in srgb, var(--warning) 55%, var(--card-border)); }
+.ai-card-title { display: flex; align-items: flex-start; gap: 6px; font-size: var(--fs-sm); }
+.ai-card-title .icon { flex: none; margin-top: 3px; color: var(--muted); }
+.ai-card-changes { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+.ai-change dt { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); }
+.ai-change dd { margin: 2px 0 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.ai-change-values { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.ai-change-values .icon { flex: none; color: var(--muted); }
+.ai-change-before { color: var(--muted); }
+.ai-change-after { color: var(--text); font-weight: 600; }
+.ai-diff { max-height: 260px; overflow: auto; padding: 4px 0; border-radius: var(--radius-sm); background: var(--surface-2); font: var(--fs-xs) / 1.6 var(--mono); }
+.ai-diff-line { padding: 0 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-diff-mark { display: inline-block; width: 18px; text-align: center; color: var(--muted); user-select: none; }
+.ai-diff-line.is-add { background: color-mix(in srgb, var(--success) 14%, transparent); }
+.ai-diff-line.is-add .ai-diff-mark { color: var(--success-text); }
+.ai-diff-line.is-remove { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--text-2); }
+.ai-diff-line.is-remove .ai-diff-mark { color: var(--danger-text); }
+.ai-diff-gap { padding: 0 8px; color: var(--muted); }
+.ai-diff-more { padding: 2px 8px 0; color: var(--muted); font-family: inherit; }
+.ai-card-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; padding-top: 10px; border-top: 1px solid var(--border); }
+.ai-card-ask { flex: 1; min-width: 0; font-size: var(--fs-xs); color: var(--warning-text); }
+.ai-panel[data-busy] .ai-card-actions .btn { opacity: 0.5; pointer-events: none; }
+.ai-card-state { display: flex; align-items: center; gap: 6px; padding-top: 10px; border-top: 1px solid var(--border); font-size: var(--fs-xs); color: var(--muted); }
+.ai-card[data-state='approved'] .ai-card-state { color: var(--success-text); }
+.ai-card[data-state='failed'] .ai-card-state { color: var(--danger-text); }
+
+.ai-dots { flex: none; width: 24px; height: 8px; background: radial-gradient(circle, currentColor 2.5px, transparent 3px) 0 50% / 8px 8px repeat-x; animation: pulse 1.2s ease-in-out infinite; }
+
+.ai-composer { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; border-top: 1px solid var(--border); }
+.ai-models { align-self: stretch; }
+.ai-models label { flex: 1; text-align: center; }
+.ai-models span { justify-content: center; font-size: var(--fs-xs); }
+.ai-input { position: relative; display: flex; flex-direction: row; align-items: flex-end; gap: 6px; padding: 6px 6px 6px 12px; border: 1px solid var(--field-border); border-radius: var(--radius-field); background: var(--surface); transition: border-color 0.15s, box-shadow 0.15s; }
+.ai-input:focus-within { border-color: var(--focus); box-shadow: var(--ring-field); }
+.ai-input.has-error { border-color: var(--danger); }
+.ai-textarea { flex: 1; min-width: 0; max-height: 200px; padding: 6px 0; border: 0; background: none; color: var(--text); font: inherit; font-size: var(--fs-base); line-height: 1.6; resize: none; outline: none; }
+.ai-textarea:focus-visible { outline: none; }
+.ai-send { flex: none; border-radius: 999px; background: var(--primary); color: var(--on-primary); }
+.ai-send:disabled { opacity: 0.4; cursor: default; }
+.ai-panel[data-busy] .ai-send { opacity: 0.4; pointer-events: none; }
+.ai-note { font-size: var(--fs-xs); color: var(--muted); }
+@media (max-width: 640px), (pointer: coarse) {
+  /* 16px 未満にしないのは、iOS が入力欄にフォーカスしたときに画面を拡大するため */
+  .ai-textarea { font-size: 16px; }
+}
