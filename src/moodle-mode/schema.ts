@@ -1,9 +1,12 @@
 import { sql } from 'drizzle-orm'
-import { index, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { CodeFiles, GradingStatus } from '../lib/code'
 import type { RunResult } from '../lib/sandbox'
 
 const now = sql`(unixepoch())`
+
+// sqlite-core の text() には照合順序を指定する手段がないため、型名に含めて DDL に出す
+const textNocase = customType<{ data: string }>({ dataType: () => 'text COLLATE NOCASE' })
 
 /** Moodle のユーザーの写し。id は Moodle のユーザー ID */
 export const users = sqliteTable('users', {
@@ -102,6 +105,24 @@ export const codeSubmissions = sqliteTable(
     createdAt: integer('created_at').notNull().default(now),
   },
   (t) => [index('code_submissions_key_user').on(t.key, t.userId, t.id)],
+)
+
+/** ファイル自動配布のアイテム（extra-kinds.tsx の bundle）で配るファイル。通常モードの bundle_files と同じ形。完全移行では引き継がない */
+export const bundleFiles = sqliteTable(
+  'bundle_files',
+  {
+    id: integer('id').primaryKey(),
+    key: text('key')
+      .notNull()
+      .references(() => extraItems.key, { onDelete: 'cascade' }),
+    // NOCASE にするのは、Windows と macOS では大文字と小文字だけが違う名前を同じファイルとして扱うため
+    path: textNocase('path').notNull(),
+    fileKey: text('file_key').notNull(),
+    size: integer('size').notNull(),
+    sha256: text('sha256').notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [uniqueIndex('bundle_files_key_path').on(t.key, t.path)],
 )
 
 /**

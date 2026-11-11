@@ -9,8 +9,10 @@ import { flashMiddleware, limitBody, wantsJson } from '../lib/http'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE } from '../lib/storage'
 import { renderer } from '../renderer'
 import { createAiAdminHandlers } from '../routes/admin/ai'
+import { bundleRoutes, createBundleHandlers, vscodeApi } from '../routes/bundle/handlers'
 import { codeRoutes, createCodeHandlers } from '../routes/code/handlers'
 import { aiLedger, usageByUser } from './ai-usage'
+import { bundleBackend } from './bundle'
 import { destroySession, requireAuth, session, type MoodleEnv } from './auth'
 import { MoodleError, isAccessDenied, isNotFound, isTokenError, isUnavailable, moodleUrl } from './client'
 import { codeBackend } from './code'
@@ -42,6 +44,7 @@ app.post('/auth/moodle/start', h.startLogin)
 app.get('/auth/moodle/callback', h.finishLogin)
 app.post('/auth/moodle/backchannel-logout', h.backchannelLogout)
 app.post('/logout', h.logout)
+app.route('/api/vscode', vscodeApi(bundleBackend))
 
 const auth = new Hono<MoodleEnv>()
 auth.use(requireAuth)
@@ -92,6 +95,7 @@ auth.get('/courses/:id/items/:iid/screen', h.showScreen)
 const code = createCodeHandlers(codeBackend)
 auth.get(`/courses/:id/items/:iid/${CODE_KIND}`, code.showPage)
 auth.route('/courses', codeRoutes(code))
+auth.route('/courses', bundleRoutes(createBundleHandlers(bundleBackend)))
 auth.get('/m/:key', h.openExtra)
 app.route('/', auth)
 
