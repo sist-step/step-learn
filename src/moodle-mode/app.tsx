@@ -10,8 +10,10 @@ import { flashMiddleware, limitBody, wantsJson } from '../lib/http'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE } from '../lib/storage'
 import { renderer } from '../renderer'
 import { createAiAdminHandlers } from '../routes/admin/ai'
+import { aiRoutes, createAiHandlers } from '../routes/ai/handlers'
 import { bundleRoutes, createBundleHandlers, isSyncRequest, vscodeApi } from '../routes/bundle/handlers'
 import { codeRoutes, createCodeHandlers } from '../routes/code/handlers'
+import { canUseMoodleAi, moodleAssistant } from './ai-assistant'
 import { aiLedger, usageByUser } from './ai-usage'
 import { bundleBackend } from './bundle'
 import { destroySession, requireAuth, session, type MoodleEnv } from './auth'
@@ -37,6 +39,16 @@ app.use(flashMiddleware)
 app.use(session)
 const syncBodyLimit = limitBody(SYNC_BODY_LIMIT)
 app.use((c, next) => (c.var.user ? userBodyLimit : isSyncRequest(c) ? syncBodyLimit : guestBodyLimit)(c, next))
+
+const aiHandlers = createAiHandlers({ agent: moodleAssistant, canUse: (c) => canUseMoodleAi(c as Context<MoodleEnv>) })
+// AppShell の中で確かめないのは、教えているコースがあるかを Moodle に問い合わせるので、描画の前に待っておく必要があるため
+app.use(async (c, next) => {
+  const user = c.var.user
+  // 失敗しても要求ごと止めないのは、Moodle に一時的につながらないだけで、パネルのない画面は描けるため
+  const allowed = user ? await canUseMoodleAi(c).catch(() => false) : false
+  if (user && allowed) c.set('aiPanel', () => aiHandlers.renderPanel(user))
+  await next()
+})
 
 app.get('/', (c) => c.redirect(c.var.user ? '/dashboard' : '/login'))
 
@@ -99,6 +111,7 @@ auth.get(`/courses/:id/items/:iid/${CODE_KIND}`, code.showPage)
 auth.route('/courses', codeRoutes(code))
 auth.route('/courses', bundleRoutes(createBundleHandlers(bundleBackend)))
 auth.get('/m/:key', h.openExtra)
+auth.route('/ai', aiRoutes(aiHandlers))
 app.route('/', auth)
 
 // エラーの画面を HTML で返すのは、client.ts が HTML でない応答を受けると送信先の URL を GET で開き直してしまうため

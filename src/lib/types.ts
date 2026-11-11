@@ -1,3 +1,4 @@
+import type { Child } from 'hono/jsx'
 import type { codeItems, courses, items, sections } from './schema'
 
 export type Role = 'admin' | 'teacher' | 'student'
@@ -22,6 +23,8 @@ export type AppEnv = {
     flash: Flash | null
     /** 描画中に部品が登録したスタイルシート（components/style.tsx） */
     styles?: Set<string>
+    /** AI のパネルを描く。AI を使えない利用者や Moodle モードでは未設定か null を返す（app.tsx） */
+    aiPanel?: () => Child
   }
 }
 
