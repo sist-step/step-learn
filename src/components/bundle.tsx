@@ -9,17 +9,19 @@ import {
   type BundleFile,
   type BundleTreeNode,
 } from '../lib/bundle'
+import { MAX_SYNC_FILE_SIZE, type BundleSyncState } from '../lib/bundle-sync'
 import { MAX_FILE_SIZE } from '../lib/storage'
 import { Button, IconButton } from './button'
 import { Card, LinkCard } from './card'
+import { cx } from './cx'
 import { Icon } from './icons'
 import { useStyle } from './style'
-import { EmptyState } from './ui'
+import { Chip, EmptyState } from './ui'
 
 type Listed = Pick<BundleFile, 'path' | 'size'>
 
-/** アイテムの URL の下の、ファイル自動配布の操作の URL（/courses/:id/items/:iid/bundle） */
-export const bundleBase = (courseId: number, itemId: number) => `/courses/${courseId}/items/${itemId}/bundle`
+/** アイテムの画面と編集画面に出す、配るファイルと同期の状態 */
+export type BundleView = { files: Listed[]; sync: BundleSyncState }
 
 const countFiles = (node: BundleTreeNode): number => (node.file ? 1 : node.children.reduce((n, c) => n + countFiles(c), 0))
 
@@ -64,8 +66,41 @@ export const BundleTree = ({ files, deleteAction }: { files: Listed[]; deleteAct
 
 const summaryOf = (files: Listed[]) => `${files.length} 個・${formatBytes(bundleSize(files))}`
 
+/** アイテムの画面の、データの同期の案内と、変更履歴への入口 */
+const BundleSyncNote = ({ sync, canManage }: { sync: BundleSyncState; canManage: boolean }) => (
+  <Card
+    class="bundle-sync-note"
+    heading="データの同期"
+    description={
+      !sync.enabled
+        ? 'データの同期は止まっています。これまでの変更履歴は残っています。'
+        : canManage
+          ? '学生が VS Code でファイルを保存するたびに、その内容が変更履歴として記録されます。'
+          : 'VS Code でファイルを保存するたびに、その内容が STEP Learn に送られ、変更履歴として記録されます。記録は先生も見られます。'
+    }
+    actions={
+      sync.historyHref && (
+        <Button href={sync.historyHref} size="sm" iconEnd="chevronRight">
+          {canManage ? '変更履歴' : '自分の変更履歴'}
+        </Button>
+      )
+    }
+  />
+)
+
 /** アイテムの画面の本体。VS Code で開くボタン・zip のダウンロード・配るファイルの一覧 */
-export const BundleOpen = ({ base, files, editHref }: { base: string; files: Listed[]; editHref?: string }) => {
+export const BundleOpen = ({
+  base,
+  files,
+  editHref,
+  sync,
+}: {
+  base: string
+  files: Listed[]
+  /** 編集画面。教師にだけ渡す */
+  editHref?: string
+  sync: BundleSyncState
+}) => {
   useStyle('/src/components/bundle.css', '/src/components/card.css')
   if (!files.length)
     return (
@@ -104,6 +139,7 @@ export const BundleOpen = ({ base, files, editHref }: { base: string; files: Lis
           </a>
         </p>
       </div>
+      {(sync.enabled || sync.historyHref) && <BundleSyncNote sync={sync} canManage={!!editHref} />}
       <Card
         heading="配布するファイル"
         description={summaryOf(files)}
@@ -119,8 +155,58 @@ export const BundleOpen = ({ base, files, editHref }: { base: string; files: Lis
   )
 }
 
+/** 編集画面の、データを同期するかの切り替え */
+const BundleSyncCard = ({ base, sync }: { base: string; sync: BundleSyncState }) => (
+  <Card
+    heading={
+      <span class="bundle-sync-heading">
+        データを同期する
+        <Chip tone={sync.enabled ? 'success' : 'default'}>{sync.enabled ? '有効' : '無効'}</Chip>
+      </span>
+    }
+    description="有効にすると、学生が VS Code でファイルを保存するたびに、その内容が STEP Learn に送られ、変更履歴として残ります。学生には、アイテムの画面と VS Code で、記録されることを知らせます。"
+    actions={
+      sync.historyHref && (
+        <Button href={sync.historyHref} size="sm" iconEnd="chevronRight">
+          変更履歴
+        </Button>
+      )
+    }
+  >
+    <form method="post" action={`${base}/sync`} class="bundle-sync-form" data-loading-form>
+      <input type="hidden" name="sync" value={sync.enabled ? '0' : '1'} />
+      <Button type="submit" variant={sync.enabled ? 'default' : 'primary'} icon="arrowPath">
+        {sync.enabled ? '同期を止める' : '同期を有効にする'}
+      </Button>
+      <p class="muted small">
+        {sync.enabled
+          ? '止めても、これまでの変更履歴は残ります。'
+          : `記録するのは文字のファイル（1 つ ${formatBytes(MAX_SYNC_FILE_SIZE)} まで）で、.git・node_modules などは除きます。`}
+      </p>
+    </form>
+  </Card>
+)
+
+/** 編集画面の、保存のフォームの外に置く欄（配るファイルと、データの同期） */
+export const BundleEditPanel = ({
+  base,
+  files,
+  sync,
+  class: cls,
+}: {
+  base: string
+  files: Listed[]
+  sync: BundleSyncState
+  class?: string
+}) => (
+  <div class={cx('stack-lg', cls)}>
+    <BundleFilesCard base={base} files={files} />
+    <BundleSyncCard base={base} sync={sync} />
+  </div>
+)
+
 /** 編集画面の、配るファイルのアップロードと一覧 */
-export const BundleFilesCard = ({ base, files, class: cls }: { base: string; files: Listed[]; class?: string }) => {
+const BundleFilesCard = ({ base, files, class: cls }: { base: string; files: Listed[]; class?: string }) => {
   useStyle('/src/components/bundle.css', '/src/components/card.css')
   return (
     <Card

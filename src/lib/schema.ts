@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { check, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { blob, check, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { CODE_LANGUAGES, GRADING_STATUSES, type CodeFiles } from './code'
 import type { RunResult } from './sandbox'
 
@@ -239,6 +239,43 @@ export const bundleFiles = sqliteTable(
     createdAt: integer('created_at').notNull().default(now),
   },
   (t) => [uniqueIndex('bundle_files_item_path').on(t.itemId, t.path)],
+)
+
+/** ファイル自動配布のアイテムの設定。行がなければ、すべて既定のまま */
+export const bundleItems = sqliteTable('bundle_items', {
+  itemId: integer('item_id')
+    .primaryKey()
+    .references(() => items.id, { onDelete: 'cascade' }),
+  /** データを同期する（学生が VS Code で保存した内容を、変更履歴として残す） */
+  sync: integer('sync').notNull().default(0),
+})
+
+/** データを同期するアイテムで、学生が VS Code で保存したファイルの記録。保存のたびに 1 行ずつ足し、前の記録は残す */
+export const bundleSyncVersions = sqliteTable(
+  'bundle_sync_versions',
+  {
+    id: integer('id').primaryKey(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // NOCASE にしないのは、学生の PC（Linux など）では大文字と小文字だけが違う名前が別のファイルになるため
+    path: text('path').notNull(),
+    /** ファイルを消した記録なら 1。中身はない */
+    deleted: integer('deleted').notNull().default(0),
+    sha256: text('sha256').notNull().default(''),
+    size: integer('size').notNull().default(0),
+    /** 1 つ前の記録（なければ配ったファイル）と比べて、増えた行と減った行の数 */
+    added: integer('added').notNull().default(0),
+    removed: integer('removed').notNull().default(0),
+    // ストレージに置かないのは、数 KB のファイルが保存のたびに増え、アイテムや利用者を消すときに cascade で一緒に消せるようにするため
+    /** gzip で縮めた中身 */
+    content: blob('content', { mode: 'buffer' }),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [index('bundle_sync_versions_item_user').on(t.itemId, t.userId, t.id), index('bundle_sync_versions_user').on(t.userId)],
 )
 
 /** 書きかけのコード。利用者ごとに 1 つで、編集のたびに上書きする */

@@ -4,7 +4,7 @@ import { BUNDLE_KIND } from '../lib/bundle'
 import { intParam } from '../lib/http'
 import type { BundleBackend } from '../routes/bundle/handlers'
 import type { MoodleEnv } from './auth'
-import { bundleStore } from './bundle-store'
+import { bundleStore, bundleSyncStore } from './bundle-store'
 import { loadCourse, outlineOf } from './data'
 import { db } from './db'
 import { extraItems } from './schema'
@@ -25,9 +25,16 @@ export const bundleBackend: BundleBackend = {
     const loaded = await loadCourse(c as Context<MoodleEnv>, courseId)
     const item = outlineOf(loaded).find((it) => it.id === itemId && !it.locked && it.extra?.type === BUNDLE_KIND)
     if (!item?.extraKey) return null
-    return { access: loaded.access, itemId, title: item.title, ref: `${REF_PREFIX}${item.extraKey}`, store: bundleStore(item.extraKey) }
+    return {
+      access: loaded.access,
+      itemId,
+      title: item.title,
+      ref: `${REF_PREFIX}${item.extraKey}`,
+      store: bundleStore(item.extraKey),
+      sync: bundleSyncStore(item.extraKey),
+    }
   },
-  storeOf(ref) {
+  itemOf(ref) {
     const key = ref.slice(REF_PREFIX.length)
     if (!ref.startsWith(REF_PREFIX) || !key) return null
     const found = db
@@ -35,6 +42,6 @@ export const bundleBackend: BundleBackend = {
       .from(extraItems)
       .where(and(eq(extraItems.key, key), eq(extraItems.type, BUNDLE_KIND)))
       .get()
-    return found ? bundleStore(key) : null
+    return found ? { store: bundleStore(key), sync: bundleSyncStore(key) } : null
   },
 }
