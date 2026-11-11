@@ -234,12 +234,13 @@ SANDBOX_URL=http://127.0.0.1:8091
 
 ### VS Code の拡張機能（STEP Learn for VSCode）
 
-ファイル自動配布のアイテムで使う VS Code の拡張機能は `vscode-extension/` にあります。本体とは別のパッケージで、ビルドも別に行います（実行時の依存はなく、esbuild で 1 ファイルにまとめます）。拡張機能の使い方は [vscode-extension/README.md](vscode-extension/README.md)（Marketplace のページにもなる）にあります。
+ファイル自動配布のアイテムで使う VS Code の拡張機能は `vscode-extension/` にあります。本体とは別のパッケージで、型チェック・lint・ビルドも別に行います（本体の `npm run lint` は拡張機能を対象から外し、入れ子の設定も読みません。拡張機能の中に同じルールの `.oxlintrc.json` を置き、拡張機能の `npm run lint` で検査します。実行時の依存はなく、esbuild で 1 ファイルにまとめます）。拡張機能の使い方は [vscode-extension/README.md](vscode-extension/README.md)（Marketplace のページにもなる）にあります。
 
 ```sh
 cd vscode-extension
 npm install
 npm run typecheck
+npm run lint
 npm run package     # step-learn-for-vscode-<バージョン>.vsix を作る（手元の VS Code に「VSIX からのインストール」で入れて試せる）
 ```
 

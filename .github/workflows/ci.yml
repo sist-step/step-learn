@@ -29,7 +29,7 @@ jobs:
       - name: Build
         run: npm run build
 
-  # 本体の lint から外した拡張機能（依存を別に入れる別のパッケージ）を、ここで依存を入れて確かめる
+  # 本体のジョブで確かめないのは、拡張機能は依存（@types/vscode など）を別に入れる別のパッケージで、本体の npm ci では型を解決できないため
   vscode-extension:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -46,6 +46,8 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npm run typecheck
+      - name: Lint
+        run: npm run lint
       - name: Build
         run: npm run build
 
