@@ -205,23 +205,22 @@ export const ItemEditPage = ({
                 </div>
               </Card>
             )}
+            <Card tone="danger" class="editor-danger">
+              <DangerRow
+                heading="アイテムを削除"
+                description={`${bundleFiles ? '配布するファイルと、' : ''}学生の${code ? '提出と' : ''}完了記録も消え、元に戻せません。`}
+              >
+                <Button type="submit" form="item-delete-form" variant="danger-outline" size="sm" icon="trash">
+                  削除
+                </Button>
+              </DangerRow>
+            </Card>
           </aside>
         </form>
 
         {bundleFiles && <BundleFilesCard base={bundleBase(courseId, item.id)} files={bundleFiles} class="editor-extra" />}
 
-        <Card tone="danger" class="editor-danger">
-          <DangerRow
-            heading="アイテムを削除"
-            description={`${bundleFiles ? '配布するファイルと、' : ''}学生の${code ? '提出と' : ''}完了記録も消え、元に戻せません。`}
-          >
-            <form method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`}>
-              <Button type="submit" variant="danger-outline" size="sm" icon="trash">
-                削除
-              </Button>
-            </form>
-          </DangerRow>
-        </Card>
+        <form id="item-delete-form" method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`} hidden />
       </div>
     </AppShell>
   )
