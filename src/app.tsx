@@ -6,6 +6,7 @@ import { Button } from './components/button'
 import { AppShell, AuthShell } from './components/layout'
 import { EmptyState } from './components/ui'
 import { session } from './lib/auth'
+import { SYNC_BODY_LIMIT } from './lib/bundle-sync'
 import { config } from './lib/config'
 import { touchCourse } from './lib/courses'
 import { flashMiddleware, limitBody } from './lib/http'
@@ -15,7 +16,7 @@ import { renderer } from './renderer'
 import account from './routes/account'
 import admin from './routes/admin'
 import auth from './routes/auth'
-import bundle, { api as vscodeApi } from './routes/bundle'
+import bundle, { isSyncRequest, api as vscodeApi } from './routes/bundle'
 import code from './routes/code'
 import content from './routes/content'
 import courses from './routes/courses'
@@ -35,7 +36,8 @@ app.use(secureHeaders())
 app.use(csrf(config.appOrigin ? { origin: config.appOrigin } : undefined))
 app.use(flashMiddleware)
 app.use(session)
-app.use((c, next) => (c.var.user ? userBodyLimit : guestBodyLimit)(c, next))
+const syncBodyLimit = limitBody(SYNC_BODY_LIMIT)
+app.use((c, next) => (c.var.user ? userBodyLimit : isSyncRequest(c) ? syncBodyLimit : guestBodyLimit)(c, next))
 app.use(renderer)
 
 // 各ハンドラで呼ばないのは、内容を変える操作を足したときに呼び忘れると、開いている画面に反映されなくなるため
