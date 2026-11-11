@@ -57,18 +57,14 @@
 }
 .bundle-drop-text { display: flex; flex-direction: column; gap: 2px; }
 .bundle-drop-actions { justify-content: center; flex-wrap: wrap; }
-.bundle-pending {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 8px 8px 14px;
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-field);
-  background: var(--surface-2);
+.bundle-drop-busy { display: none; align-items: center; gap: 8px; min-height: 32px; font-weight: 600; }
+.bundle-drop-busy::before { content: ''; width: 16px; height: 16px; border: 2px solid var(--border-strong); border-top-color: var(--c-ink); border-radius: 50%; animation: spin 0.8s linear infinite; }
+.bundle-upload[data-uploading] .bundle-drop { border-style: solid; }
+.bundle-upload[data-uploading] .bundle-drop-text, .bundle-upload[data-uploading] .bundle-drop-actions { display: none; }
+.bundle-upload[data-uploading] .bundle-drop-busy { display: flex; }
+@media (prefers-reduced-motion: reduce) {
+  .bundle-drop-busy::before { animation-duration: 3s; }
 }
-.bundle-pending[hidden] { display: none; }
-.bundle-pending > .truncate { flex: 1; min-width: 0; }
-.bundle-pending > .icon { flex: none; color: var(--muted); }
 
 @media (pointer: coarse), (max-width: 640px) {
   .bundle-drop-text { display: none; }

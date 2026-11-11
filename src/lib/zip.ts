@@ -1,4 +1,5 @@
 import zlib from 'node:zlib'
+import yauzl, { type Entry } from 'yauzl'
 
 export type ZipEntry = { path: string; data: Uint8Array }
 
@@ -64,4 +65,64 @@ export function buildZip(entries: ZipEntry[], modified = new Date()): Buffer {
   end.writeUInt32LE(centralSize, 12)
   end.writeUInt32LE(offset, 16)
   return Buffer.concat([...locals, ...centrals, end])
+}
+
+export class ZipError extends Error {}
+
+/** zip の中のファイル 1 つ。read は中身を展開する（読めなければ ZipError を投げる） */
+export type ZipItem = { path: string; size: number; read: () => Promise<Uint8Array<ArrayBuffer>> }
+
+const UNICODE_PATH_FIELD = 0x7075
+const UNIX_HOST = 3
+const S_IFMT = 0o170000
+const S_IFLNK = 0o120000
+const BROKEN = 'zip ファイルが壊れているか、zip ではありません。'
+
+// UTF-8 の印がなくても先に UTF-8 として試すのは、macOS の圧縮が印を付けずに UTF-8 で名前を入れるため。
+// それで読めなければ Shift_JIS とみなし、yauzl に任せないのは、yauzl が印のない名前を CP437 として読み、日本語の Windows の圧縮（Shift_JIS）が文字化けするため
+function nameOf(entry: Entry) {
+  const { fileNameRaw: raw, generalPurposeBitFlag: flags, extraFields } = entry
+  if (flags & UTF8_NAMES) return new TextDecoder().decode(raw)
+  if (extraFields.some((f) => f.id === UNICODE_PATH_FIELD)) return yauzl.getFileNameLowLevel(flags, raw, extraFields, false)
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(raw)
+  } catch {
+    return new TextDecoder('shift_jis').decode(raw)
+  }
+}
+
+const isLink = (entry: Entry) => entry.versionMadeBy >> 8 === UNIX_HOST && ((entry.externalFileAttributes >>> 16) & S_IFMT) === S_IFLNK
+
+const asZipError = (e: unknown) => (e instanceof ZipError ? e : new ZipError(BROKEN))
+
+/** zip の中のファイルの一覧。フォルダーとシンボリックリンクは含めない。zip として読めなければ ZipError を投げる */
+export async function listZip(data: Uint8Array): Promise<ZipItem[]> {
+  try {
+    const zip = await yauzl.fromBufferPromise(Buffer.from(data.buffer, data.byteOffset, data.byteLength), {
+      lazyEntries: true,
+      decodeStrings: false,
+      autoClose: false,
+      // 書かれた大きさを超えたら止めるのは、展開すると巨大になる zip（zip 爆弾）でメモリを使い切らないため。呼び出し側は書かれた大きさで上限を確かめる
+      validateEntrySizes: true,
+    })
+    const items: ZipItem[] = []
+    for await (const entry of zip.eachEntry()) {
+      const path = nameOf(entry).normalize('NFC')
+      if (/[/\\]$/.test(path) || isLink(entry)) continue
+      const read = async () => {
+        if (entry.isEncrypted()) throw new ZipError('パスワード付きの zip には対応していません。')
+        if (!entry.canDecodeFileData()) throw new ZipError('対応していない圧縮形式の zip です。')
+        try {
+          const stream = await zip.openReadStreamPromise(entry)
+          return new Uint8Array(Buffer.concat(await stream.toArray()))
+        } catch (e) {
+          throw asZipError(e)
+        }
+      }
+      items.push({ path, size: entry.uncompressedSize, read })
+    }
+    return items
+  } catch (e) {
+    throw asZipError(e)
+  }
 }
