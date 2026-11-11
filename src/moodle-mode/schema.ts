@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { blob, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { CodeFiles, GradingStatus } from '../lib/code'
 import type { RunResult } from '../lib/sandbox'
 
@@ -123,6 +123,38 @@ export const bundleFiles = sqliteTable(
     createdAt: integer('created_at').notNull().default(now),
   },
   (t) => [uniqueIndex('bundle_files_key_path').on(t.key, t.path)],
+)
+
+/** ファイル自動配布のアイテムの設定。通常モードの bundle_items と同じ形。完全移行では引き継がない */
+export const bundleItems = sqliteTable('bundle_items', {
+  // extra_items の data に入れないのは、アイテムを保存するたびに種類の toData が data を作り直し、設定が消えるため
+  key: text('key')
+    .primaryKey()
+    .references(() => extraItems.key, { onDelete: 'cascade' }),
+  sync: integer('sync').notNull().default(0),
+})
+
+/** データを同期するアイテムで、学生が VS Code で保存したファイルの記録。通常モードの bundle_sync_versions と同じ形。完全移行では引き継がない */
+export const bundleSyncVersions = sqliteTable(
+  'bundle_sync_versions',
+  {
+    id: integer('id').primaryKey(),
+    key: text('key')
+      .notNull()
+      .references(() => extraItems.key, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    path: text('path').notNull(),
+    deleted: integer('deleted').notNull().default(0),
+    sha256: text('sha256').notNull().default(''),
+    size: integer('size').notNull().default(0),
+    added: integer('added').notNull().default(0),
+    removed: integer('removed').notNull().default(0),
+    content: blob('content', { mode: 'buffer' }),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [index('bundle_sync_versions_key_user').on(t.key, t.userId, t.id)],
 )
 
 /**
