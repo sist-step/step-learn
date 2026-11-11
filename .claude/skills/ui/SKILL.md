@@ -140,6 +140,14 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `CodeGrade` | 学生に見せる提出と採点の結果のカード。採点中は `code-editor.ts` が終わりを待ち、カードとヘッダーの帯の表示を取り直す |
 | `CodeWorkspace` | コードのアイテムの本体（`AppShell` の `topbar` と一緒に使う）。左に問題文とファイルのタブ付きのエディター、右にプレビューとコンソール（Web）か入力と実行結果（Python）。コードはサーバーで描かず、`code-editor.ts` が `${base}/state` から読み込み、書きかけのコードを `${base}/draft` に自動で保存する。提出は `CODE_FORM` のフォームの送信（ヘッダーの帯のボタンに `form={CODE_FORM}` を付ける） |
 
+### ファイル自動配布 — `src/components/bundle.tsx`
+
+| 部品 | 用途 |
+| --- | --- |
+| `BundleOpen` | ファイル自動配布のアイテムの画面の本体。「VS Code で開く」（`data-vscode-launch` のフォームで、`client.ts` が鍵付きの `vscode://` のリンクを受け取って開く）・拡張機能の案内・zip のダウンロード・配るファイルの木。ファイルがなければ空の表示（`editHref` を渡すと教師向けのアップロードへの入口） |
+| `BundleFilesCard` | 編集画面の、配るファイルのアップロード（フォルダー・ファイルの選択とドラッグ＆ドロップ。`client.ts` がフォルダーの中の場所を `paths` として一緒に送る）と、削除ボタン付きの木。保存のフォームの外に置く（通常モードの `ItemEditPage` と、Moodle モードの `ExtraKind` の `Panel`） |
+| `BundleTree` | 配るファイルのフォルダーの木（`files`、`deleteAction` を渡すと行ごとの削除ボタン） |
+
 ### PDF — `src/components/pdf.tsx`
 
 | 部品 | 用途 |

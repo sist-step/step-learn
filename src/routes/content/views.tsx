@@ -1,3 +1,4 @@
+import { BundleFilesCard, BundleOpen, bundleBase } from '../../components/bundle'
 import { CodeBarActions, CodeGrade, CodeGradingFields, CodeStarterFields, CodeWorkspace, type GradeView } from '../../components/code'
 import {
   CompletionField,
@@ -20,6 +21,7 @@ import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, DangerRow, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
+import type { BundleFile } from '../../lib/bundle'
 import type { CodeFiles, CodeLanguage } from '../../lib/code'
 import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
@@ -66,6 +68,7 @@ export const ItemEditPage = ({
   access,
   item,
   code,
+  bundleFiles,
   gradingEnabled,
   sections,
   values,
@@ -74,6 +77,8 @@ export const ItemEditPage = ({
   access: CourseAccess
   item: Item
   code?: CodeItem
+  /** ファイル自動配布のアイテムで配るファイル */
+  bundleFiles?: BundleFile[]
   /** AI が設定されていて、提出を自動で採点するか */
   gradingEnabled: boolean
   sections: Section[]
@@ -203,8 +208,13 @@ export const ItemEditPage = ({
           </aside>
         </form>
 
+        {bundleFiles && <BundleFilesCard base={bundleBase(courseId, item.id)} files={bundleFiles} class="editor-extra" />}
+
         <Card tone="danger" class="editor-danger">
-          <DangerRow heading="アイテムを削除" description={`学生の${code ? '提出と' : ''}完了記録も消え、元に戻せません。`}>
+          <DangerRow
+            heading="アイテムを削除"
+            description={`${bundleFiles ? '配布するファイルと、' : ''}学生の${code ? '提出と' : ''}完了記録も消え、元に戻せません。`}
+          >
             <form method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`}>
               <Button type="submit" variant="danger-outline" size="sm" icon="trash">
                 削除
@@ -229,6 +239,7 @@ export const ItemPage = ({
   sharing,
   textPreview,
   code,
+  bundleFiles,
   revision,
 }: {
   access: CourseAccess
@@ -242,6 +253,7 @@ export const ItemPage = ({
   sharing: boolean
   textPreview: string | null
   code?: CodeView
+  bundleFiles?: BundleFile[]
   revision: string
 }) => {
   const id = access.course.id
@@ -259,7 +271,8 @@ export const ItemPage = ({
     isStudent && isTracked(o) && o.completion === completion && !done.has(o.id)
   const onOpen = (o: OutlineItem) => (waitsFor(o, 'view') ? { 'data-complete-on-open': completeUrl(o) } : {})
   const embedded = item.type === 'link' && item.linkTarget === 'embed'
-  const opensOnView = item.type === 'page' || embedded || !!code || (!!preview && (preview !== 'text' || textPreview !== null))
+  const opensOnView =
+    item.type === 'page' || item.type === 'bundle' || embedded || !!code || (!!preview && (preview !== 'text' || textPreview !== null))
   const tracked = outline.filter(isTracked)
 
   const navHref = (o: OutlineItem) => `${base}/${o.id}`
@@ -368,6 +381,14 @@ export const ItemPage = ({
                 開く
               </Button>
             </LinkCard>
+          )}
+
+          {bundleFiles && (
+            <BundleOpen
+              base={bundleBase(id, item.id)}
+              files={bundleFiles}
+              editHref={access.canManage ? `${base}/${item.id}/edit` : undefined}
+            />
           )}
 
           {item.type === 'screen' && (

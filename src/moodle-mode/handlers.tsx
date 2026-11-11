@@ -408,6 +408,8 @@ async function createExtraItem(c: C, loaded: LoadedCourse, sectionId: number, ki
   })
   insertExtra({ key, courseId: id, cmid, type: field(form, 'type', 50), data: result.data })
   forgetCourse(id)
+  if (kind.editAfterCreate)
+    return redirectWith(c, `/courses/${id}/items/${cmid}/edit`, `「${title}」を追加しました。続けて中身を設定してください。`)
   const next = field(form, 'then') === 'view' ? `/courses/${id}/items/${cmid}` : editUrl(loaded, sectionId)
   return redirectWith(c, next, `「${title}」を追加しました。`)
 }

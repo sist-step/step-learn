@@ -253,7 +253,14 @@ export const CreateCourseButton = () => (
   </>
 )
 
-export const ITEM_ICONS: Record<ItemType, IconName> = { page: 'page', link: 'link', file: 'file', screen: 'monitor', code: 'terminal' }
+export const ITEM_ICONS: Record<ItemType, IconName> = {
+  page: 'page',
+  link: 'link',
+  file: 'file',
+  screen: 'monitor',
+  code: 'terminal',
+  bundle: 'folder',
+}
 
 export const ItemIcon = ({ type }: { type: ItemType }) => {
   useStyle('/src/components/course.css')
@@ -359,6 +366,7 @@ const COMPLETION_HINTS: Record<ItemType | 'any', string> = {
   file: '「開いたら完了」はプレビューを表示するかダウンロードしたとき、「最後まで再生したら完了」は動画・音声を最後まで再生したときに完了になります。',
   screen: '画面共有では「なし」か「学生が自分で完了にする」を選べます。',
   code: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
+  bundle: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
   any: '「開いたら完了」はページ・リンク・ファイルで、「最後まで再生したら完了」は動画・音声のファイルで選べます。',
 }
 
@@ -380,6 +388,7 @@ const COMPLETION_WAITING: Record<Exclude<Completion, 'none' | 'manual'>, Partial
     link: 'リンクを開くと完了になります',
     file: 'ファイルを開くと完了になります',
     code: 'このアイテムを開くと完了になります',
+    bundle: 'このアイテムを開くと完了になります',
   },
   play: { file: '最後まで再生すると完了になります' },
 }

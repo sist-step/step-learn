@@ -272,6 +272,7 @@ const ITEM_TYPE_DESCRIPTIONS: Record<ItemType, string> = {
   file: 'PDF や画像などを配る',
   screen: '授業中に画面を配信する',
   code: 'コードを書いて提出する',
+  bundle: 'プログラムのファイルを VS Code で開けるように配る',
 }
 
 const AddItemButton = ({ sectionId }: { sectionId: number }) => (
@@ -280,7 +281,7 @@ const AddItemButton = ({ sectionId }: { sectionId: number }) => (
   </button>
 )
 
-const ITEM_TYPES = ['page', 'link', 'file', 'screen', 'code'] as const
+const ITEM_TYPES = ['page', 'link', 'file', 'screen', 'code', 'bundle'] as const
 
 const KindOptionBody = ({ type }: { type: ItemType }) => (
   <>
@@ -354,6 +355,7 @@ const AddItemModal = ({
           hint="あとから変えられません。最初に入れておくコードは、追加したあとに編集画面で設定します。"
           fieldClass="when-code"
         />
+        <p class="when-bundle muted small">配るファイルは、追加したあとの編集画面でアップロードします。</p>
         <MarkdownEditor
           label={
             <>
@@ -388,7 +390,7 @@ const AddItemModal = ({
         </div>
         {tracking && <CompletionField id="new-item-completion" />}
         <div class="form-actions">
-          <Button type="submit" name="then" value="view">
+          <Button type="submit" name="then" value="view" class="unless-bundle">
             追加して表示
           </Button>
           <Button type="submit" variant="primary">

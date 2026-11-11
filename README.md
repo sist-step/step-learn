@@ -17,7 +17,7 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
   - コース一覧と検索（参加しているコースのみ。管理者は登録していないコースも表示できる）。「進行中」と「すべて」の切り替え（開始日・終了日で判定。端末ごとに記憶。「すべて」では終了したコースも出し、開始前のコースは教師として登録している人と管理者にだけ出す。ダッシュボードとサイドバーは進行中のコースだけ）、ダッシュボード（受講中・担当コース、進捗、「続きから学習」）
   - 作成（管理者がコース一覧や管理画面のモーダルから）・編集・削除、開始日と終了日、カラー、コースアイコンとヒーロー画像（PNG / JPEG / WebP / GIF、最大 5MB。アイコンは未設定なら頭文字を表示）
   - 学生の自己登録はなく、管理者か教師が参加者として追加したコースだけが見える
-  - セクションとアイテム（ページ＝Markdown / リンク / ファイル / 画面共有 / コード）
+  - セクションとアイテム（ページ＝Markdown / リンク / ファイル / 画面共有 / コード / ファイル自動配布）
   - 編集モードでの追加・並べ替え・削除（オンにするとブラウザを閉じるかログアウトするまで、どのコースでも続く）。オフのときは教師にも学生と同じ見え方で表示する
   - セクション・アイテムごとの「学生に非表示」（学生には一覧にも出さず、URL を開いても 404。進捗の計算からも外す）
   - 学生ごとの完了チェックと進捗表示、前後ナビと目次付きの閲覧画面
@@ -25,6 +25,10 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
   - コード：セクションに「コード」アイテムを追加すると、学生がブラウザのエディターでコードを書いて提出できる。言語は Web（HTML / CSS / JavaScript。書きながら隣にプレビューとコンソールを表示）か Python（sandbox のコンテナで実行して結果を表示。下の「コードを実行する sandbox」）。書きかけのコードは自動で保存され、提出は出し直せる（前の提出も残る）。教師は問題文・最初に入れておくコード・採点基準・満点を設定する
     - 採点：`OPENROUTER_API_KEY` を設定していると、提出のたびに AI が採点基準に沿って点数と講評を付ける（Python は、提出されたコードを sandbox で実行した結果も AI に渡す）。採点は順番に行い、終わると学生の画面に結果が出る。AI が採点するときは、続けて提出できるのは 1 分に 1 回まで。設定していなければ自動では採点しない
     - 教師はアイテムの「提出」から、学生ごとの提出（コード・プレビュー・実行結果・AI の採点・提出の履歴）を見て、点数とコメントを付けられる。教師が付けた点数は AI の点数より優先して成績になる。AI の採点はやり直せる
+  - ファイル自動配布：セクションに「ファイル自動配布」アイテムを追加し、編集画面でフォルダーごと（またはファイルを選んで）アップロードすると、学生はアイテムの「VS Code で開く」を押すだけで、VS Code の拡張機能「STEP Learn for VSCode」（`vscode-extension/`。下の「VS Code の拡張機能」）がファイルを `ドキュメント/STEP Learn/<コース名>/<アイテム名>` に用意してフォルダーを開く。拡張機能がない人のために zip でもダウンロードできる
+    - フォルダーの構成はそのまま配る。`.git`・`node_modules`・`__pycache__`・`.venv` などは外し、実行ファイル（.exe など）は受け付けない。同じ場所のファイルは置き換わる。1 アイテムに 500 個・合計 50MB まで（1 回のアップロードは 30MB まで）
+    - 2 回目からは前に用意したフォルダーを開く。教師がファイルを足したり更新したりしていれば、取り込むかを聞き、学生が書き換えたファイルは上書きしない
+    - 「VS Code で開く」のリンクには、その学生とアイテムに限った鍵（数分で切れ、1 回だけ使える）を付ける。拡張機能はそれを、ファイルの一覧と受け取るための鍵（15 分）に引き換える（`/api/vscode/claim`）。鍵は `SESSION_SECRET` から導いた鍵で署名し、DB には保存しない
   - 画面共有：セクションに「画面共有」アイテムを追加すると、教師がブラウザから画面をライブ配信でき、参加者はアイテムを開くと別タブいっぱいに映像を視聴できる（最大 1920×1080・30fps、回線と画面の動きに応じた可変ビットレート）
 - **管理画面**（管理者、`/admin`）：ユーザーのロール変更、全コースの一覧と作成
 - **テーマ**：既定はライト。ヘッダーのユーザーメニューで選んだときだけダークにし、選択はブラウザ（localStorage）に保持する
@@ -161,9 +165,10 @@ MOODLE_MIGRATE_URL=https://moodle.example.ac.jp MOODLE_MIGRATE_TOKEN=<トーク�
 - STEP Learn にしかない機能（新規登録・パスワードの再設定・Markdown のページ・CLI）は使えません
 - 画面共有は、Moodle モードだけにある種類のアイテム（下）として追加できます。一覧や目次から開くと、新しいタブで画面共有の画面を開きます（Moodle の画面から開いたときも新しいタブで開きます）。視聴できるのはアイテムを開ける参加者、配信できるのはコースを編集できる人で、接続している間も確かめ直し、見られなくなった人の接続は切ります
 - コード（コードを書いて提出し、AI が採点するアイテム）も、Moodle モードだけにある種類のアイテム（下）として追加できます。機能は通常モードと同じで、一覧や目次から開くと、新しいタブでエディターの画面を開きます。提出の一覧に並ぶのは提出した学生だけです（参加者は Moodle にあるため）。書きかけのコード・提出・採点は `data/moodle-mode.db` に置き、Moodle の評定には反映しません。完全移行では引き継ぎません。採点にかかった AI の使用量も `data/moodle-mode.db` に記録し、通常モードと同じく月の上限に達している間は自動では採点しません
+- ファイル自動配布も、Moodle モードだけにある種類のアイテム（下）として追加できます。機能は通常モードと同じです。配るファイルの一覧は `data/moodle-mode.db` に、ファイルの中身は教材ファイルと同じストレージの `moodle-mode/` の下に置きます。完全移行では引き継ぎません
 - 管理（`/admin`。Moodle のサイト管理者だけが開けます）は、AI の月の上限と使用量の画面です。上限と使用量は通常モードとは別に `data/moodle-mode.db` に置きます。ユーザーとコースの管理は Moodle のサイト管理で行い、画面の右上から移れます
 - Moodle モードだけにある種類のアイテム（`src/moodle-mode/extra-kinds.tsx` に定義する）は、中身を `data/moodle-mode.db` に保存し、Moodle には同じ位置に STEP Learn へ移る URL の活動（リンク先は `/m/<キー>`）を置きます。並び順・表示・アクセス制限・完了は Moodle の活動のものを使います。Moodle でコースをコピーしたときは、コピー先では開けません。完全移行では引き継ぎません
-- STEP Learn 側の DB は `data/moodle-mode.db`（ユーザーの写し・セッション・暗号化したトークンと、Moodle モードだけにある種類のアイテムの中身、コードのアイテムの書きかけのコードと提出、AI の使用量と月の上限）で、`data/step-learn.db` は作りも開きもしません。完全移行のときに引き継ぐ必要はありません
+- STEP Learn 側の DB は `data/moodle-mode.db`（ユーザーの写し・セッション・暗号化したトークンと、Moodle モードだけにある種類のアイテムの中身、コードのアイテムの書きかけのコードと提出、ファイル自動配布の配るファイルの一覧、AI の使用量と月の上限）で、`data/step-learn.db` は作りも開きもしません。完全移行のときに引き継ぐ必要はありません
 
 Moodle 側には、このリポジトリの `moodle/local_steplearn/` のプラグインを入れて設定します。手順は [moodle/README.md](moodle/README.md) を参照してください。
 
@@ -227,6 +232,27 @@ docker compose -f sandbox/compose.dev.yaml up -d --build   # 127.0.0.1:8091 で�
 SANDBOX_URL=http://127.0.0.1:8091
 ```
 
+### VS Code の拡張機能（STEP Learn for VSCode）
+
+ファイル自動配布のアイテムで使う VS Code の拡張機能は `vscode-extension/` にあります。本体とは別のパッケージで、ビルドも別に行います（実行時の依存はなく、esbuild で 1 ファイルにまとめます）。拡張機能の使い方は [vscode-extension/README.md](vscode-extension/README.md)（Marketplace のページにもなる）にあります。
+
+```sh
+cd vscode-extension
+npm install
+npm run typecheck
+npm run package     # step-learn-for-vscode-<バージョン>.vsix を作る（手元の VS Code に「VSIX からのインストール」で入れて試せる）
+```
+
+Marketplace への公開（無料）:
+
+1. Microsoft アカウントで [Azure DevOps](https://dev.azure.com/) の組織を作り、「Personal access tokens」で Organization を「All accessible organizations」、Scopes を「Marketplace の Manage」にしたトークンを作る
+2. [Marketplace の管理画面](https://marketplace.visualstudio.com/manage) で publisher `mint1535` を作る
+3. `cd vscode-extension && npx vsce login mint1535`（トークンを入力）→ `npm run publish`。更新するときは `package.json` の `version` を上げてから `npm run publish`
+
+拡張機能の ID は `mint1535.step-learn-for-vscode`（publisher と `package.json` の `name`）です。publisher か名前を変えるときは、`vscode-extension/package.json` と `src/lib/bundle.ts` の `VSCODE_EXTENSION_ID` をそろえてください。そろっていないと、「VS Code で開く」のリンクが拡張機能に届きません。
+
+拡張機能が受け取るのは、リンクに書かれた https のサーバー（手元の開発では `http://localhost`）だけです。STEP Learn が「VS Code で開く」のリンクに入れるサーバーは `APP_ORIGIN`（なければ要求の URL）なので、リバースプロキシの配下では `APP_ORIGIN` を設定してください。
+
 ### 自動デプロイ（GitHub Actions のセルフホストランナー）
 
 `master` への push で CI（`.github/workflows/ci.yml`）が成功すると、`.github/workflows/deploy.yml` が 2 つのサーバーのセルフホストランナー上で `docker compose build` → `docker compose up -d` を実行して入れ替えます。
@@ -275,7 +301,8 @@ src/moodle/          Moodle のバックアップの展開・読み取り・取�
 src/moodle-mode/     Moodle モード（MOODLE_URL を設定したときだけ使う。完全移行のあとは削除する）
 moodle/              Moodle モード用の Moodle プラグイン（local_steplearn）と検証用の Moodle（moodle/dev）
 sandbox/             学生が書いたコードを実行するコンテナ（server.py が要求を受け、jail.py が権限を落として実行する）
+vscode-extension/    ファイル自動配布のファイルを用意して開く VS Code の拡張機能（STEP Learn for VSCode）。本体とは別にビルドする
 src/components/      レイアウトと UI 部品
-src/routes/<ルート>/ auth / account / admin / dashboard / courses / content / participants / screen / code。
+src/routes/<ルート>/ auth / account / admin / dashboard / courses / content / participants / screen / code / bundle。
                      ルートごとに index.ts（ルーティング）・handlers.tsx（処理）・views.tsx（画面）・<ルート>.css に分ける
 ```
