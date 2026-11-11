@@ -34,7 +34,7 @@ import { clientIp, field, intParam, readForm, redirectWith, wantsJson } from '..
 import { rateLimiter } from '../../lib/rate-limit'
 import { deleteKeys, inBackground, isExecutable, storage } from '../../lib/storage'
 import type { AppEnv } from '../../lib/types'
-import { buildZip } from '../../lib/zip'
+import { ZipError, buildZip, listZip, type ZipItem } from '../../lib/zip'
 import { SyncHistoryPage, SyncStudentsPage, type SyncFileRow } from './views'
 
 type C = Context<AppEnv>
@@ -63,6 +63,14 @@ export type BundleBackend = {
 
 const asList = <T,>(v: T | T[] | undefined) => (v === undefined ? [] : Array.isArray(v) ? v : [v])
 
+/** zip の中身がすべて 1 つのフォルダーに入っていれば、そのフォルダーを外した場所 */
+function withoutWrapper(paths: string[]) {
+  const top = paths[0]?.split('/')[0]
+  // そのまま置かないのは、フォルダーを圧縮した zip だと学生の PC でフォルダーが 1 段深くなるため（フォルダーを選んだときも、そのフォルダーの名前は外す）
+  const wrapped = !!top && paths.every((p) => p.startsWith(`${top}/`))
+  return wrapped ? paths.map((p) => p.slice(top.length + 1)) : paths
+}
+
 const sha256 = (bytes: Uint8Array) => crypto.createHash('sha256').update(bytes).digest('hex')
 
 const serverOrigin = (c: C) => config.appOrigin ?? new URL(c.req.url).origin
@@ -83,18 +91,54 @@ export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: B
   }
 
   type Upload = { path: string; file: File }
+  type Picked = { name: string; file: File }
+  type Read<T> = ({ ok: true } & T) | { ok: false; error: string }
+
+  // 書かれた大きさで先に確かめるのは、上限を超える zip を展開してメモリを使わないため
+  async function unpack(archive: File): Promise<Read<{ picked: Picked[]; skipped: number }>> {
+    let items: ZipItem[]
+    try {
+      items = await listZip(new Uint8Array(await archive.arrayBuffer()))
+    } catch (e) {
+      if (e instanceof ZipError) return { ok: false, error: `「${archive.name}」を展開できませんでした。${e.message}` }
+      throw e
+    }
+    const usable = items.filter((i) => !isExcludedPath(i.path.replace(/\\/g, '/')))
+    if (usable.length > MAX_BUNDLE_FILES) return { ok: false, error: `ファイルは ${MAX_BUNDLE_FILES} 個までです。` }
+    if (bundleSize(usable) > MAX_BUNDLE_SIZE) return { ok: false, error: `ファイルの合計は ${formatBytes(MAX_BUNDLE_SIZE)} までです。` }
+    const names = withoutWrapper(usable.map((i) => i.path.replace(/\\/g, '/')))
+    const picked: Picked[] = []
+    for (const [i, item] of usable.entries()) {
+      try {
+        picked.push({ name: names[i], file: new File([await item.read()], names[i].split('/').pop()!) })
+      } catch (e) {
+        if (e instanceof ZipError) return { ok: false, error: `「${archive.name}」の「${item.path}」を展開できませんでした。${e.message}` }
+        throw e
+      }
+    }
+    return { ok: true, picked, skipped: items.length - usable.length }
+  }
 
   // 1 つずつ確かめるのは、どのファイルで止めたかを教師に伝えるため
-  async function readUploads(c: C): Promise<{ ok: true; uploads: Upload[]; skipped: number } | { ok: false; error: string }> {
+  async function readUploads(c: C): Promise<Read<{ uploads: Upload[]; skipped: number }>> {
     const body = await c.req.parseBody({ all: true })
     const files = asList(body.files).filter((f): f is File => f instanceof File)
     const paths = asList(body.paths).map((p) => (typeof p === 'string' ? p : ''))
-    if (!files.length) return { ok: false, error: 'アップロードするファイルを選択してください。' }
+    const archives = asList(body.archives).filter((f): f is File => f instanceof File)
+    if (!files.length && !archives.length) return { ok: false, error: 'アップロードするファイルを選択してください。' }
+    const picked: Picked[] = files.map((file, i) => ({ name: paths[i] || file.name, file }))
+    // ブラウザが外した数も足すのは、node_modules などを送らずに済ませつつ、外した数をまとめて伝えるため
+    let skipped = typeof body.skipped === 'string' ? Math.min(Math.max(Math.trunc(Number(body.skipped)) || 0, 0), 1_000_000) : 0
+    for (const archive of archives) {
+      const read = await unpack(archive)
+      if (!read.ok) return read
+      picked.push(...read.picked)
+      skipped += read.skipped
+    }
     const uploads: Upload[] = []
-    let skipped = 0
-    for (const [i, file] of files.entries()) {
-      const path = bundlePath(paths[i] || file.name)
-      if (!path) return { ok: false, error: `「${paths[i] || file.name}」は、ファイルの名前か場所に使えない文字が含まれています。` }
+    for (const { name, file } of picked) {
+      const path = bundlePath(name)
+      if (!path) return { ok: false, error: `「${name}」は、ファイルの名前か場所に使えない文字が含まれています。` }
       if (isExcludedPath(path)) {
         skipped++
         continue

@@ -883,35 +883,41 @@ document.addEventListener('drop', (e) => {
 
 // --- ファイル自動配布のアップロード（components/bundle.tsx の BundleFilesCard）
 // ファイル選択の部品（FileInput）を使わないのは、フォルダーの中の場所をファイルと一緒に送る必要があり、input の files ではそれを持てないため
-type PendingFile = { file: File; path: string }
-const bundlePending = new WeakMap<HTMLFormElement, PendingFile[]>()
+// archive は、選んだりドロップしたりした zip（フォルダーの中の zip は、展開せずにそのまま配る）
+type BundleUpload = { file: File; path: string; archive?: boolean }
 
-function showBundlePending(form: HTMLFormElement) {
-  const pending = bundlePending.get(form) ?? []
-  const box = form.querySelector<HTMLElement>('[data-bundle-pending]')
-  if (!box) return
-  box.hidden = !pending.length
-  const size = pending.reduce((sum, f) => sum + f.file.size, 0)
-  box.querySelector('[data-bundle-summary]')!.textContent = `${pending.length} 個のファイル（${formatBytes(size)}）をアップロードします`
-}
+const isZip = (file: File) => /\.zip$/i.test(file.name)
 
-function addBundleFiles(form: HTMLFormElement, files: PendingFile[]) {
-  const usable = files.filter((f) => !!bundlePath(f.path) && !isExcludedPath(f.path))
+function uploadBundle(form: HTMLFormElement, files: BundleUpload[]) {
+  if (form.hasAttribute('data-uploading')) return
+  const usable = files.filter((f) => f.archive || (!!bundlePath(f.path) && !isExcludedPath(f.path)))
   const skipped = files.length - usable.length
-  const merged = new Map((bundlePending.get(form) ?? []).map((f) => [f.path.toLowerCase(), f]))
-  for (const f of usable) merged.set(f.path.toLowerCase(), f)
-  const list = [...merged.values()]
+  if (!usable.length)
+    return toast(
+      skipped
+        ? 'アップロードできるファイルがありませんでした（.git や node_modules などは外しています）。'
+        : 'アップロードするファイルがありません。',
+      'error',
+    )
   const maxFiles = Number(form.dataset.maxFiles)
   const maxSize = Number(form.dataset.maxSize)
-  if (list.length > maxFiles) return toast(`ファイルは ${maxFiles} 個までです。`, 'error')
-  if (list.reduce((sum, f) => sum + f.file.size, 0) > maxSize)
+  if (usable.length > maxFiles) return toast(`ファイルは ${maxFiles} 個までです。`, 'error')
+  if (usable.reduce((sum, f) => sum + f.file.size, 0) > maxSize)
     return toast(`1 回にアップロードできるのは合計 ${formatBytes(maxSize)} までです。何回かに分けてアップロードしてください。`, 'error')
-  bundlePending.set(form, list)
-  showBundlePending(form)
-  if (skipped) toast(`${skipped} 個のファイルは、配らないファイル（.git や node_modules など）として外しました。`, 'info')
+  const data = new FormData()
+  for (const { file, path, archive } of usable) {
+    if (archive) data.append('archives', file, file.name)
+    else {
+      data.append('files', file, file.name)
+      data.append('paths', path)
+    }
+  }
+  data.append('skipped', String(skipped))
+  form.toggleAttribute('data-uploading', true)
+  void visit(new URL(form.action), { method: 'POST', body: data, onFail: () => form.removeAttribute('data-uploading') })
 }
 
-async function readDropEntry(entry: FileSystemEntry, prefix: string): Promise<PendingFile[]> {
+async function readDropEntry(entry: FileSystemEntry, prefix: string): Promise<BundleUpload[]> {
   const path = `${prefix}${entry.name}`
   if (entry instanceof FileSystemFileEntry) return [{ file: await new Promise<File>((ok, ng) => entry.file(ok, ng)), path }]
   // 中を読む前に外すのは、node_modules のように数万のファイルを含むフォルダーを読み終えるまで待たせないため
@@ -928,15 +934,10 @@ async function readDropEntry(entry: FileSystemEntry, prefix: string): Promise<Pe
 }
 
 document.addEventListener('click', (e) => {
-  const target = e.target as Element
-  const form = target.closest<HTMLFormElement>('[data-bundle-upload]')
-  if (!form) return
-  const pick = target.closest<HTMLElement>('[data-bundle-pick]')
-  if (pick) form.querySelector<HTMLInputElement>(`[data-bundle-input="${pick.dataset.bundlePick}"]`)?.click()
-  if (target.closest('[data-bundle-clear]')) {
-    bundlePending.delete(form)
-    showBundlePending(form)
-  }
+  const pick = (e.target as Element).closest<HTMLElement>('[data-bundle-pick]')
+  const form = pick?.closest<HTMLFormElement>('[data-bundle-upload]')
+  if (form && !form.hasAttribute('data-uploading'))
+    form.querySelector<HTMLInputElement>(`[data-bundle-input="${pick!.dataset.bundlePick}"]`)?.click()
 })
 
 document.addEventListener('change', (e) => {
@@ -945,9 +946,11 @@ document.addEventListener('change', (e) => {
   if (!form || !input.matches('[data-bundle-input]') || !input.files) return
   // 選んだフォルダーの名前を外すのは、そのフォルダーの中身を配るため（学生の PC ではアイテムの名前のフォルダーに入る）
   const folder = input.dataset.bundleInput === 'folder'
-  const files = [...input.files].map((file) => ({ file, path: folder ? file.webkitRelativePath.split('/').slice(1).join('/') : file.name }))
+  const files = [...input.files].map((file) =>
+    folder ? { file, path: file.webkitRelativePath.split('/').slice(1).join('/') } : { file, path: file.name, archive: isZip(file) },
+  )
   input.value = ''
-  addBundleFiles(form, files)
+  uploadBundle(form, files)
 })
 
 const bundleDropOf = (e: DragEvent) => (e.target instanceof Element ? e.target.closest<HTMLElement>('[data-bundle-drop]') : null)
@@ -956,8 +959,9 @@ document.addEventListener('dragover', (e) => {
   const zone = bundleDropOf(e)
   if (!zone || !carriesFiles(e)) return
   e.preventDefault()
-  e.dataTransfer!.dropEffect = 'copy'
-  zone.toggleAttribute('data-dragging', true)
+  const busy = !!zone.closest('[data-uploading]')
+  e.dataTransfer!.dropEffect = busy ? 'none' : 'copy'
+  zone.toggleAttribute('data-dragging', !busy)
 })
 document.addEventListener('dragleave', (e) => {
   const zone = bundleDropOf(e)
@@ -971,42 +975,24 @@ document.addEventListener('drop', (e) => {
   e.preventDefault()
   zone.removeAttribute('data-dragging')
   // ドロップのイベントの中で取り出すのは、イベントが終わると DataTransfer の中身が読めなくなるため
-  const entries = [...e.dataTransfer!.items].map((item) => item.webkitGetAsEntry()).filter((entry) => !!entry)
-  const single = entries.length === 1 && entries[0] instanceof FileSystemDirectoryEntry ? entries[0] : null
+  // エントリーだけにしないのは、ドラッグ元によってはエントリーが取れず、ファイルを受け取れなくなるため
+  const dropped = [...e.dataTransfer!.items]
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.webkitGetAsEntry() ?? item.getAsFile())
+    .filter((d) => !!d)
+  const single = dropped.length === 1 && dropped[0] instanceof FileSystemDirectoryEntry ? dropped[0] : null
   void (async () => {
     try {
       const files = single
         ? (await readDropEntry(single, '')).map((f) => ({ ...f, path: f.path.split('/').slice(1).join('/') }))
-        : (await Promise.all(entries.map((entry) => readDropEntry(entry, '')))).flat()
-      addBundleFiles(form, files)
+        : (await Promise.all(dropped.map((d) => (d instanceof File ? Promise.resolve([{ file: d, path: d.name }]) : readDropEntry(d, '')))))
+            .flat()
+            .map((f) => ({ ...f, archive: !f.path.includes('/') && isZip(f.file) }))
+      uploadBundle(form, files)
     } catch {
       toast('ファイルを読み込めませんでした。', 'error')
     }
   })()
-})
-
-document.addEventListener('submit', (e) => {
-  const form = e.target as HTMLFormElement
-  if (!form.matches('[data-bundle-upload]')) return
-  e.preventDefault()
-  const pending = bundlePending.get(form) ?? []
-  if (!pending.length) return toast('アップロードするファイルを選択してください。', 'error')
-  const data = new FormData()
-  for (const { file, path } of pending) {
-    data.append('files', file, file.name)
-    data.append('paths', path)
-  }
-  const btn = form.querySelector<HTMLButtonElement>('button[type=submit]')
-  btn?.classList.add('loading')
-  if (btn) btn.disabled = true
-  void visit(new URL(form.action), {
-    method: 'POST',
-    body: data,
-    onFail: () => {
-      btn?.classList.remove('loading')
-      if (btn) btn.disabled = false
-    },
-  })
 })
 
 // --- VS Code で開く（components/bundle.tsx の BundleOpen）
