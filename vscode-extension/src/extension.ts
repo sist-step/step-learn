@@ -1,5 +1,6 @@
 import path from 'node:path'
 import * as vscode from 'vscode'
+import { HistorySession, confirmSync, tokenKey } from './history-session'
 import {
   SyncError,
   claim,
@@ -18,6 +19,27 @@ import {
 
 const TRUSTED_KEY = 'trustedServers'
 const RECORDS_KEY = 'bundles'
+
+const sessions = new Map<string, HistorySession>()
+
+const recordsOf = (context: vscode.ExtensionContext) => context.globalState.get<Record<string, Synced>>(RECORDS_KEY, {})
+
+/** 開いているフォルダーのうち、前に用意したフォルダーで変更履歴の同期を始める。鍵が新しくなっているかもしれないので、動いているものも始め直す */
+async function startSessions(context: vscode.ExtensionContext) {
+  for (const session of sessions.values()) session.dispose()
+  sessions.clear()
+  const open = (vscode.workspace.workspaceFolders ?? []).filter((f) => f.uri.scheme === 'file').map((f) => f.uri.fsPath)
+  for (const [key, record] of Object.entries(recordsOf(context))) {
+    if (!open.some((folder) => path.relative(folder, record.folder) === '')) continue
+    const server = parseServer(key.split(' ')[0])
+    const token = await context.secrets.get(tokenKey(key))
+    // 鍵がないのは、同期に対応する前の拡張機能で用意したフォルダー。STEP Learn の画面から開き直すと鍵を受け取る
+    if (!server || !token || sessions.has(key)) continue
+    const session = new HistorySession(context, key, record.folder, server, token, () => recordsOf(context)[key]?.files ?? {})
+    sessions.set(key, session)
+    session.start()
+  }
+}
 
 const configuredRoot = () => rootFolder(vscode.workspace.getConfiguration('stepLearn').get<string>('folder') ?? '')
 
@@ -92,7 +114,11 @@ async function openFromLink(context: vscode.ExtensionContext, uri: vscode.Uri) {
       () => claim(server, token),
     )
     const key = `${server.origin} ${manifest.ref}`
-    const records = context.globalState.get<Record<string, Synced>>(RECORDS_KEY, {})
+    if (manifest.sync) {
+      if (manifest.sync.enabled && !(await confirmSync(context, key, manifest.title))) return
+      await context.secrets.store(tokenKey(key), manifest.sync.token)
+    }
+    const records = recordsOf(context)
     const choice = await choose(manifest, records[key])
     if (!choice) return
     if (choice.files.length) {
@@ -107,6 +133,7 @@ async function openFromLink(context: vscode.ExtensionContext, uri: vscode.Uri) {
     // 開く前に記録するのは、このウィンドウでフォルダーを開くと拡張機能が止まり、あとの処理が動かないため
     await context.globalState.update(RECORDS_KEY, { ...records, [key]: record(choice.folder, records[key], choice.files, choice.same) })
     await openFolder(choice.folder)
+    await startSessions(context)
   } catch (e) {
     const message = e instanceof SyncError ? e.message : `ファイルを用意できませんでした（${e instanceof Error ? e.message : String(e)}）。`
     void vscode.window.showErrorMessage(message)
@@ -114,8 +141,11 @@ async function openFromLink(context: vscode.ExtensionContext, uri: vscode.Uri) {
 }
 
 export function activate(context: vscode.ExtensionContext) {
+  void startSessions(context)
   context.subscriptions.push(
     vscode.window.registerUriHandler({ handleUri: (uri) => openFromLink(context, uri) }),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => void startSessions(context)),
+    { dispose: () => sessions.forEach((session) => session.dispose()) },
     vscode.commands.registerCommand('stepLearn.openRootFolder', async () => {
       const root = await configuredRoot()
       if (!(await exists(root))) {
@@ -131,4 +161,8 @@ export function activate(context: vscode.ExtensionContext) {
       void vscode.window.showInformationMessage('ファイルを受け取ってよいサーバーの記録を消しました。次に開くときに、もう一度確認します。')
     }),
   )
+}
+
+export async function deactivate() {
+  await Promise.all([...sessions.values()].map((session) => session.flushNow()))
 }
