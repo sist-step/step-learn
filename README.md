@@ -166,11 +166,14 @@ MOODLE_MIGRATE_URL=https://moodle.example.ac.jp MOODLE_MIGRATE_TOKEN=<トーク�
 - 画面共有は、Moodle モードだけにある種類のアイテム（下）として追加できます。一覧や目次から開くと、新しいタブで画面共有の画面を開きます（Moodle の画面から開いたときも新しいタブで開きます）。視聴できるのはアイテムを開ける参加者、配信できるのはコースを編集できる人で、接続している間も確かめ直し、見られなくなった人の接続は切ります
 - コード（コードを書いて提出し、AI が採点するアイテム）も、Moodle モードだけにある種類のアイテム（下）として追加できます。機能は通常モードと同じで、一覧や目次から開くと、新しいタブでエディターの画面を開きます。提出の一覧に並ぶのは提出した学生だけです（参加者は Moodle にあるため）。書きかけのコード・提出・採点は `data/moodle-mode.db` に置き、Moodle の評定には反映しません。完全移行では引き継ぎません。採点にかかった AI の使用量も `data/moodle-mode.db` に記録し、通常モードと同じく月の上限に達している間は自動では採点しません
 - ファイル自動配布も、Moodle モードだけにある種類のアイテム（下）として追加できます。機能は通常モードと同じです。配るファイルの一覧は `data/moodle-mode.db` に、ファイルの中身は教材ファイルと同じストレージの `moodle-mode/` の下に置きます。完全移行では引き継ぎません
+  - Moodle には、URL の活動ではなく専用の活動「ファイル自動配布」（`moodle/mod_stepbundle/` のプラグイン）を置きます。Moodle の画面で開くと STEP Learn のアイテムの画面に移り、Moodle の画面（活動の追加）からも作れます。このプラグインが Moodle に入っていないときは、アイテムを追加する画面にファイル自動配布を出しません
+  - ごみ箱から戻した活動は、前に配っていたファイルにつながります。複製した活動とコピーしたコースの活動は、ファイルのない状態から始まります
+  - 専用の活動にする前の形（URL の活動）で残っているファイル自動配布は、教師がそのコースを開いたときに、Moodle の活動・配るファイルごと自動で削除します（学生には、それまでも一覧に出しません）
 - 管理（`/admin`。Moodle のサイト管理者だけが開けます）は、AI の月の上限と使用量の画面です。上限と使用量は通常モードとは別に `data/moodle-mode.db` に置きます。ユーザーとコースの管理は Moodle のサイト管理で行い、画面の右上から移れます
-- Moodle モードだけにある種類のアイテム（`src/moodle-mode/extra-kinds.tsx` に定義する）は、中身を `data/moodle-mode.db` に保存し、Moodle には同じ位置に STEP Learn へ移る URL の活動（リンク先は `/m/<キー>`）を置きます。並び順・表示・アクセス制限・完了は Moodle の活動のものを使います。Moodle でコースをコピーしたときは、コピー先では開けません。完全移行では引き継ぎません
+- Moodle モードだけにある種類のアイテム（`src/moodle-mode/extra-kinds.tsx` に定義する）は、中身を `data/moodle-mode.db` に保存し、Moodle には同じ位置に STEP Learn へ移る URL の活動（リンク先は `/m/<キー>`。ファイル自動配布だけは専用の活動）を置きます。並び順・表示・アクセス制限・完了は Moodle の活動のものを使います。URL の活動に置いた種類は、Moodle でコースをコピーしたときは、コピー先では開けません。完全移行では引き継ぎません
 - STEP Learn 側の DB は `data/moodle-mode.db`（ユーザーの写し・セッション・暗号化したトークンと、Moodle モードだけにある種類のアイテムの中身、コードのアイテムの書きかけのコードと提出、ファイル自動配布の配るファイルの一覧、AI の使用量と月の上限）で、`data/step-learn.db` は作りも開きもしません。完全移行のときに引き継ぐ必要はありません
 
-Moodle 側には、このリポジトリの `moodle/local_steplearn/` のプラグインを入れて設定します。手順は [moodle/README.md](moodle/README.md) を参照してください。
+Moodle 側には、このリポジトリの `moodle/local_steplearn/` のプラグインを入れて設定します。ファイル自動配布を使うときは `moodle/mod_stepbundle/` も入れます。手順は [moodle/README.md](moodle/README.md) を参照してください。
 
 | 環境変数 | 内容 |
 | --- | --- |
@@ -183,7 +186,7 @@ Moodle 側には、このリポジトリの `moodle/local_steplearn/` のプラ�
 - `src/moodle-mode/`・`migrations-moodle/`・`drizzle.moodle.config.ts`・`moodle/`
 - `src/index.tsx` のモードの切り替え（`./app` だけを読み込む形に戻す）と、`src/server.ts`・`vite.config.ts` の `config.moodle` の分岐
 - `src/lib/config.ts` の `moodle` / `moodleDatabasePath` / `moodleMigrate`、`src/lib/db.ts` の Moodle モードのガード、`src/components/style.tsx` の `moodle-mode.css`
-- `src/moodle/remote.ts` と `src/cli.ts` の `moodle:migrate`、`src/lib/forms.ts` の `extraItemFields` / `extraItem` / `extraCode`、`src/client.ts` の `setKindOnly`
+- `src/moodle/remote.ts` と `src/cli.ts` の `moodle:migrate`、`src/lib/forms.ts` の `extraItemFields` / `extraItem` / `extraCode`、`src/lib/bundle.ts` の `BUNDLE_MODULE`、`src/client.ts` の `setKindOnly`
 - コードのアイテムを 2 つのモードで使い回すための分け方（`src/routes/code/handlers.tsx` の `CodeBackend`、`src/lib/code-store.ts` の `CodeStore`、`src/lib/code-grader.ts` の `createGrader`、`src/routes/code/views.tsx` の `CodePage`）は、通常モードの実装（`src/routes/code/backend.ts`・`src/lib/code-items.ts`・`src/lib/code-grading.ts`）だけになるので、まとめてかまいません
 - `package.json` の `moodle:migrate` / `db:generate:moodle` / `db:check:moodle`、CI の「Check Moodle mode migrations」、`Dockerfile` の `migrations-moodle`、`.dockerignore` の `moodle`
 
@@ -300,7 +303,7 @@ src/styles/base.css  デザイントークンと共通スタイル（ダーク�
 src/lib/             設定・DB・認証・HTTP ヘルパー・Markdown・ストレージ・画像アップロード・コースの権限・AI（OpenRouter）・sandbox の呼び出し
 src/moodle/          Moodle のバックアップの展開・読み取り・取り込み（CLI の moodle:import）
 src/moodle-mode/     Moodle モード（MOODLE_URL を設定したときだけ使う。完全移行のあとは削除する）
-moodle/              Moodle モード用の Moodle プラグイン（local_steplearn）と検証用の Moodle（moodle/dev）
+moodle/              Moodle モード用の Moodle プラグイン（local_steplearn・mod_stepbundle）と検証用の Moodle（moodle/dev）
 sandbox/             学生が書いたコードを実行するコンテナ（server.py が要求を受け、jail.py が権限を落として実行する）
 vscode-extension/    ファイル自動配布のファイルを用意して開く VS Code の拡張機能（STEP Learn for VSCode）。本体とは別にビルドする
 src/components/      レイアウトと UI 部品
