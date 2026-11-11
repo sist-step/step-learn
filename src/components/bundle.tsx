@@ -1,5 +1,6 @@
 import { formatBytes } from '../lib/bytes'
 import {
+  EXCLUDED_NAMES,
   MAX_BUNDLE_FILES,
   MAX_BUNDLE_SIZE,
   VSCODE_EXTENSION_NAME,
@@ -15,6 +16,7 @@ import { Button, IconButton } from './button'
 import { Card, LinkCard } from './card'
 import { cx } from './cx'
 import { Icon } from './icons'
+import { Popover } from './overlay'
 import { useStyle } from './style'
 import { Chip, EmptyState } from './ui'
 
@@ -252,16 +254,32 @@ const BundleFilesCard = ({ base, files, class: cls }: { base: string; files: Lis
                 ファイル・zip を選択
               </Button>
             </span>
+            <span class="bundle-drop-limit muted small">
+              最大 {MAX_BUNDLE_FILES} 個・合計 {formatBytes(MAX_BUNDLE_SIZE)}
+              <span>（1 回のアップロードは {formatBytes(MAX_FILE_SIZE)}）まで</span>
+            </span>
             <span class="bundle-drop-busy" role="status">
               アップロードしています…
             </span>
           </div>
-          <p class="muted small">
-            フォルダーを選ぶとその中身を、zip
-            を選ぶと展開した中身を配ります。同じ場所にあるファイルは置き換わります。.git・node_modules・__pycache__・.venv
-            などは自動で外します。最大 {MAX_BUNDLE_FILES} 個・合計 {formatBytes(MAX_BUNDLE_SIZE)}（1 回のアップロードは{' '}
-            {formatBytes(MAX_FILE_SIZE)}）まで。
-          </p>
+          <Popover
+            class="bundle-excluded"
+            panelClass="bundle-excluded-panel"
+            trigger={
+              <summary class="bundle-excluded-trigger">
+                <Chip icon="info">除外されるファイル</Chip>
+              </summary>
+            }
+          >
+            <p class="small">次の名前のフォルダーとファイルは、アップロードしても自動で外します。</p>
+            <ul class="bundle-excluded-list">
+              {EXCLUDED_NAMES.map((name) => (
+                <li>
+                  <code>{name}</code>
+                </li>
+              ))}
+            </ul>
+          </Popover>
         </form>
         {files.length > 0 && <BundleTree files={files} deleteAction={`${base}/files/delete`} />}
       </div>

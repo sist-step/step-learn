@@ -25,7 +25,7 @@ const MAX_PATH_LENGTH = 400
 const MAX_SEGMENT_LENGTH = 255
 
 /** アップロードのときに外すフォルダーとファイル。環境ごとに作り直すものと、OS が勝手に作るもの */
-const EXCLUDED_SEGMENTS = new Set([
+export const EXCLUDED_NAMES = [
   '.git',
   '.svn',
   '.hg',
@@ -37,7 +37,8 @@ const EXCLUDED_SEGMENTS = new Set([
   '.DS_Store',
   'Thumbs.db',
   'desktop.ini',
-])
+]
+const EXCLUDED_SEGMENTS = new Set(EXCLUDED_NAMES)
 
 // Windows で作れない名前を受け付けないのは、学生の PC に展開できず、そのファイルだけ配られなくなるため
 const INVALID_CHARS = /[\p{Cc}<>:"|?*\\]/u
