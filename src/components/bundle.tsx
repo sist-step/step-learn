@@ -2,7 +2,6 @@ import { formatBytes } from '../lib/bytes'
 import {
   MAX_BUNDLE_FILES,
   MAX_BUNDLE_SIZE,
-  VSCODE_EXTENSION_ID,
   VSCODE_EXTENSION_NAME,
   VSCODE_MARKETPLACE_URL,
   bundleSize,
@@ -98,17 +97,12 @@ export const BundleOpen = ({ base, files, editHref }: { base: string; files: Lis
       </LinkCard>
       <div class="bundle-help muted small">
         <p>
-          初めて使うときは、VS Code に拡張機能「{VSCODE_EXTENSION_NAME}」を入れてください。
-          <a href={`vscode:extension/${VSCODE_EXTENSION_ID}`} data-no-prefetch>
-            VS Code で入れる
-          </a>
-          ・
+          VS Code に拡張機能「{VSCODE_EXTENSION_NAME}」を入れてください。
           <a href={VSCODE_MARKETPLACE_URL} target="_blank" rel="noopener" data-no-prefetch>
             Marketplace で見る
             <Icon name="external" size={12} />
           </a>
         </p>
-        <p>2 回目からは、前に用意したフォルダーをそのまま開きます。書き換えたファイルが上書きされることはありません。</p>
       </div>
       <Card
         heading="配布するファイル"
