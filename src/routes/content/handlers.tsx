@@ -10,6 +10,7 @@ import {
   trackedItemCount,
   visibleItem,
 } from '../../lib/courses'
+import { bundleKeysOf, bundleStore } from '../../lib/bundle-items'
 import { DEFAULT_MAX_SCORE, DEFAULT_STARTER, MAX_CODE_LENGTH, MAX_STDIN_LENGTH } from '../../lib/code'
 import { gradingEnabled } from '../../lib/code-grader'
 import { grader } from '../../lib/code-grading'
@@ -125,10 +126,16 @@ export async function removeSection(c: Context<AppEnv>) {
     .from(items)
     .where(and(eq(items.sectionId, sid), eq(items.courseId, access.course.id), isNotNull(items.fileKey)))
     .all()
+  const bundles = db
+    .select({ id: items.id })
+    .from(items)
+    .where(and(eq(items.sectionId, sid), eq(items.courseId, access.course.id), eq(items.type, 'bundle')))
+    .all()
+  const bundleKeys = bundleKeysOf(bundles.map((b) => b.id))
   db.delete(sections)
     .where(and(eq(sections.id, sid), eq(sections.courseId, access.course.id)))
     .run()
-  inBackground(deleteKeys(files.map((r) => r.fileKey!)))
+  inBackground(deleteKeys([...files.map((r) => r.fileKey!), ...bundleKeys]))
   return redirectWith(c, editUrl(access.course.id), 'セクションを削除しました。', 'info')
 }
 
@@ -209,6 +216,13 @@ export async function createItem(c: Context<AppEnv>) {
     if (type === 'code') tx.insert(codeItems).values({ itemId: row.id, language, starter: DEFAULT_STARTER[language] }).run()
     return row
   })
+  // ファイル自動配布は、ファイルを置くまで学生に配れないので、アップロードする編集画面へ進める
+  if (type === 'bundle')
+    return redirectWith(
+      c,
+      `/courses/${courseId}/items/${created.id}/edit`,
+      `「${input.title}」を追加しました。配るファイルをアップロードしてください。`,
+    )
   const next = field(form, 'then') === 'view' ? `/courses/${courseId}/items/${created.id}` : editUrl(courseId, sectionId)
   return redirectWith(c, next, `「${input.title}」を追加しました。`)
 }
@@ -224,6 +238,7 @@ export async function editItem(c: Context<AppEnv>) {
       access={access}
       item={item}
       code={getCodeItem(iid)}
+      bundleFiles={item.type === 'bundle' ? bundleStore(iid).list() : undefined}
       gradingEnabled={gradingEnabled}
       sections={listSections(access.course.id)}
     />,
@@ -270,6 +285,7 @@ export async function updateItem(c: Context<AppEnv>) {
         access={access}
         item={item}
         code={code}
+        bundleFiles={item.type === 'bundle' ? bundleStore(iid).list() : undefined}
         gradingEnabled={gradingEnabled}
         sections={listSections(courseId)}
         values={values}
@@ -336,13 +352,14 @@ export async function removeItem(c: Context<AppEnv>) {
   const access = await manageAccess(c)
   const iid = intParam(c, 'iid')
   if (!access || !iid) return c.notFound()
+  const bundleKeys = bundleKeysOf([iid])
   const item = db
     .delete(items)
     .where(and(eq(items.id, iid), eq(items.courseId, access.course.id)))
     .returning({ sectionId: items.sectionId, fileKey: items.fileKey, title: items.title })
     .get()
   if (!item) return c.notFound()
-  if (item.fileKey) inBackground(deleteKeys([item.fileKey]))
+  inBackground(deleteKeys([item.fileKey, ...bundleKeys]))
   return redirectWith(c, editUrl(access.course.id, item.sectionId), `「${item.title}」を削除しました。`, 'info')
 }
 
@@ -433,6 +450,7 @@ export async function showItem(c: Context<AppEnv>) {
       sharing={isSharing(item.id)}
       textPreview={textPreview}
       code={code}
+      bundleFiles={item.type === 'bundle' ? bundleStore(iid).list() : undefined}
       revision={revision}
     />,
     { title: item.title },

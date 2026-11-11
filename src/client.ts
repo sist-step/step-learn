@@ -3,6 +3,7 @@
 // 全ページ共通のクライアント処理。JS が無効な環境では renderer の noscript がアプリを使えなくする。
 
 import checkSvg from 'heroicons/24/outline/check.svg?raw'
+import { bundlePath, isExcludedPath } from './lib/bundle'
 import { formatBytes } from './lib/bytes'
 import { isFormName, validate, type FieldErrors, type FormInput } from './lib/forms'
 import { getSetting, setSetting, updateSetting, type Theme } from './lib/settings'
@@ -878,6 +879,152 @@ document.addEventListener('drop', (e) => {
   files.items.add(file)
   input.files = files.files
   input.dispatchEvent(new Event('change', { bubbles: true }))
+})
+
+// --- ファイル自動配布のアップロード（components/bundle.tsx の BundleFilesCard）
+// ファイル選択の部品（FileInput）を使わないのは、フォルダーの中の場所をファイルと一緒に送る必要があり、input の files ではそれを持てないため
+type PendingFile = { file: File; path: string }
+const bundlePending = new WeakMap<HTMLFormElement, PendingFile[]>()
+
+function showBundlePending(form: HTMLFormElement) {
+  const pending = bundlePending.get(form) ?? []
+  const box = form.querySelector<HTMLElement>('[data-bundle-pending]')
+  if (!box) return
+  box.hidden = !pending.length
+  const size = pending.reduce((sum, f) => sum + f.file.size, 0)
+  box.querySelector('[data-bundle-summary]')!.textContent = `${pending.length} 個のファイル（${formatBytes(size)}）をアップロードします`
+}
+
+function addBundleFiles(form: HTMLFormElement, files: PendingFile[]) {
+  const usable = files.filter((f) => !!bundlePath(f.path) && !isExcludedPath(f.path))
+  const skipped = files.length - usable.length
+  const merged = new Map((bundlePending.get(form) ?? []).map((f) => [f.path.toLowerCase(), f]))
+  for (const f of usable) merged.set(f.path.toLowerCase(), f)
+  const list = [...merged.values()]
+  const maxFiles = Number(form.dataset.maxFiles)
+  const maxSize = Number(form.dataset.maxSize)
+  if (list.length > maxFiles) return toast(`ファイルは ${maxFiles} 個までです。`, 'error')
+  if (list.reduce((sum, f) => sum + f.file.size, 0) > maxSize)
+    return toast(`1 回にアップロードできるのは合計 ${formatBytes(maxSize)} までです。何回かに分けてアップロードしてください。`, 'error')
+  bundlePending.set(form, list)
+  showBundlePending(form)
+  if (skipped) toast(`${skipped} 個のファイルは、配らないファイル（.git や node_modules など）として外しました。`, 'info')
+}
+
+async function readDropEntry(entry: FileSystemEntry, prefix: string): Promise<PendingFile[]> {
+  const path = `${prefix}${entry.name}`
+  if (entry instanceof FileSystemFileEntry) return [{ file: await new Promise<File>((ok, ng) => entry.file(ok, ng)), path }]
+  // 中を読む前に外すのは、node_modules のように数万のファイルを含むフォルダーを読み終えるまで待たせないため
+  if (!(entry instanceof FileSystemDirectoryEntry) || isExcludedPath(entry.name)) return []
+  const reader = entry.createReader()
+  const children: FileSystemEntry[] = []
+  // readEntries は 1 回で全部を返すとは限らないので、空が返るまで読む
+  for (;;) {
+    const batch = await new Promise<FileSystemEntry[]>((ok, ng) => reader.readEntries(ok, ng))
+    if (!batch.length) break
+    children.push(...batch)
+  }
+  return (await Promise.all(children.map((child) => readDropEntry(child, `${path}/`)))).flat()
+}
+
+document.addEventListener('click', (e) => {
+  const target = e.target as Element
+  const form = target.closest<HTMLFormElement>('[data-bundle-upload]')
+  if (!form) return
+  const pick = target.closest<HTMLElement>('[data-bundle-pick]')
+  if (pick) form.querySelector<HTMLInputElement>(`[data-bundle-input="${pick.dataset.bundlePick}"]`)?.click()
+  if (target.closest('[data-bundle-clear]')) {
+    bundlePending.delete(form)
+    showBundlePending(form)
+  }
+})
+
+document.addEventListener('change', (e) => {
+  const input = e.target as HTMLInputElement
+  const form = input.closest<HTMLFormElement>('[data-bundle-upload]')
+  if (!form || !input.matches('[data-bundle-input]') || !input.files) return
+  // 選んだフォルダーの名前を外すのは、そのフォルダーの中身を配るため（学生の PC ではアイテムの名前のフォルダーに入る）
+  const folder = input.dataset.bundleInput === 'folder'
+  const files = [...input.files].map((file) => ({ file, path: folder ? file.webkitRelativePath.split('/').slice(1).join('/') : file.name }))
+  input.value = ''
+  addBundleFiles(form, files)
+})
+
+const bundleDropOf = (e: DragEvent) => (e.target instanceof Element ? e.target.closest<HTMLElement>('[data-bundle-drop]') : null)
+
+document.addEventListener('dragover', (e) => {
+  const zone = bundleDropOf(e)
+  if (!zone || !carriesFiles(e)) return
+  e.preventDefault()
+  e.dataTransfer!.dropEffect = 'copy'
+  zone.toggleAttribute('data-dragging', true)
+})
+document.addEventListener('dragleave', (e) => {
+  const zone = bundleDropOf(e)
+  // ボタンなどの子要素に入ったときに外さないのは、強調がちらつくため
+  if (zone && !(e.relatedTarget instanceof Node && zone.contains(e.relatedTarget))) zone.removeAttribute('data-dragging')
+})
+document.addEventListener('drop', (e) => {
+  const zone = bundleDropOf(e)
+  const form = zone?.closest<HTMLFormElement>('[data-bundle-upload]')
+  if (!zone || !form || !carriesFiles(e)) return
+  e.preventDefault()
+  zone.removeAttribute('data-dragging')
+  // ドロップのイベントの中で取り出すのは、イベントが終わると DataTransfer の中身が読めなくなるため
+  const entries = [...e.dataTransfer!.items].map((item) => item.webkitGetAsEntry()).filter((entry) => !!entry)
+  const single = entries.length === 1 && entries[0] instanceof FileSystemDirectoryEntry ? entries[0] : null
+  void (async () => {
+    try {
+      const files = single
+        ? (await readDropEntry(single, '')).map((f) => ({ ...f, path: f.path.split('/').slice(1).join('/') }))
+        : (await Promise.all(entries.map((entry) => readDropEntry(entry, '')))).flat()
+      addBundleFiles(form, files)
+    } catch {
+      toast('ファイルを読み込めませんでした。', 'error')
+    }
+  })()
+})
+
+document.addEventListener('submit', (e) => {
+  const form = e.target as HTMLFormElement
+  if (!form.matches('[data-bundle-upload]')) return
+  e.preventDefault()
+  const pending = bundlePending.get(form) ?? []
+  if (!pending.length) return toast('アップロードするファイルを選択してください。', 'error')
+  const data = new FormData()
+  for (const { file, path } of pending) {
+    data.append('files', file, file.name)
+    data.append('paths', path)
+  }
+  const btn = form.querySelector<HTMLButtonElement>('button[type=submit]')
+  btn?.classList.add('loading')
+  if (btn) btn.disabled = true
+  void visit(new URL(form.action), {
+    method: 'POST',
+    body: data,
+    onFail: () => {
+      btn?.classList.remove('loading')
+      if (btn) btn.disabled = false
+    },
+  })
+})
+
+// --- VS Code で開く（components/bundle.tsx の BundleOpen）
+// リンクを画面に描いておかないのは、中の鍵が数分で切れ、開いたままの画面から押すと使えなくなっているため
+document.addEventListener('submit', async (e) => {
+  const form = e.target as HTMLFormElement
+  if (!form.matches('[data-vscode-launch]')) return
+  e.preventDefault()
+  try {
+    const res = await fetch(form.action, { method: 'POST', headers: { Accept: 'application/json' } })
+    const body: unknown = await res.json()
+    const url = typeof body === 'object' && body !== null && 'url' in body && typeof body.url === 'string' ? body.url : null
+    if (!res.ok || !url) throw new Error('no url')
+    location.href = url
+    toast('VS Code を開いています。開かないときは、拡張機能が入っているか確かめてください。', 'info')
+  } catch {
+    toast('VS Code で開く準備ができませんでした。もう一度お試しください。', 'error')
+  }
 })
 
 // --- 目次（data-toc）で、いま表示している節のリンクを強調する

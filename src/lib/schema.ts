@@ -130,7 +130,7 @@ export const items = sqliteTable(
     sectionId: integer('section_id')
       .notNull()
       .references(() => sections.id, { onDelete: 'cascade' }),
-    type: text('type', { enum: ['page', 'link', 'file', 'screen', 'code'] }).notNull(),
+    type: text('type', { enum: ['page', 'link', 'file', 'screen', 'code', 'bundle'] }).notNull(),
     title: text('title').notNull(),
     body: text('body').notNull().default(''),
     url: text('url').notNull().default(''),
@@ -155,7 +155,7 @@ export const items = sqliteTable(
   (t) => [
     index('items_section').on(t.sectionId, t.position),
     index('items_course').on(t.courseId),
-    check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code')`),
+    check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle')`),
     check('items_completion', sql`${t.completion} IN ('none', 'manual', 'view', 'play')`),
     check('items_link_target', sql`${t.linkTarget} IN ('new', 'same', 'embed')`),
   ],
@@ -221,6 +221,24 @@ export const codeItems = sqliteTable(
     maxScore: integer('max_score').notNull().default(100),
   },
   (t) => [check('code_items_language', sql`${t.language} IN ('web', 'python')`)],
+)
+
+/** ファイル自動配布のアイテム（items.type が bundle）で配るファイル。path はアイテムの中での場所（/ 区切り） */
+export const bundleFiles = sqliteTable(
+  'bundle_files',
+  {
+    id: integer('id').primaryKey(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    // NOCASE にするのは、Windows と macOS では大文字と小文字だけが違う名前を同じファイルとして扱うため
+    path: textNocase('path').notNull(),
+    fileKey: text('file_key').notNull(),
+    size: integer('size').notNull(),
+    sha256: text('sha256').notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [uniqueIndex('bundle_files_item_path').on(t.itemId, t.path)],
 )
 
 /** 書きかけのコード。利用者ごとに 1 つで、編集のたびに上書きする */

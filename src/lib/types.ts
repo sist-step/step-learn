@@ -31,7 +31,7 @@ export type Item = typeof items.$inferSelect
 
 export type CodeItem = typeof codeItems.$inferSelect
 
-export type ItemType = 'page' | 'link' | 'file' | 'screen' | 'code'
+export type ItemType = 'page' | 'link' | 'file' | 'screen' | 'code' | 'bundle'
 
 export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   page: 'ページ',
@@ -39,6 +39,7 @@ export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   file: 'ファイル',
   screen: '画面共有',
   code: 'コード',
+  bundle: 'ファイル自動配布',
 }
 
 export const COMPLETIONS = ['none', 'manual', 'view', 'play'] as const

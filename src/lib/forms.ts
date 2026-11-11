@@ -199,7 +199,7 @@ const itemFields = {
   title: text('タイトル', 200, { required: true }),
   body: text('本文', 100_000),
   hidden: flag(),
-  type: choice(['page', 'link', 'file', 'screen', 'code'], 'page'),
+  type: choice(['page', 'link', 'file', 'screen', 'code', 'bundle'], 'page'),
   language: choice(CODE_LANGUAGES, 'web'),
   link_target: choice(LINK_TARGETS, 'new'),
   completion: z.optional(z.enum(COMPLETIONS, '完了の条件が正しくありません。')),
