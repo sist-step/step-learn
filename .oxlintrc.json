@@ -3,6 +3,7 @@
   "categories": {
     "correctness": "error"
   },
+  "ignorePatterns": ["vscode-extension/**"],
   "env": {
     "browser": true,
     "node": true
