@@ -24,6 +24,7 @@ services:
       - ./.moodle/moodle:/var/www/html
       - ./apache.conf:/etc/apache2/sites-enabled/000-default.conf:ro
       - ../local_steplearn:/var/www/html/public/local/steplearn
+      - ../mod_stepbundle:/var/www/html/public/mod/stepbundle
       - ./:/opt/steplearn-dev:ro
       - moodledata:/var/www/moodledata
 

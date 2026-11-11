@@ -41,14 +41,17 @@ export const sessions = sqliteTable(
   (t) => [index('sessions_user').on(t.userId), index('sessions_moodle_sid').on(t.moodleSid)],
 )
 
-/** Moodle モードだけにある種類のアイテムの中身。Moodle には、この位置に /m/<key> へ移る URL の活動を置く。完全移行では引き継がない */
+/**
+ * Moodle モードだけにある種類のアイテムの中身。Moodle には、この位置に /m/<key> へ移る URL の活動か、
+ * 鍵を持つ専用の活動（ファイル自動配布の mod_stepbundle）を置く。完全移行では引き継がない
+ */
 export const extraItems = sqliteTable(
   'extra_items',
   {
     key: text('key').primaryKey(),
     /** 作ったコース。Moodle でコースをコピーすると、同じ key を指す活動がほかのコースにもできる */
     courseId: integer('course_id').notNull(),
-    /** 作った活動（URL の活動の cmid） */
+    /** 作ったときの活動の cmid。ごみ箱から戻した活動は、同じ key のまま別の cmid になる */
     cmid: integer('cmid').notNull(),
     // CHECK を付けないのは、種類を足すたびに SQLite ではテーブルの作り直しになり、種類の一覧は extra.tsx で決まるため
     type: text('type').notNull(),

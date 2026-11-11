@@ -3,6 +3,9 @@
 /** ファイル自動配布のアイテムの種類の名前。通常モードの items.type と、Moodle モードの extra_items.type に使う */
 export const BUNDLE_KIND = 'bundle'
 
+/** Moodle モードで、ファイル自動配布のアイテムの位置に置く Moodle の活動（moodle/mod_stepbundle）の名前 */
+export const BUNDLE_MODULE = 'stepbundle'
+
 /** VS Code の拡張機能（vscode-extension/）の ID。publisher を変えたら vscode-extension/package.json と合わせる */
 export const VSCODE_EXTENSION_ID = 'mint1535.step-learn-for-vscode'
 

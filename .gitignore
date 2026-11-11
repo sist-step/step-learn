@@ -25,8 +25,8 @@ moodle/dev/.moodle/
 # VS Code extension package built by `npm run package` (see vscode-extension/README.md)
 *.vsix
 
-# Moodle plugin package built by `make moodle-zip` (see moodle/README.md)
-moodle/local_steplearn.zip
+# Moodle plugin packages built by `make moodle-zip` (see moodle/README.md)
+moodle/*.zip
 
 # env
 .env

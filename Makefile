@@ -1,6 +1,5 @@
-MOODLE_PLUGIN_DIR := moodle/local_steplearn
-MOODLE_PLUGIN_NAME := steplearn
-MOODLE_ZIP := moodle/local_steplearn.zip
+MOODLE_PLUGINS := local_steplearn mod_stepbundle
+MOODLE_ZIPS := $(MOODLE_PLUGINS:%=moodle/%.zip)
 
 .PHONY: help moodle-zip moodle-zip-clean
 .DEFAULT_GOAL := help
@@ -9,13 +8,17 @@ MOODLE_ZIP := moodle/local_steplearn.zip
 help: ## コマンドの一覧を表示する
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-18s %s\n", $$1, $$2}'
 
-# ファイルの更新日時で差分ビルドにしないのは、削除したファイルが zip に残ってしまうため
-moodle-zip: ## Moodle プラグインを moodle/local_steplearn.zip にまとめる
-	rm -f $(MOODLE_ZIP)
+# ファイルの更新日時で差分ビルドにしないのは、削除したファイルが zip に残ってしまうため。
+# zip の中のディレクトリ名は、プラグインの種類（local_・mod_）を除いた名前にする
+moodle-zip: ## Moodle プラグインを moodle/<プラグイン>.zip にまとめる
+	rm -f $(MOODLE_ZIPS)
 	tmp=$$(mktemp -d) && trap 'rm -rf "$$tmp"' EXIT && \
-	cp -R $(MOODLE_PLUGIN_DIR) "$$tmp/$(MOODLE_PLUGIN_NAME)" && \
-	(cd "$$tmp" && zip -rqX "$(CURDIR)/$(MOODLE_ZIP)" $(MOODLE_PLUGIN_NAME) -x '*.DS_Store')
-	@echo "$(MOODLE_ZIP) を作成しました"
+	for plugin in $(MOODLE_PLUGINS); do \
+		name=$${plugin#*_} && \
+		cp -R moodle/$$plugin "$$tmp/$$name" && \
+		(cd "$$tmp" && zip -rqX "$(CURDIR)/moodle/$$plugin.zip" $$name -x '*.DS_Store') && \
+		echo "moodle/$$plugin.zip を作成しました" || exit 1; \
+	done
 
-moodle-zip-clean: ## moodle/local_steplearn.zip を削除する
-	rm -f $(MOODLE_ZIP)
+moodle-zip-clean: ## moodle/<プラグイン>.zip を削除する
+	rm -f $(MOODLE_ZIPS)
