@@ -1915,31 +1915,23 @@ function watchAiBusy() {
   }, 3000)
 }
 
-async function sendAiMessage(form: HTMLFormElement) {
+type AiStreamHooks = { onRetract?: () => void; onChat?: (id: number) => void }
+
+/** 応答を届いた分から会話に書き足す。closed はチャットがもうないこと、confirmed は確認カードを出したこと */
+async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiStreamHooks = {}) {
   const panel = aiPanel()
   const log = panel?.querySelector<HTMLElement>('[data-ai-log]')
-  const input = aiInput()
-  if (!panel || !log || !input) return
-  const text = input.value.trim()
-  const data = new FormData(form)
+  const outcome = { closed: false, retracted: false, confirmed: false }
+  if (!panel || !log) return outcome
   data.set('page', location.pathname)
-  const intro = log.querySelector<HTMLElement>('[data-ai-intro]')
-  const started = !panel.dataset.chat
-
   aiSending = true
   panel.toggleAttribute('data-busy', true)
-  if (intro) intro.hidden = true
-  const sent = aiTemplate('user', text)
   const pending = aiTemplate('pending')
-  log.append(sent, pending)
-  input.value = ''
-  fitAiInput(input)
+  log.append(pending)
   scrollAiLog(true)
 
   let bubble: HTMLElement | null = null
   let markdown = ''
-  let closed = false
-  let retracted = false
   const handle = (event: AiAgentEvent) => {
     if (event.type === 'text') {
       if (!bubble) {
@@ -1948,25 +1940,22 @@ async function sendAiMessage(form: HTMLFormElement) {
       }
       markdown += event.text
       bubble.querySelector('[data-ai-text]')!.innerHTML = renderMarkdown(markdown)
-    } else if (event.type === 'tool') {
+    } else if (event.type === 'tool' || event.type === 'confirm') {
       bubble = null
       markdown = ''
-      pending.before(aiTemplate('tool', event.label))
+      if (event.type === 'tool') pending.before(aiTemplate('tool', event.label))
+      else outcome.confirmed = true
     } else if (event.type === 'error') {
       if (event.retract) {
-        retracted = true
-        sent.remove()
-        if (intro && !log.querySelector('.ai-msg')) intro.hidden = false
-        if (!input.value) input.value = text
-        fitAiInput(input)
+        outcome.retracted = true
+        onRetract?.()
       }
       pending.before(aiTemplate('error', event.message))
     } else if (event.type === 'chat') {
       panel.dataset.chat = String(event.id)
-      const chatField = form.elements.namedItem('chat')
-      if (chatField instanceof HTMLInputElement) chatField.value = String(event.id)
+      onChat?.(event.id)
     } else if (event.type === 'closed') {
-      closed = true
+      outcome.closed = true
     } else {
       const note = panel.querySelector('[data-ai-quota]')
       if (note) note.textContent = event.quota
@@ -1975,7 +1964,7 @@ async function sendAiMessage(form: HTMLFormElement) {
   }
 
   try {
-    const res = await fetch(form.action, { method: 'POST', body: data, headers: { Accept: 'application/x-ndjson' } })
+    const res = await fetch(url, { method: 'POST', body: data, headers: { Accept: 'application/x-ndjson' } })
     if (!res.ok || !res.body) throw new Error(`status ${res.status}`)
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
     let buffer = ''
@@ -1995,16 +1984,59 @@ async function sendAiMessage(form: HTMLFormElement) {
     panel.removeAttribute('data-busy')
     scrollAiLog()
   }
-  // 新しく始めたチャットを取り直すのは、ヘッダーのモデル名と「閉じる」ボタンを、サーバーの描いたものにそろえるため
-  if (closed || (started && panel.dataset.chat)) await refreshAiPanel(retracted ? text : '')
+  return outcome
+}
+
+async function sendAiMessage(form: HTMLFormElement) {
+  const panel = aiPanel()
+  const log = panel?.querySelector<HTMLElement>('[data-ai-log]')
+  const input = aiInput()
+  if (!panel || !log || !input) return
+  const text = input.value.trim()
+  const data = new FormData(form)
+  const intro = log.querySelector<HTMLElement>('[data-ai-intro]')
+  const started = !panel.dataset.chat
+  const dismissing = !!log.querySelector('.ai-card[data-state=pending]')
+  if (intro) intro.hidden = true
+  const sent = aiTemplate('user', text)
+  log.append(sent)
+  input.value = ''
+  fitAiInput(input)
+
+  const outcome = await streamAi(form.action, data, {
+    onRetract: () => {
+      sent.remove()
+      if (intro && !log.querySelector('.ai-msg')) intro.hidden = false
+      if (!input.value) input.value = text
+      fitAiInput(input)
+    },
+    onChat: (id) => {
+      const chatField = form.elements.namedItem('chat')
+      if (chatField instanceof HTMLInputElement) chatField.value = String(id)
+    },
+  })
+  // 新しく始めたチャットと確認カードを取り直すのは、ヘッダーのモデル名・「閉じる」ボタン・カードを、サーバーの描いたものにそろえるため
+  if (outcome.closed || outcome.confirmed || dismissing || (started && panel.dataset.chat))
+    await refreshAiPanel(outcome.retracted ? text : '')
+}
+
+async function decideAiCard(form: HTMLFormElement, submitter: HTMLElement | null) {
+  const data = new FormData(form, submitter)
+  $$<HTMLButtonElement>('button', form).forEach((btn) => (btn.disabled = true))
+  await streamAi(form.action, data)
+  await refreshAiPanel()
 }
 
 document.addEventListener('submit', (e) => {
   const form = e.target as HTMLFormElement
-  if (e.defaultPrevented || !form.matches('[data-ai-form], [data-ai-close]')) return
+  if (e.defaultPrevented || !form.matches('[data-ai-form], [data-ai-close], [data-ai-confirm]')) return
   e.preventDefault()
   if (form.matches('[data-ai-form]')) {
     if (!aiSending) void sendAiMessage(form)
+    return
+  }
+  if (form.matches('[data-ai-confirm]')) {
+    if (!aiSending) void decideAiCard(form, e.submitter)
     return
   }
   delete form.dataset.confirmed
