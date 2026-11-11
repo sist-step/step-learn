@@ -211,7 +211,7 @@ const BundleFilesCard = ({ base, files, class: cls }: { base: string; files: Lis
   return (
     <Card
       heading="配布するファイル"
-      description={files.length ? summaryOf(files) : 'フォルダーごと、またはファイルを選んでアップロードします。'}
+      description={files.length ? summaryOf(files) : 'フォルダーごと、またはファイルや zip を選んでアップロードします。'}
       class={cls}
       actions={
         files.length > 0 && (
@@ -241,7 +241,7 @@ const BundleFilesCard = ({ base, files, class: cls }: { base: string; files: Lis
               <Icon name="upload" size={18} />
             </span>
             <span class="bundle-drop-text">
-              <span class="bundle-drop-drag">フォルダーやファイルをここにドラッグ＆ドロップ</span>
+              <span class="bundle-drop-drag">フォルダーやファイル、zip をここにドラッグ＆ドロップ</span>
               <span class="muted small">または</span>
             </span>
             <span class="row bundle-drop-actions">
@@ -249,20 +249,16 @@ const BundleFilesCard = ({ base, files, class: cls }: { base: string; files: Lis
                 フォルダーを選択
               </Button>
               <Button size="sm" icon="file" data-bundle-pick="files">
-                ファイルを選択
+                ファイル・zip を選択
               </Button>
             </span>
-          </div>
-          <div class="bundle-pending" data-bundle-pending hidden>
-            <Icon name="folder" size={16} />
-            <span class="truncate" data-bundle-summary />
-            <IconButton icon="x" label="選択を取り消す" data-bundle-clear />
-            <Button type="submit" variant="primary" size="sm" icon="upload">
-              アップロード
-            </Button>
+            <span class="bundle-drop-busy" role="status">
+              アップロードしています…
+            </span>
           </div>
           <p class="muted small">
-            フォルダーを選ぶと、その中身をそのまま配ります。同じ場所にあるファイルは置き換わります。.git・node_modules・__pycache__・.venv
+            フォルダーを選ぶとその中身を、zip
+            を選ぶと展開した中身を配ります。同じ場所にあるファイルは置き換わります。.git・node_modules・__pycache__・.venv
             などは自動で外します。最大 {MAX_BUNDLE_FILES} 個・合計 {formatBytes(MAX_BUNDLE_SIZE)}（1 回のアップロードは{' '}
             {formatBytes(MAX_FILE_SIZE)}）まで。
           </p>
