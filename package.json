@@ -9,7 +9,7 @@
     "moodle:import": "node dist/server/cli.js moodle:import",
     "moodle:migrate": "node dist/server/cli.js moodle:migrate",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint --type-aware",
+    "lint": "oxlint --type-aware --disable-nested-config",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:generate": "drizzle-kit generate",
