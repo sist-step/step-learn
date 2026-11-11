@@ -3,6 +3,7 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream } from 'node:stream/web'
+import { BUNDLE_MODULE } from '../lib/bundle'
 import { isHttpUrl } from '../lib/forms'
 import type { Completion } from '../lib/types'
 import { callSite, fetchSiteFile, type MoodleCourse, type MoodleModule, type MoodleSection } from '../moodle-mode/client'
@@ -80,6 +81,8 @@ export async function readRemoteCourse(site: MoodleSite, courseId: number, dir: 
         }
         return items
       }
+      case BUNDLE_MODULE:
+        return skip('Moodle モードで追加したアイテムは引き継ぎません')
       default:
         return skip('URL・ファイル・フォルダー以外の活動は取り込みません')
     }

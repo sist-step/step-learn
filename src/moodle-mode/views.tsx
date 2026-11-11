@@ -27,7 +27,7 @@ import { previewKind } from '../lib/preview'
 import { formatBytes } from '../lib/bytes'
 import { MAX_FILE_SIZE } from '../lib/storage'
 import { MOODLE_DISPLAY_LABELS, isExactDisplay } from '../moodle/display'
-import { EXTRA_KINDS, extraKindOf, type ExtraKind } from './extra-kinds'
+import { extraKindOf, type ExtraKind, type ExtraKindEntry } from './extra-kinds'
 import type { CourseLayout, ItemCompletion, MItem, MSection, Restriction, TilesLayout, TopcollLayout } from './mapping'
 import { PREVIOUS_ITEM, isOpenable, isTracked, sectionHref } from './mapping'
 import { TileArt } from './tile-art'
@@ -346,8 +346,6 @@ const ExtraOptionBody = ({ kind }: { kind: ExtraKind }) => (
   </>
 )
 
-const extraKinds = () => Object.entries(EXTRA_KINDS)
-
 const CHOICES = ['none', 'manual', 'view'] as const
 
 export const MoodleCompletionField = ({ id, value = 'none', error }: { id?: string; value?: string; error?: string }) => (
@@ -363,7 +361,17 @@ export const MoodleCompletionField = ({ id, value = 'none', error }: { id?: stri
 )
 
 // 課題などをここで追加できるようにしないのは、Moodle の活動の設定項目が多く、Moodle の編集画面で作るほうが確実なため
-const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sections: MSection[]; tracking: boolean }) => (
+const AddItemModal = ({
+  courseId,
+  sections,
+  tracking,
+  kinds,
+}: {
+  courseId: number
+  sections: MSection[]
+  tracking: boolean
+  kinds: ExtraKindEntry[]
+}) => (
   <Modal
     id={ADD_ITEM_MODAL}
     heading="アイテムを追加"
@@ -388,7 +396,7 @@ const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sect
             <Icon name="chevronRight" size={16} />
           </button>
         ))}
-        {extraKinds().map(([t, kind]) => (
+        {kinds.map(([t, kind]) => (
           <button type="button" class="kind-option" data-pick-kind={t} data-kind-validate={kind.form}>
             <ExtraOptionBody kind={kind} />
             <Icon name="chevronRight" size={16} />
@@ -402,7 +410,7 @@ const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sect
               <KindOptionBody type={t} />
             </span>
           ))}
-          {extraKinds().map(([t, kind]) => (
+          {kinds.map(([t, kind]) => (
             <span class="kind-summary-body" data-kind-only={t} hidden>
               <ExtraOptionBody kind={kind} />
             </span>
@@ -421,7 +429,7 @@ const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sect
           hint={`最大 ${formatBytes(MAX_FILE_SIZE)}。PDF・画像はブラウザでプレビューできます。`}
           fieldClass="when-file"
         />
-        {extraKinds().map(([t, kind]) => (
+        {kinds.map(([t, kind]) => (
           <fieldset class="stack" data-kind-only={t} hidden disabled>
             <kind.Fields values={{}} errors={{}} idPrefix={`new-${t}`} />
             {kind.addNote && <p class="muted small">{kind.addNote}</p>}
@@ -816,6 +824,7 @@ export const CoursePage = ({
   sections,
   items,
   layout,
+  extraKinds,
   openSection,
   revision,
   moodleCourseUrl,
@@ -824,6 +833,8 @@ export const CoursePage = ({
   sections: MSection[]
   items: MItem[]
   layout: CourseLayout
+  /** アイテムを追加するときに選べる、リンクとファイル以外の種類 */
+  extraKinds: ExtraKindEntry[]
   /** タイルで開いているセクション */
   openSection?: number
   revision: string
@@ -880,7 +891,7 @@ export const CoursePage = ({
             <ListSections {...props} />
           ))}
         {manage && <AddSectionModal courseId={id} />}
-        {manage && sections.length > 0 && <AddItemModal courseId={id} sections={sections} tracking={tracking} />}
+        {manage && sections.length > 0 && <AddItemModal courseId={id} sections={sections} tracking={tracking} kinds={extraKinds} />}
       </TabPanel>
       <CourseLiveSync courseId={id} revision={revision} />
     </AppShell>

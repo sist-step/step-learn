@@ -17,19 +17,21 @@ import {
   isCodeLanguage,
   type CodeFiles,
 } from '../lib/code'
-import { BUNDLE_KIND } from '../lib/bundle'
+import { BUNDLE_KIND, BUNDLE_MODULE } from '../lib/bundle'
 import { gradingEnabled } from '../lib/code-grader'
 import type { CourseAccess } from '../lib/courses'
 import type { FieldErrors, FormName } from '../lib/forms'
 import { sandboxEnabled } from '../lib/sandbox'
 import { isSharing } from '../lib/screen-share'
 import { bundleStore } from './bundle-store'
+import type { Api, MoodleCourse, SaveActivity } from './client'
 import type { MItem } from './mapping'
 
 export type ExtraData = Record<string, unknown>
 
 /**
  * Moodle モードだけにある種類のアイテムの定義。中身は moodle-mode.db の extra_items に JSON で保存し、完全移行では引き継がない。
+ * Moodle には、その位置に /m/<key> へ移る URL の活動か、種類ごとの専用の活動（module）を置く。
  * 種類を足すときは EXTRA_KINDS に定義を足し、forms.ts に extraItemFields を含むスキーマを登録する
  */
 export type ExtraKind = {
@@ -58,6 +60,19 @@ export type ExtraKind = {
   tabPath?: string
   /** 一覧に「配信中」を出すか。引数は活動の cmid */
   isLive?: (cmid: number) => boolean
+  /**
+   * 付けると、Moodle には /m/<key> の URL の活動ではなく、専用の活動（moodle/mod_<name>）を置く。開くと STEP Learn のアイテムの画面に移る。
+   * 中身は同じく moodle-mode.db に置き、活動が持つ鍵で見分ける。鍵は Moodle が決めるので、中身は最初に見たときに空で作る（extra.ts の withExtras）。
+   * 名前は mapping.ts の EXTRA_MODULES にも足す
+   */
+  module?: {
+    name: string
+    /** Moodle にこの活動のプラグインが入っているか */
+    available: (course: MoodleCourse) => boolean
+    save: (moodle: Api, activity: SaveActivity) => Promise<number>
+    /** 開いたことを Moodle に記録する（「開いたら完了」の条件を満たす） */
+    view: (moodle: Api, cmid: number) => Promise<unknown>
+  }
 }
 
 const SCREEN_PATH = 'screen'
@@ -202,8 +217,24 @@ const bundle: ExtraKind = {
     <BundleFilesCard base={bundleBase(access.course.id, item.id)} files={bundleFilesOf(item)} class="editor-extra" />
   ),
   editAfterCreate: true,
+  module: {
+    name: BUNDLE_MODULE,
+    available: (course) => !!course.bundle,
+    save: (moodle, activity) => moodle.saveBundle(activity),
+    view: (moodle, cmid) => moodle.viewBundle(cmid),
+  },
 }
 
 export const EXTRA_KINDS: Record<string, ExtraKind> = { screen, [CODE_KIND]: code, [BUNDLE_KIND]: bundle }
 
 export const extraKindOf = (type: string): ExtraKind | null => (Object.hasOwn(EXTRA_KINDS, type) ? EXTRA_KINDS[type] : null)
+
+/** Moodle の活動の名前から、その活動に置く種類を探す */
+export const extraTypeOfModule = (modname: string) => Object.keys(EXTRA_KINDS).find((type) => EXTRA_KINDS[type].module?.name === modname)
+
+/** 種類の名前（extra_items.type）と定義 */
+export type ExtraKindEntry = [type: string, kind: ExtraKind]
+
+/** このコースで追加できる種類 */
+export const addableExtraKinds = (course: MoodleCourse): ExtraKindEntry[] =>
+  Object.entries(EXTRA_KINDS).filter(([, kind]) => !kind.module || kind.module.available(course))

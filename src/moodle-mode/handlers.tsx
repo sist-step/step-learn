@@ -16,7 +16,7 @@ import { forgetCourse, forgetProgress, forgetSections } from './cache'
 import { MoodleError, exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
 import { loadCourse, moodle, myCourses, otherCourses, outlineOf, progressOf, revisionOf, type LoadedCourse } from './data'
 import { findExtra, insertExtra, newExtraKey, updateExtraData } from './extra'
-import { extraKindOf, type ExtraKind } from './extra-kinds'
+import { addableExtraKinds, extraKindOf, type ExtraKind } from './extra-kinds'
 import {
   EXTRA_PATH,
   PREVIOUS_ITEM,
@@ -177,6 +177,7 @@ export async function showCourse(c: C) {
       sections={loaded.sections}
       items={loaded.items}
       layout={loaded.layout}
+      extraKinds={addableExtraKinds(loaded.course)}
       openSection={Number(c.req.query('section')) || undefined}
       revision={await revisionOf(loaded)}
       moodleCourseUrl={moodleUrl(`/course/view.php?id=${id}`)}
@@ -393,20 +394,18 @@ async function createExtraItem(c: C, loaded: LoadedCourse, sectionId: number, ki
   if (!result.ok) return redirectWith(c, editUrl(loaded, sectionId), firstError(result.errors), 'error')
   const { title, hidden } = result.common
   const completion = loaded.course.completionenabled ? (result.common.completion ?? 'none') : 'none'
-  const key = newExtraKey()
-  // Moodle の画面で開いたときにそのまま STEP Learn に移るよう、同じウィンドウで開く（RESOURCELIB_DISPLAY_OPEN）表示方法にする。
-  // 新しいタブで開く種類は、STEP Learn の一覧と同じく新しいタブ（RESOURCELIB_DISPLAY_NEW）にする
-  const cmid = await moodle(c).saveUrl({
-    courseid: id,
-    cmid: 0,
-    sectionid: sectionId,
-    name: title,
-    externalurl: extraUrl(c, key),
-    completion,
-    visible: !hidden,
-    display: kind.tabPath ? 'new' : 'same',
-  })
-  insertExtra({ key, courseId: id, cmid, type: field(form, 'type', 50), data: result.data })
+  const activity = { courseid: id, cmid: 0, sectionid: sectionId, name: title, completion, visible: !hidden }
+  let cmid: number
+  if (kind.module) {
+    if (!kind.module.available(loaded.course)) return c.notFound()
+    cmid = await kind.module.save(moodle(c), activity)
+  } else {
+    const key = newExtraKey()
+    // Moodle の画面で開いたときにそのまま STEP Learn に移るよう、同じウィンドウで開く（RESOURCELIB_DISPLAY_OPEN）表示方法にする。
+    // 新しいタブで開く種類は、STEP Learn の一覧と同じく新しいタブ（RESOURCELIB_DISPLAY_NEW）にする
+    cmid = await moodle(c).saveUrl({ ...activity, externalurl: extraUrl(c, key), display: kind.tabPath ? 'new' : 'same' })
+    insertExtra({ key, courseId: id, cmid, type: field(form, 'type', 50), data: result.data })
+  }
   forgetCourse(id)
   if (kind.editAfterCreate)
     return redirectWith(c, `/courses/${id}/items/${cmid}/edit`, `「${title}」を追加しました。続けて中身を設定してください。`)
@@ -506,17 +505,10 @@ async function updateExtraItem(c: C, loaded: LoadedCourse, item: EditableItem & 
   const { title, hidden } = result.common
   const completion = !loaded.course.completionenabled || item.completion === 'auto' ? 'keep' : (result.common.completion ?? 'keep')
   updateExtraData(item.extraKey, id, result.data)
+  const activity = { courseid: id, cmid: item.id, sectionid: item.sectionId, name: title, completion, visible: !hidden }
+  if (kind.module) await kind.module.save(moodle(c), activity)
   // リンク先を送り直すのは、save_url が URL を必須にしているため。Moodle の画面で書き換えられていても /m/<key> に戻す
-  await moodle(c).saveUrl({
-    courseid: id,
-    cmid: item.id,
-    sectionid: item.sectionId,
-    name: title,
-    externalurl: extraUrl(c, item.extraKey),
-    completion,
-    visible: !hidden,
-    display: 'keep',
-  })
+  else await moodle(c).saveUrl({ ...activity, externalurl: extraUrl(c, item.extraKey), display: 'keep' })
   if (!!hidden !== item.hidden) await moodle(c).updateCourse(id, hidden ? 'cm_hide' : 'cm_show', [item.id])
   if (sectionId !== item.sectionId) await moodle(c).updateCourse(id, 'cm_move', [item.id], { sectionid: sectionId })
   forgetCourse(id)
@@ -761,7 +753,9 @@ export async function toggleComplete(c: C) {
   const on = field(await readForm(c), 'on', 10)
   // 自動の完了で on（開いた）を送らせるのは、手動の切り替えと取り違えて、自動で付いた完了を未完了に戻さないため
   if (on === 'view' && item.completion === 'view') {
-    if (item.kind === 'link' || item.kind === 'extra') await moodle(c).viewUrl(item.instance)
+    const ownModule = item.extra && extraKindOf(item.extra.type)?.module
+    if (ownModule) await ownModule.view(moodle(c), item.id)
+    else if (item.kind === 'link' || item.kind === 'extra') await moodle(c).viewUrl(item.instance)
     else if (item.kind === 'file') await moodle(c).viewResource(item.instance)
     else return c.notFound()
   } else if (!on && item.completion === 'manual') {

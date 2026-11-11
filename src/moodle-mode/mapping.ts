@@ -1,4 +1,5 @@
 import type { CourseCardData } from '../components/ui'
+import { BUNDLE_MODULE } from '../lib/bundle'
 import type { CourseAccess } from '../lib/courses'
 import { COURSE_COLORS, type Completion, type Course, type LinkTarget, type NavCourse } from '../lib/types'
 import { linkTargetOf, moodleDisplayOf, type MoodleDisplay } from '../moodle/display'
@@ -61,8 +62,32 @@ export type ExtraContent = { type: string; data: Record<string, unknown>; live: 
 
 export const EXTRA_PATH = '/m/'
 
+const EXTRA_KEY = /^[\w-]{20,64}$/
+
 /** extra のアイテムを置く URL の活動のリンク先（/m/<key>）から key を取り出す。ホストを見ないのは、STEP Learn のドメインを変えても読めるようにするため */
-export const extraKeyOf = (url: string) => URL.parse(url)?.pathname.match(/^\/m\/([\w-]{20,64})$/)?.[1] ?? null
+export const extraKeyOf = (url: string) => {
+  const key = URL.parse(url)?.pathname.match(/^\/m\/([^/]+)$/)?.[1]
+  return key && EXTRA_KEY.test(key) ? key : null
+}
+
+// extra-kinds.tsx の module から集めないのは、このファイルを通常モードの移行ツール（src/moodle/remote.ts）も読み込み、
+// extra-kinds.tsx を読み込むと moodle-mode.db を開いてしまうため
+/** extra のうち、URL の活動ではなく専用の活動を Moodle に置く種類の、その活動の名前。鍵は活動の customdata の key にある */
+const EXTRA_MODULES = new Set([BUNDLE_MODULE])
+
+function customDataOf(m: MoodleModule): Record<string, unknown> {
+  try {
+    const data: unknown = JSON.parse(m.customdata ?? '')
+    return typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {}
+  } catch {
+    return {}
+  }
+}
+
+function moduleKeyOf(m: MoodleModule) {
+  const { key } = customDataOf(m)
+  return typeof key === 'string' && EXTRA_KEY.test(key) ? key : null
+}
 
 /** STEP Learn の完了の条件に、Moodle にしかない「そのほかの自動の条件」（auto）を足したもの */
 export type ItemCompletion = Exclude<Completion, 'play'> | 'auto'
@@ -74,7 +99,7 @@ export type MItem = {
   modname: string
   instance: number
   title: string
-  /** link と extra はリンク先、moodle は Moodle の活動の画面 */
+  /** link と、URL の活動に置いた extra はリンク先、moodle は Moodle の活動の画面 */
   url: string
   /** link の開き方。Moodle の表示方法を読み替えたもの */
   linkTarget: LinkTarget
@@ -163,27 +188,25 @@ function completionOf(m: MoodleModule, tracking: boolean): ItemCompletion {
   if (!tracking || !m.completion) return 'none'
   if (m.completion === 1) return 'manual'
   const rules = m.completiondata?.details.map((d) => d.rulename) ?? []
-  return (m.modname === 'url' || m.modname === 'resource') && rules.length === 1 && rules[0] === 'completionview' ? 'view' : 'auto'
+  const viewable = m.modname === 'url' || m.modname === 'resource' || EXTRA_MODULES.has(m.modname)
+  return viewable && rules.length === 1 && rules[0] === 'completionview' ? 'view' : 'auto'
 }
 
 export function displayOf(m: MoodleModule) {
-  try {
-    const data = JSON.parse(m.customdata ?? '') as { display?: unknown }
-    // 文字列も受け付けるのは、Moodle が DB の値をそのまま入れるため（自動のときだけ数値になる）
-    const display = typeof data.display === 'number' || typeof data.display === 'string' ? moodleDisplayOf(Number(data.display)) : null
-    // ダウンロードを自動とみなすのは、URL の活動の設定ではダウンロードを選べず、自動のときにふつうのページの URL へ Moodle が選ぶ値のため
-    return display === 'download' ? 'auto' : display
-  } catch {
-    return null
-  }
+  const data = customDataOf(m)
+  // 文字列も受け付けるのは、Moodle が DB の値をそのまま入れるため（自動のときだけ数値になる）
+  const display = typeof data.display === 'number' || typeof data.display === 'string' ? moodleDisplayOf(Number(data.display)) : null
+  // ダウンロードを自動とみなすのは、URL の活動の設定ではダウンロードを選べず、自動のときにふつうのページの URL へ Moodle が選ぶ値のため
+  return display === 'download' ? 'auto' : display
 }
 
 const KINDS: Partial<Record<string, ItemKind>> = { url: 'link', resource: 'file', label: 'label', subsection: 'subsection' }
 
 function toItem(m: MoodleModule, sectionId: number, tracking: boolean, childSectionId: number | null = null): MItem {
   const content = m.contents?.[0]
-  const extraKey = m.modname === 'url' ? extraKeyOf(content?.fileurl ?? '') : null
-  const kind = extraKey ? 'extra' : (KINDS[m.modname] ?? 'moodle')
+  const ownModule = EXTRA_MODULES.has(m.modname)
+  const extraKey = m.modname === 'url' ? extraKeyOf(content?.fileurl ?? '') : ownModule ? moduleKeyOf(m) : null
+  const kind = extraKey || ownModule ? 'extra' : (KINDS[m.modname] ?? 'moodle')
   const file = kind === 'file' ? content : undefined
   const display = kind === 'link' ? displayOf(m) : null
   return {
