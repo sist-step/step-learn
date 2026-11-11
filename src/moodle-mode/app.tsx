@@ -4,12 +4,13 @@ import { HTTPException } from 'hono/http-exception'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { createMiddleware } from 'hono/factory'
 import { secureHeaders } from 'hono/secure-headers'
+import { SYNC_BODY_LIMIT } from '../lib/bundle-sync'
 import { config } from '../lib/config'
 import { flashMiddleware, limitBody, wantsJson } from '../lib/http'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE } from '../lib/storage'
 import { renderer } from '../renderer'
 import { createAiAdminHandlers } from '../routes/admin/ai'
-import { bundleRoutes, createBundleHandlers, vscodeApi } from '../routes/bundle/handlers'
+import { bundleRoutes, createBundleHandlers, isSyncRequest, vscodeApi } from '../routes/bundle/handlers'
 import { codeRoutes, createCodeHandlers } from '../routes/code/handlers'
 import { aiLedger, usageByUser } from './ai-usage'
 import { bundleBackend } from './bundle'
@@ -34,7 +35,8 @@ app.use(secureHeaders())
 app.use(csrf(config.appOrigin ? { origin: config.appOrigin } : undefined))
 app.use(flashMiddleware)
 app.use(session)
-app.use((c, next) => (c.var.user ? userBodyLimit : guestBodyLimit)(c, next))
+const syncBodyLimit = limitBody(SYNC_BODY_LIMIT)
+app.use((c, next) => (c.var.user ? userBodyLimit : isSyncRequest(c) ? syncBodyLimit : guestBodyLimit)(c, next))
 
 app.get('/', (c) => c.redirect(c.var.user ? '/dashboard' : '/login'))
 

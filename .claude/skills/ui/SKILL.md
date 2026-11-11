@@ -144,8 +144,8 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 
 | 部品 | 用途 |
 | --- | --- |
-| `BundleOpen` | ファイル自動配布のアイテムの画面の本体。「VS Code で開く」（`data-vscode-launch` のフォームで、`client.ts` が鍵付きの `vscode://` のリンクを受け取って開く）・拡張機能の案内・zip のダウンロード・配るファイルの木。ファイルがなければ空の表示（`editHref` を渡すと教師向けのアップロードへの入口） |
-| `BundleFilesCard` | 編集画面の、配るファイルのアップロード（フォルダー・ファイルの選択とドラッグ＆ドロップ。`client.ts` がフォルダーの中の場所を `paths` として一緒に送る）と、削除ボタン付きの木。保存のフォームの外に置く（通常モードの `ItemEditPage` と、Moodle モードの `ExtraKind` の `Panel`） |
+| `BundleOpen` | ファイル自動配布のアイテムの画面の本体。「VS Code で開く」（`data-vscode-launch` のフォームで、`client.ts` が鍵付きの `vscode://` のリンクを受け取って開く）・拡張機能の案内・データの同期の案内と変更履歴への入口（`sync`。`lib/bundle-sync.ts` の `syncStateOf` で作る）・zip のダウンロード・配るファイルの木。ファイルがなければ空の表示（`editHref` を渡すと教師向けのアップロードへの入口） |
+| `BundleEditPanel` | 編集画面の、配るファイルのアップロード（フォルダー・ファイルの選択とドラッグ＆ドロップ。`client.ts` がフォルダーの中の場所を `paths` として一緒に送る）と削除ボタン付きの木、その下の「データを同期する」の切り替え（`${base}/sync` へのフォーム）。保存のフォームの外に置く（通常モードの `ItemEditPage` と、Moodle モードの `ExtraKind` の `Panel`） |
 | `BundleTree` | 配るファイルのフォルダーの木（`files`、`deleteAction` を渡すと行ごとの削除ボタン） |
 
 ### PDF — `src/components/pdf.tsx`

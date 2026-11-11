@@ -29,6 +29,7 @@ export const STYLESHEETS = [
   '/src/routes/admin/admin.css',
   '/src/routes/screen/screen.css',
   '/src/routes/code/code.css',
+  '/src/routes/bundle/bundle.css',
   '/src/moodle-mode/moodle-mode.css',
 ] as const
 

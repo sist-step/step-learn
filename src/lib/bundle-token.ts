@@ -8,17 +8,21 @@ const key = Buffer.from(crypto.hkdfSync('sha256', config.sessionSecret, '', 'ste
 export const LAUNCH_TTL = 5 * 60
 /** 鍵と引き換えに渡す、ファイルを受け取るための鍵の有効期間 */
 export const GRANT_TTL = 15 * 60
+/** 変更履歴を送るための鍵の有効期間。学期のあいだ、STEP Learn の画面から開き直さなくても送り続けられる長さにする */
+export const SYNC_TTL = 180 * 24 * 60 * 60
 
 /** ref はモードごとのアイテムの識別子（backend の storeOf に渡す）。course と title は、展開先のフォルダー名に使う */
 export type LaunchClaims = { kind: 'launch'; ref: string; userId: number; course: string; title: string; nonce: string; exp: number }
 export type GrantClaims = { kind: 'grant'; ref: string; userId: number; exp: number }
-type Claims = LaunchClaims | GrantClaims
+export type SyncClaims = { kind: 'sync'; ref: string; userId: number; exp: number }
+type Claims = LaunchClaims | GrantClaims | SyncClaims
 
 const mac = (body: string) => crypto.createHmac('sha256', key).update(body).digest('base64url')
 
 const nowSec = () => Math.floor(Date.now() / 1000)
 
-// DB に保存しないのは、数分で切れる鍵で、署名を確かめれば作った人とアイテムが分かるため
+// DB に保存しないのは、署名を確かめれば作った人とアイテムが分かるため。開くための鍵は数分で切れ、
+// 長く使える同期の鍵でできるのは本人の変更履歴を足すことだけで、使うたびにアイテムと利用者が残っているかを確かめる
 function sign(claims: Claims) {
   const body = Buffer.from(JSON.stringify(claims)).toString('base64url')
   return `${body}.${mac(body)}`
@@ -60,4 +64,11 @@ export const signGrant = (claims: Omit<GrantClaims, 'kind' | 'exp'>) => sign({ k
 export function verifyGrant(token: string): GrantClaims | null {
   const claims = verify(token)
   return claims?.kind === 'grant' ? claims : null
+}
+
+export const signSync = (claims: Omit<SyncClaims, 'kind' | 'exp'>) => sign({ kind: 'sync', ...claims, exp: nowSec() + SYNC_TTL })
+
+export function verifySync(token: string): SyncClaims | null {
+  const claims = verify(token)
+  return claims?.kind === 'sync' ? claims : null
 }

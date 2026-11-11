@@ -10,6 +10,9 @@ export const VSCODE_EXTENSION_NAME = 'STEP Learn for VSCode'
 
 export const VSCODE_MARKETPLACE_URL = `https://marketplace.visualstudio.com/items?itemName=${VSCODE_EXTENSION_ID}`
 
+/** アイテムの URL の下の、ファイル自動配布の操作の URL（/courses/:id/items/:iid/bundle） */
+export const bundleBase = (courseId: number, itemId: number) => `/courses/${courseId}/items/${itemId}/bundle`
+
 /** アイテム 1 つに置けるファイルの数と合計の大きさ */
 export const MAX_BUNDLE_FILES = 500
 export const MAX_BUNDLE_SIZE = 50 * 1024 * 1024
