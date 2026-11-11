@@ -2,7 +2,6 @@
 .bundle-open { margin-bottom: 24px; }
 .bundle-open > .link-card { margin-bottom: 0; }
 .bundle-help p { margin: 0; }
-.bundle-help p + p { margin-top: 4px; }
 .bundle-help a { display: inline-flex; align-items: center; gap: 2px; }
 
 /* ファイルの木 */
