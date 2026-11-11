@@ -77,6 +77,7 @@
 .item-form:not([data-kind='page'], [data-kind='code']) .when-other-inline,
 .item-form[data-kind='code'] .when-code-inline { display: inline; }
 .item-form:not([data-kind='page']) .when-page-inline { display: none; }
+.item-form:not([data-kind='bundle']) .when-bundle, .item-form[data-kind='bundle'] .unless-bundle { display: none; }
 
 :root:not([data-edit-mode]) .edit-only,
 :root[data-edit-mode] .view-only { display: none; }
@@ -262,7 +263,8 @@
 .item-form[data-kind='link'] [data-kind-summary='link'],
 .item-form[data-kind='file'] [data-kind-summary='file'],
 .item-form[data-kind='screen'] [data-kind-summary='screen'],
-.item-form[data-kind='code'] [data-kind-summary='code'] { display: flex; }
+.item-form[data-kind='code'] [data-kind-summary='code'],
+.item-form[data-kind='bundle'] [data-kind-summary='bundle'] { display: flex; }
 .kind-summary > .btn { flex: none; margin-left: auto; }
 /* 切り替え中にボタンの幅を残さないのは、カードの大きさから伸びはじめるときに文字が折り返して見えるため */
 .item-steps.is-switching .kind-summary { position: relative; }
