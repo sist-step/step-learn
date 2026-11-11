@@ -1,4 +1,5 @@
 import type { FC } from 'hono/jsx'
+import { BundleFilesCard, BundleOpen, bundleBase } from '../components/bundle'
 import { Button } from '../components/button'
 import { LinkCard } from '../components/card'
 import { CodeGradingFields, CodeStarterFields } from '../components/code'
@@ -16,11 +17,13 @@ import {
   isCodeLanguage,
   type CodeFiles,
 } from '../lib/code'
+import { BUNDLE_KIND } from '../lib/bundle'
 import { gradingEnabled } from '../lib/code-grader'
 import type { CourseAccess } from '../lib/courses'
 import type { FieldErrors, FormName } from '../lib/forms'
 import { sandboxEnabled } from '../lib/sandbox'
 import { isSharing } from '../lib/screen-share'
+import { bundleStore } from './bundle-store'
 import type { MItem } from './mapping'
 
 export type ExtraData = Record<string, unknown>
@@ -42,6 +45,12 @@ export type ExtraKind = {
   Fields: FC<{ values: Record<string, unknown>; errors: FieldErrors; idPrefix: string }>
   /** アイテムの画面の本体 */
   View: FC<{ item: MItem; data: ExtraData; access: CourseAccess }>
+  /** 編集画面の、保存のフォームの外に置く欄（ファイルのアップロードのように、別の送信先を持つもの） */
+  Panel?: FC<{ item: MItem; access: CourseAccess }>
+  /** 追加したあとに、アイテムの画面ではなく編集画面へ進めるか */
+  editAfterCreate?: boolean
+  /** アイテムを追加するモーダルで、種類ごとの欄の代わりに出す説明 */
+  addNote?: string
   /**
    * 付けると、一覧や目次からはアイテムの画面ではなく、その下のこのパスの画面を新しいタブで開く。
    * Moodle の画面からも新しいタブで開き、/m/<key> からもこの画面に移る
@@ -172,6 +181,29 @@ const code: ExtraKind = {
   tabPath: CODE_KIND,
 }
 
-export const EXTRA_KINDS: Record<string, ExtraKind> = { screen, [CODE_KIND]: code }
+const bundleFilesOf = (item: MItem) => (item.extraKey ? bundleStore(item.extraKey).list() : [])
+
+const bundle: ExtraKind = {
+  label: 'ファイル自動配布',
+  description: 'プログラムのファイルを VS Code で開けるように配る',
+  icon: 'folder',
+  form: 'extraItem',
+  toData: () => ({}),
+  Fields: () => null,
+  addNote: '配るファイルは、追加したあとの編集画面でアップロードします。',
+  View: ({ item, access }) => (
+    <BundleOpen
+      base={bundleBase(access.course.id, item.id)}
+      files={bundleFilesOf(item)}
+      editHref={access.canManage ? `/courses/${access.course.id}/items/${item.id}/edit` : undefined}
+    />
+  ),
+  Panel: ({ item, access }) => (
+    <BundleFilesCard base={bundleBase(access.course.id, item.id)} files={bundleFilesOf(item)} class="editor-extra" />
+  ),
+  editAfterCreate: true,
+}
+
+export const EXTRA_KINDS: Record<string, ExtraKind> = { screen, [CODE_KIND]: code, [BUNDLE_KIND]: bundle }
 
 export const extraKindOf = (type: string): ExtraKind | null => (Object.hasOwn(EXTRA_KINDS, type) ? EXTRA_KINDS[type] : null)
