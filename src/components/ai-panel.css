@@ -77,6 +77,34 @@
 .ai-error { display: flex; align-items: flex-start; gap: 6px; padding: 8px 10px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger-text); font-size: var(--fs-sm); }
 .ai-error .icon { flex: none; margin-top: 3px; }
 
+/* ===== 確認カード */
+.ai-card { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-card); animation: rise 0.2s var(--ease); }
+.ai-card[data-state='pending'] { border-color: color-mix(in srgb, var(--warning) 55%, var(--card-border)); }
+.ai-card-title { display: flex; align-items: flex-start; gap: 6px; font-size: var(--fs-sm); }
+.ai-card-title .icon { flex: none; margin-top: 3px; color: var(--muted); }
+.ai-card-changes { display: flex; flex-direction: column; gap: 8px; margin: 0; }
+.ai-change dt { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); }
+.ai-change dd { margin: 2px 0 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.ai-change-values { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.ai-change-values .icon { flex: none; color: var(--muted); }
+.ai-change-before { color: var(--muted); }
+.ai-change-after { color: var(--text); font-weight: 600; }
+.ai-diff { max-height: 260px; overflow: auto; padding: 4px 0; border-radius: var(--radius-sm); background: var(--surface-2); font: var(--fs-xs) / 1.6 var(--mono); }
+.ai-diff-line { padding: 0 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-diff-mark { display: inline-block; width: 18px; text-align: center; color: var(--muted); user-select: none; }
+.ai-diff-line.is-add { background: color-mix(in srgb, var(--success) 14%, transparent); }
+.ai-diff-line.is-add .ai-diff-mark { color: var(--success-text); }
+.ai-diff-line.is-remove { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--text-2); }
+.ai-diff-line.is-remove .ai-diff-mark { color: var(--danger-text); }
+.ai-diff-gap { padding: 0 8px; color: var(--muted); }
+.ai-diff-more { padding: 2px 8px 0; color: var(--muted); font-family: inherit; }
+.ai-card-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; padding-top: 10px; border-top: 1px solid var(--border); }
+.ai-card-ask { flex: 1; min-width: 0; font-size: var(--fs-xs); color: var(--warning-text); }
+.ai-panel[data-busy] .ai-card-actions .btn { opacity: 0.5; pointer-events: none; }
+.ai-card-state { display: flex; align-items: center; gap: 6px; padding-top: 10px; border-top: 1px solid var(--border); font-size: var(--fs-xs); color: var(--muted); }
+.ai-card[data-state='approved'] .ai-card-state { color: var(--success-text); }
+.ai-card[data-state='failed'] .ai-card-state { color: var(--danger-text); }
+
 .ai-dots { flex: none; width: 24px; height: 8px; background: radial-gradient(circle, currentColor 2.5px, transparent 3px) 0 50% / 8px 8px repeat-x; animation: pulse 1.2s ease-in-out infinite; }
 
 .ai-composer { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; border-top: 1px solid var(--border); }

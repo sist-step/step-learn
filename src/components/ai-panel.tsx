@@ -1,12 +1,20 @@
 // lib/ai-usage.ts などを読み込まず、描く内容を props で受け取るのは、AppShell を使う Moodle モードから DB を開くモジュールを読み込まないため
-import { IconButton } from './button'
+import type { AiCardState } from '../lib/ai-chat'
+import type { DiffLine } from '../lib/diff'
+import { Button, IconButton } from './button'
 import { FieldError, SegmentedControl, validateWith } from './form'
 import { Icon } from './icons'
 import { Markdown } from './markdown'
 import { Mascot } from './mascot'
 import { useStyle } from './style'
 
-export type AiChatEntry = { kind: 'user' | 'assistant'; text: string } | { kind: 'tool'; label: string }
+/** 確認カードの 1 行。複数行の文章は差分（hunks）で見せる */
+export type AiCardChange = { label: string; before: string; after: string } | { label: string; hunks: DiffLine[][] }
+
+export type AiChatEntry =
+  | { kind: 'user' | 'assistant'; text: string }
+  | { kind: 'tool'; label: string }
+  | { kind: 'card'; callId: string; title: string; changes: AiCardChange[]; state: AiCardState; note?: string }
 
 /** problem は今そのモデルを使えない理由 */
 export type AiModelOption = { value: string; label: string; problem: string | null }
@@ -22,11 +30,95 @@ export const AI_PANEL_ID = 'ai-panel'
 
 const SUGGESTIONS = [
   'このコースの構成を要約して',
-  '開いているページの誤字や分かりにくい表現を探して',
-  'このコースで非表示になっているものを教えて',
+  '開いているページの誤字や分かりにくい表現を直して',
+  '新しいセクションを作って、授業の流れを説明するページを追加して',
 ]
 
-const Entry = ({ entry }: { entry: AiChatEntry }) => {
+// 差分を全部出さないのは、ページを丸ごと書き換える提案で、カードがパネルより長くなり、実行するボタンまでたどり着けないため
+const MAX_DIFF_LINES = 40
+
+const DIFF_MARKS: Record<DiffLine['kind'], string> = { add: '+', remove: '-', same: ' ' }
+
+function DiffView({ hunks }: { hunks: DiffLine[][] }) {
+  const rows = hunks.flatMap((hunk, i) => [...(i > 0 ? [null] : []), ...hunk])
+  const shown = rows.slice(0, MAX_DIFF_LINES)
+  return (
+    <div class="ai-diff">
+      {shown.map((line) =>
+        line ? (
+          <div class={`ai-diff-line is-${line.kind}`}>
+            <span class="ai-diff-mark" aria-hidden="true">
+              {DIFF_MARKS[line.kind]}
+            </span>
+            <span class="sr-only">{line.kind === 'add' ? '追加: ' : line.kind === 'remove' ? '削除: ' : ''}</span>
+            {line.text || ' '}
+          </div>
+        ) : (
+          <div class="ai-diff-gap" aria-hidden="true">
+            ⋯
+          </div>
+        ),
+      )}
+      {rows.length > shown.length && <p class="ai-diff-more">ほか {rows.length - shown.length} 行</p>}
+    </div>
+  )
+}
+
+const CARD_STATE_LABELS: Record<AiCardState, string> = {
+  pending: '実行してよいか確認してください',
+  approved: '実行しました',
+  rejected: '実行せずに取り消しました',
+  failed: '実行できませんでした',
+}
+
+const Card = ({ entry, chatId }: { entry: Extract<AiChatEntry, { kind: 'card' }>; chatId: number }) => (
+  <div class="ai-card" data-state={entry.state}>
+    <p class="ai-card-title">
+      <Icon name="pencil" size={15} />
+      <strong>{entry.title}</strong>
+    </p>
+    <dl class="ai-card-changes">
+      {entry.changes.map((change) => (
+        <div class="ai-change">
+          <dt>{change.label}</dt>
+          <dd>
+            {'hunks' in change ? (
+              <DiffView hunks={change.hunks} />
+            ) : (
+              <span class="ai-change-values">
+                <s class="ai-change-before">{change.before || '（なし）'}</s>
+                <Icon name="chevronRight" size={14} />
+                <span class="ai-change-after">{change.after || '（なし）'}</span>
+              </span>
+            )}
+          </dd>
+        </div>
+      ))}
+    </dl>
+    {entry.state === 'pending' ? (
+      <form method="post" action="/ai/chat/confirm" class="ai-card-actions" data-ai-confirm>
+        <input type="hidden" name="chat" value={String(chatId)} />
+        <input type="hidden" name="call" value={entry.callId} />
+        <span class="ai-card-ask">{CARD_STATE_LABELS.pending}</span>
+        <Button type="submit" name="decision" value="reject" size="sm" variant="ghost">
+          取り消す
+        </Button>
+        <Button type="submit" name="decision" value="approve" size="sm" variant="primary" icon="check">
+          実行する
+        </Button>
+      </form>
+    ) : (
+      <p class="ai-card-state">
+        <Icon name={entry.state === 'approved' ? 'checkCircle' : entry.state === 'failed' ? 'alert' : 'x'} size={15} />
+        {CARD_STATE_LABELS[entry.state]}
+        {entry.state === 'failed' && entry.note && `（${entry.note}）`}
+      </p>
+    )}
+  </div>
+)
+
+const Entry = ({ entry, chatId }: { entry: AiChatEntry; chatId: number }) => {
+  if (entry.kind === 'card') return <Card entry={entry} chatId={chatId} />
   if (entry.kind === 'tool') return <ToolLine label={entry.label} />
   if (entry.kind === 'user') return <UserMessage text={entry.text} />
   return (
@@ -54,7 +146,7 @@ const Intro = ({ models }: { models: readonly AiModelOption[] }) => (
     <Mascot act="greet" size={76} stand={false} />
     <h2 class="ai-intro-title">何をお手伝いしましょうか？</h2>
     <p class="ai-intro-text">
-      管理しているコースの内容を読んで、質問に答えたり、教材の見直しを手伝ったりします。今はまだ、内容を変更することはできません。
+      管理しているコースの内容を読んで、質問に答えたり、教材の追加や見直しを手伝ったりします。追加したものは学生に非表示で作り、今ある内容を変えるときは、実行する前に確認します。
     </p>
     <div class="ai-suggestions">
       {SUGGESTIONS.map((s) => (
@@ -119,7 +211,7 @@ export const AiPanel = ({ models, chat, quota }: AiPanelProps) => {
       </header>
 
       <div class="ai-log" data-ai-log>
-        {chat ? chat.entries.map((e) => <Entry entry={e} />) : <Intro models={models} />}
+        {chat ? chat.entries.map((e) => <Entry entry={e} chatId={chat.id} />) : <Intro models={models} />}
         {chat?.busy && (
           <p class="ai-tool ai-pending">
             <span class="ai-dots" aria-hidden="true" />
