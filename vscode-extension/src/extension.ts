@@ -59,10 +59,11 @@ async function trust(context: vscode.ExtensionContext, server: URL) {
 
 type Choice = { folder: string; files: ManifestFile[]; same: ManifestFile[] }
 
-/** 用意するフォルダーと書き込むファイルを決める。やめるときは null */
-async function choose(manifest: Manifest, previous: Synced | undefined): Promise<Choice | null> {
+/** 用意するフォルダーと書き込むファイルを決める。taken はほかのアイテムに用意したフォルダー。やめるときは null */
+async function choose(manifest: Manifest, previous: Synced | undefined, taken: ReadonlySet<string>): Promise<Choice | null> {
   const base = path.join(await configuredRoot(), folderName(manifest.course), folderName(manifest.title))
-  const folder = previous && (await exists(previous.folder)) ? previous.folder : base
+  // base をそのまま使わないのは、同じコースに同じ名前のアイテムがあると、ほかのアイテムのフォルダーを開いてファイルや変更履歴が混ざるため
+  const folder = previous && (await exists(previous.folder)) ? previous.folder : taken.has(base) ? await freshFolder(base, taken) : base
   if (!(await exists(folder))) return { folder, files: manifest.files, same: [] }
 
   const { missing, updatable, same } = await plan(folder, manifest, previous?.folder === folder ? previous : undefined)
@@ -83,7 +84,7 @@ async function choose(manifest: Manifest, previous: Synced | undefined): Promise
   )
   if (answer === take) return { folder, files: [...missing, ...updatable], same }
   if (answer === keep) return { folder, files: [], same: [] }
-  if (answer === fresh) return { folder: await freshFolder(base), files: manifest.files, same: [] }
+  if (answer === fresh) return { folder: await freshFolder(base, taken), files: manifest.files, same: [] }
   return null
 }
 
@@ -119,7 +120,12 @@ async function openFromLink(context: vscode.ExtensionContext, uri: vscode.Uri) {
       await context.secrets.store(tokenKey(key), manifest.sync.token)
     }
     const records = recordsOf(context)
-    const choice = await choose(manifest, records[key])
+    const taken = new Set(
+      Object.entries(records)
+        .filter(([k]) => k !== key)
+        .map(([, r]) => r.folder),
+    )
+    const choice = await choose(manifest, records[key], taken)
     if (!choice) return
     if (choice.files.length) {
       await vscode.window.withProgress(

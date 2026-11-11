@@ -146,10 +146,10 @@ export async function plan(folder: string, manifest: Manifest, synced?: Synced):
   return result
 }
 
-/** 同じ名前のフォルダーがあれば「名前 (2)」のように番号を付ける */
-export async function freshFolder(base: string) {
+/** 同じ名前のフォルダーがあるか、ほかのアイテムに使われていれば「名前 (2)」のように番号を付ける */
+export async function freshFolder(base: string, taken: ReadonlySet<string>) {
   let candidate = base
-  for (let n = 2; await exists(candidate); n++) candidate = `${base} (${n})`
+  for (let n = 2; taken.has(candidate) || (await exists(candidate)); n++) candidate = `${base} (${n})`
   return candidate
 }
 
