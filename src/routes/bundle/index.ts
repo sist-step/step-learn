@@ -4,6 +4,8 @@ import type { AppEnv } from '../../lib/types'
 import { backend } from './backend'
 import { bundleRoutes, createBundleHandlers, vscodeApi } from './handlers'
 
+export { isSyncRequest } from './handlers'
+
 const app = new Hono<AppEnv>()
 app.use(requireAuth)
 app.route('/', bundleRoutes(createBundleHandlers(backend)))

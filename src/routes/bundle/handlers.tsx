@@ -17,14 +17,25 @@ import {
   type BundleFile,
   type BundleStore,
 } from '../../lib/bundle'
-import { claimLaunch, signGrant, signLaunch, verifyGrant } from '../../lib/bundle-token'
+import {
+  MAX_SYNC_FILE_SIZE,
+  distributedText,
+  parseChanges,
+  recordChanges,
+  textOf,
+  type BundleSyncStore,
+  type SyncVersion,
+} from '../../lib/bundle-sync'
+import { claimLaunch, signGrant, signLaunch, signSync, verifyGrant, verifySync } from '../../lib/bundle-token'
 import { config } from '../../lib/config'
 import type { CourseAccess } from '../../lib/courses'
-import { clientIp, field, readForm, redirectWith, wantsJson } from '../../lib/http'
+import { diffLines } from '../../lib/diff'
+import { clientIp, field, intParam, readForm, redirectWith, wantsJson } from '../../lib/http'
 import { rateLimiter } from '../../lib/rate-limit'
 import { deleteKeys, inBackground, isExecutable, storage } from '../../lib/storage'
 import type { AppEnv } from '../../lib/types'
 import { buildZip } from '../../lib/zip'
+import { SyncHistoryPage, SyncStudentsPage, type SyncFileRow } from './views'
 
 type C = Context<AppEnv>
 
@@ -36,13 +47,14 @@ export type BundleContext = {
   /** 拡張機能に渡すアイテムの識別子。storeOf に渡すと同じ置き場所が返る */
   ref: string
   store: BundleStore
+  sync: BundleSyncStore
 }
 
 export type BundleBackend = {
   /** URL のコースとアイテムを、ログインしている人が開けるなら返す。開けなければ null */
   resolve: (c: C) => Promise<BundleContext | null>
   /** 拡張機能からの要求（ログインのセッションがない）で、ref のアイテムの置き場所を返す。アイテムがなくなっていれば null */
-  storeOf: (ref: string) => BundleStore | null
+  itemOf: (ref: string) => Pick<BundleContext, 'store' | 'sync'> | null
   /** ストレージのキーの先頭。コースを消すときにまとめて消せるよう、コースごとに分ける */
   keyPrefix: (courseId: number) => string
   editUrl: (courseId: number, itemId: number) => string
@@ -54,6 +66,15 @@ const asList = <T,>(v: T | T[] | undefined) => (v === undefined ? [] : Array.isA
 const sha256 = (bytes: Uint8Array) => crypto.createHash('sha256').update(bytes).digest('hex')
 
 const serverOrigin = (c: C) => config.appOrigin ?? new URL(c.req.url).origin
+
+const readStored = (file: BundleFile) => storage.read(file.fileKey, file.size)
+
+const bearer = (c: Context) => c.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
+
+const SYNC_PATH = '/api/vscode/sync'
+
+/** 拡張機能が変更を送る要求か。ログインのセッションがなくても、鍵で本人と確かめられるので、本文の上限を上げてよい */
+export const isSyncRequest = (c: Context) => c.req.method === 'POST' && c.req.path === SYNC_PATH && !!verifySync(bearer(c))
 
 export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: BundleBackend) {
   async function manage(c: C) {
@@ -159,7 +180,84 @@ export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: B
     return c.json({ url: `vscode://${VSCODE_EXTENSION_ID}/open?${query}` })
   }
 
-  return { upload, remove, download, launch }
+  // ---------------------------------------------------------------- データの同期と変更履歴
+
+  async function setSync(c: C) {
+    const ctx = await manage(c)
+    if (!ctx) return c.notFound()
+    const on = field(await readForm(c), 'sync', 1) === '1'
+    ctx.sync.setEnabled(on)
+    const message = on
+      ? 'データの同期を有効にしました。学生が VS Code で保存した内容が、変更履歴として残ります。'
+      : 'データの同期を止めました。これまでの変更履歴は残ります。'
+    return redirectWith(c, editUrl(ctx.access.course.id, ctx.itemId), message, on ? 'success' : 'info')
+  }
+
+  async function listHistory(c: C) {
+    const ctx = await manage(c)
+    if (!ctx) return c.notFound()
+    const { access, itemId, title, sync } = ctx
+    return c.render(
+      <SyncStudentsPage
+        access={access}
+        item={{ id: itemId, title }}
+        itemUrl={itemUrl(access.course.id, itemId)}
+        enabled={sync.enabled()}
+        rows={sync.listStudents()}
+      />,
+      { title: `変更履歴 - ${title}` },
+    )
+  }
+
+  function fileRows(versions: SyncVersion[]): SyncFileRow[] {
+    const rows = new Map<string, SyncFileRow>()
+    for (const v of versions) {
+      const row = rows.get(v.path)
+      if (row) row.versions++
+      else rows.set(v.path, { path: v.path, versions: 1, deleted: !!v.deleted, latestId: v.id })
+    }
+    return [...rows.values()].sort((a, b) => a.path.localeCompare(b.path, 'ja'))
+  }
+
+  async function showHistory(c: C) {
+    const ctx = await resolve(c)
+    const studentId = intParam(c, 'uid')
+    // 学生に自分の記録を見せるのは、何が先生に見えているかを本人が確かめられるようにするため
+    if (!ctx || !studentId || !(ctx.access.canManage || studentId === c.var.user!.id)) return c.notFound()
+    const { access, itemId, title, store, sync } = ctx
+    const student = sync.findUser(studentId)
+    const versions = sync.listVersions(studentId)
+    if (!student || !versions.length) return c.notFound()
+
+    // ファイルの場所を URL に入れないのは、開発サーバー（Vite）が .md などで終わる URL を自分のファイルとして横取りするため
+    const wanted = Number(c.req.query('v')) || versions[0].id
+    // ほかの学生の記録の ID を付けた URL で開けないよう、この学生の記録の中から選ぶ
+    const path = versions.find((v) => v.id === wanted)?.path
+    const timeline = versions.filter((v) => v.path === path)
+    const index = timeline.findIndex((v) => v.id === wanted)
+    const chosen = index >= 0 ? sync.getVersion(studentId, wanted) : undefined
+    if (!chosen) return c.notFound()
+    const previous = timeline[index + 1] && sync.getVersion(studentId, timeline[index + 1].id)
+    const before = previous ? textOf(previous) : await distributedText(store.list(), chosen.path, readStored)
+
+    return c.render(
+      <SyncHistoryPage
+        access={access}
+        item={{ id: itemId, title }}
+        itemUrl={itemUrl(access.course.id, itemId)}
+        student={student}
+        files={fileRows(versions)}
+        timeline={timeline}
+        version={chosen}
+        lines={diffLines(before, textOf(chosen))}
+        full={c.req.query('view') === 'full'}
+        fromDistributed={!previous}
+      />,
+      { title: `${student.name} さんの変更履歴 - ${title}` },
+    )
+  }
+
+  return { upload, remove, download, launch, setSync, listHistory, showHistory }
 }
 
 export function bundleRoutes(h: ReturnType<typeof createBundleHandlers>) {
@@ -168,14 +266,29 @@ export function bundleRoutes(h: ReturnType<typeof createBundleHandlers>) {
   app.post('/:id/items/:iid/bundle/files/delete', h.remove)
   app.get('/:id/items/:iid/bundle/zip', h.download)
   app.post('/:id/items/:iid/bundle/launch', h.launch)
+  app.post('/:id/items/:iid/bundle/sync', h.setSync)
+  app.get('/:id/items/:iid/bundle/history', h.listHistory)
+  app.get('/:id/items/:iid/bundle/history/:uid', h.showHistory)
   return app
 }
 
+const SYNC_EXPIRED = '同期の期限が切れました。STEP Learn の画面からもう一度開いてください。'
+
 /** STEP Learn for VSCode（vscode-extension/）が呼ぶ API。ログインのセッションの代わりに、リンクの鍵と、それと引き換えた鍵で確かめる */
-export function vscodeApi({ storeOf }: Pick<BundleBackend, 'storeOf'>) {
+export function vscodeApi({ itemOf }: Pick<BundleBackend, 'itemOf'>) {
   // 上限を付けるのは、ログインしていなくても呼べ、鍵を総当たりで試されないようにするため
   const claimLimit = rateLimiter({ limit: 30, windowSec: 60 })
+  // 拡張機能は保存から数秒待ってまとめて送るので、普通に使っていて届く回数ではない
+  const syncLimit = rateLimiter({ limit: 120, windowSec: 60 })
   const app = new Hono<AppEnv>()
+
+  function syncTarget(c: C) {
+    const claims = verifySync(bearer(c))
+    const item = claims && itemOf(claims.ref)
+    // 利用者も確かめるのは、鍵が半年使え、そのあいだに利用者が消されているかもしれないため
+    if (!claims || !item?.sync.findUser(claims.userId)) return null
+    return { ...item, userId: claims.userId, limitKey: `${claims.ref} ${claims.userId}` }
+  }
 
   app.post('/claim', async (c) => {
     const ip = clientIp(c)
@@ -184,23 +297,43 @@ export function vscodeApi({ storeOf }: Pick<BundleBackend, 'storeOf'>) {
     const body: unknown = await c.req.json().catch(() => null)
     const token = typeof body === 'object' && body !== null && 'token' in body && typeof body.token === 'string' ? body.token : ''
     const claims = claimLaunch(token)
-    const store = claims && storeOf(claims.ref)
-    if (!claims || !store)
+    const item = claims && itemOf(claims.ref)
+    if (!claims || !item)
       return c.json({ error: 'リンクの期限が切れているか、すでに使われています。STEP Learn の画面からもう一度開いてください。' }, 401)
     return c.json({
       ref: claims.ref,
       course: claims.course,
       title: claims.title,
       grant: signGrant({ ref: claims.ref, userId: claims.userId }),
-      files: store.list().map(({ path, size, sha256 }) => ({ path, size, sha256 })),
+      files: item.store.list().map(({ path, size, sha256 }) => ({ path, size, sha256 })),
+      // 同期が無効でも鍵を渡すのは、あとから教師が有効にしたときに、学生が画面から開き直さなくても送り始められるようにするため
+      sync: { token: signSync({ ref: claims.ref, userId: claims.userId }), enabled: item.sync.enabled() },
     })
+  })
+
+  app.get('/sync', (c) => {
+    const target = syncTarget(c)
+    if (!target) return c.json({ error: SYNC_EXPIRED }, 401)
+    return c.json({ enabled: target.sync.enabled(), maxFileSize: MAX_SYNC_FILE_SIZE })
+  })
+
+  app.post('/sync', async (c) => {
+    const target = syncTarget(c)
+    if (!target) return c.json({ error: SYNC_EXPIRED }, 401)
+    if (!target.sync.enabled()) return c.json({ enabled: false, recorded: 0, full: false })
+    if (syncLimit.retryAfter(target.limitKey)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
+    syncLimit.hit(target.limitKey)
+    const changes = parseChanges(await c.req.json().catch(() => null))
+    if (!changes) return c.json({ error: '送られた内容が正しくありません。' }, 400)
+    const result = await recordChanges(target.sync, target.userId, changes, target.store.list(), readStored)
+    return c.json({ enabled: true, ...result })
   })
 
   // パスではなく中身のハッシュで指すのは、URL が .md などで終わると開発サーバー（Vite）が自分のファイルとして横取りし、
   // 拡張機能はどのみち受け取った中身をハッシュで確かめるため
   app.get('/files/:sha256{[0-9a-f]{64}}', async (c) => {
-    const grant = verifyGrant(c.req.header('authorization')?.replace(/^Bearer /, '') ?? '')
-    const store = grant && storeOf(grant.ref)
+    const grant = verifyGrant(bearer(c))
+    const store = grant && itemOf(grant.ref)?.store
     if (!store) return c.json({ error: '期限が切れました。STEP Learn の画面からもう一度開いてください。' }, 401)
     const file = store.list().find((f) => f.sha256 === c.req.param('sha256'))
     if (!file) return c.json({ error: 'ファイルが見つかりません。' }, 404)

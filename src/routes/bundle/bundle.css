@@ -1,0 +1,53 @@
+/* ==========================================================================
+   ファイル自動配布の変更履歴（教師の一覧と、学生ごとの記録）
+   ========================================================================== */
+
+.col-sync { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.col-open { width: 1%; text-align: right; }
+
+.sync-history { display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 28vw, 360px); gap: 24px; align-items: start; }
+.sync-history-main, .sync-history-side { min-width: 0; }
+.sync-history-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.sync-history-bar .tabs { margin: 0; }
+.sync-path { font-family: var(--mono); overflow-wrap: anywhere; }
+
+.sync-stats { flex: none; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sync-stats .is-add { color: var(--success-text); }
+.sync-stats .is-remove, .sync-stats.is-remove { color: var(--danger-text); }
+
+/* 差分 */
+.sync-code {
+  max-height: 70vh;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  overflow: auto;
+}
+.sync-diff { width: 100%; border-collapse: collapse; font: var(--fs-sm)/1.6 var(--mono); tab-size: 4; }
+.sync-diff td { padding: 0 8px; vertical-align: top; }
+.sync-no { width: 1%; color: var(--muted); text-align: right; white-space: nowrap; user-select: none; font-variant-numeric: tabular-nums; }
+.sync-sign { width: 1%; padding: 0 2px; text-align: center; user-select: none; }
+.sync-text { white-space: pre; }
+.sync-diff .is-add { background: color-mix(in srgb, var(--success) 16%, transparent); }
+.sync-diff .is-remove { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.sync-diff .is-add .sync-sign { color: var(--success-text); }
+.sync-diff .is-remove .sync-sign { color: var(--danger-text); }
+.sync-gap td { padding: 2px 8px; border-block: 1px solid var(--border); background: var(--surface-3); color: var(--muted); text-align: center; user-select: none; }
+
+/* ファイルと記録の一覧 */
+.sync-list { display: flex; flex-direction: column; gap: 2px; max-height: 320px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.sync-list a { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; padding: 4px 10px; border-radius: var(--radius-sm); color: inherit; font-size: var(--fs-sm); text-decoration: none; }
+.sync-list a > :first-child { flex: 1; min-width: 0; }
+.sync-list a > .muted { flex: none; }
+.sync-list a.active { background: var(--c-soft); color: var(--c-ink); font-weight: 600; }
+.sync-timeline { max-height: 50vh; font-variant-numeric: tabular-nums; }
+@media (hover: hover) {
+  .sync-list a:not(.active):hover { background: var(--surface-2); }
+}
+
+@media (max-width: 900px) {
+  .sync-history { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .sync-list a { min-height: var(--tap); }
+}

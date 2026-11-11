@@ -2,8 +2,13 @@
 .bundle-open { margin-bottom: 24px; }
 .bundle-open > .link-card { margin-bottom: 0; }
 .bundle-help p { margin: 0; }
-.bundle-help p + p { margin-top: 4px; }
 .bundle-help a { display: inline-flex; align-items: center; gap: 2px; }
+
+/* データの同期 */
+.bundle-sync-note > .card-head { margin-bottom: 0; }
+.bundle-sync-heading { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.bundle-sync-form { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.bundle-sync-form > p { flex: 1 1 240px; margin: 0; }
 
 /* ファイルの木 */
 .bundle-tree { font-size: var(--fs-sm); }

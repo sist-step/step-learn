@@ -1,4 +1,4 @@
-import { bundleStore, getBundleItem } from '../../lib/bundle-items'
+import { bundleStore, bundleSyncStore, getBundleItem } from '../../lib/bundle-items'
 import { getCourseAccess, isVisibleItem } from '../../lib/courses'
 import { intParam } from '../../lib/http'
 import type { BundleBackend } from './handlers'
@@ -17,10 +17,18 @@ export const backend: BundleBackend = {
     if (!access) return null
     const item = getBundleItem(itemId)
     if (!item || item.courseId !== courseId || (!access.canManage && !isVisibleItem(itemId))) return null
-    return { access, itemId, title: item.title, ref: `${REF_PREFIX}${itemId}`, store: bundleStore(itemId) }
+    return {
+      access,
+      itemId,
+      title: item.title,
+      ref: `${REF_PREFIX}${itemId}`,
+      store: bundleStore(itemId),
+      sync: bundleSyncStore(courseId, itemId),
+    }
   },
-  storeOf(ref) {
+  itemOf(ref) {
     const itemId = Number(ref.slice(REF_PREFIX.length))
-    return ref.startsWith(REF_PREFIX) && Number.isSafeInteger(itemId) && getBundleItem(itemId) ? bundleStore(itemId) : null
+    const item = ref.startsWith(REF_PREFIX) && Number.isSafeInteger(itemId) && getBundleItem(itemId)
+    return item ? { store: bundleStore(itemId), sync: bundleSyncStore(item.courseId, itemId) } : null
   },
 }
