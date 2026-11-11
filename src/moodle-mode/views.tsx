@@ -424,6 +424,7 @@ const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sect
         {extraKinds().map(([t, kind]) => (
           <fieldset class="stack" data-kind-only={t} hidden disabled>
             <kind.Fields values={{}} errors={{}} idPrefix={`new-${t}`} />
+            {kind.addNote && <p class="muted small">{kind.addNote}</p>}
           </fieldset>
         ))}
         <div class="grid-2">
@@ -442,7 +443,7 @@ const AddItemModal = ({ courseId, sections, tracking }: { courseId: number; sect
         </div>
         {tracking && <MoodleCompletionField id="new-item-completion" />}
         <div class="form-actions">
-          <Button type="submit" name="then" value="view">
+          <Button type="submit" name="then" value="view" class="unless-bundle">
             追加して表示
           </Button>
           <Button type="submit" variant="primary">
@@ -1347,6 +1348,8 @@ export const ItemEditPage = ({
             )}
           </aside>
         </form>
+
+        {extraKind?.Panel && <extraKind.Panel item={item} access={access} />}
 
         <Card tone="danger" class="editor-danger">
           <DangerRow heading="アイテムを削除" description="旧STEP Learn からも削除され、学生の完了記録も消えます。">

@@ -1,0 +1,68 @@
+{
+  "name": "step-learn-for-vscode",
+  "displayName": "STEP Learn for VSCode",
+  "description": "STEP Learn で配られたプログラムのファイルを、ボタン 1 つで VS Code に用意して開きます。",
+  "version": "0.1.0",
+  "publisher": "mint1535",
+  "private": true,
+  "license": "UNLICENSED",
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sist-step/step-learn"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Education",
+    "Other"
+  ],
+  "keywords": [
+    "STEP Learn",
+    "LMS",
+    "授業"
+  ],
+  "activationEvents": [
+    "onUri"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "stepLearn.openRootFolder",
+        "title": "配布ファイルの保存先を開く",
+        "category": "STEP Learn"
+      },
+      {
+        "command": "stepLearn.forgetServers",
+        "title": "ファイルを受け取ってよいサーバーの記録を消す",
+        "category": "STEP Learn"
+      }
+    ],
+    "configuration": {
+      "title": "STEP Learn",
+      "properties": {
+        "stepLearn.folder": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "配布されたファイルを用意するフォルダー。空のときは「ドキュメント/STEP Learn」に、コースとアイテムの名前のフォルダーを作ります。"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "typecheck": "tsc --noEmit",
+    "package": "npm run build && vsce package --no-dependencies --skip-license",
+    "publish": "npm run build && vsce publish --no-dependencies --skip-license"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/vscode": "~1.90.0",
+    "@vscode/vsce": "^3.6.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0"
+  }
+}

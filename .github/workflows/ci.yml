@@ -29,6 +29,26 @@ jobs:
       - name: Build
         run: npm run build
 
+  # 本体の lint から外した拡張機能（依存を別に入れる別のパッケージ）を、ここで依存を入れて確かめる
+  vscode-extension:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: vscode-extension
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: vscode-extension/package-lock.json
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+
   docker:
     runs-on: ubuntu-latest
     timeout-minutes: 15

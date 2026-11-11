@@ -26,13 +26,14 @@
 .editor-form { display: contents; }
 .editor-main { grid-row: span 2; }
 .editor-side { display: flex; flex-direction: column; gap: 20px; }
-.editor-danger { grid-column: 2; }
+.editor-danger { grid-column: 2; grid-row: 2; }
+.editor-extra { grid-column: 1; }
 .editor-title { height: var(--control-h-lg); font-size: 16px; font-weight: 600; }
 
 @media (max-width: 900px) {
   .editor { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
   .editor-main { grid-row: auto; }
-  .editor-danger { grid-column: auto; }
+  .editor-danger, .editor-extra { grid-column: auto; grid-row: auto; }
 }
 
 /* ===== 閲覧 */
