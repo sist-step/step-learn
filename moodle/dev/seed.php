@@ -10,7 +10,6 @@ require_once($CFG->libdir . '/testing/generator/lib.php');
 const APP_URL = 'http://localhost:5174';
 const BACKCHANNEL_URL = 'http://host.docker.internal:5174/auth/moodle/backchannel-logout';
 const BACKCHANNEL_SECRET = 'dev-backchannel-secret-0123456789abcdef';
-const PASSWORD = 'Moodle-dev-pass-1';
 
 global $DB;
 \core\session\manager::set_user(get_admin());
@@ -28,11 +27,12 @@ set_config('banner', 1, 'local_steplearn');
 $authenticated = $DB->get_record('role', ['shortname' => 'user'], '*', MUST_EXIST);
 assign_capability('webservice/rest:use', CAP_ALLOW, $authenticated->id, $system->id, true);
 
+// パスワードを推測されにくいものにしないのは、検証環境のユーザーを切り替えてログインし直すことが多いため
 function ensure_user(testing_data_generator $generator, string $username, string $firstname, string $lastname): stdClass {
     global $DB;
     return $DB->get_record('user', ['username' => $username, 'deleted' => 0]) ?: $generator->create_user([
         'username' => $username,
-        'password' => PASSWORD,
+        'password' => $username,
         'firstname' => $firstname,
         'lastname' => $lastname,
         'email' => $username . '@example.com',
@@ -58,8 +58,8 @@ $token = $DB->get_field('external_tokens', 'token', ['externalserviceid' => $exc
     ?: \core_external\util::generate_token(EXTERNAL_TOKEN_PERMANENT, $exchange, $service->id, $system, 0, '', 'STEP Learn exchange');
 accesslib_clear_all_caches(true);
 
-$teacher = ensure_user($generator, 'teacher1', '花子', '先生');
-$student = ensure_user($generator, 'student1', '太郎', '学生');
+$teacher = ensure_user($generator, 'teacher', '花子', '先生');
+$student = ensure_user($generator, 'student', '太郎', '学生');
 
 $course = $DB->get_record('course', ['shortname' => 'moodle-mode']);
 if (!$course) {
@@ -180,7 +180,7 @@ $topcoll = ensure_format_course($generator, 'topcoll', '折りたたみ型トピ
 cli_writeln('MOODLE_URL=' . $CFG->wwwroot);
 cli_writeln('MOODLE_EXCHANGE_TOKEN=' . $token);
 cli_writeln('MOODLE_BACKCHANNEL_SECRET=' . BACKCHANNEL_SECRET);
-cli_writeln('コース ID: ' . $course->id . '（teacher1 / student1、パスワード ' . PASSWORD . '）');
+cli_writeln('コース ID: ' . $course->id . '（teacher / student、パスワードはユーザー名と同じ）');
 foreach (['タイル' => $tiles, '折りたたみ型トピック' => $topcoll] as $label => $formatcourse) {
     if ($formatcourse) {
         cli_writeln("{$label}のコース ID: {$formatcourse->id}");
