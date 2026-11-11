@@ -1,8 +1,8 @@
 {
   "name": "step-learn-for-vscode",
   "displayName": "STEP Learn for VSCode",
-  "description": "STEP Learn で配られたプログラムのファイルを、ボタン 1 つで VS Code に用意して開きます。",
-  "version": "0.1.0",
+  "description": "STEP Learn で配られたプログラムのファイルを、ボタン 1 つで VS Code に用意して開きます。先生が指定したアイテムでは、保存した内容を変更履歴として STEP Learn に記録します。",
+  "version": "0.2.0",
   "publisher": "mint1535",
   "private": true,
   "license": "UNLICENSED",
@@ -24,7 +24,8 @@
     "授業"
   ],
   "activationEvents": [
-    "onUri"
+    "onUri",
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "contributes": {

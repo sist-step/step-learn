@@ -6,8 +6,11 @@ import path from 'node:path'
 
 export type ManifestFile = { path: string; size: number; sha256: string }
 
-/** STEP Learn の /api/vscode/claim の応答 */
-export type Manifest = { ref: string; course: string; title: string; grant: string; files: ManifestFile[] }
+/** 変更履歴を送るための鍵と、アイテムが「データを同期する」になっているか */
+export type ManifestSync = { token: string; enabled: boolean }
+
+/** STEP Learn の /api/vscode/claim の応答。sync は、同期に対応していない古い STEP Learn にはない */
+export type Manifest = { ref: string; course: string; title: string; grant: string; files: ManifestFile[]; sync?: ManifestSync }
 
 /** 前に用意したときの記録。files は、配られたときのファイルの中身のハッシュ（学生が書き換えたかを見分ける） */
 export type Synced = { folder: string; files: Record<string, string> }
@@ -89,7 +92,9 @@ function parseManifest(body: unknown): Manifest {
   })
   if (files.length > MAX_FILES || files.reduce((sum, f) => sum + f.size, 0) > MAX_TOTAL_SIZE)
     throw new SyncError('配布されたファイルが多すぎるため、用意できません。')
-  return { ref, course, title, grant, files }
+  const sync =
+    isObject(body.sync) && typeof body.sync.token === 'string' ? { token: body.sync.token, enabled: body.sync.enabled === true } : undefined
+  return { ref, course, title, grant, files, sync }
 }
 
 /** リンクの鍵を、配るファイルの一覧と、ファイルを受け取るための鍵に引き換える */
