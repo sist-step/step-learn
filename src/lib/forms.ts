@@ -278,6 +278,15 @@ const aiSettings = z.object({
   anthropic_limit: usd('Anthropic の月の上限', 10_000),
 })
 
+export const MAX_AI_MESSAGE_LENGTH = 4000
+
+const aiMessage = z.object({
+  message: text('メッセージ', MAX_AI_MESSAGE_LENGTH, { required: true }),
+  model: hidden(100),
+  chat: hidden(20),
+  page: hidden(500),
+})
+
 export const FORMS = {
   login,
   register,
@@ -297,6 +306,7 @@ export const FORMS = {
   extraCode,
   image,
   aiSettings,
+  aiMessage,
 }
 
 export type FormName = keyof typeof FORMS

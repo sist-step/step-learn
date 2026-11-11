@@ -48,11 +48,13 @@ import lock from 'heroicons/24/outline/lock-closed.svg?raw'
 import lockOpen from 'heroicons/24/outline/lock-open.svg?raw'
 import listNumbered from 'heroicons/24/outline/numbered-list.svg?raw'
 import pencil from 'heroicons/24/outline/pencil.svg?raw'
+import pencilSquare from 'heroicons/24/outline/pencil-square.svg?raw'
 import photo from 'heroicons/24/outline/photo.svg?raw'
 import play from 'heroicons/24/outline/play.svg?raw'
 import plus from 'heroicons/24/outline/plus.svg?raw'
 import pages from 'heroicons/24/outline/rectangle-stack.svg?raw'
 import shield from 'heroicons/24/outline/shield-check.svg?raw'
+import sparkles from 'heroicons/24/outline/sparkles.svg?raw'
 import layers from 'heroicons/24/outline/square-3-stack-3d.svg?raw'
 import trash from 'heroicons/24/outline/trash.svg?raw'
 import user from 'heroicons/24/outline/user.svg?raw'
@@ -81,6 +83,8 @@ const svgs = {
   chevronRight,
   chevronLeft,
   arrowUp,
+  sparkles,
+  pencilSquare,
   arrowDown,
   ellipsis,
   link,

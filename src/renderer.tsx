@@ -2,7 +2,7 @@ import { raw } from 'hono/html'
 import { jsxRenderer } from 'hono/jsx-renderer'
 import { Script, ViteClient } from 'vite-ssr-components/hono'
 import { StyleLinks, StyleLinksResolver } from './components/style'
-import { THEME_BOOT_SCRIPT } from './lib/settings'
+import { BOOT_SCRIPT } from './lib/settings'
 
 declare module 'hono' {
   interface ContextRenderer {
@@ -17,7 +17,7 @@ export const renderer = jsxRenderer(({ children, title }) => (
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <meta name="color-scheme" content="light" />
       <meta name="theme-color" content="" />
-      <script>{raw(THEME_BOOT_SCRIPT)}</script>
+      <script>{raw(BOOT_SCRIPT)}</script>
       <title>{title ? `${title} | STEP Learn` : 'STEP Learn'}</title>
       <link rel="icon" href="/favicon.ico" sizes="32x32" />
       <link rel="icon" href="/favicon.png" type="image/png" sizes="160x160" />

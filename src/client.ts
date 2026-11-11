@@ -4,9 +4,11 @@
 
 import checkSvg from 'heroicons/24/outline/check.svg?raw'
 import { bundlePath, isExcludedPath } from './lib/bundle'
+import type { AiAgentEvent } from './lib/ai-agent'
 import { formatBytes } from './lib/bytes'
 import { isFormName, validate, type FieldErrors, type FormInput } from './lib/forms'
-import { getSetting, setSetting, updateSetting, type Theme } from './lib/settings'
+import { renderMarkdown } from './lib/markdown'
+import { AI_PANEL_DOCKED, getSetting, setSetting, updateSetting, type Theme } from './lib/settings'
 
 const $$ = <T extends Element>(sel: string, root: ParentNode = document) => [...root.querySelectorAll<T>(sel)]
 
@@ -19,7 +21,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') document.body.classList.remove('nav-open')
 })
 
-// --- テーマの切り替え（端末ごと。最初の描画前に当てるのは lib/settings.ts の THEME_BOOT_SCRIPT）
+// --- テーマの切り替え（端末ごと。最初の描画前に当てるのは lib/settings.ts の BOOT_SCRIPT）
 function applyTheme(theme: Theme) {
   document.documentElement.dataset.theme = theme
   $$('[data-theme-toggle]').forEach((el) => el.setAttribute('aria-checked', String(theme === 'dark')))
@@ -1820,6 +1822,207 @@ function prepareArrival(flight: Flight) {
   }
 }
 
+// --- AI アシスタントのパネル（components/ai-panel.tsx）
+// 送信を再読み込みなしの遷移に任せないのは、応答を言い終えるまで待たずに、届いた分から画面に出すため
+const aiPanel = () => document.getElementById('ai-panel')
+const aiInput = () => aiPanel()?.querySelector<HTMLTextAreaElement>('.ai-textarea') ?? null
+let aiSending = false
+let aiPolling: ReturnType<typeof setTimeout> | null = null
+
+function aiTemplate(kind: 'user' | 'assistant' | 'tool' | 'pending' | 'error', text?: string) {
+  const template = aiPanel()?.querySelector<HTMLTemplateElement>(`template[data-ai-template="${kind}"]`)
+  const el = template?.content.firstElementChild?.cloneNode(true)
+  if (!(el instanceof HTMLElement)) throw new Error(`template ${kind} がありません`)
+  if (text !== undefined) el.querySelector('[data-ai-text]')!.textContent = text
+  return el
+}
+
+function scrollAiLog(force = false) {
+  const log = aiPanel()?.querySelector<HTMLElement>('[data-ai-log]')
+  if (!log) return
+  // 読み返しているときに最下部へ戻さないのは、応答が流れているあいだ、上の発言を読めなくなるため
+  if (force || log.scrollHeight - log.scrollTop - log.clientHeight < 80) log.scrollTop = log.scrollHeight
+}
+
+function fitAiInput(input: HTMLTextAreaElement) {
+  input.style.height = 'auto'
+  input.style.height = `${input.scrollHeight}px`
+}
+
+const aiDocked = () => matchMedia(AI_PANEL_DOCKED).matches
+
+function setAiOpen(open: boolean) {
+  document.documentElement.toggleAttribute('data-ai-open', open)
+  $$('.ai-panel-toggle').forEach((el) => el.setAttribute('aria-expanded', String(open)))
+  setSetting('aiPanel', open)
+  if (!open) return
+  scrollAiLog(true)
+  // 狭い画面で入力欄にフォーカスしないのは、開いただけでキーボードが出て会話が隠れるため
+  if (aiDocked()) aiInput()?.focus()
+}
+
+document.addEventListener('click', (e) => {
+  const target = e.target as Element
+  if (target.closest('[data-ai-toggle]')) return setAiOpen(!document.documentElement.hasAttribute('data-ai-open'))
+  const suggestion = target.closest<HTMLElement>('[data-ai-suggest]')
+  const input = aiInput()
+  if (!suggestion || !input) return
+  input.value = suggestion.dataset.aiSuggest ?? ''
+  fitAiInput(input)
+  input.form?.requestSubmit()
+})
+
+document.addEventListener('keydown', (e) => {
+  const input = e.target as Element
+  if (e.key === 'Escape' && !aiDocked() && aiPanel()?.contains(input)) return setAiOpen(false)
+  if (!(input instanceof HTMLTextAreaElement) || !input.matches('.ai-textarea') || e.key !== 'Enter' || e.shiftKey) return
+  // keyCode も見るのは、Safari では変換を確定した Enter の keydown で isComposing が false になるため
+  if (e.isComposing || e.keyCode === 229) return
+  e.preventDefault()
+  input.form?.requestSubmit()
+})
+
+document.addEventListener('input', (e) => {
+  const input = e.target as Element
+  if (input instanceof HTMLTextAreaElement && input.matches('.ai-textarea')) fitAiInput(input)
+})
+
+async function refreshAiPanel(draft = '') {
+  if (aiPolling) clearTimeout(aiPolling)
+  aiPolling = null
+  const res = await fetch('/ai/chat', { headers: { Accept: 'text/html' } })
+  const doc = res.ok ? new DOMParser().parseFromString(await res.text(), 'text/html') : null
+  const next = doc?.getElementById('ai-panel')
+  const current = aiPanel()
+  if (!next || !current) return
+  current.replaceWith(document.adoptNode(next))
+  const input = aiInput()
+  if (input && draft) {
+    input.value = draft
+    fitAiInput(input)
+  }
+  initMascots()
+  scrollAiLog(true)
+  watchAiBusy()
+}
+
+// 作成中の応答を開き直した画面に流し直さないのは、流れていた続きを受け取る手段がなく、言い終えて保存されたものを取り直せば足りるため
+function watchAiBusy() {
+  if (aiSending || aiPolling || !aiPanel()?.hasAttribute('data-busy')) return
+  aiPolling = setTimeout(() => {
+    aiPolling = null
+    void refreshAiPanel()
+  }, 3000)
+}
+
+async function sendAiMessage(form: HTMLFormElement) {
+  const panel = aiPanel()
+  const log = panel?.querySelector<HTMLElement>('[data-ai-log]')
+  const input = aiInput()
+  if (!panel || !log || !input) return
+  const text = input.value.trim()
+  const data = new FormData(form)
+  data.set('page', location.pathname)
+  const intro = log.querySelector<HTMLElement>('[data-ai-intro]')
+  const started = !panel.dataset.chat
+
+  aiSending = true
+  panel.toggleAttribute('data-busy', true)
+  if (intro) intro.hidden = true
+  const sent = aiTemplate('user', text)
+  const pending = aiTemplate('pending')
+  log.append(sent, pending)
+  input.value = ''
+  fitAiInput(input)
+  scrollAiLog(true)
+
+  let bubble: HTMLElement | null = null
+  let markdown = ''
+  let closed = false
+  let retracted = false
+  const handle = (event: AiAgentEvent) => {
+    if (event.type === 'text') {
+      if (!bubble) {
+        bubble = aiTemplate('assistant')
+        pending.before(bubble)
+      }
+      markdown += event.text
+      bubble.querySelector('[data-ai-text]')!.innerHTML = renderMarkdown(markdown)
+    } else if (event.type === 'tool') {
+      bubble = null
+      markdown = ''
+      pending.before(aiTemplate('tool', event.label))
+    } else if (event.type === 'error') {
+      if (event.retract) {
+        retracted = true
+        sent.remove()
+        if (intro && !log.querySelector('.ai-msg')) intro.hidden = false
+        if (!input.value) input.value = text
+        fitAiInput(input)
+      }
+      pending.before(aiTemplate('error', event.message))
+    } else if (event.type === 'chat') {
+      panel.dataset.chat = String(event.id)
+      const chatField = form.elements.namedItem('chat')
+      if (chatField instanceof HTMLInputElement) chatField.value = String(event.id)
+    } else if (event.type === 'closed') {
+      closed = true
+    } else {
+      const note = panel.querySelector('[data-ai-quota]')
+      if (note) note.textContent = event.quota
+    }
+    scrollAiLog()
+  }
+
+  try {
+    const res = await fetch(form.action, { method: 'POST', body: data, headers: { Accept: 'application/x-ndjson' } })
+    if (!res.ok || !res.body) throw new Error(`status ${res.status}`)
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
+    let buffer = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += value
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) if (line.trim()) handle(JSON.parse(line) as AiAgentEvent)
+    }
+  } catch {
+    pending.before(aiTemplate('error', 'AI と通信できませんでした。少し待ってから、もう一度お試しください。'))
+  } finally {
+    pending.remove()
+    aiSending = false
+    panel.removeAttribute('data-busy')
+    scrollAiLog()
+  }
+  // 新しく始めたチャットを取り直すのは、ヘッダーのモデル名と「閉じる」ボタンを、サーバーの描いたものにそろえるため
+  if (closed || (started && panel.dataset.chat)) await refreshAiPanel(retracted ? text : '')
+}
+
+document.addEventListener('submit', (e) => {
+  const form = e.target as HTMLFormElement
+  if (e.defaultPrevented || !form.matches('[data-ai-form], [data-ai-close]')) return
+  e.preventDefault()
+  if (form.matches('[data-ai-form]')) {
+    if (!aiSending) void sendAiMessage(form)
+    return
+  }
+  delete form.dataset.confirmed
+  fetch(form.action, { method: 'POST', headers: { Accept: 'application/json' } })
+    .then((res) => {
+      if (!res.ok) throw new Error(`status ${res.status}`)
+      return refreshAiPanel()
+    })
+    .then(() => aiDocked() && aiInput()?.focus())
+    .catch(() => toast('チャットを閉じられませんでした。', 'error'))
+})
+
+function initAiPanel() {
+  const open = document.documentElement.hasAttribute('data-ai-open')
+  $$('.ai-panel-toggle').forEach((el) => el.setAttribute('aria-expanded', String(open)))
+  watchAiBusy()
+}
+
 // --- ページ遷移を再読み込みなしで行う（JS がなければ通常のリンク・フォーム送信で遷移する）
 type Page = { url: string; redirected: boolean; isHtml: boolean; html: string }
 type Visit = { method?: 'GET' | 'POST'; body?: FormData | URLSearchParams; pop?: boolean; onFail?: () => void }
@@ -1896,6 +2099,8 @@ function patch(from: Element, to: Element, persist: boolean) {
       if (persist) return cur.nodeValue !== node.nodeValue && (cur.nodeValue = node.nodeValue)
       return cur.replaceWith(node)
     }
+    // 中身を新しいページに合わせないのは、AI のパネルのように、描いたあと client.ts が書き足していく部分を消さないため
+    if (cur.hasAttribute('data-keep') && cur.id === node.id) return
     const inner = persist || cur.hasAttribute('data-persist')
     if (inner || cur.querySelector('[data-persist]')) return patch(cur, node, inner)
     cur.replaceWith(node)
@@ -2285,6 +2490,7 @@ function initPage() {
   openHashTarget()
   watchLive()
   initAuthArt()
+  initAiPanel()
 }
 
 function initContent() {

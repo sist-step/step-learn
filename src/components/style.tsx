@@ -20,6 +20,7 @@ export const STYLESHEETS = [
   '/src/components/pdf.css',
   '/src/components/code.css',
   '/src/components/bundle.css',
+  '/src/components/ai-panel.css',
   '/src/components/auth.css',
   '/src/routes/dashboard/dashboard.css',
   '/src/routes/courses/courses.css',
