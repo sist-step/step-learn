@@ -919,11 +919,15 @@ function uploadBundle(form: HTMLFormElement, files: BundleUpload[]) {
   void visit(new URL(form.action), { method: 'POST', body: data, onFail: () => form.removeAttribute('data-uploading') })
 }
 
+// instanceof で見分けないのは、Chrome では FileSystemFileEntry・FileSystemDirectoryEntry がグローバルになく ReferenceError になるため
+const isFileEntry = (entry: FileSystemEntry): entry is FileSystemFileEntry => entry.isFile
+const isDirectoryEntry = (entry: FileSystemEntry): entry is FileSystemDirectoryEntry => entry.isDirectory
+
 async function readDropEntry(entry: FileSystemEntry, prefix: string): Promise<BundleUpload[]> {
   const path = `${prefix}${entry.name}`
-  if (entry instanceof FileSystemFileEntry) return [{ file: await new Promise<File>((ok, ng) => entry.file(ok, ng)), path }]
+  if (isFileEntry(entry)) return [{ file: await new Promise<File>((ok, ng) => entry.file(ok, ng)), path }]
   // 中を読む前に外すのは、node_modules のように数万のファイルを含むフォルダーを読み終えるまで待たせないため
-  if (!(entry instanceof FileSystemDirectoryEntry) || isExcludedPath(entry.name)) return []
+  if (!isDirectoryEntry(entry) || isExcludedPath(entry.name)) return []
   const reader = entry.createReader()
   const children: FileSystemEntry[] = []
   // readEntries は 1 回で全部を返すとは限らないので、空が返るまで読む
@@ -982,7 +986,7 @@ document.addEventListener('drop', (e) => {
     .filter((item) => item.kind === 'file')
     .map((item) => item.webkitGetAsEntry() ?? item.getAsFile())
     .filter((d) => !!d)
-  const single = dropped.length === 1 && dropped[0] instanceof FileSystemDirectoryEntry ? dropped[0] : null
+  const single = dropped.length === 1 && !(dropped[0] instanceof File) && isDirectoryEntry(dropped[0]) ? dropped[0] : null
   void (async () => {
     try {
       const files = single
