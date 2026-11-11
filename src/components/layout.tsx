@@ -2,6 +2,7 @@ import type { Child } from 'hono/jsx'
 import { useRequestContext } from 'hono/jsx-renderer'
 import { ROLE_LABELS, type AppEnv, type Flash } from '../lib/types'
 import { Icon, type IconName } from './icons'
+import { AiPanelToggle } from './ai-panel'
 import { IconButton } from './button'
 import { cx } from './cx'
 import { Switch } from './form'
@@ -101,6 +102,7 @@ export const AppShell = ({ children, editable, tone, topbar }: { children: Child
   const user = c.var.user!
   const path = c.req.path
   const navCourses = c.var.navCourses
+  const aiPanel = c.var.aiPanel?.()
   const courseMatch = path.match(/^\/courses\/(\d+)/)
   const currentCourse = courseMatch ? Number(courseMatch[1]) : null
   const links = (
@@ -139,6 +141,7 @@ export const AppShell = ({ children, editable, tone, topbar }: { children: Child
               <Icon name="x" size={14} />
             </button>
           )}
+          {aiPanel && <AiPanelToggle />}
           <UserMenu editable={editable} />
         </div>
       </header>
@@ -187,6 +190,7 @@ export const AppShell = ({ children, editable, tone, topbar }: { children: Child
       <div class="backdrop" data-nav-toggle />
 
       <main class={cx('content', tone && `tone-${tone}`)}>{children}</main>
+      {aiPanel}
       <Toast />
     </div>
   )
