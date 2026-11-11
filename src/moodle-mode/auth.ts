@@ -141,6 +141,13 @@ async function activeSession(id: string) {
   return { row, token }
 }
 
+/** VS Code の拡張機能からの要求のように、ログインのセッションがない要求で Moodle に問い合わせるための、利用者のトークン。期限が切れていれば null */
+export function storedToken(userId: number) {
+  const row = db.select({ token: users.token, tokenExpiresAt: users.tokenExpiresAt }).from(users).where(eq(users.id, userId)).get()
+  if (!row || (row.tokenExpiresAt > 0 && row.tokenExpiresAt <= now())) return null
+  return decryptToken(row.token)
+}
+
 /** 画面共有の接続（socket.io）のように、Hono を通らない要求の Cookie ヘッダーから利用者とトークンを読む */
 export async function sessionFromCookieHeader(header: string | undefined) {
   if (!header) return null

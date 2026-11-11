@@ -53,8 +53,8 @@ export type BundleContext = {
 export type BundleBackend = {
   /** URL のコースとアイテムを、ログインしている人が開けるなら返す。開けなければ null */
   resolve: (c: C) => Promise<BundleContext | null>
-  /** 拡張機能からの要求（ログインのセッションがない）で、ref のアイテムの置き場所を返す。アイテムがなくなっていれば null */
-  itemOf: (ref: string) => Pick<BundleContext, 'store' | 'sync'> | null
+  /** 拡張機能からの要求（ログインのセッションがない）で、userId の人が使う ref のアイテムの置き場所を返す。アイテムがなくなっていれば null */
+  itemOf: (ref: string, userId: number) => Promise<Pick<BundleContext, 'store' | 'sync'> | null>
   /** ストレージのキーの先頭。コースを消すときにまとめて消せるよう、コースごとに分ける */
   keyPrefix: (courseId: number) => string
   editUrl: (courseId: number, itemId: number) => string
@@ -282,9 +282,9 @@ export function vscodeApi({ itemOf }: Pick<BundleBackend, 'itemOf'>) {
   const syncLimit = rateLimiter({ limit: 120, windowSec: 60 })
   const app = new Hono<AppEnv>()
 
-  function syncTarget(c: C) {
+  async function syncTarget(c: C) {
     const claims = verifySync(bearer(c))
-    const item = claims && itemOf(claims.ref)
+    const item = claims && (await itemOf(claims.ref, claims.userId))
     // 利用者も確かめるのは、鍵が半年使え、そのあいだに利用者が消されているかもしれないため
     if (!claims || !item?.sync.findUser(claims.userId)) return null
     return { ...item, userId: claims.userId, limitKey: `${claims.ref} ${claims.userId}` }
@@ -297,7 +297,7 @@ export function vscodeApi({ itemOf }: Pick<BundleBackend, 'itemOf'>) {
     const body: unknown = await c.req.json().catch(() => null)
     const token = typeof body === 'object' && body !== null && 'token' in body && typeof body.token === 'string' ? body.token : ''
     const claims = claimLaunch(token)
-    const item = claims && itemOf(claims.ref)
+    const item = claims && (await itemOf(claims.ref, claims.userId))
     if (!claims || !item)
       return c.json({ error: 'リンクの期限が切れているか、すでに使われています。STEP Learn の画面からもう一度開いてください。' }, 401)
     return c.json({
@@ -311,14 +311,14 @@ export function vscodeApi({ itemOf }: Pick<BundleBackend, 'itemOf'>) {
     })
   })
 
-  app.get('/sync', (c) => {
-    const target = syncTarget(c)
+  app.get('/sync', async (c) => {
+    const target = await syncTarget(c)
     if (!target) return c.json({ error: SYNC_EXPIRED }, 401)
     return c.json({ enabled: target.sync.enabled(), maxFileSize: MAX_SYNC_FILE_SIZE })
   })
 
   app.post('/sync', async (c) => {
-    const target = syncTarget(c)
+    const target = await syncTarget(c)
     if (!target) return c.json({ error: SYNC_EXPIRED }, 401)
     if (!target.sync.enabled()) return c.json({ enabled: false, recorded: 0, full: false })
     if (syncLimit.retryAfter(target.limitKey)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
@@ -333,7 +333,7 @@ export function vscodeApi({ itemOf }: Pick<BundleBackend, 'itemOf'>) {
   // 拡張機能はどのみち受け取った中身をハッシュで確かめるため
   app.get('/files/:sha256{[0-9a-f]{64}}', async (c) => {
     const grant = verifyGrant(bearer(c))
-    const store = grant && itemOf(grant.ref)?.store
+    const store = grant && (await itemOf(grant.ref, grant.userId))?.store
     if (!store) return c.json({ error: '期限が切れました。STEP Learn の画面からもう一度開いてください。' }, 401)
     const file = store.list().find((f) => f.sha256 === c.req.param('sha256'))
     if (!file) return c.json({ error: 'ファイルが見つかりません。' }, 404)

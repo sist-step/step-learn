@@ -3,13 +3,25 @@ import type { Context } from 'hono'
 import { BUNDLE_KIND } from '../lib/bundle'
 import { intParam } from '../lib/http'
 import type { BundleBackend } from '../routes/bundle/handlers'
-import type { MoodleEnv } from './auth'
+import { storedToken, type MoodleEnv } from './auth'
 import { bundleStore, bundleSyncStore } from './bundle-store'
-import { loadCourse, outlineOf } from './data'
+import { isAccessDenied, isNotFound, isTokenError } from './client'
+import { loadCourse, loadCourseAs, outlineOf, type Viewer } from './data'
 import { db } from './db'
 import { extraItems } from './schema'
 
 const REF_PREFIX = 'm-'
+
+/** viewer に、コースのその鍵のファイル自動配布の活動が Moodle で見えているか */
+async function listedInMoodle(viewer: Viewer, courseId: number, key: string) {
+  try {
+    const { items } = await loadCourseAs(viewer, courseId)
+    return items.some((it) => it.extraKey === key && it.extra?.type === BUNDLE_KIND)
+  } catch (e) {
+    if (isNotFound(e) || isTokenError(e) || isAccessDenied(e)) return false
+    throw e
+  }
+}
 
 /** Moodle モード: 配布するファイルを moodle-mode.db に置き、権限を Moodle のコースから確かめる */
 export const bundleBackend: BundleBackend = {
@@ -34,14 +46,19 @@ export const bundleBackend: BundleBackend = {
       sync: bundleSyncStore(item.extraKey),
     }
   },
-  itemOf(ref) {
+  async itemOf(ref, userId) {
     const key = ref.slice(REF_PREFIX.length)
     if (!ref.startsWith(REF_PREFIX) || !key) return null
     const found = db
-      .select({ key: extraItems.key })
+      .select({ courseId: extraItems.courseId })
       .from(extraItems)
       .where(and(eq(extraItems.key, key), eq(extraItems.type, BUNDLE_KIND)))
       .get()
-    return found ? { store: bundleStore(key), sync: bundleSyncStore(key) } : null
+    const token = found && storedToken(userId)
+    if (!found || !token) return null
+    // 中身の行があるかだけで決めないのは、Moodle のごみ箱から戻せるよう、活動を消しても中身を残しているため。
+    // Moodle の画面から消した活動も止められるよう、STEP Learn で消したときの印ではなく、Moodle に今もあるかで確かめる
+    if (!(await listedInMoodle({ token, userId }, found.courseId, key))) return null
+    return { store: bundleStore(key), sync: bundleSyncStore(key) }
   },
 }

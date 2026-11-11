@@ -26,7 +26,7 @@ export const backend: BundleBackend = {
       sync: bundleSyncStore(courseId, itemId),
     }
   },
-  itemOf(ref) {
+  async itemOf(ref) {
     const itemId = Number(ref.slice(REF_PREFIX.length))
     const item = ref.startsWith(REF_PREFIX) && Number.isSafeInteger(itemId) && getBundleItem(itemId)
     return item ? { store: bundleStore(itemId), sync: bundleSyncStore(item.courseId, itemId) } : null
