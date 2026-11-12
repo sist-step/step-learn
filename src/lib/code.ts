@@ -126,12 +126,15 @@ export function buildWebDocument({ html = '', css = '', js = '' }: CodeFiles) {
   let linkedCss = false
   let linkedJs = false
   // 置き換える文字列をそのまま渡さないのは、コードの中の $& などが置換のパターンとして解釈されるため
+  // 属性まで 1 つの正規表現で照合せず `>` も必須にしないのは、`>` のない入力で開始位置ごとに末尾まで走査し直し、サーバーの描画が止まるため
   let doc = html
-    .replace(/<link\b[^>]*\bhref=(["'])(?:\.\/)?style\.css\1[^>]*>/gi, () => {
+    .replace(/<link\b[^>]*>?/gi, (tag) => {
+      if (!tag.endsWith('>') || !/\bhref=(["'])(?:\.\/)?style\.css\1/i.test(tag)) return tag
       linkedCss = true
       return style
     })
-    .replace(/<script\b[^>]*\bsrc=(["'])(?:\.\/)?script\.js\1[^>]*>\s*<\/script>/gi, () => {
+    .replace(/<script\b[^>]*(>\s*<\/script>)?/gi, (tag, closing: string | undefined) => {
+      if (!closing || !/\bsrc=(["'])(?:\.\/)?script\.js\1/i.test(tag)) return tag
       linkedJs = true
       return script
     })
