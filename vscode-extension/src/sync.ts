@@ -9,8 +9,19 @@ export type ManifestFile = { path: string; size: number; sha256: string }
 /** 変更履歴を送るための鍵と、アイテムが「データを同期する」になっているか */
 export type ManifestSync = { token: string; enabled: boolean }
 
-/** STEP Learn の /api/vscode/claim の応答。sync は、同期に対応していない古い STEP Learn にはない */
-export type Manifest = { ref: string; course: string; title: string; grant: string; files: ManifestFile[]; sync?: ManifestSync }
+/** リンクを作った人の STEP Learn のアカウント */
+export type ManifestUser = { id: number; name: string }
+
+/** STEP Learn の /api/vscode/claim の応答。sync と user は、それぞれに対応していない古い STEP Learn にはない */
+export type Manifest = {
+  ref: string
+  course: string
+  title: string
+  grant: string
+  files: ManifestFile[]
+  sync?: ManifestSync
+  user?: ManifestUser
+}
 
 /** 前に用意したときの記録。files は、配られたときのファイルの中身のハッシュ（学生が書き換えたかを見分ける） */
 export type Synced = { folder: string; files: Record<string, string> }
@@ -94,7 +105,11 @@ function parseManifest(body: unknown): Manifest {
     throw new SyncError('配布されたファイルが多すぎるため、用意できません。')
   const sync =
     isObject(body.sync) && typeof body.sync.token === 'string' ? { token: body.sync.token, enabled: body.sync.enabled === true } : undefined
-  return { ref, course, title, grant, files, sync }
+  const user =
+    isObject(body.user) && typeof body.user.id === 'number' && typeof body.user.name === 'string'
+      ? { id: body.user.id, name: body.user.name }
+      : undefined
+  return { ref, course, title, grant, files, sync, user }
 }
 
 /** リンクの鍵を、配るファイルの一覧と、ファイルを受け取るための鍵に引き換える */

@@ -14,11 +14,13 @@ import {
   rootFolder,
   type Manifest,
   type ManifestFile,
+  type ManifestUser,
   type Synced,
 } from './sync'
 
 const TRUSTED_KEY = 'trustedServers'
 const RECORDS_KEY = 'bundles'
+const ACCOUNTS_KEY = 'accounts'
 
 const sessions = new Map<string, HistorySession>()
 
@@ -54,6 +56,37 @@ async function trust(context: vscode.ExtensionContext, server: URL) {
   )
   if (answer !== accept) return false
   await context.globalState.update(TRUSTED_KEY, [...trusted, server.origin])
+  return true
+}
+
+/** 前に開いたときと違うアカウントのリンクなら、開いてよいかを確かめる。開くときは、このサーバーのアカウントとして覚えておく */
+async function confirmAccount(context: vscode.ExtensionContext, server: URL, title: string, user: ManifestUser) {
+  const accounts = context.globalState.get<Record<string, ManifestUser>>(ACCOUNTS_KEY, {})
+  // アイテムごとに覚えないのは、まだ開いていないアイテムのリンクでも、ほかの人のアカウントのフォルダーを黙って用意しないため
+  const known = accounts[server.origin]
+  // 覚えたアカウントがなくても前に開いたアイテムがあれば確かめるのは、アカウントを覚える前の拡張機能が受け取った鍵は、誰のものか分からないため
+  const opened = Object.keys(recordsOf(context)).some((key) => key.startsWith(`${server.origin} `))
+  if (known ? known.id !== user.id : opened) {
+    const accept = '続ける'
+    const answer = await vscode.window.showWarningMessage(
+      known
+        ? `「${title}」のリンクは、前回とは違うアカウント（${user.name} さん）のものです。`
+        : `「${title}」を ${user.name} さんのアカウントで開きます。`,
+      {
+        modal: true,
+        detail: [
+          known && `前回は ${known.name} さんのアカウントで開いていました。`,
+          `ほかの人から送られたリンクを開くと、保存した内容がその人の変更履歴として記録されることがあります。自分で STEP Learn の画面から開いたときだけ「${accept}」を押してください。`,
+          !known && '次からは、違うアカウントのリンクのときだけ確認します。',
+        ]
+          .filter(Boolean)
+          .join(''),
+      },
+      accept,
+    )
+    if (answer !== accept) return false
+  }
+  await context.globalState.update(ACCOUNTS_KEY, { ...accounts, [server.origin]: user })
   return true
 }
 
@@ -115,6 +148,7 @@ async function openFromLink(context: vscode.ExtensionContext, uri: vscode.Uri) {
       () => claim(server, token),
     )
     const key = `${server.origin} ${manifest.ref}`
+    if (manifest.user && !(await confirmAccount(context, server, manifest.title, manifest.user))) return
     if (manifest.sync) {
       if (manifest.sync.enabled && !(await confirmSync(context, key, manifest.title))) return
       await context.secrets.store(tokenKey(key), manifest.sync.token)
