@@ -1,12 +1,8 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
-import { CODE_LANGUAGES, filesFor, type CodeFiles, type CodeLanguage } from './code'
+import { filesFor, type CodeFiles, type CodeLanguage } from './code'
 import type { CodeStore } from './code-store'
 import { db, type DB } from './db'
-import { sandboxEnabled } from './sandbox'
 import { codeDrafts, codeItems, codeSubmissions, enrollments, users } from './schema'
-
-/** Python は sandbox が設定されているときだけ選べる */
-export const availableCodeLanguages: readonly CodeLanguage[] = CODE_LANGUAGES.filter((l) => l !== 'python' || sandboxEnabled)
 
 export const getCodeItem = (itemId: number) => db.select().from(codeItems).where(eq(codeItems.itemId, itemId)).get()
 

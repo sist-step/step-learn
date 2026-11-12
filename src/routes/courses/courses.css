@@ -70,14 +70,14 @@
 }
 
 /* 種類に応じて入力欄を出し分け */
-.item-form .when-link, .item-form .when-file, .item-form .when-code, .item-form .when-other-inline, .item-form .when-code-inline { display: none; }
+.item-form .when-link, .item-form .when-file, .item-form .when-code, .item-form .when-other-inline { display: none; }
 .item-form[data-kind='link'] .when-link,
 .item-form[data-kind='file'] .when-file,
 .item-form[data-kind='code'] .when-code { display: flex; }
-.item-form:not([data-kind='page'], [data-kind='code']) .when-other-inline,
-.item-form[data-kind='code'] .when-code-inline { display: inline; }
+.item-form:not([data-kind='page']) .when-other-inline { display: inline; }
 .item-form:not([data-kind='page']) .when-page-inline { display: none; }
-.item-form:not([data-kind='bundle']) .when-bundle, .item-form[data-kind='bundle'] .unless-bundle { display: none; }
+.item-form:not([data-kind='bundle']) .when-bundle { display: none; }
+.item-form[data-kind='code'] .unless-code, .item-form:is([data-kind='bundle'], [data-kind='code']) .unless-edit-next { display: none; }
 
 :root:not([data-edit-mode]) .edit-only,
 :root[data-edit-mode] .view-only { display: none; }
