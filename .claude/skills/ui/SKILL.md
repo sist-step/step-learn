@@ -81,7 +81,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | 部品 | 用途 |
 | --- | --- |
 | `Modal` | 中央に出すダイアログ（`id` / `heading` / `description`）。開くボタンは `<Button popovertarget={id}>`、閉じるボタンは `popovertargetaction="hide"` を足す。右上の × は部品に含まれる |
-| `Popover` | ボタンの下に出す小さなパネル（`details` で開閉、外側クリックと Esc で閉じる）。`trigger` に `<IconButton as="summary" …>` などの `summary` を渡す |
+| `Popover` | ボタンの下に出す小さなパネル（`details` で開閉、外側クリックと Esc で閉じる）。開くときに `client.ts`（`placePopoverPanel`）が高さを測り、下に収まらなければボタンの上に開き（`is-above`）、上にも収まらなければパネル全体が見えるまでスクロールする。`trigger` に `<IconButton as="summary" …>` などの `summary` を渡す |
 | `MenuItem` | メニューの 1 行（`icon`、`href` でリンク、なければボタン）。削除などの危険な操作は `class="is-danger"` |
 
 表の行やカードの「その他の操作」は、`<Popover class="row-menu" panelClass="row-menu-panel" trigger={<IconButton as="summary" icon="ellipsis" label="その他の操作" />}>` の中に `MenuItem` を並べる（`.row-menu-panel` と `is-danger` の色は `overlay.css` にある）。
