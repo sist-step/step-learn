@@ -31,13 +31,8 @@ npm run dev   # http://localhost:5173
 ```
 
 - 開発サーバーはバックグラウンドで起動し、終わったら止める
-- ログインが必要な画面は、ユーザーを CLI で作ってから確かめる（CLI は `npm run build` 後に使える。作成済みのユーザーはエラーになるので飛ばしてよい）
-
-  ```sh
-  printf 'step-learn-dev-pass\n' | npm run user:create -- --email admin@example.com --name "管理者" --username admin
-  printf 'step-learn-dev-pass\n' | npm run user:create -- --email teacher@example.com --name "教師" --username teacher --role teacher
-  printf 'step-learn-dev-pass\n' | npm run user:create -- --email student@example.com --name "学生" --username student --role student
-  ```
+- ログインが必要な画面は、開発用のユーザーを作ってから確かめる。`npm run dev:users` で `data/step-learn.db` に `admin` / `teacher` / `student`（メールアドレスは `<ユーザー名>@example.com`、パスワードはユーザー名と同じ）を作る。すでにいれば、ユーザー名とパスワードをこの形に戻す
+  - `npm run user:create` を使わないのは、パスワードの規則（8 文字以上・推測されやすい語は不可）でユーザー名と同じパスワードが弾かれるため
 
 - ブラウザで確認できる環境なら、変更した画面を実際に操作する。できなければ `curl` でステータスコードと HTML を確かめる
 - 確認すること
