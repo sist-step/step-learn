@@ -858,7 +858,6 @@ export const CoursePage = ({
       <CourseHeader
         access={access}
         tab="content"
-        editSwitch={false}
         progress={isStudent ? { done: doneCount, total: trackedItems.length } : undefined}
         tabActions={
           <>
