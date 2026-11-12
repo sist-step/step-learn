@@ -95,7 +95,7 @@ export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: B
   type Read<T> = ({ ok: true } & T) | { ok: false; error: string }
 
   // 書かれた大きさで先に確かめるのは、上限を超える zip を展開してメモリを使わないため
-  async function unpack(archive: File): Promise<Read<{ picked: Picked[]; skipped: number }>> {
+  async function unpack(archive: File, earlier: File[]): Promise<Read<{ picked: Picked[]; skipped: number }>> {
     let items: ZipItem[]
     try {
       items = await listZip(new Uint8Array(await archive.arrayBuffer()))
@@ -104,8 +104,9 @@ export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: B
       throw e
     }
     const usable = items.filter((i) => !isExcludedPath(i.path.replace(/\\/g, '/')))
-    if (usable.length > MAX_BUNDLE_FILES) return { ok: false, error: `ファイルは ${MAX_BUNDLE_FILES} 個までです。` }
-    if (bundleSize(usable) > MAX_BUNDLE_SIZE) return { ok: false, error: `ファイルの合計は ${formatBytes(MAX_BUNDLE_SIZE)} までです。` }
+    if (earlier.length + usable.length > MAX_BUNDLE_FILES) return { ok: false, error: `ファイルは ${MAX_BUNDLE_FILES} 個までです。` }
+    if (bundleSize([...earlier, ...usable]) > MAX_BUNDLE_SIZE)
+      return { ok: false, error: `ファイルの合計は ${formatBytes(MAX_BUNDLE_SIZE)} までです。` }
     const names = withoutWrapper(usable.map((i) => i.path.replace(/\\/g, '/')))
     const picked: Picked[] = []
     for (const [i, item] of usable.entries()) {
@@ -127,12 +128,20 @@ export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: B
     const archives = asList(body.archives).filter((f): f is File => f instanceof File)
     if (!files.length && !archives.length) return { ok: false, error: 'アップロードするファイルを選択してください。' }
     const picked: Picked[] = files.map((file, i) => ({ name: paths[i] || file.name, file }))
+    // すでに置いてあるファイルを足さないのは、このあとのファイルで置き換えられるかがまだわからないため（置いたあとの合計は upload で確かめる）
+    const earlier = picked
+      .filter(({ name }) => {
+        const path = bundlePath(name)
+        return !!path && !isExcludedPath(path)
+      })
+      .map((p) => p.file)
     // ブラウザが外した数も足すのは、node_modules などを送らずに済ませつつ、外した数をまとめて伝えるため
     let skipped = typeof body.skipped === 'string' ? Math.min(Math.max(Math.trunc(Number(body.skipped)) || 0, 0), 1_000_000) : 0
     for (const archive of archives) {
-      const read = await unpack(archive)
+      const read = await unpack(archive, earlier)
       if (!read.ok) return read
       picked.push(...read.picked)
+      earlier.push(...read.picked.map((p) => p.file))
       skipped += read.skipped
     }
     const uploads: Upload[] = []
