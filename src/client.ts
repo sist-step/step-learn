@@ -585,6 +585,29 @@ document.addEventListener(
   true,
 )
 
+// --- ポップオーバーのパネルは、下に収まらなければボタンの上に開き、どちらにも収まらなければ全体が見えるまでスクロールする
+// toggle イベントで置き直さないのは、発火が描画の後になり、下に開いたパネルが一瞬見えてから上へ跳ぶため
+const POPOVER_MARGIN = 8
+function placePopoverPanel(d: HTMLDetailsElement) {
+  const panel = d.querySelector<HTMLElement>(':scope > .popover-panel')
+  if (!panel) return
+  panel.classList.remove('is-above')
+  const anchor = d.getBoundingClientRect()
+  const gap = panel.offsetTop - anchor.height
+  const needed = panel.offsetHeight + gap + POPOVER_MARGIN
+  const topbarBottom = document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0
+  if (innerHeight - anchor.bottom >= needed) return
+  if (anchor.top - topbarBottom >= needed) panel.classList.add('is-above')
+  else panel.scrollIntoView({ block: 'nearest' })
+}
+document.addEventListener('click', (e) => {
+  const d = (e.target as Element).closest('details.popover > summary')?.parentElement
+  if (!(d instanceof HTMLDetailsElement) || d.open) return
+  e.preventDefault()
+  d.open = true
+  placePopoverPanel(d)
+})
+
 // --- ポップオーバーは外側クリックと Esc で閉じる
 document.addEventListener('click', (e) => {
   $$<HTMLDetailsElement>('details.popover[open]').forEach((d) => {
