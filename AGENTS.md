@@ -12,6 +12,7 @@ npm run format     # Prettier で整形（CI は format:check）
 npm run build      # dist/ を生成。CLI（user:create）もこれで作られる
 npm run db:generate  # schema.ts からマイグレーションを生成
 npm run db:check     # マイグレーションの整合性を確認（CI と同じ）
+npm run dev:users    # 開発用のユーザー admin / teacher / student を作る（パスワードはユーザー名と同じ）
 ```
 
 テストフレームワークはない。完了の基準は `typecheck`・`lint`・`format:check`・`build` が通り、変更した画面を実際に動かして確かめたこと。
