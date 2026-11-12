@@ -1211,8 +1211,9 @@ function initMascots() {
 
 // --- コースページを歩き回るマスコット（components/mascot.tsx の WalkingMascot）
 // 立つ場所や壁に目印の属性を付けないのは、コースヘッダーのマークアップにまで歩き回りの都合を持ち込むことになるため
-const WALKER_GROUNDS = ['.course-hero-cover', '.sections > .section-card']
-const WALKER_WALLS = '.back-link, .course-hero-side > *, .course-tabs .tabs, .course-tabs-actions > *'
+// セクションのカードだけにしないのは、Moodle のタイル形式では全体のセクションがないと、見えているカードが 1 枚もないため
+const WALKER_GROUNDS = ['.course-hero-cover', '.section-card, .sec-tile']
+const WALKER_WALLS = '.back-link, .course-hero-side > *, .course-tabs .tabs, .course-tabs-actions > *, .section-toggles > *'
 const WALKER_GAP = 6
 // 端まで歩かせないのは、足場の角が丸く、端では足の下に何もないように見えるため
 const WALKER_EDGE = 20
