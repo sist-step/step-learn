@@ -32,7 +32,6 @@
 :root:not([data-edit-mode]) .topbar-edit-mode { display: none; }
 /* .topbar-edit-mode だけで書かないのは、後から読み込まれる ui.css の .chip に大きさを上書きされるため */
 .topbar .topbar-edit-mode { height: 32px; padding: 0 10px 0 12px; gap: 6px; border: 0; font: inherit; font-size: var(--fs-xs); font-weight: 600; cursor: pointer; transition: background 0.15s; }
-:root:has(.course-edit-switch) .topbar .topbar-edit-mode { display: none; }
 .topbar-avatar { position: relative; display: block; border-radius: 50%; cursor: pointer; }
 .topbar-avatar::-webkit-details-marker { display: none; }
 /* 輪を summary の box-shadow で描かないのは、タップ領域を広げる padding の外側に輪が離れてしまうため */
