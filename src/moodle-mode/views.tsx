@@ -16,6 +16,7 @@ import {
 import { Icon, type IconName } from '../components/icons'
 import { AppShell, AuthShell } from '../components/layout'
 import { Markdown } from '../components/markdown'
+import { WalkingMascot } from '../components/mascot'
 import { MenuItem, Modal, Popover } from '../components/overlay'
 import { PdfBar, PdfStage } from '../components/pdf'
 import { Styles, useStyle } from '../components/style'
@@ -894,6 +895,7 @@ export const CoursePage = ({
         {manage && sections.length > 0 && <AddItemModal courseId={id} sections={sections} tracking={tracking} kinds={extraKinds} />}
       </TabPanel>
       <CourseLiveSync courseId={id} revision={revision} />
+      <WalkingMascot />
     </AppShell>
   )
 }
