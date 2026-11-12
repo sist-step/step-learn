@@ -347,27 +347,32 @@ const AddItemModal = ({
           hint="最大 30MB。PDF・画像はブラウザでプレビューできます。"
           fieldClass="when-file"
         />
-        <SelectField
-          label="言語"
-          name="language"
-          id="new-item-language"
-          options={codeLanguages.map((l) => ({ value: l, label: CODE_LANGUAGE_LABELS[l] }))}
-          hint="あとから変えられません。最初に入れておくコードは、追加したあとに編集画面で設定します。"
-          fieldClass="when-code"
-        />
+        {codeLanguages.length > 1 ? (
+          <SelectField
+            label="言語"
+            name="language"
+            id="new-item-language"
+            options={codeLanguages.map((l) => ({ value: l, label: CODE_LANGUAGE_LABELS[l] }))}
+            hint="あとから変えられません。"
+            fieldClass="when-code"
+          />
+        ) : (
+          <input type="hidden" name="language" value={codeLanguages[0]} />
+        )}
+        <p class="when-code muted small">問題文・最初のコード・採点基準は、追加したあとの編集画面で設定します。</p>
         <p class="when-bundle muted small">配るファイルは、追加したあとの編集画面でアップロードします。</p>
         <MarkdownEditor
           label={
             <>
               <span class="when-page-inline">本文（任意）</span>
               <span class="when-other-inline">説明（任意）</span>
-              <span class="when-code-inline">問題文</span>
             </>
           }
           name="body"
           id="new-item-body"
           rows={4}
           placeholder="あとから編集画面でも書けます"
+          fieldClass="unless-code"
         />
         <div class="grid-2">
           <SelectField
@@ -390,7 +395,7 @@ const AddItemModal = ({
         </div>
         {tracking && <CompletionField id="new-item-completion" />}
         <div class="form-actions">
-          <Button type="submit" name="then" value="view" class="unless-bundle">
+          <Button type="submit" name="then" value="view" class="unless-edit-next">
             追加して表示
           </Button>
           <Button type="submit" variant="primary">

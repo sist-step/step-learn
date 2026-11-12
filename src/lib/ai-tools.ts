@@ -16,6 +16,7 @@ import {
 import {
   CODE_FILES,
   CODE_LANGUAGES,
+  CODE_LANGUAGE_LABELS,
   DEFAULT_MAX_SCORE,
   DEFAULT_STARTER,
   MAX_CODE_LENGTH,
@@ -24,11 +25,11 @@ import {
   filesFor,
   type CodeFiles,
 } from './code'
-import { availableCodeLanguages } from './code-items'
 import { unixToDateInput } from './course-period'
 import { getCourseAccessFor, nextPosition, touchCourse } from './courses'
 import { contains, db } from './db'
 import { isHttpUrl } from './forms'
+import { availableCodeLanguages } from './sandbox'
 import { bundleFiles, codeItems, courses, enrollments, items, sections } from './schema'
 import { ITEM_TYPE_LABELS, LINK_TARGET_LABELS, LINK_TARGETS, type Item, type User } from './types'
 
@@ -272,7 +273,13 @@ const createItem = defineTool(
     link_target: z.optional(
       z.enum(LINK_TARGETS).check(z.describe('リンクの開き方。new: 新しいタブ / same: 同じタブ / embed: ページに埋め込む')),
     ),
-    language: z.optional(z.enum(CODE_LANGUAGES).check(z.describe('コードの言語。web: HTML / CSS / JavaScript、python: Python'))),
+    language: z.optional(
+      z
+        .enum(CODE_LANGUAGES)
+        .check(
+          z.describe(`コードの言語。web: HTML / CSS / JavaScript、python: Python。今作れるのは ${availableCodeLanguages.join('・')} だけ`),
+        ),
+    ),
     criteria: z.optional(describedString('コードの採点基準。AI の採点に使い、学生には見せない', 5000)),
     max_score: z.optional(z.int().check(z.minimum(1), z.maximum(MAX_MAX_SCORE), z.describe('コードの満点'))),
   }),
@@ -287,7 +294,9 @@ const createItem = defineTool(
     if (args.type === 'link' && !isHttpUrl(url)) return fail('リンクには http:// か https:// で始まる URL が必要です。')
     const language = args.language ?? 'web'
     if (args.type === 'code' && !availableCodeLanguages.includes(language))
-      return fail('Python を実行する環境が設定されていないため、Python のコードは作れません。')
+      return fail(
+        `${CODE_LANGUAGE_LABELS[language]} のコードは作れません。今は ${availableCodeLanguages.map((l) => CODE_LANGUAGE_LABELS[l]).join('・')} だけ作れます。`,
+      )
 
     const created = db.transaction((tx) => {
       const row = tx
