@@ -13,6 +13,8 @@
   box-shadow: var(--shadow-lg);
   animation: rise 0.15s var(--ease);
 }
+.popover-panel.is-above { top: auto; bottom: calc(100% + 6px); animation-name: popover-above; }
+@keyframes popover-above { from { opacity: 0; transform: translateY(-6px); } }
 
 .menu-item {
   display: flex;
