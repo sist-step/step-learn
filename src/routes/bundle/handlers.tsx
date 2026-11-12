@@ -342,12 +342,15 @@ export function vscodeApi({ itemOf }: Pick<BundleBackend, 'itemOf'>) {
     const token = typeof body === 'object' && body !== null && 'token' in body && typeof body.token === 'string' ? body.token : ''
     const claims = claimLaunch(token)
     const item = claims && (await itemOf(claims.ref, claims.userId))
-    if (!claims || !item)
+    const user = claims && item?.sync.findUser(claims.userId)
+    if (!claims || !item || !user)
       return c.json({ error: 'リンクの期限が切れているか、すでに使われています。STEP Learn の画面からもう一度開いてください。' }, 401)
     return c.json({
       ref: claims.ref,
       course: claims.course,
       title: claims.title,
+      // 拡張機能に鍵の中身を読ませないのは、鍵の形を変えたときに拡張機能を出し直さずに済ませるため
+      user: { id: user.id, name: user.name },
       grant: signGrant({ ref: claims.ref, userId: claims.userId }),
       files: item.store.list().map(({ path, size, sha256 }) => ({ path, size, sha256 })),
       // 同期が無効でも鍵を渡すのは、あとから教師が有効にしたときに、学生が画面から開き直さなくても送り始められるようにするため
