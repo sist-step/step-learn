@@ -24,7 +24,7 @@ import { syncStateOf } from '../lib/bundle-sync'
 import { gradingEnabled } from '../lib/code-grader'
 import type { CourseAccess } from '../lib/courses'
 import type { FieldErrors, FormName } from '../lib/forms'
-import { sandboxEnabled } from '../lib/sandbox'
+import { availableCodeLanguages } from '../lib/sandbox'
 import { isSharing } from '../lib/screen-share'
 import type { AppEnv } from '../lib/types'
 import { bundleStore, bundleSyncStore } from './bundle-store'
@@ -120,22 +120,17 @@ const codeFilesOf = (source: Record<string, unknown>): CodeFiles => Object.fromE
 
 const CodeFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
   const language = str(values.language)
-  // 言語が決まっていないのは、追加するとき。最初のコードと採点基準は、言語が決まったあとの編集画面で設定する
+  // 言語が決まっていないのは、追加するとき。問題文・最初のコード・採点基準は、言語が決まったあとの編集画面で設定する
   if (!isCodeLanguage(language)) {
+    if (availableCodeLanguages.length === 1) return <input type="hidden" name="language" value={availableCodeLanguages[0]} />
     return (
-      <>
-        <SelectField
-          label="言語"
-          name="language"
-          id={`${idPrefix}-language`}
-          options={CODE_LANGUAGES.filter((l) => l !== 'python' || sandboxEnabled).map((l) => ({
-            value: l,
-            label: CODE_LANGUAGE_LABELS[l],
-          }))}
-          hint="あとから変えられません。最初に入れておくコードと採点基準は、追加したあとに編集画面で設定します。"
-        />
-        <MarkdownEditor label="問題文" name="body" id={`${idPrefix}-body`} rows={4} placeholder="あとから編集画面でも書けます" />
-      </>
+      <SelectField
+        label="言語"
+        name="language"
+        id={`${idPrefix}-language`}
+        options={availableCodeLanguages.map((l) => ({ value: l, label: CODE_LANGUAGE_LABELS[l] }))}
+        hint="あとから変えられません。"
+      />
     )
   }
   // 保存済みの中身では starter にまとまっていて、検証で弾かれて送られてきたままの値では html・css などが直に入っている
@@ -179,6 +174,8 @@ const code: ExtraKind = {
     }
   },
   Fields: CodeFields,
+  addNote: '問題文・最初のコード・採点基準は、追加したあとの編集画面で設定します。',
+  editAfterCreate: true,
   View: ({ item, access }) => (
     <LinkCard
       href={`/courses/${access.course.id}/items/${item.id}/${CODE_KIND}`}

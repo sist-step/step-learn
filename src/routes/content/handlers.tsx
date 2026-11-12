@@ -15,15 +15,15 @@ import type { BundleView } from '../../components/bundle'
 import { bundleBase } from '../../lib/bundle'
 import { bundleKeysOf, bundleStore, bundleSyncStore } from '../../lib/bundle-items'
 import { syncStateOf } from '../../lib/bundle-sync'
-import { DEFAULT_MAX_SCORE, DEFAULT_STARTER, MAX_CODE_LENGTH, MAX_STDIN_LENGTH } from '../../lib/code'
+import { CODE_LANGUAGE_LABELS, DEFAULT_MAX_SCORE, DEFAULT_STARTER, MAX_CODE_LENGTH, MAX_STDIN_LENGTH } from '../../lib/code'
 import { gradingEnabled } from '../../lib/code-grader'
 import { grader } from '../../lib/code-grading'
-import { availableCodeLanguages, codeStore, getCodeItem, updateCodeItem } from '../../lib/code-items'
+import { codeStore, getCodeItem, updateCodeItem } from '../../lib/code-items'
 import { db } from '../../lib/db'
 import { completionError, firstError, isFile, validate, type FieldErrors } from '../../lib/forms'
 import { field, fileField, intParam, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
 import { previewKind } from '../../lib/preview'
-import { sandboxEnabled } from '../../lib/sandbox'
+import { availableCodeLanguages, sandboxEnabled } from '../../lib/sandbox'
 import { codeItems, completions, items, sections } from '../../lib/schema'
 import { isSharing } from '../../lib/screen-share'
 import {
@@ -200,7 +200,7 @@ export async function createItem(c: Context<AppEnv>) {
   if (!result.ok) return redirectWith(c, editUrl(courseId, sectionId), firstError(result.errors), 'error')
   const { type, hidden, language, ...input } = result.values
   if (type === 'code' && !availableCodeLanguages.includes(language))
-    return redirectWith(c, editUrl(courseId, sectionId), 'Python を実行する環境が設定されていないため、Python は選べません。', 'error')
+    return redirectWith(c, editUrl(courseId, sectionId), `${CODE_LANGUAGE_LABELS[language]} は選べません。`, 'error')
   const file = type === 'file' && isFile(input.file) ? input.file : null
   const uploadError = await checkUpload(file)
   if (uploadError) return redirectWith(c, editUrl(courseId, sectionId), uploadError, 'error')
@@ -235,6 +235,12 @@ export async function createItem(c: Context<AppEnv>) {
       c,
       `/courses/${courseId}/items/${created.id}/edit`,
       `「${input.title}」を追加しました。配るファイルをアップロードしてください。`,
+    )
+  if (type === 'code')
+    return redirectWith(
+      c,
+      `/courses/${courseId}/items/${created.id}/edit`,
+      `「${input.title}」を追加しました。問題文と最初のコードを設定してください。`,
     )
   const next = field(form, 'then') === 'view' ? `/courses/${courseId}/items/${created.id}` : editUrl(courseId, sectionId)
   return redirectWith(c, next, `「${input.title}」を追加しました。`)

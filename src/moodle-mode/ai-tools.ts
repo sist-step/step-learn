@@ -17,6 +17,7 @@ import {
 import {
   CODE_FILES,
   CODE_LANGUAGES,
+  CODE_LANGUAGE_LABELS,
   DEFAULT_MAX_SCORE,
   DEFAULT_STARTER,
   MAX_CODE_LENGTH,
@@ -26,7 +27,7 @@ import {
 } from '../lib/code'
 import { config } from '../lib/config'
 import { isHttpUrl } from '../lib/forms'
-import { sandboxEnabled } from '../lib/sandbox'
+import { availableCodeLanguages } from '../lib/sandbox'
 import { LINK_TARGET_LABELS, LINK_TARGETS } from '../lib/types'
 import type { MoodleEnv } from './auth'
 import { forgetCourse } from './cache'
@@ -226,7 +227,13 @@ const createItem = defineTool(
       z.enum(LINK_TARGETS).check(z.describe('リンクの開き方。new: 新しいタブ / same: 同じタブ / embed: ページに埋め込む')),
     ),
     body: z.optional(describedString('コードの問題文（Markdown）', 100_000)),
-    language: z.optional(z.enum(CODE_LANGUAGES).check(z.describe('コードの言語。web: HTML / CSS / JavaScript、python: Python'))),
+    language: z.optional(
+      z
+        .enum(CODE_LANGUAGES)
+        .check(
+          z.describe(`コードの言語。web: HTML / CSS / JavaScript、python: Python。今作れるのは ${availableCodeLanguages.join('・')} だけ`),
+        ),
+    ),
     criteria: z.optional(describedString('コードの採点基準。AI の採点に使い、学生には見せない', 5000)),
     max_score: z.optional(z.int().check(z.minimum(1), z.maximum(MAX_MAX_SCORE), z.describe('コードの満点'))),
   }),
@@ -238,8 +245,10 @@ const createItem = defineTool(
     if (!title) return fail('タイトルが空です。')
     const url = args.url?.trim() ?? ''
     if (args.type === 'link' && !isHttpUrl(url)) return fail('リンクには http:// か https:// で始まる URL が必要です。')
-    if (args.type === 'code' && args.language === 'python' && !sandboxEnabled)
-      return fail('Python を実行する環境が設定されていないため、Python のコードは作れません。')
+    if (args.type === 'code' && !availableCodeLanguages.includes(args.language ?? 'web'))
+      return fail(
+        `${CODE_LANGUAGE_LABELS[args.language ?? 'web']} のコードは作れません。今は ${availableCodeLanguages.map((l) => CODE_LANGUAGE_LABELS[l]).join('・')} だけ作れます。`,
+      )
     const api = moodle(moodleContext(c))
     const activity = { courseid: args.course_id, cmid: 0, sectionid: args.section_id, name: title, completion: 'none', visible: false }
     let cmid: number
