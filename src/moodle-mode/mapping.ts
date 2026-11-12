@@ -1,6 +1,7 @@
 import type { CourseCardData } from '../components/ui'
 import { BUNDLE_MODULE } from '../lib/bundle'
 import type { CourseAccess } from '../lib/courses'
+import { isHttpUrl } from '../lib/forms'
 import { COURSE_COLORS, type Completion, type Course, type LinkTarget, type NavCourse } from '../lib/types'
 import { linkTargetOf, moodleDisplayOf, type MoodleDisplay } from '../moodle/display'
 import { toMarkdown, toPlainText } from '../moodle/html'
@@ -206,7 +207,10 @@ function toItem(m: MoodleModule, sectionId: number, tracking: boolean, childSect
   const content = m.contents?.[0]
   const ownModule = EXTRA_MODULES.has(m.modname)
   const extraKey = m.modname === 'url' ? extraKeyOf(content?.fileurl ?? '') : ownModule ? moduleKeyOf(m) : null
-  const kind = extraKey || ownModule ? 'extra' : (KINDS[m.modname] ?? 'moodle')
+  // http(s) でない URL を空にしてリンクのまま扱わないのは、STEP Learn から保存し直すと Moodle にある URL を空で上書きしてしまうため。
+  // URL がないものを含めないのは、Moodle がアクセス制限中の活動には URL を返さず、そのリンクの見た目を変えないため
+  const nonHttpLink = m.modname === 'url' && !!content?.fileurl && !isHttpUrl(content.fileurl)
+  const kind = extraKey || ownModule ? 'extra' : nonHttpLink ? 'moodle' : (KINDS[m.modname] ?? 'moodle')
   const file = kind === 'file' ? content : undefined
   const display = kind === 'link' ? displayOf(m) : null
   return {

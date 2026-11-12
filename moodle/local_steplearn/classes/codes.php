@@ -39,6 +39,11 @@ class codes {
      */
     public static function create(int $userid, string $challenge, string $sid): string {
         global $DB;
+        // 「Log in as」のセッションにも発行しないのは、交換したトークンには本当のユーザーも「Log in as」を許したコースも残らず、
+        // なりすました相手としてすべてのコースを操作できてしまうため
+        if (\core\session\manager::is_loggedinas()) {
+            throw new \moodle_exception('nologinas');
+        }
         $DB->delete_records_select(self::TABLE, 'timecreated < ?', [time() - self::TTL]);
         $code = self::base64url(random_bytes(32));
         $DB->insert_record(self::TABLE, (object) [
