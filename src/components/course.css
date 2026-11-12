@@ -84,24 +84,6 @@ div.course-hero-cover { background: linear-gradient(150deg, var(--c2), var(--c1)
 .course-tabs .tabs { margin: 0; }
 .course-tabs-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
 
-.course-edit-switch {
-  height: var(--control-h);
-  padding: 0 10px 0 14px;
-  border-radius: 999px;
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--border-strong), var(--shadow-sm);
-  color: var(--text-2);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.course-edit-switch[aria-checked='true'] {
-  background: var(--c-soft);
-  color: var(--c-ink);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-ink) 25%, transparent);
-}
-.course-edit-switch[aria-checked='true'] .switch-track { background: var(--c-deep, var(--primary)); }
-
 @media (max-width: 900px) {
   .course-hero:not(.is-compact) { flex-wrap: wrap; }
   .course-hero-body { flex-basis: calc(100% - 100px); }
