@@ -32,12 +32,26 @@ export const AI_CHAT_MODELS: readonly AiModel[] = ['deepseek/deepseek-v4.1-flash
 /** チャットのモデルが、利用者がパネルで「難しい依頼」を選んだ発言だけを任せるモデル */
 export const AI_HARD_TASK_MODELS: Partial<Record<AiModel, AiModel>> = { 'claude-haiku-5-5': 'claude-sonnet-5-5' }
 
+// 提供元の枠だけにしないのは、難しい依頼だけを任せる高いモデルに提供元の週の枠を使い切られると、基本のモデルでも続けられなくなるため
+/** 提供元の週の枠とは別に、本人の週の枠を持つモデル。使った額は提供元の枠にも数える */
+export const AI_LIMITED_MODELS = ['claude-sonnet-5-5'] as const satisfies readonly AiModel[]
+
+export type AiLimitedModel = (typeof AI_LIMITED_MODELS)[number]
+
+export const isLimitedModel = (model: string): model is AiLimitedModel => (AI_LIMITED_MODELS as readonly string[]).includes(model)
+
 /** 請求先。月の上限と使用量はこの単位で分ける */
 export const AI_PROVIDERS = ['openrouter', 'anthropic'] as const
 
 export type AiProvider = (typeof AI_PROVIDERS)[number]
 
 export const AI_PROVIDER_LABELS: Record<AiProvider, string> = { openrouter: 'OpenRouter', anthropic: 'Anthropic' }
+
+/** パネルの利用状況に出す、提供元の週の枠の名前 */
+export const AI_PROVIDER_QUOTA_LABELS: Record<AiProvider, string> = { openrouter: 'DeepSeek', anthropic: 'Claude 全体' }
+
+/** パネルの利用状況に出す、モデルだけの週の枠の名前 */
+export const AI_LIMITED_MODEL_QUOTA_LABELS: Record<AiLimitedModel, string> = { 'claude-sonnet-5-5': 'Sonnet のみ' }
 
 export const AI_PROVIDER_MODELS: Record<AiProvider, readonly AiModel[]> = { openrouter: OPENROUTER_MODELS, anthropic: ANTHROPIC_MODELS }
 

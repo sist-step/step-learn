@@ -11,7 +11,7 @@ export type { AiOverview, AiUserUsage } from './ai-ledger'
 /** 通常モード（step-learn.db）の AI の月の上限と使用量 */
 export const aiLedger = createAiLedger({ db, aiUsage, appSettings })
 
-export const { getMonthlyLimit, setMonthlyLimits, recordUsage, getQuota, aiOverview } = aiLedger
+export const { getMonthlyLimit, setLimits, recordUsage, getQuota, aiOverview } = aiLedger
 
 export function canUseAi(user: User) {
   if (!AI_PROVIDERS.some(isProviderEnabled) || !hasAiEmail(user.email)) return false
