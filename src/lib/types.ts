@@ -1,4 +1,5 @@
 import type { Child } from 'hono/jsx'
+import type { LogAs } from './operation-log'
 import type { codeItems, courses, items, sections } from './schema'
 
 export type Role = 'admin' | 'teacher' | 'student'
@@ -27,6 +28,8 @@ export type AppEnv = {
     aiPanel?: () => Child
     /** 操作ログに残す利用者。ログインした要求と、既にあるアカウントでのログインの失敗では、user がまだ空のため（lib/operation-log.ts） */
     logUserId?: number
+    /** 操作ログに、URL で決まるものとは別の操作として残すとき（lib/operation-log.ts の logAs） */
+    logAs?: LogAs
   }
 }
 

@@ -59,6 +59,14 @@ function loadMoodleMigrate() {
   return { url: url.href.replace(/\/+$/, ''), token: env.MOODLE_MIGRATE_TOKEN }
 }
 
+function loadMicrosoft() {
+  if (!env.MICROSOFT_CLIENT_ID) return null
+  if (!env.MICROSOFT_CLIENT_SECRET) throw new Error('MICROSOFT_CLIENT_ID を設定する場合は MICROSOFT_CLIENT_SECRET も設定してください')
+  const tenant = env.MICROSOFT_TENANT || 'common'
+  if (!/^[\w.-]+$/.test(tenant)) throw new Error('MICROSOFT_TENANT はテナント ID か common / organizations / consumers にしてください')
+  return { clientId: env.MICROSOFT_CLIENT_ID, clientSecret: env.MICROSOFT_CLIENT_SECRET, tenant }
+}
+
 function loadSandbox() {
   if (!env.SANDBOX_URL) return null
   if (env.SANDBOX_URL.startsWith('unix:')) {
@@ -106,6 +114,8 @@ export const config = {
   anthropic: env.CLAUDE_API_KEY ? { apiKey: env.CLAUDE_API_KEY } : null,
   /** AI エージェントを使えるメールアドレスのドメイン（@ より後ろの完全一致） */
   aiEmailDomain: (env.AI_EMAIL_DOMAIN || 'sist.ac.jp').toLowerCase(),
+  /** MICROSOFT_CLIENT_ID が設定されていれば、通常モードのログイン画面で Microsoft アカウントでログインできる（lib/microsoft.ts） */
+  microsoft: loadMicrosoft(),
   /** SANDBOX_URL が設定されていれば、学生のコードを sandbox のコンテナで実行できる（lib/sandbox.ts）。なければ実行は失敗する */
   sandbox: loadSandbox(),
 }
