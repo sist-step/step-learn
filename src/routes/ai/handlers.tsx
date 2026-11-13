@@ -61,6 +61,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
       revision: chatRevision(chat),
       chat: chat && {
         id: chat.id,
+        model: chat.model,
         modelLabel: AI_MODEL_LABELS[chat.model],
         entries: entriesOf(chat.content),
         busy: agent.isRunning(user.id),
