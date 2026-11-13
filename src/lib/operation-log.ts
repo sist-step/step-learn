@@ -45,11 +45,14 @@ const RULES: Rule[] = [
   get('/courses/:id/items/:iid/bundle/history/:uid', 'bundle.history.view', '変更履歴を見た', 'user'),
 
   post('/login', 'login', 'ログイン', 'change'),
+  rule('GET', '/auth/microsoft/callback', 'login.microsoft', 'Microsoft アカウントでログイン', 'change'),
   post('/logout', 'logout', 'ログアウト', 'change'),
   post('/register/complete', 'register', '新規登録', 'important'),
+  post('/auth/microsoft/register', 'register.microsoft', 'Microsoft アカウントで新規登録', 'important'),
   post('/password/reset', 'password.reset', 'パスワードを再設定', 'important'),
   post('/account', 'account.update', 'プロフィールを変更', 'important'),
   post('/account/password', 'account.password', 'パスワードを変更', 'important'),
+  post('/account/microsoft/unlink', 'account.microsoft.unlink', 'Microsoft アカウントの連携を解除', 'important'),
 
   post('/admin/users/:uid/role', 'admin.role', 'ユーザーのロールを変更', 'important', 'user'),
   post('/admin/ai', 'admin.ai', 'AI の月の上限を変更', 'important'),
@@ -97,7 +100,22 @@ const RULES: Rule[] = [
   skip('/courses/:id/items/:iid/code/run'),
   skip('/ai/chat/close'),
   skip('/views'),
+  // Microsoft のサインイン画面へ移る操作を残さないのは、戻ってきたときのログイン・連携のほうを残すため
+  skip('/auth/microsoft'),
+  skip('/account/microsoft'),
 ]
+
+// URL だけで決めないのは、Microsoft の戻り先がログインにも連携にも使う 1 つの URL のため
+const ALTERNATES = {
+  'login.microsoft.failed': { label: 'Microsoft アカウントでのログインに失敗', kind: 'change' },
+  'account.microsoft.link': { label: 'Microsoft アカウントを連携', kind: 'important' },
+  'account.microsoft.link.failed': { label: 'Microsoft アカウントの連携に失敗', kind: 'change' },
+} as const satisfies Record<string, { label: string; kind: LogKind }>
+
+export type LogAs = keyof typeof ALTERNATES
+
+/** この要求を、URL で決まる操作ではなく別の操作として残す */
+export const logAs = (c: Context<AppEnv>, action: LogAs) => c.set('logAs', action)
 
 const LOGIN_FAILED = { action: 'login.failed', label: 'ログインに失敗' }
 
@@ -107,6 +125,7 @@ const OTHER: Rule = { method: 'POST', pattern: /^/, action: 'other', label: 'そ
 const ACTION_LABELS: Record<string, string> = Object.fromEntries([
   ...RULES.filter((r) => r.kind).map((r) => [r.action, r.label]),
   [LOGIN_FAILED.action, LOGIN_FAILED.label],
+  ...Object.entries(ALTERNATES).map(([action, { label }]) => [action, label]),
   [OTHER.action, OTHER.label],
 ])
 
@@ -190,13 +209,14 @@ function purgeExpired(t: number) {
 
 function record(c: Context<AppEnv>, match: Match, path: string, target: string | null, failed = false) {
   const t = Math.floor(Date.now() / 1000)
-  const auth = match.rule.action === 'login' || match.rule.action === 'logout'
+  const auth = ['login', 'login.microsoft', 'logout'].includes(match.rule.action)
+  const alternate = c.var.logAs
   try {
     db.insert(operationLogs)
       .values({
         userId: c.var.logUserId ?? c.var.user?.id ?? null,
-        kind: match.kind,
-        action: failed ? LOGIN_FAILED.action : match.rule.action,
+        kind: alternate ? ALTERNATES[alternate].kind : match.kind,
+        action: failed ? LOGIN_FAILED.action : (alternate ?? match.rule.action),
         path: path.slice(0, 500),
         courseId: match.params.id ?? null,
         target,
