@@ -21,6 +21,8 @@ export type AiModelOption = { value: string; label: string; problem: string | nu
 
 export type AiPanelProps = {
   models: readonly AiModelOption[]
+  /** チャットの版（lib/ai-chat.ts の chatRevision） */
+  revision: string
   chat: { id: number; modelLabel: string; entries: AiChatEntry[]; busy: boolean } | null
   /** 開いているチャットのモデルの、今週の枠の使い具合 */
   quota: string
@@ -181,7 +183,7 @@ export const AiPanelToggle = () => (
   />
 )
 
-export const AiPanel = ({ models, chat, quota }: AiPanelProps) => {
+export const AiPanel = ({ models, revision, chat, quota }: AiPanelProps) => {
   useStyle('/src/components/ai-panel.css')
   useStyle('/src/components/markdown.css')
   const usable = models.filter((m) => !m.problem)
@@ -194,6 +196,7 @@ export const AiPanel = ({ models, chat, quota }: AiPanelProps) => {
       data-keep
       data-ai-panel
       data-chat={chat?.id}
+      data-revision={revision}
       data-busy={chat?.busy ? '' : undefined}
     >
       <header class="ai-panel-head">
@@ -204,6 +207,7 @@ export const AiPanel = ({ models, chat, quota }: AiPanelProps) => {
         </div>
         {chat && (
           <form method="post" action="/ai/chat/close" data-ai-close data-confirm="このチャットを閉じますか？閉じた会話は開き直せません。">
+            <input type="hidden" name="chat" value={String(chat.id)} />
             <IconButton type="submit" icon="pencilSquare" label="チャットを閉じて新しく始める" />
           </form>
         )}

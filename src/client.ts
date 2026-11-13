@@ -2241,7 +2241,13 @@ function prepareArrival(flight: Flight) {
 const aiPanel = () => document.getElementById('ai-panel')
 const aiInput = () => aiPanel()?.querySelector<HTMLTextAreaElement>('.ai-textarea') ?? null
 let aiSending = false
-let aiPolling: ReturnType<typeof setTimeout> | null = null
+let aiComposing = false
+let aiSync: Promise<void> | null = null
+let aiSyncTimer = 0
+const AI_SYNC_INTERVAL = 10_000
+const AI_BUSY_SYNC_INTERVAL = 3000
+// サーバーへの問い合わせだけで済ませないのは、同じブラウザのほかのタブで言い終えた応答を、次の問い合わせまで待たずに出すため
+const aiChannel = new BroadcastChannel('ai-panel')
 
 function aiTemplate(kind: 'user' | 'assistant' | 'tool' | 'pending' | 'error', text?: string) {
   const template = aiPanel()?.querySelector<HTMLTemplateElement>(`template[data-ai-template="${kind}"]`)
@@ -2269,7 +2275,8 @@ function setAiOpen(open: boolean) {
   document.documentElement.toggleAttribute('data-ai-open', open)
   $$('.ai-panel-toggle').forEach((el) => el.setAttribute('aria-expanded', String(open)))
   setSetting('aiPanel', open)
-  if (!open) return
+  if (!open) return scheduleAiSync()
+  void syncAiPanel()
   scrollAiLog(true)
   // 狭い画面で入力欄にフォーカスしないのは、開いただけでキーボードが出て会話が隠れるため
   if (aiDocked()) aiInput()?.focus()
@@ -2301,44 +2308,102 @@ document.addEventListener('input', (e) => {
   if (input instanceof HTMLTextAreaElement && input.matches('.ai-textarea')) fitAiInput(input)
 })
 
-async function refreshAiPanel(draft = '') {
-  if (aiPolling) clearTimeout(aiPolling)
-  aiPolling = null
+document.addEventListener('compositionstart', (e) => {
+  if ((e.target as Element).matches('.ai-textarea')) aiComposing = true
+})
+
+document.addEventListener('compositionend', (e) => {
+  if ((e.target as Element).matches('.ai-textarea')) aiComposing = false
+})
+
+/** パネルを取り直す。入力中の文はそのまま残す */
+async function refreshAiPanel() {
+  window.clearTimeout(aiSyncTimer)
   const res = await fetch('/ai/chat', { headers: { Accept: 'text/html' } })
   const doc = res.ok ? new DOMParser().parseFromString(await res.text(), 'text/html') : null
   const next = doc?.getElementById('ai-panel')
   const current = aiPanel()
   if (!next || !current) return
+  const draft = aiInput()?.value ?? ''
+  const focused = document.activeElement === aiInput()
   current.replaceWith(document.adoptNode(next))
   const input = aiInput()
   if (input && draft) {
     input.value = draft
     fitAiInput(input)
   }
+  if (input && focused) input.focus()
   initMascots()
   scrollAiLog(true)
-  watchAiBusy()
+  scheduleAiSync()
+}
+
+const aiWatching = () => !!aiPanel() && !document.hidden && document.documentElement.hasAttribute('data-ai-open')
+
+function scheduleAiSync() {
+  window.clearTimeout(aiSyncTimer)
+  if (!aiWatching()) return
+  const delay = aiPanel()!.hasAttribute('data-busy') ? AI_BUSY_SYNC_INTERVAL : AI_SYNC_INTERVAL
+  aiSyncTimer = window.setTimeout(() => void syncAiPanel(), delay)
+}
+
+/** ほかのタブや端末での発言や応答を、パネルがまだ反映していなければ true */
+async function aiPanelOutdated() {
+  const panel = aiPanel()
+  if (!panel) return false
+  const res = await fetch('/ai/chat/state', { headers: { Accept: 'application/json' }, cache: 'no-store' })
+  if (!res.ok) return false
+  const state = (await res.json()) as { revision: string; busy: boolean }
+  return state.revision !== (panel.dataset.revision ?? '') || state.busy !== panel.hasAttribute('data-busy')
+}
+
+/** 古ければ取り直す。取り直したら true */
+async function refreshAiIfOutdated() {
+  try {
+    if (!(await aiPanelOutdated())) return false
+    await refreshAiPanel()
+    return true
+  } catch {
+    return false
+  }
 }
 
 // 作成中の応答を開き直した画面に流し直さないのは、流れていた続きを受け取る手段がなく、言い終えて保存されたものを取り直せば足りるため
-function watchAiBusy() {
-  if (aiSending || aiPolling || !aiPanel()?.hasAttribute('data-busy')) return
-  aiPolling = setTimeout(() => {
-    aiPolling = null
-    void refreshAiPanel()
-  }, 3000)
+// 変換中に取り直さないのは、入力欄が差し替わって、確定していない文字が消えるため
+function syncAiPanel() {
+  if (aiSending) return Promise.resolve()
+  if (aiComposing || !aiWatching()) {
+    scheduleAiSync()
+    return Promise.resolve()
+  }
+  aiSync ??= (async () => {
+    try {
+      if ((await aiPanelOutdated()) && !aiSending && !aiComposing) await refreshAiPanel()
+    } catch {}
+  })().finally(() => {
+    aiSync = null
+    if (!aiSending) scheduleAiSync()
+  })
+  return aiSync
 }
+
+aiChannel.addEventListener('message', () => void syncAiPanel())
+document.addEventListener('visibilitychange', () => void syncAiPanel())
+addEventListener('focus', () => void syncAiPanel())
 
 type AiStreamHooks = { onRetract?: () => void; onChat?: (id: number) => void }
 
-/** 応答を届いた分から会話に書き足す。closed はチャットがもうないこと、confirmed は確認カードを出したこと、errors は出したエラーの文言 */
+/**
+ * 応答を届いた分から会話に書き足す。closed はチャットがもうないこと、confirmed は確認カードを出したこと、
+ * outdated はパネルが古く、発言を受け付けられなかったこと、errors は出したエラーの文言
+ */
 async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiStreamHooks = {}) {
   const panel = aiPanel()
   const log = panel?.querySelector<HTMLElement>('[data-ai-log]')
-  const outcome = { closed: false, retracted: false, confirmed: false, errors: [] as string[] }
+  const outcome = { closed: false, retracted: false, confirmed: false, outdated: false, errors: [] as string[] }
   if (!panel || !log) return outcome
   data.set('page', location.pathname)
-  aiSending = true
+  data.set('revision', panel.dataset.revision ?? '')
   panel.toggleAttribute('data-busy', true)
   const pending = aiTemplate('pending')
   log.append(pending)
@@ -2371,7 +2436,11 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
       onChat?.(event.id)
     } else if (event.type === 'closed') {
       outcome.closed = true
+    } else if (event.type === 'outdated') {
+      outcome.outdated = true
+      onRetract?.()
     } else {
+      panel.dataset.revision = event.revision
       const note = panel.querySelector('[data-ai-quota]')
       if (note) note.textContent = event.quota
     }
@@ -2395,19 +2464,34 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
     pending.before(aiTemplate('error', 'AI と通信できませんでした。少し待ってから、もう一度お試しください。'))
   } finally {
     pending.remove()
-    aiSending = false
     panel.removeAttribute('data-busy')
     scrollAiLog()
   }
   return outcome
 }
 
-async function sendAiMessage(form: HTMLFormElement) {
+function noteAiProblem(message: string) {
+  aiPanel()?.querySelector('[data-ai-log]')?.append(aiTemplate('error', message))
+  scrollAiLog(true)
+}
+
+const AI_CHAT_GONE = 'このチャットはほかのタブで閉じられたため、送りませんでした。新しいチャットで送るには、もう一度送信してください。'
+
+/** 取り直したパネルが、取り直す前に開いていたチャット（chat は ID）の続きか */
+const continuesAiChat = (chat: string) => !chat || aiPanel()?.dataset.chat === chat
+
+/** 入力欄の発言を送る。パネルが古ければ取り直してから送り、retried はそのために送り直した 2 回目であること */
+async function sendAiMessage(retried = false) {
+  const chat = aiPanel()?.dataset.chat ?? ''
+  // 閉じられたチャットの続きとして書いた発言を、新しいチャットや別のチャットへ送らないのは、前の会話を踏まえた発言が、文脈のないまま AI に渡るため
+  if ((await refreshAiIfOutdated()) && !continuesAiChat(chat)) return noteAiProblem(AI_CHAT_GONE)
   const panel = aiPanel()
+  const form = panel?.querySelector<HTMLFormElement>('[data-ai-form]')
   const log = panel?.querySelector<HTMLElement>('[data-ai-log]')
   const input = aiInput()
-  if (!panel || !log || !input) return
+  if (!panel || !form || !log || !input) return
   const text = input.value.trim()
+  if (!text) return
   const data = new FormData(form)
   const intro = log.querySelector<HTMLElement>('[data-ai-intro]')
   const started = !panel.dataset.chat
@@ -2430,9 +2514,15 @@ async function sendAiMessage(form: HTMLFormElement) {
       if (chatField instanceof HTMLInputElement) chatField.value = String(id)
     },
   })
+  if (outcome.outdated) {
+    await refreshAiPanel()
+    if (!continuesAiChat(chat)) return noteAiProblem(AI_CHAT_GONE)
+    if (!retried) return sendAiMessage(true)
+    return noteAiProblem('ほかのタブで会話が進んだため、送れませんでした。会話を確かめて、もう一度送信してください。')
+  }
   // 新しく始めたチャットと確認カードを取り直すのは、ヘッダーのモデル名・「閉じる」ボタン・カードを、サーバーの描いたものにそろえるため
   if (outcome.closed || outcome.confirmed || dismissing || (started && panel.dataset.chat)) {
-    await refreshAiPanel(outcome.retracted ? text : '')
+    await refreshAiPanel()
     // 取り直したパネルだけにしないのは、送り直してもらう発言はサーバーに残らず、断った理由まで消えるため
     if (outcome.retracted) {
       const next = aiPanel()?.querySelector<HTMLElement>('[data-ai-log]')
@@ -2443,6 +2533,15 @@ async function sendAiMessage(form: HTMLFormElement) {
 }
 
 async function decideAiCard(form: HTMLFormElement, submitter: HTMLElement | null) {
+  const call = new FormData(form).get('call')
+  const decision = submitter instanceof HTMLButtonElement ? submitter.value : ''
+  if (await refreshAiIfOutdated()) {
+    const next = $$<HTMLFormElement>('[data-ai-confirm]', aiPanel() ?? document).find((f) => new FormData(f).get('call') === call)
+    // 取り直したパネルでカードが確認を待っていなければ送らないのは、ほかのタブで決めたカードを決め直さないため
+    if (!next) return
+    form = next
+    submitter = $$<HTMLButtonElement>('button[name=decision]', next).find((b) => b.value === decision) ?? null
+  }
   const data = new FormData(form, submitter)
   $$<HTMLButtonElement>('button', form).forEach((btn) => (btn.disabled = true))
   await streamAi(form.action, data)
@@ -2453,28 +2552,40 @@ document.addEventListener('submit', (e) => {
   const form = e.target as HTMLFormElement
   if (e.defaultPrevented || !form.matches('[data-ai-form], [data-ai-close], [data-ai-confirm]')) return
   e.preventDefault()
-  if (form.matches('[data-ai-form]')) {
-    if (!aiSending) void sendAiMessage(form)
-    return
-  }
-  if (form.matches('[data-ai-confirm]')) {
-    if (!aiSending) void decideAiCard(form, e.submitter)
+  if (form.matches('[data-ai-form], [data-ai-confirm]')) {
+    const submitter = e.submitter
+    void runAiTask(() => (form.matches('[data-ai-form]') ? sendAiMessage() : decideAiCard(form, submitter)))
     return
   }
   delete form.dataset.confirmed
-  fetch(form.action, { method: 'POST', headers: { Accept: 'application/json' } })
+  fetch(form.action, { method: 'POST', body: new FormData(form), headers: { Accept: 'application/json' } })
     .then((res) => {
       if (!res.ok) throw new Error(`status ${res.status}`)
+      aiChannel.postMessage('changed')
       return refreshAiPanel()
     })
     .then(() => aiDocked() && aiInput()?.focus())
     .catch(() => toast('チャットを閉じられませんでした。', 'error'))
 })
 
+async function runAiTask(task: () => Promise<void>) {
+  if (aiSending) return
+  aiSending = true
+  try {
+    // 問い合わせ中の取り直しを待たずに送らないのは、送っているあいだにパネルが差し替わり、流れてくる応答が画面から消えるため
+    await aiSync
+    await task()
+  } finally {
+    aiSending = false
+    aiChannel.postMessage('changed')
+    scheduleAiSync()
+  }
+}
+
 function initAiPanel() {
   const open = document.documentElement.hasAttribute('data-ai-open')
   $$('.ai-panel-toggle').forEach((el) => el.setAttribute('aria-expanded', String(open)))
-  watchAiBusy()
+  scheduleAiSync()
 }
 
 // --- ページ遷移を再読み込みなしで行う（JS がなければ通常のリンク・フォーム送信で遷移する）
