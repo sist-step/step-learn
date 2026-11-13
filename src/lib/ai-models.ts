@@ -32,6 +32,15 @@ export const AI_CHAT_MODELS: readonly AiModel[] = ['deepseek/deepseek-v4.1-flash
 /** チャットのモデルが、利用者がパネルで「難しい依頼」を選んだ発言だけを任せるモデル */
 export const AI_HARD_TASK_MODELS: Partial<Record<AiModel, AiModel>> = { 'claude-haiku-5-5': 'claude-sonnet-5-5' }
 
+// display: 'updates' で受け取らないのは、返るのが短い要約だけで、回答の本文の代わりにはならないため
+/**
+ * ツールを呼ぶ前に書いた 1〜2 文より長い文章を、本文ではなく中身が空の考えた内容のブロックで返すモデル。
+ * 回答のあとにツールを呼ばせると、回答が表示されずに消える
+ */
+export const AI_HIDDEN_PRELUDE_MODELS: readonly AiModel[] = ['claude-sonnet-5-5']
+
+export const hidesPrelude = (model: AiModel) => AI_HIDDEN_PRELUDE_MODELS.includes(model)
+
 // 提供元の枠だけにしないのは、難しい依頼だけを任せる高いモデルに提供元の週の枠を使い切られると、基本のモデルでも続けられなくなるため
 /** 提供元の週の枠とは別に、本人の週の枠を持つモデル。使った額は提供元の枠にも数える */
 export const AI_LIMITED_MODELS = ['claude-sonnet-5-5'] as const satisfies readonly AiModel[]
