@@ -1,6 +1,15 @@
 // サーバーの handlers と client.ts の両方が読み込むので、DB や Node の API を使うモジュールを import しない
 import * as z from 'zod/mini'
-import { CODE_LANGUAGES, MAX_CODE_LENGTH, MAX_MAX_SCORE, MAX_STDIN_LENGTH } from './code'
+import {
+  CODE_LANGUAGES,
+  MAX_CODE_LENGTH,
+  MAX_CONSTRAINT_LABEL_LENGTH,
+  MAX_CONSTRAINT_LENGTH,
+  MAX_CONSTRAINTS,
+  MAX_STDIN_LENGTH,
+  MAX_SUBMIT_PERIOD,
+  type CodeConstraint,
+} from './code'
 import { dateInputToUnix, dateTimeInputToUnix, isDateInput, isDateTimeInput } from './course-period'
 import { checkPassword } from './password'
 import { isMediaFile } from './preview'
@@ -142,7 +151,13 @@ const restriction = z.object({ from: dateTime('開始日時'), until: dateTime('
 const section = z.object({ title: text('セクション名', 120, { required: true }), summary: z.optional(text('説明', 2000)) })
 
 export const completionChoices = (type: ItemType): Completion[] =>
-  type === 'screen' ? ['none', 'manual'] : type === 'file' ? [...COMPLETIONS] : ['none', 'manual', 'view']
+  type === 'screen'
+    ? ['none', 'manual']
+    : type === 'file'
+      ? ['none', 'manual', 'view', 'play']
+      : type === 'code'
+        ? ['none', 'manual', 'view', 'clear']
+        : ['none', 'manual', 'view']
 
 // file に null を受け付けるのは、ブラウザでは保存済みのファイルの種類が分からず、保存するときにサーバーで確かめ直すため
 export function completionError(type: ItemType, completion: Completion | undefined, file: { type: string; name: string } | null) {
@@ -171,27 +186,38 @@ const codeFields = {
   stdin: source('入力', MAX_STDIN_LENGTH),
 }
 
+const list = () =>
+  z.transform((v: unknown) => (Array.isArray(v) ? v : v === undefined ? [] : [v]).map((s) => (typeof s === 'string' ? s.trim() : '')))
+
+/**
+ * 編集画面の制約の行（constraint_label[] と constraint_text[] を同じ順に送る）を、制約の一覧にする。ラベルも内容も空の行は捨てる。
+ * error は最初に見つかった誤りで、何番目の行かを含める
+ */
+export function readConstraints({
+  'constraint_label[]': labels = [],
+  'constraint_text[]': texts = [],
+}: {
+  'constraint_label[]'?: string[]
+  'constraint_text[]'?: string[]
+}): { constraints: CodeConstraint[]; error: string | null } {
+  const rows = labels.map((label, i) => ({ no: i + 1, label, text: texts[i] ?? '' })).filter((r) => r.label || r.text)
+  const fail = (error: string) => ({ constraints: [], error })
+  if (rows.length === 0) return fail('制約を 1 つ以上入れてください。')
+  if (rows.length > MAX_CONSTRAINTS) return fail(`制約は ${MAX_CONSTRAINTS} 個までにしてください。`)
+  for (const { no, label, text } of rows) {
+    if (!label) return fail(`${no} 番目の制約のラベルを入力してください。`)
+    if (label.length > MAX_CONSTRAINT_LABEL_LENGTH)
+      return fail(`${no} 番目の制約のラベルは${MAX_CONSTRAINT_LABEL_LENGTH}文字以内で入力してください。`)
+    if (text.length > MAX_CONSTRAINT_LENGTH) return fail(`${no} 番目の制約の内容は${MAX_CONSTRAINT_LENGTH}文字以内で入力してください。`)
+  }
+  return { constraints: rows.map(({ label, text }) => ({ label, text })), error: null }
+}
+
 /** コードのアイテムで、実行・下書きの保存・提出のときに送るコード */
 const code = z.object(codeFields)
 
-const points = (label: string, { min, max }: { min: number; max: number }) =>
-  z.pipe(
-    trimmed(),
-    z
-      .string()
-      .check(
-        rule((s: string) =>
-          !s || (/^\d{1,6}$/.test(s) && Number(s) >= min && Number(s) <= max)
-            ? null
-            : `${label}は ${min} から ${max} までの整数で入力してください。`,
-        ),
-      ),
-  )
-
-// 点数が満点を超えていないかをここで確かめないのは、満点がアイテムの設定で決まり、ハンドラで照らし合わせるため
 const codeReview = z.object({
   submission: hidden(20),
-  score: points('点数', { min: 0, max: MAX_MAX_SCORE }),
   comment: text('コメント', 2000),
 })
 
@@ -225,15 +251,35 @@ const itemEdit = z
     ...itemFields,
     ...codeFields,
     criteria: z.optional(text('採点基準', 5000)),
-    max_score: z.optional(points('満点', { min: 1, max: MAX_MAX_SCORE })),
+    'constraint_label[]': list(),
+    'constraint_text[]': list(),
+    opens_at: z.optional(dateTime('開始日時')),
+    closes_at: z.optional(dateTime('終了日時')),
     url: z.optional(z.pipe(text('URL', 2000), z.string().check(rule((s: string) => (isHttpUrl(s) ? null : URL_INVALID))))),
   })
   .check(
     z.superRefine((v, ctx) => {
       const message = completionIssue(v)
       if (message) ctx.issues.push({ code: 'custom', message, input: v, path: ['completion'] })
+      if (v.type !== 'code') return
+      const error = readConstraints(v).error
+      if (error) ctx.issues.push({ code: 'custom', message: error, input: v, path: ['constraints'] })
+      for (const issue of submitPeriodIssues(v.opens_at ?? '', v.closes_at ?? '')) ctx.issues.push({ code: 'custom', input: v, ...issue })
     }),
   )
+
+/** コードのアイテムの提出の期間（日時の入力欄の値）の誤り。形の誤りは欄ごとのスキーマ（dateTime）が出すので、ここでは見ない */
+function submitPeriodIssues(opensAt: string, closesAt: string) {
+  const issues: { message: string; path: string[] }[] = []
+  if (!opensAt) issues.push({ message: '開始日時を入力してください。', path: ['opens_at'] })
+  if (!closesAt) issues.push({ message: '終了日時を入力してください。', path: ['closes_at'] })
+  if (!isDateTimeInput(opensAt) || !isDateTimeInput(closesAt)) return issues
+  const length = dateTimeInputToUnix(closesAt) - dateTimeInputToUnix(opensAt)
+  if (length <= 0) issues.push({ message: '終了日時は開始日時より後にしてください。', path: ['closes_at'] })
+  else if (length > MAX_SUBMIT_PERIOD)
+    issues.push({ message: `提出の期間は ${MAX_SUBMIT_PERIOD / 3600} 時間以内にしてください。`, path: ['closes_at'] })
+  return issues
+}
 
 /** Moodle モードの extra のアイテムに共通の欄。種類ごとのスキーマはこれに中身の欄を足して作る（src/moodle-mode/extra-kinds.tsx） */
 export const extraItemFields = {
@@ -252,7 +298,6 @@ const extraCode = z.object({
   language: choice(CODE_LANGUAGES, 'web'),
   starter_set: flag(),
   criteria: text('採点基準', 5000),
-  max_score: points('満点', { min: 1, max: MAX_MAX_SCORE }),
 })
 
 const image = z.object({ image: file('画像を選択してください。') })

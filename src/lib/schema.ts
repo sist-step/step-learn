@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { blob, check, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import { CODE_LANGUAGES, GRADING_STATUSES, type CodeFiles } from './code'
+import { CODE_LANGUAGES, GRADING_STATUSES, type CodeConstraint, type CodeFiles, type ConstraintResult } from './code'
 import type { RunResult } from './sandbox'
 
 const now = sql`(unixepoch())`
@@ -142,7 +142,7 @@ export const items = sqliteTable(
     fileSize: integer('file_size'),
     fileType: text('file_type'),
     hidden: integer('hidden').notNull().default(0),
-    completion: text('completion', { enum: ['none', 'manual', 'view', 'play'] })
+    completion: text('completion', { enum: ['none', 'manual', 'view', 'play', 'clear'] })
       .notNull()
       .default('none'),
     position: integer('position').notNull().default(0),
@@ -156,7 +156,7 @@ export const items = sqliteTable(
     index('items_section').on(t.sectionId, t.position),
     index('items_course').on(t.courseId),
     check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle')`),
-    check('items_completion', sql`${t.completion} IN ('none', 'manual', 'view', 'play')`),
+    check('items_completion', sql`${t.completion} IN ('none', 'manual', 'view', 'play', 'clear')`),
     check('items_link_target', sql`${t.linkTarget} IN ('new', 'same', 'embed')`),
   ],
 )
@@ -237,9 +237,13 @@ export const codeItems = sqliteTable(
     starter: text('starter', { mode: 'json' }).$type<CodeFiles>().notNull(),
     /** Python の標準入力の例。学生の入力欄に最初から入れておき、採点のときの実行にも使う */
     stdin: text('stdin').notNull().default(''),
-    /** AI に渡す採点基準。学生には見せない */
+    /** AI に渡す補足。制約にしにくい観点（読みやすさなど）を書く。学生には見せない */
     criteria: text('criteria').notNull().default(''),
-    maxScore: integer('max_score').notNull().default(100),
+    /** 判定の観点（制約）。AI は制約ごとに 3 段階で判定し、すべてできていればクリア。空のアイテム（古いもの）は講評だけを返す */
+    constraints: text('constraints', { mode: 'json' }).$type<CodeConstraint[]>().notNull().default([]),
+    /** 学生が提出できる期間（長さは MAX_SUBMIT_PERIOD まで）。決まっていない（NULL）あいだは提出を受け付けない */
+    opensAt: integer('opens_at'),
+    closesAt: integer('closes_at'),
   },
   (t) => [check('code_items_language', sql`${t.language} IN ('web', 'python')`)],
 )
@@ -333,13 +337,13 @@ export const codeSubmissions = sqliteTable(
     files: text('files', { mode: 'json' }).$type<CodeFiles>().notNull(),
     /** AI の採点の状態。none は採点しない（AI が設定されていない）提出 */
     status: text('status', { enum: GRADING_STATUSES }).notNull().default('none'),
-    /** AI が付けた点数と講評 */
-    score: integer('score'),
+    /** AI の講評 */
     feedback: text('feedback').notNull().default(''),
     /** 採点のときに sandbox で実行した結果（Python） */
     output: text('output', { mode: 'json' }).$type<RunResult>(),
-    /** 教師が付けた点数とコメント。点数があれば、AI の点数よりこちらを成績にする */
-    teacherScore: integer('teacher_score'),
+    /** AI の制約ごとの判定。制約のないアイテムの提出と、採点していない提出は null */
+    verdicts: text('verdicts', { mode: 'json' }).$type<ConstraintResult[]>(),
+    /** 教師から学生へのコメント */
     teacherComment: text('teacher_comment').notNull().default(''),
     createdAt: integer('created_at').notNull().default(now),
   },

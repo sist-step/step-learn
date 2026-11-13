@@ -50,6 +50,20 @@
       "when": 1794396818347,
       "tag": "0006_faulty_blazing_skull",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1794527625200,
+      "tag": "0007_foamy_leader",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794529094187,
+      "tag": "0008_aromatic_black_tom",
+      "breakpoints": true
     }
   ]
 }
