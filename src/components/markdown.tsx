@@ -45,6 +45,7 @@ export const MarkdownEditor = ({
   error,
   hint,
   fieldClass,
+  split,
 }: {
   label: Child
   name: string
@@ -55,10 +56,17 @@ export const MarkdownEditor = ({
   error?: string
   hint?: Child
   fieldClass?: string
+  /** 幅が足りるとき、書く欄とプレビューを横に並べる「並べる」を出す */
+  split?: boolean
 }) => {
   useStyle('/src/components/form.css', '/src/components/markdown.css')
   return (
-    <div class={cx('field md-editor', error && 'has-error', fieldClass)} style={`--md-rows: ${rows}`} data-md-editor>
+    <div
+      class={cx('field md-editor', error && 'has-error', fieldClass)}
+      style={`--md-rows: ${rows}`}
+      data-md-editor
+      data-md-split={split ? '' : undefined}
+    >
       <div class="md-editor-head">
         <label for={id} id={`${id}-label`}>
           {label}
@@ -67,6 +75,11 @@ export const MarkdownEditor = ({
           <button type="button" aria-pressed="true" data-md-mode="write">
             <Icon name="pencil" size={14} /> 書く
           </button>
+          {split && (
+            <button type="button" aria-pressed="false" data-md-mode="split" hidden>
+              <Icon name="columns" size={14} /> 並べる
+            </button>
+          )}
           <button type="button" aria-pressed="false" data-md-mode="preview">
             <Icon name="eye" size={14} /> プレビュー
           </button>
@@ -78,6 +91,11 @@ export const MarkdownEditor = ({
             <IconButton icon={b.icon} label={b.label} iconSize={16} data-md-format={b.format} />
           ))}
         </div>
+        {split && (
+          <div class="md-preview-head" aria-hidden="true" hidden>
+            <Icon name="eye" size={14} /> プレビュー
+          </div>
+        )}
         <Textarea
           id={id}
           name={name}

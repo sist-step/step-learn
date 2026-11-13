@@ -61,6 +61,7 @@ import trash from 'heroicons/24/outline/trash.svg?raw'
 import user from 'heroicons/24/outline/user.svg?raw'
 import userMinus from 'heroicons/24/outline/user-minus.svg?raw'
 import users from 'heroicons/24/outline/users.svg?raw'
+import columns from 'heroicons/24/outline/view-columns.svg?raw'
 import x from 'heroicons/24/outline/x-mark.svg?raw'
 
 // 外部アイコンフォントを読み込まず、使う分だけをビルド時に文字列として埋め込む
@@ -128,6 +129,7 @@ const svgs = {
   terminal,
   play,
   undo,
+  columns,
 } as const
 
 export type IconName = keyof typeof svgs

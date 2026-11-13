@@ -240,6 +240,162 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
   .search kbd { display: none; }
 }
 
+/* ===== 日時の選択（DateTimeField。パネルの中身は client.ts が作る） */
+.dt-control { position: relative; display: flex; align-items: center; gap: 4px; }
+.dt-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  height: var(--control-h);
+  padding: 0 12px 0 14px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-field);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.dt-trigger > .icon { flex: none; color: var(--muted); }
+.dt-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dt-text.is-empty { color: var(--muted); }
+.dt-trigger:focus-visible, .dt-trigger[aria-expanded='true'] { outline: none; border-color: var(--focus); box-shadow: var(--ring-field); }
+.has-error .dt-trigger { border-color: var(--danger); }
+.dt-clear { flex: none; }
+.dt-clear[hidden] { display: none; }
+/* display: none にしないのは、検証のエラーで欄へ移動するとき、フォーカスの行き先がなくなるため */
+.dt-value { position: absolute; bottom: 0; left: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+
+.dt-panel {
+  --dt-cell: 38px;
+  position: fixed;
+  inset: auto;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+}
+.dt-panel:popover-open { animation: rise 0.15s var(--ease); }
+.dt-head { display: none; }
+.dt-body { display: flex; gap: 16px; }
+.dt-cal { width: calc(var(--dt-cell) * 7); }
+.dt-cal-nav { display: flex; align-items: center; justify-content: space-between; height: 32px; margin-bottom: 6px; }
+.dt-cal-title { font-weight: 650; font-variant-numeric: tabular-nums; }
+.dt-week, .dt-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.dt-week span { display: grid; place-items: center; height: 28px; color: var(--muted); font-size: var(--fs-xs); font-weight: 600; }
+.dt-week span:first-child, .dt-day.is-sun { color: var(--danger-text); }
+.dt-week span:last-child, .dt-day.is-sat { color: var(--info-text); }
+.dt-day {
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  width: var(--dt-cell);
+  height: var(--dt-cell);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.dt-day.is-outside { opacity: 0.45; }
+.dt-day[aria-current='date'] { box-shadow: inset 0 0 0 1.5px var(--c-ink); color: var(--c-ink); font-weight: 650; }
+.dt-day[aria-pressed='true'], .dt-opt[aria-selected='true'] { background: var(--c-deep, var(--c1)); color: var(--c-on, var(--on-strong)); font-weight: 650; box-shadow: none; opacity: 1; }
+.dt-time { display: flex; flex-direction: column; padding-left: 16px; border-left: 1px solid var(--border); }
+.dt-time-label { display: flex; align-items: center; height: 32px; margin-bottom: 6px; font-weight: 650; }
+.dt-cols { display: flex; align-items: stretch; gap: 2px; height: calc(28px + var(--dt-cell) * 6); }
+.dt-col { position: relative; display: flex; flex-direction: column; gap: 2px; width: 56px; overflow-y: auto; scrollbar-width: none; overscroll-behavior: contain; }
+.dt-colon { align-self: center; color: var(--muted); font-weight: 650; }
+.dt-opt {
+  flex: none;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.dt-foot { display: flex; align-items: center; gap: 4px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.dt-done { margin-left: auto; }
+@media (hover: hover) {
+  .dt-trigger:hover:not([aria-expanded='true']) { border-color: color-mix(in srgb, var(--text) 55%, var(--field-border)); }
+  .dt-day:hover:not([aria-pressed='true']), .dt-opt:hover:not([aria-selected='true']) { background: var(--surface-2); color: var(--text); }
+}
+
+/* スマホで欄の下に出さないのは、指で押すには日付や時刻の一覧が小さく、キーボードのない画面では下から出すほうが親指が届くため */
+.dt-panel.is-sheet {
+  --dt-cell: 40px;
+  --dt-row: 38px;
+  inset: auto 0 0;
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100dvh - 24px);
+  margin: 0 auto;
+  padding: 8px 16px 0;
+  overflow-y: auto;
+  border-width: 1px 1px 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  overscroll-behavior: contain;
+}
+.dt-panel.is-sheet:popover-open { animation: dt-sheet-in 0.28s var(--ease); }
+@keyframes dt-sheet-in { from { translate: 0 100%; } }
+.dt-panel.is-sheet::backdrop { background: rgb(0 0 0 / 0.45); animation: fade 0.2s; }
+.dt-panel.is-sheet::before { content: ''; display: block; width: 36px; height: 4px; margin: 0 auto 12px; border-radius: 999px; background: var(--border-strong); }
+.is-sheet .dt-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
+.is-sheet .dt-head-label { color: var(--muted); font-size: var(--fs-sm); font-weight: 600; }
+.is-sheet .dt-head-value { font-size: var(--fs-xl); font-weight: 650; font-variant-numeric: tabular-nums; }
+.is-sheet .dt-head-value.is-empty { color: var(--muted); }
+.is-sheet .dt-body { flex-direction: column; gap: 12px; }
+.is-sheet .dt-cal { width: 100%; }
+.is-sheet .dt-day { font-size: var(--fs-base); }
+.is-sheet .dt-time { padding: 12px 0 0; border-top: 1px solid var(--border); border-left: 0; }
+.is-sheet .dt-time-label { height: auto; margin-bottom: 4px; color: var(--muted); font-size: var(--fs-sm); font-weight: 600; }
+/* 真ん中の帯を項目の背景で示さないのは、回している途中は選んだ項目が帯からずれて、どこで止まるのか分かりにくいため */
+.is-sheet .dt-cols {
+  position: relative;
+  justify-content: center;
+  gap: 8px;
+  height: calc(var(--dt-row) * 5);
+  -webkit-mask-image: linear-gradient(transparent, currentColor 30%, currentColor 70%, transparent);
+  mask-image: linear-gradient(transparent, currentColor 30%, currentColor 70%, transparent);
+}
+.is-sheet .dt-cols::before { content: ''; position: absolute; inset: calc(var(--dt-row) * 2) 0 auto; height: var(--dt-row); border-radius: 12px; background: var(--c-soft); pointer-events: none; }
+.is-sheet .dt-col { z-index: 1; gap: 0; width: 72px; padding-block: calc(var(--dt-row) * 2); scroll-snap-type: y mandatory; }
+.is-sheet .dt-opt { height: var(--dt-row); border-radius: 0; font-size: var(--fs-lg); scroll-snap-align: center; }
+.is-sheet .dt-opt[aria-selected='true'] { background: none; color: var(--c-ink); }
+.is-sheet .dt-colon { font-size: var(--fs-lg); z-index: 1; }
+/* 下に固定するのは、背の低い画面でシートの中をスクロールしても「決定」を探さずに押せるようにするため */
+.is-sheet .dt-foot { position: sticky; bottom: 0; gap: 8px; margin: 12px -16px 0; padding: 12px 16px max(16px, env(safe-area-inset-bottom)); border-top: 0; background: var(--surface-raised); }
+.is-sheet .dt-foot .btn { height: var(--tap); }
+.is-sheet .dt-done { flex: 1; max-width: 60%; }
+
+/* 背の低い画面でホイールを 5 行のままにしないのは、カレンダーと合わせると画面に収まらず、時刻を選ぶたびにシートの中をスクロールすることになるため */
+@media (max-height: 760px) {
+  .dt-panel.is-sheet { --dt-cell: 36px; --dt-row: 34px; }
+  .is-sheet .dt-head { margin-bottom: 4px; }
+  .is-sheet .dt-head-value { font-size: var(--fs-lg); }
+  .is-sheet .dt-cols { height: calc(var(--dt-row) * 3); }
+  .is-sheet .dt-cols::before { top: var(--dt-row); }
+  .is-sheet .dt-col { padding-block: var(--dt-row); }
+}
+.dt-panel:focus { outline: none; }
+
 /* スマホ幅で --fs-* のままにしないのは、iOS の Safari が 16px 未満の入力欄にフォーカスすると画面を拡大するため */
 @media (max-width: 640px) {
   .input, .input-sm, .search-input { font-size: 16px; }
