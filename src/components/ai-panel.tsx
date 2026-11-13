@@ -283,6 +283,16 @@ export const AiPanel = ({ models, revision, chat, quota }: AiPanelProps) => {
         )}
         {!chat && usable.length === 1 && <input type="hidden" name="model" value={usable[0].value} />}
         <div class="field ai-input">
+          {/* title を空にするのは、ブラウザ標準のツールチップが CSS のチップと重なって 2 つ出るため */}
+          <IconButton
+            icon="lightBulb"
+            label="難しい依頼"
+            title=""
+            class="ai-hard"
+            data-ai-hard
+            aria-pressed={hard ? 'true' : 'false'}
+            hidden={!current?.hardLabel}
+          />
           <textarea
             id="ai-message"
             name="message"
@@ -296,23 +306,9 @@ export const AiPanel = ({ models, revision, chat, quota }: AiPanelProps) => {
           <IconButton type="submit" icon="arrowUp" label="送信" class="ai-send" disabled={!chat && usable.length === 0} />
         </div>
         <FieldError id="ai-message" />
-        <div class="ai-composer-foot">
-          <Button
-            size="sm"
-            variant="ghost"
-            icon="lightBulb"
-            class="ai-hard"
-            data-ai-hard
-            aria-pressed={hard ? 'true' : 'false'}
-            title="よく考える必要のある依頼を、より賢いモデルに任せます"
-            hidden={!current?.hardLabel}
-          >
-            難しい依頼
-          </Button>
-          <p class="ai-note" data-ai-quota>
-            {quota || 'Enter で送信、Shift + Enter で改行'}
-          </p>
-        </div>
+        <p class="ai-note" data-ai-quota>
+          {quota || 'Enter で送信、Shift + Enter で改行'}
+        </p>
       </form>
 
       <template data-ai-template="user">
