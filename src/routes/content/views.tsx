@@ -542,6 +542,7 @@ export const ItemPage = ({
                         <a
                           href={o.type === 'screen' ? `${navHref(o)}/screen` : navHref(o)}
                           class={cx('outline-link', o.id === item.id && 'active', isHidden(o) && 'is-hidden')}
+                          data-item={o.id}
                           {...(opensNewTab(o) ? { target: '_blank', rel: 'noopener', 'data-no-prefetch': '' } : {})}
                           {...(o.type === 'link' ? linkOpenAttrs(o.url, o.linkTarget, navHref(o)) : {})}
                           aria-current={o.id === item.id ? 'page' : undefined}
