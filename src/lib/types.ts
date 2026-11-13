@@ -25,6 +25,8 @@ export type AppEnv = {
     styles?: Set<string>
     /** AI のパネルを描く。AI を使えない利用者や Moodle モードでは未設定か null を返す（app.tsx） */
     aiPanel?: () => Child
+    /** 操作ログに残す利用者。ログインした要求と、既にあるアカウントでのログインの失敗では、user がまだ空のため（lib/operation-log.ts） */
+    logUserId?: number
   }
 }
 
@@ -78,4 +80,22 @@ export const ROLE_LABELS: Record<Role, string> = {
 export const COURSE_ROLE_LABELS: Record<CourseRole, string> = {
   teacher: '教師',
   student: '学生',
+}
+
+/** 操作ログの種類。どの操作がどれになるかは lib/operation-log.ts の RULES で決める */
+export const LOG_KINDS = ['view', 'change', 'important'] as const
+
+export type LogKind = (typeof LOG_KINDS)[number]
+
+export const LOG_KIND_LABELS: Record<LogKind, string> = {
+  view: '閲覧',
+  change: '操作',
+  important: '重要な操作',
+}
+
+/** 種類ごとの保存期間（日）。null は消さない */
+export const LOG_RETENTION_DAYS: Record<LogKind, number | null> = {
+  view: 90,
+  change: 365,
+  important: null,
 }

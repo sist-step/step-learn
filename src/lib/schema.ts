@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import { blob, check, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { CODE_LANGUAGES, GRADING_STATUSES, type CodeConstraint, type CodeFiles, type ConstraintResult } from './code'
 import type { RunResult } from './sandbox'
+import { LOG_KINDS } from './types'
 
 const now = sql`(unixepoch())`
 
@@ -351,5 +352,31 @@ export const codeSubmissions = sqliteTable(
     index('code_submissions_item_user').on(t.itemId, t.userId, t.id),
     index('code_submissions_user').on(t.userId),
     check('code_submissions_status', sql`${t.status} IN ('none', 'pending', 'graded', 'failed')`),
+  ],
+)
+
+/** 操作ログ。種類ごとの保存期間を過ぎたものは消す（lib/operation-log.ts） */
+export const operationLogs = sqliteTable(
+  'operation_logs',
+  {
+    id: integer('id').primaryKey(),
+    userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+    kind: text('kind', { enum: LOG_KINDS }).notNull(),
+    action: text('action').notNull(),
+    path: text('path').notNull(),
+    // 外部キーにしないのは、コースを削除すると、削除した記録からどのコースだったかがわからなくなるため
+    courseId: integer('course_id'),
+    /** 操作の対象（アイテム・セクション・ユーザー・コース）の、操作した時点の名前 */
+    target: text('target'),
+    ip: text('ip').notNull().default(''),
+    /** ログイン・ログアウトのときだけ残す */
+    userAgent: text('user_agent'),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [
+    index('operation_logs_created').on(t.createdAt),
+    index('operation_logs_user').on(t.userId),
+    index('operation_logs_kind').on(t.kind),
+    check('operation_logs_kind', sql`${t.kind} IN ('view', 'change', 'important')`),
   ],
 )

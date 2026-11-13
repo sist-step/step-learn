@@ -86,6 +86,7 @@ export async function submitLogin(c: Context<AppEnv>) {
   const ok = user ? await verifyPassword(password, user.passwordHash) : await dummyVerify(password)
 
   if (!user || !ok) {
+    if (user) c.set('logUserId', user.id)
     c.status(401)
     return c.render(
       <LoginPage login={login} next={next} errors={{ form: 'メールアドレス（ユーザー名）またはパスワードが正しくありません。' }} />,

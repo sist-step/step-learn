@@ -347,6 +347,7 @@ const aiMessage = z.object({
   chat: hidden(20),
   page: hidden(500),
   hard: flag(),
+  revision: hidden(50),
 })
 
 export const FORMS = {
