@@ -249,6 +249,7 @@ CSS は 1 ファイルにまとめず、使う部品・画面の隣に置く。�
 - 操作はリンクか `<form method="post">`。送信ボタンは `<Button type="submit">` / `<IconButton type="submit">`（部品の `type` の既定は `button`）
 - 送信に時間がかかるフォームには `data-loading-form`（二重送信防止）
 - 取り消せない操作のフォームには `data-confirm="〜しますか？"`
+  - 確認は画面の中央に出し、ほかを操作できなくする。`data-confirm-scope` を付けた要素（`position` が `static` 以外のもの）の中のフォームでは、その要素の上だけを覆って中央に出し、外は操作できるまま残す（例は `AiPanel`）
 - `select` を変えたら即送信するフォームには `data-autosubmit`
 - 編集画面の保存ボタンには `data-save-shortcut`（⌘S / Ctrl+S で押される。フォームの外に置くときは `form="<id>"` を付ける）
 - 開閉は `<details>` / `<summary>` で作る（ボタンの下に出すパネルは `Popover` 部品）
