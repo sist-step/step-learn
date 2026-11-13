@@ -1,6 +1,6 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import type { Context } from 'hono'
-import { isCodeLanguage, type CodeConstraint, type CodeFiles } from '../lib/code'
+import { isCodeLanguage, type CodeConstraint, type CodeFiles, type SubmitPeriod } from '../lib/code'
 import { createGrader } from '../lib/code-grader'
 import type { CodeSettings, CodeStore } from '../lib/code-store'
 import { intParam } from '../lib/http'
@@ -28,10 +28,18 @@ export function codeSettingsOf(data: Record<string, unknown>, title = text(data.
     starter: typeof data.starter === 'object' && data.starter !== null ? (data.starter as CodeFiles) : {},
     stdin: text(data.stdin),
     criteria: text(data.criteria),
-    // Moodle モードの入力欄には制約がないので、制約で採点するのは、通常モードと同じ形の data を持つアイテムだけ
+    // 制約の欄ができる前に作ったアイテムは constraints を持たず、講評だけを返す
     constraints: Array.isArray(data.constraints) ? (data.constraints as CodeConstraint[]) : [],
   }
 }
+
+const unix = (v: unknown) => (typeof v === 'number' ? v : null)
+
+/** extra_items の data の、学生が提出できる期間。期間の欄ができる前に作ったアイテムは持たず、決まっていない扱いになる */
+export const codePeriodOf = (data: Record<string, unknown>): SubmitPeriod => ({
+  opensAt: unix(data.opensAt),
+  closesAt: unix(data.closesAt),
+})
 
 const SUMMARY = {
   id: codeSubmissions.id,
@@ -124,9 +132,9 @@ export const codeBackend: CodeBackend = {
     // このアプリのルートに組み込んで呼ばれるので、Context は Moodle モードのもの（トークンを持つ）
     const loaded = await loadCourse(c as Context<MoodleEnv>, courseId)
     const item = outlineOf(loaded).find((it) => it.id === itemId && !it.locked && it.extra?.type === CODE_KIND)
-    const settings = item?.extra && codeSettingsOf(item.extra.data, item.title)
-    if (!item?.extraKey || !settings) return null
-    // 提出の期間を設けないのは、Moodle モードの入力欄に期間の欄がないため
-    return { access: loaded.access, itemId, settings, period: null, store: codeStore(item.extraKey) }
+    const data = item?.extra?.data
+    const settings = data && codeSettingsOf(data, item.title)
+    if (!item?.extraKey || !data || !settings) return null
+    return { access: loaded.access, itemId, settings, period: codePeriodOf(data), store: codeStore(item.extraKey) }
   },
 }

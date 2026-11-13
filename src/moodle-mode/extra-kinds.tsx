@@ -3,7 +3,7 @@ import { useRequestContext } from 'hono/jsx-renderer'
 import { BundleEditPanel, BundleOpen, type BundleView } from '../components/bundle'
 import { Button } from '../components/button'
 import { LinkCard } from '../components/card'
-import { CodeGradingFields, CodeStarterFields } from '../components/code'
+import { CodeGradingFields, CodePeriodFields, CodeStarterFields, type ConstraintRow } from '../components/code'
 import { SelectField } from '../components/form'
 import type { IconName } from '../components/icons'
 import { MarkdownEditor } from '../components/markdown'
@@ -17,12 +17,13 @@ import {
   isCodeLanguage,
   type CodeFiles,
 } from '../lib/code'
+import { dateTimeInputToUnix, isDateTimeInput, unixToDateTimeInput } from '../lib/course-period'
 import { BUNDLE_KIND, bundleBase } from '../lib/bundle'
 import { BUNDLE_MODULE } from '../lib/bundle'
 import { syncStateOf } from '../lib/bundle-sync'
 import { gradingEnabled } from '../lib/code-grader'
 import type { CourseAccess } from '../lib/courses'
-import type { FieldErrors, FormName } from '../lib/forms'
+import { readConstraints, type FieldErrors, type FormName } from '../lib/forms'
 import { availableCodeLanguages } from '../lib/sandbox'
 import { isSharing } from '../lib/screen-share'
 import type { AppEnv } from '../lib/types'
@@ -117,6 +118,26 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '')
 
 const codeFilesOf = (source: Record<string, unknown>): CodeFiles => Object.fromEntries(CODE_FILE_KEYS.map((key) => [key, str(source[key])]))
 
+const listOf = (v: unknown) => (Array.isArray(v) ? v : v === undefined ? [] : [v]).map(str)
+
+const constraintsOfForm = (values: Record<string, unknown>) =>
+  readConstraints({ 'constraint_label[]': listOf(values['constraint_label[]']), 'constraint_text[]': listOf(values['constraint_text[]']) })
+    .constraints
+
+/** 入力欄に入れる制約の行。保存済みの中身では constraints にまとまっていて、送られてきたままの値では行ごとの欄の値が並んでいる */
+function constraintRowsOf(values: Record<string, unknown>): ConstraintRow[] {
+  if (Array.isArray(values.constraints))
+    return values.constraints.map((c: Record<string, unknown>) => ({ label: str(c.label), text: str(c.text) }))
+  const texts = listOf(values['constraint_text[]'])
+  return listOf(values['constraint_label[]']).map((label, i) => ({ label, text: texts[i] ?? '' }))
+}
+
+/** 入力欄に入れる提出の期間。保存済みの中身では UNIX 秒、送られてきたままの値では日時の入力欄の値 */
+const periodInputOf = (values: Record<string, unknown>, field: 'opens_at' | 'closes_at', saved: 'opensAt' | 'closesAt') =>
+  typeof values[field] === 'string' ? values[field] : typeof values[saved] === 'number' ? unixToDateTimeInput(values[saved]) : ''
+
+const unixOf = (input: string) => (isDateTimeInput(input) ? dateTimeInputToUnix(input) : null)
+
 const CodeFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
   const language = str(values.language)
   // 言語が決まっていないのは、追加するとき。問題文・最初のコード・採点基準は、言語が決まったあとの編集画面で設定する
@@ -142,7 +163,19 @@ const CodeFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
       <input type="hidden" name="starter_set" value="1" />
       <MarkdownEditor label="問題文" name="body" id={`${idPrefix}-body`} value={str(values.body)} error={errors.body} rows={10} />
       <CodeStarterFields language={language} starter={starter} stdin={str(values.stdin)} errors={errors} idPrefix={idPrefix} />
-      <CodeGradingFields gradingEnabled={gradingEnabled} criteria={str(values.criteria)} errors={errors} idPrefix={idPrefix} />
+      <CodeGradingFields
+        gradingEnabled={gradingEnabled}
+        criteria={str(values.criteria)}
+        constraints={constraintRowsOf(values)}
+        errors={errors}
+        idPrefix={idPrefix}
+      />
+      <CodePeriodFields
+        opensAt={periodInputOf(values, 'opens_at', 'opensAt')}
+        closesAt={periodInputOf(values, 'closes_at', 'closesAt')}
+        errors={errors}
+        idPrefix={idPrefix}
+      />
     </>
   )
 }
@@ -152,20 +185,24 @@ const code: ExtraKind = {
   description: 'コードを書いて提出する',
   icon: 'terminal',
   form: 'extraCode',
-  // 中身の読み取りは moodle-mode/code.ts の codeSettingsOf。タイトルも入れておくのは、採点が Moodle に問い合わせずに動くため
+  // 中身の読み取りは moodle-mode/code.ts の codeSettingsOf と codePeriodOf。タイトルも入れておくのは、採点が Moodle に問い合わせずに動くため
   toData(values) {
     const language = isCodeLanguage(str(values.language)) ? (values.language as (typeof CODE_LANGUAGES)[number]) : 'web'
+    const edited = values.starter_set === 1
     return {
       title: str(values.title),
       body: str(values.body),
       language,
-      starter: values.starter_set === 1 ? filesFor(language, codeFilesOf(values)) : DEFAULT_STARTER[language],
+      starter: edited ? filesFor(language, codeFilesOf(values)) : DEFAULT_STARTER[language],
       stdin: language === 'python' ? str(values.stdin) : '',
       criteria: str(values.criteria),
+      constraints: edited ? constraintsOfForm(values) : [],
+      opensAt: edited ? unixOf(str(values.opens_at)) : null,
+      closesAt: edited ? unixOf(str(values.closes_at)) : null,
     }
   },
   Fields: CodeFields,
-  addNote: '問題文・最初のコード・採点基準は、追加したあとの編集画面で設定します。',
+  addNote: '問題文・最初のコード・制約・提出の期間は、追加したあとの編集画面で設定します。',
   editAfterCreate: true,
   View: ({ item, access }) => (
     <LinkCard
