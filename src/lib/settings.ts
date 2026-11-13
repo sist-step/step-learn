@@ -16,6 +16,7 @@ const SETTINGS = z.object({
   pdfThumbs: z.boolean().catch(true),
   collapsedSections: z.array(z.string()).catch([]),
   aiPanel: z.boolean().catch(false),
+  mdSplit: z.boolean().catch(true),
 })
 
 export type Settings = z.infer<typeof SETTINGS>

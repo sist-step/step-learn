@@ -1,4 +1,5 @@
 import type { Child, JSX } from 'hono/jsx'
+import { formatDateTimeInput } from '../lib/course-period'
 import type { FormName } from '../lib/forms'
 import { IMAGE_ACCEPT, IMAGE_TOO_LARGE, MAX_IMAGE_SIZE } from '../lib/images'
 import { IconButton } from './button'
@@ -228,6 +229,60 @@ export const FileInput = ({
       <FileChip class="file-drop-chip" icon={icon} data-file-chip>
         <IconButton icon="x" label="選択を取り消す" data-file-clear />
       </FileChip>
+    </div>
+  )
+}
+
+/**
+ * 日時（mode="datetime"、値は YYYY-MM-DDTHH:mm）か日付（mode="date"、値は YYYY-MM-DD）を選ぶ欄。
+ * 押すと client.ts が、パソコンでは欄の下にカレンダーと時刻の一覧を、スマホでは下からカレンダーと時刻のホイールを出す。
+ * 送信されるのは隠した入力欄（name）の値。optional を付けると、選んだ値を消すボタンが付く
+ */
+export const DateTimeField = ({
+  label,
+  name,
+  id = `f-${name}`,
+  value = '',
+  mode = 'datetime',
+  optional,
+  error,
+  hint,
+  fieldClass,
+}: LabeledProps & { value?: string; mode?: 'datetime' | 'date'; optional?: boolean }) => {
+  useStyle('/src/components/form.css', '/src/components/button.css')
+  const placeholder = mode === 'date' ? '日付を選択' : '日付と時刻を選択'
+  return (
+    <div class={cx('field dt-field', error && 'has-error', fieldClass)} data-dt={mode}>
+      <label for={`${id}-open`} id={`${id}-label`}>
+        {label}
+      </label>
+      <div class="dt-control">
+        <button
+          type="button"
+          id={`${id}-open`}
+          class="dt-trigger"
+          aria-haspopup="dialog"
+          aria-expanded="false"
+          aria-describedby={describedBy(id, hint)}
+          data-dt-open
+        >
+          <Icon name="calendar" size={18} />
+          <span class={cx('dt-text', !value && 'is-empty')} data-dt-text data-dt-placeholder={placeholder}>
+            {value ? formatDateTimeInput(value) : placeholder}
+          </span>
+        </button>
+        {optional && (
+          <IconButton icon="x" label={`${mode === 'date' ? '日付' : '日時'}を消す`} class="dt-clear" hidden={!value} data-dt-clear />
+        )}
+        {/* type="hidden" にしないのは、検証のエラーで欄へ移動するとき、フォーカスもスクロールもできなくなるため */}
+        <input type="text" id={id} name={name} value={value} class="dt-value" tabindex={-1} readonly aria-hidden="true" data-dt-value />
+      </div>
+      <FieldError id={id} error={error} />
+      {hint && (
+        <p id={`${id}-desc`} class="field-hint">
+          {hint}
+        </p>
+      )}
     </div>
   )
 }

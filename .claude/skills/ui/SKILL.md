@@ -36,6 +36,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `SelectField` | ラベル付きのセレクト。`options`（`{ value, label }[]`）と `value` |
 | `TextAreaField` | ラベル付きの複数行入力 |
 | `FileField` | ラベル付きのファイル選択（中身は `FileInput`） |
+| `DateTimeField` | ラベル付きの日時（`mode="datetime"`、値は `YYYY-MM-DDTHH:mm`）か日付（`mode="date"`、値は `YYYY-MM-DD`）の選択。ブラウザ標準の `datetime-local` / `date` は使わずこれを使う。欄は「2026年11月13日（金） 14:30」と出すボタンで、押すと `client.ts` がパネルを出す。パソコン（幅 641px 以上かつ細かいポインター）では欄の下にカレンダーと時・分（5 分刻み）の一覧のポップオーバーを出し、選んだそばから欄に入れる（矢印キーで日を、PageUp / PageDown で月を移せる）。スマホ・タブレットでは下からシートを出し、カレンダーと時・分のホイールで選んで「決定」で入れる（背景を押すと取り消し）。`optional` で値を消す × とパネルの「クリア」が付く。送信されるのは隠した入力欄（`name`）の値なので、サーバー側の検証はそのまま使える |
 | `ImageField` | プレビュー付きの画像選択。`src`（保存済みの画像の URL）/ `aspect`（プレビューの縦横比、既定 `16 / 9`）/ `width`。`FileInput` のドロップ領域がそのままプレビューになり、画像があるときはホバー・ドラッグ中だけ案内を重ねる。選ぶとプレビューが替わり、上限を超えるファイルは `client.ts` が送信前に取り消す。受け取ったファイルは `lib/images.ts` の `putImage(prefix, file)` で検証・保存し、`serveImage(key)` で配信する |
 | `FormField` | ラベル・エラー・ヒントの枠だけ。中身を自由に組みたいとき（`children` に `Input` などを置く） |
 | `Input` / `Select` / `Textarea` | ラベルなしの部品。表の中や横並びのフォームで使う（`aria-label` を付ける）。`compact` で小さくなる |
@@ -43,7 +44,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `FileChip` | ファイル 1 件の行（`name` / `meta` / `icon`、既定 `file`）。編集画面の「現在のファイル」にも使い、`FileInput` で選んだファイルと同じ見た目にそろえる |
 | `SearchBox` | 一覧上部の検索欄（`/` キーでフォーカス） |
 | `SegmentedControl` | ラジオボタンの切り替え（`name` / `label` / `options`（`icon` 付き可）/ `value`） |
-| `MarkdownEditor`（`markdown.tsx`） | Markdown の入力欄。CodeMirror のエディターに書式ボタン（⌘B / ⌘I / ⌘K）と「書く / プレビュー」の切り替え、書き方の早見表が付く。`label` / `name` / `value` / `rows`（最低の高さ）/ `placeholder` / `error` / `hint`。送信されるのは中の `textarea`（`name`）の値。Markdown を受け取る入力欄では `TextAreaField` ではなくこれを使う |
+| `MarkdownEditor`（`markdown.tsx`） | Markdown の入力欄。CodeMirror のエディターに書式ボタン（⌘B / ⌘I / ⌘K）と「書く / プレビュー」の切り替え、書き方の早見表が付く。`label` / `name` / `value` / `rows`（最低の高さ）/ `placeholder` / `error` / `hint`。`split` を付けると、欄の幅が 760px 以上のときだけ「並べる」（左に書く欄、右に入力に追従するプレビュー）が増える。並べるかどうかは端末ごとの設定（`mdSplit`、既定は並べる）で、幅の広いときに「書く / 並べる」を選ぶと覚える。アイテムの編集画面の本文・問題文・説明で使う。送信されるのは中の `textarea`（`name`）の値。Markdown を受け取る入力欄では `TextAreaField` ではなくこれを使う |
 | `Switch` | オン・オフのスイッチ（`role="switch"` のボタン）。`label` / `checked` / `icon`。切り替えの処理は `data-*` を付けて `client.ts` に書く |
 
 各 `XxxField` の `fieldClass` は外側の `.field` に付くクラス（`when-link` などの出し分け用）。
@@ -162,7 +163,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 
 | 部品 | 用途 |
 | --- | --- |
-| `PdfBar` | PDF のアイテムで `AppShell` の `topbar` に渡す帯（パンくず・タイトル・「ビューアー / ブラウザ」の切り替え・`children` の操作ボタン）。帯そのものは `components/course.tsx` の `ItemBar`（`type` / `crumbs` / `title` / `hiddenNote` / `children`）で、アイテムを画面いっぱいに出すほかの画面（コード）もこれを使う。切り替えは保存せず、`client.ts` がその場で `PdfStage` の中身を入れ替える（開いているあいだは再読み込みなしの遷移でも保ち、再読み込みすると既定のビューアーに戻る） |
+| `PdfBar` | PDF のアイテムで `AppShell` の `topbar` に渡す帯（パンくず・タイトル・「ビューアー / ブラウザ」の切り替え・`children` の操作ボタン）。帯そのものは `components/course.tsx` の `ItemBar`（`type` か `icon`（種類のアイコンの代わり。Moodle モードの `KindIcon` など）/ `crumbs` / `title` / `hiddenNote` / `children`）で、アイテムを画面いっぱいに出すほかの画面（コード・アイテムの編集画面）もこれを使う。切り替えは保存せず、`client.ts` がその場で `PdfStage` の中身を入れ替える（開いているあいだは再読み込みなしの遷移でも保ち、再読み込みすると既定のビューアーに戻る） |
 | `PdfStage` | ヘッダーの下いっぱいの PDF 表示。既定は pdf.js の自作ビューアー（`src/pdf-viewer.ts`。`client.ts` が PDF のある画面でだけ読み込む）、ブラウザを選ぶと iframe でブラウザ標準のビューアー（サーバーは両方を描き、iframe は選ばれるまで `hidden` のまま `src` を入れない）。ビューアーは左にページのサムネイルの一覧を出し（ツールバーの左端のボタンで開閉。開閉は端末ごとの設定（`pdfThumbs`）に保存し、スマホ幅では閉じた状態から始めてページに重ねて出す）、今のページを `aria-current` で示す |
 
 ログイン前の画面（`AuthShell`）の右側は、`src/auth-art.ts` が three.js で描く 3D アニメーション（背景は無地で、台座の上で小さなキューブが 14 種類の形（ロケット・ネコ・家・アイスクリームなど。`MODELS`）に組み上がっては組み替わる。クリックでつつくとキューブが弾け、3 回続けると次の形へ。ドラッグで回せる）。`data-auth-art` の要素に `client.ts` が canvas を置き、再読み込みなしの遷移では同じ canvas を新しい要素へ移して続きから動かす。色は `--art-deep` / `--art-mid` / `--art-bright` / `--art-shine` とコースの色（`tone-*`）を読み取る。スマホ幅（非表示）では three.js を読み込まない
@@ -177,6 +178,8 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 - 残りの属性は `...rest` で要素に渡し、型は `JSX.IntrinsicElements['button']` などと交差させる（`data-*` や `aria-*` をそのまま受けられる）
 - 部品が出すクラスは `src/client.ts` も参照している（`btn-success` の切り替え、`data-toggle-password` など）。名前を変えるときは `client.ts` も検索する
 - 部品を足したら、この表にも追記する
+
+アイテムの編集画面（通常モードの `routes/content/views.tsx` と Moodle モードの `moodle-mode/views.tsx` の `ItemEditPage`）は、`AppShell` の `topbar` に `ItemBar` を渡し、その `children` に `components/course.tsx` の `ItemEditActions`（「編集中」・表示・保存（`ITEM_FORM` のフォームを送る）と、削除を入れた「その他の操作」）を置く。本文は `content.css` の `.item-editor` で、横幅いっぱい（最大 1920px）のグリッドの左の列にカード（`editor-main` / `editor-extra`）、右の列（`editor-side`）に設定のカードを置く。右の列はスクロールしても見えたまま止まり、画面より高ければその中だけスクロールする。幅 900px 以下では 1 列にして、設定を最後に回す。ファイルのアイテムの今のファイルと差し替えの欄は `ItemFileField`（幅があれば横に並べる）。Moodle モードのアクセス制限の画面は、従来の `.editor-head` / `.editor` のまま
 
 `src/components/layout.tsx` の `AppShell`（ログイン後。コース配下の画面では `tone` にコースの色を渡す。`topbar` に中身を渡すとヘッダーにその画面の見出しや操作を置き、レールを畳んで本文をヘッダーの下いっぱいに広げる。例は PDF のアイテム）/ `AuthShell`（ログイン前）で必ず包む。コース配下の画面は `components/course.tsx` の `CourseHeader` でタブを出す。
 

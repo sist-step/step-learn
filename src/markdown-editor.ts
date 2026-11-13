@@ -8,6 +8,7 @@ import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import type { MarkdownFormat } from './components/markdown'
 import { renderMarkdown } from './lib/markdown'
+import { getSetting, setSetting } from './lib/settings'
 
 const highlight = HighlightStyle.define([
   { tag: tags.heading, class: 'md-tok-heading' },
@@ -63,6 +64,13 @@ const formatKey = (key: string, format: MarkdownFormat) => ({
   },
 })
 
+type MdView = 'write' | 'split' | 'preview'
+
+const isMdView = (v: string | undefined): v is MdView => v === 'write' || v === 'split' || v === 'preview'
+
+// これより狭いと並べないのは、片側に 1 行で入る文字が少なくなりすぎて、書く欄もプレビューも読みにくくなるため
+const SPLIT_MIN_WIDTH = 760
+
 export function mountMarkdownEditor(field: HTMLElement) {
   const source = field.querySelector<HTMLTextAreaElement>('.md-editor-source')
   const host = field.querySelector<HTMLElement>('[data-md-host]')
@@ -70,6 +78,31 @@ export function mountMarkdownEditor(field: HTMLElement) {
   const toolbar = field.querySelector<HTMLElement>('.md-toolbar')
   if (!source || !host || !preview || !toolbar || field.hasAttribute('data-md-ready')) return
   field.setAttribute('data-md-ready', '')
+  const previewHead = field.querySelector<HTMLElement>('.md-preview-head')
+  const splitButton = field.querySelector<HTMLButtonElement>('[data-md-mode="split"]')
+
+  let chosen: MdView = splitButton && getSetting('mdSplit') ? 'split' : 'write'
+  let shown: MdView = 'write'
+  let wide = false
+  let previewTimer = 0
+
+  const renderPreview = () => {
+    const text = view.state.doc.toString()
+    preview.innerHTML = text.trim() ? renderMarkdown(text) : '<p class="muted">まだ何も書かれていません。</p>'
+  }
+
+  const show = (next: MdView) => {
+    if (next === 'preview') preview.style.minHeight = `${host.offsetHeight}px`
+    else preview.style.removeProperty('min-height')
+    shown = next
+    if (next !== 'write') renderPreview()
+    host.hidden = next === 'preview'
+    toolbar.hidden = next === 'preview'
+    preview.hidden = next === 'write'
+    if (previewHead) previewHead.hidden = next !== 'split'
+    field.dataset.mdView = next
+    field.querySelectorAll<HTMLElement>('[data-md-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mdMode === next)))
+  }
 
   const view = new EditorView({
     parent: host,
@@ -87,7 +120,11 @@ export function mountMarkdownEditor(field: HTMLElement) {
         ...(source.hasAttribute('aria-describedby') && { 'aria-describedby': source.getAttribute('aria-describedby')! }),
       }),
       EditorView.updateListener.of((u) => {
-        if (u.docChanged) source.value = u.state.doc.toString()
+        if (!u.docChanged) return
+        source.value = u.state.doc.toString()
+        if (shown !== 'split') return
+        clearTimeout(previewTimer)
+        previewTimer = window.setTimeout(renderPreview, 150)
       }),
     ],
   })
@@ -101,18 +138,22 @@ export function mountMarkdownEditor(field: HTMLElement) {
     view.focus()
   })
   field.querySelector('.md-modes')?.addEventListener('click', (e) => {
-    const btn = (e.target as Element).closest<HTMLButtonElement>('[data-md-mode]')
-    if (!btn) return
-    const showPreview = btn.dataset.mdMode === 'preview'
-    if (showPreview) {
-      preview.style.minHeight = `${host.offsetHeight}px`
-      const text = view.state.doc.toString()
-      preview.innerHTML = text.trim() ? renderMarkdown(text) : '<p class="muted">まだ何も書かれていません。</p>'
-    }
-    host.hidden = showPreview
-    toolbar.hidden = showPreview
-    preview.hidden = !showPreview
-    field.querySelectorAll('[data-md-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b === btn)))
-    if (!showPreview) view.focus()
+    const picked = (e.target as Element).closest<HTMLElement>('[data-md-mode]')?.dataset.mdMode
+    if (!isMdView(picked)) return
+    // プレビューと、並べられない幅で選んだ「書く」を覚えないのは、ちょっと確かめただけで、次に開いたときの並べ方まで変わってしまうため
+    if (splitButton && wide && picked !== 'preview') setSetting('mdSplit', picked === 'split')
+    chosen = picked
+    show(picked)
+    if (picked !== 'preview') view.focus()
   })
+
+  if (!splitButton) return
+  new ResizeObserver(() => {
+    const fits = field.clientWidth >= SPLIT_MIN_WIDTH
+    if (fits === wide) return
+    wide = fits
+    splitButton.hidden = !fits
+    const next = chosen === 'split' && !fits ? 'write' : chosen
+    if (next !== shown) show(next)
+  }).observe(field)
 }

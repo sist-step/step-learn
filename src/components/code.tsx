@@ -21,7 +21,7 @@ import type { FieldErrors } from '../lib/forms'
 import { Button, IconButton } from './button'
 import { Card } from './card'
 import { cx } from './cx'
-import { FieldError, FormField, Input, TextAreaField, TextField, Textarea } from './form'
+import { DateTimeField, FieldError, FormField, Input, TextAreaField, Textarea } from './form'
 import { Icon, type IconName } from './icons'
 import { Markdown } from './markdown'
 import { Popover } from './overlay'
@@ -396,15 +396,8 @@ const PERIOD_DESCRIPTION = `学生はこの期間だけ提出できます。長�
 
 const PeriodInputs = ({ opensAt, closesAt, errors, idPrefix = 'f' }: PeriodProps) => (
   <div class="stack">
-    <TextField label="開始日時" name="opens_at" id={`${idPrefix}-opens_at`} type="datetime-local" value={opensAt} error={errors.opens_at} />
-    <TextField
-      label="終了日時"
-      name="closes_at"
-      id={`${idPrefix}-closes_at`}
-      type="datetime-local"
-      value={closesAt}
-      error={errors.closes_at}
-    />
+    <DateTimeField label="開始日時" name="opens_at" id={`${idPrefix}-opens_at`} value={opensAt} error={errors.opens_at} />
+    <DateTimeField label="終了日時" name="closes_at" id={`${idPrefix}-closes_at`} value={closesAt} error={errors.closes_at} />
   </div>
 )
 
