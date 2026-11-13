@@ -1,7 +1,7 @@
 // lib/ai.ts に置かないのは、提供元ごとの実装（ai-openrouter.ts・ai-anthropic.ts）と lib/ai.ts が互いを読み込む循環になるため
 
 export const OPENROUTER_MODELS = ['deepseek/deepseek-v4.1-flash-1017'] as const
-export const ANTHROPIC_MODELS = ['claude-sonnet-5-5'] as const
+export const ANTHROPIC_MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5'] as const
 
 export const AI_MODELS = [...OPENROUTER_MODELS, ...ANTHROPIC_MODELS] as const
 
@@ -21,8 +21,16 @@ export const isAnthropicModel = (model: AiModel): model is AnthropicModel => (AN
 
 export const AI_MODEL_LABELS: Record<AiModel, string> = {
   'deepseek/deepseek-v4.1-flash-1017': 'DeepSeek V4.1 Flash 1017',
+  'claude-haiku-5-5': 'Claude Haiku 5.5',
   'claude-sonnet-5-5': 'Claude Sonnet 5.5',
 }
+
+// Sonnet を選択肢に出さないのは、簡単な依頼にまで高いモデルを使わず、難しい依頼だけを AI_HARD_TASK_MODELS で任せるため
+/** チャットを始めるときに選べるモデル */
+export const AI_CHAT_MODELS: readonly AiModel[] = ['deepseek/deepseek-v4.1-flash-1017', 'claude-haiku-5-5']
+
+/** チャットのモデルが、利用者がパネルで「難しい依頼」を選んだ発言だけを任せるモデル */
+export const AI_HARD_TASK_MODELS: Partial<Record<AiModel, AiModel>> = { 'claude-haiku-5-5': 'claude-sonnet-5-5' }
 
 /** 請求先。月の上限と使用量はこの単位で分ける */
 export const AI_PROVIDERS = ['openrouter', 'anthropic'] as const

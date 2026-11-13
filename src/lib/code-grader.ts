@@ -24,7 +24,7 @@ import {
 import type { CodeSettings, CodeStore, GradingResult } from './code-store'
 import { SandboxError, runCode, sandboxEnabled, type RunResult } from './sandbox'
 
-const CLAUDE: AiModel = 'claude-sonnet-5-5'
+const CLAUDE: AiModel = 'claude-haiku-5-5'
 const DEEPSEEK: AiModel = 'deepseek/deepseek-v4.1-flash-1017'
 
 // 提出のたびに呼ぶのに安い DeepSeek を常に使わないのは、Claude の予算に余裕があるうちは Claude で採点するため
