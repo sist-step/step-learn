@@ -7,7 +7,7 @@ import chevronLeftSvg from 'heroicons/24/outline/chevron-left.svg?raw'
 import chevronRightSvg from 'heroicons/24/outline/chevron-right.svg?raw'
 import sparklesSvg from 'heroicons/24/outline/sparkles.svg?raw'
 import { bundlePath, isExcludedPath } from './lib/bundle'
-import type { AiAgentEvent } from './lib/ai-agent'
+import type { AiAgentEvent, AiUsageMeter } from './lib/ai-agent'
 import type { AiTouched } from './lib/ai-tool-kit'
 import { formatBytes } from './lib/bytes'
 import { formatDateTimeInput } from './lib/course-period'
@@ -2343,24 +2343,63 @@ function setAiOpen(open: boolean) {
   if (aiDocked()) aiInput()?.focus()
 }
 
-type AiModelLabels = Record<string, { label: string; hard: string | null }>
+type AiModelLabels = Record<string, { label: string; hard: string | null; hardOff: string | null }>
 
-/** 選んでいるモデルと「難しい依頼」に合わせて、ヘッダーのモデル名と送信する hard をそろえる */
-function syncAiModel(form: HTMLFormElement) {
-  const labels = JSON.parse(form.dataset.aiLabels ?? '{}') as AiModelLabels
-  const model =
+const aiLabelsOf = (form: HTMLFormElement) => JSON.parse(form.dataset.aiLabels ?? '{}') as AiModelLabels
+
+const chosenAiModel = (form: HTMLFormElement) =>
+  (
     form.querySelector<HTMLInputElement>('input[name="model"]:checked') ??
     form.querySelector<HTMLInputElement>('input[type="hidden"][name="model"]')
-  const entry = model ? labels[model.value] : undefined
-  const toggle = form.querySelector<HTMLElement>('[data-ai-hard]')
+  )?.value
+
+/** 選んでいるモデルと「難しい依頼」に合わせて、ヘッダーのモデル名・送信する hard・入力欄の下の利用状況をそろえる */
+function syncAiModel(form: HTMLFormElement) {
+  const model = chosenAiModel(form)
+  const entry = model ? aiLabelsOf(form)[model] : undefined
+  $$<HTMLElement>('[data-ai-usage]', form).forEach((el) => (el.hidden = el.dataset.aiUsage !== model))
+  const toggle = form.querySelector<HTMLButtonElement>('button[data-ai-hard]')
   const hardField = form.elements.namedItem('hard')
   if (!toggle || !(hardField instanceof HTMLInputElement)) return
   toggle.hidden = !entry?.hard
-  const hard = !!entry?.hard && toggle.getAttribute('aria-pressed') === 'true'
+  toggle.disabled = !!entry?.hardOff
+  toggle.setAttribute('aria-label', entry?.hardOff ? `難しい依頼（${entry.hardOff}）` : '難しい依頼')
+  const hard = !!entry?.hard && !entry.hardOff && toggle.getAttribute('aria-pressed') === 'true'
   toggle.setAttribute('aria-pressed', String(hard))
   hardField.value = hard ? '1' : ''
   const name = aiPanel()?.querySelector('[data-ai-model]')
   if (name && entry) name.textContent = hard ? entry.hard : entry.label
+}
+
+/** 応答のあとの利用状況を反映する。同じ枠（key）はどのモデルの欄でも同じなので、key の合う行をすべて書き換える */
+function paintAiUsage(panel: HTMLElement, usage: AiUsageMeter[], hardOff: string | null) {
+  for (const meter of usage) {
+    $$<HTMLElement>(`[data-ai-meter="${CSS.escape(meter.key)}"]`, panel).forEach((el) => {
+      el.dataset.state = meter.state
+      el.toggleAttribute('data-high', meter.state === 'ok' && meter.percent >= 80)
+      el.style.setProperty('--ai-used', `${meter.percent}%`)
+      const percent = el.querySelector('[data-ai-meter-percent]')
+      if (percent) percent.textContent = String(meter.percent)
+      const note = el.querySelector('[data-ai-meter-note]')
+      if (note) note.textContent = meter.note
+      el.querySelector('[role=progressbar]')?.setAttribute('aria-valuenow', String(meter.percent))
+    })
+  }
+  $$<HTMLElement>('[data-ai-usage-trigger]', panel).forEach((trigger) => {
+    const main = trigger.closest('[data-ai-usage]')?.querySelector<HTMLElement>('.ai-meter')
+    const percent = main?.querySelector('[data-ai-meter-percent]')?.textContent ?? '0'
+    const label = main?.querySelector('.ai-meter-label')?.textContent ?? ''
+    trigger.setAttribute('aria-label', `今週の利用状況（${label} ${percent}% 使用）`)
+    const text = trigger.querySelector('[data-ai-usage-main]')
+    if (text) text.textContent = percent
+  })
+  const form = panel.querySelector<HTMLFormElement>('[data-ai-form]')
+  const model = form && chosenAiModel(form)
+  if (!form || !model) return
+  const labels = aiLabelsOf(form)
+  if (labels[model]) labels[model].hardOff = hardOff
+  form.dataset.aiLabels = JSON.stringify(labels)
+  syncAiModel(form)
 }
 
 document.addEventListener('change', (e) => {
@@ -2558,8 +2597,7 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
       pending.before(aiReplies(event.replies))
     } else {
       panel.dataset.revision = event.revision
-      const note = panel.querySelector('[data-ai-quota]')
-      if (note) note.textContent = event.quota
+      paintAiUsage(panel, event.usage, event.hardOff)
     }
     scrollAiLog(following)
   }

@@ -1,9 +1,22 @@
 // DB を読み込まず、ツール・使用量・保存先を渡して作るのは、通常モード（lib/ai-assistant.ts）と Moodle モード（moodle-mode/ai-assistant.ts）で同じ会話の進め方を使うため
 import * as z from 'zod/mini'
-import { AI_HARD_TASK_MODELS, AiError, complete, isAiModel, replyMessage, type AiMessage, type AiModel, type AiToolCall } from './ai'
+import {
+  AI_HARD_TASK_MODELS,
+  AI_LIMITED_MODEL_QUOTA_LABELS,
+  AI_MODEL_LABELS,
+  AI_PROVIDER_QUOTA_LABELS,
+  AiError,
+  aiProvider,
+  complete,
+  isAiModel,
+  replyMessage,
+  type AiMessage,
+  type AiModel,
+  type AiToolCall,
+} from './ai'
 import { chatRevision, type AiChat, type AiChatContent, type AiChatStore } from './ai-chat'
 import type { AiLedger } from './ai-ledger'
-import type { AiQuota } from './ai-quota'
+import type { AiQuota, AiQuotaState } from './ai-quota'
 import { judgeOffTopic } from './ai-scope'
 import {
   describedString,
@@ -20,7 +33,8 @@ import { ROLE_LABELS } from './types'
 /**
  * パネルへ流す出来事。chat は新しく始めたチャットの ID、error の retract は送った発言を会話に残さなかったこと（入力欄に戻してよい）、
  * confirm は確認カードを出したこと、applied はツールが内容を変えたこと、closed は開いていたチャットがもうないこと、
- * outdated は送った画面が古く、発言を受け付けなかったこと、replies は押して送れる続きの依頼、done の revision は保存したチャットの版
+ * outdated は送った画面が古く、発言を受け付けなかったこと、replies は押して送れる続きの依頼、
+ * done の usage はチャットのモデルの今週の利用状況、hardOff は「難しい依頼」を今使えない短い理由、revision は保存したチャットの版
  */
 export type AiAgentEvent =
   | { type: 'chat'; id: number }
@@ -32,7 +46,7 @@ export type AiAgentEvent =
   | { type: 'closed' }
   | { type: 'outdated' }
   | { type: 'replies'; replies: string[] }
-  | { type: 'done'; quota: string; revision: string }
+  | { type: 'done'; usage: AiUsageMeter[]; hardOff: string | null; revision: string }
 
 type Emit = (event: AiAgentEvent) => void
 
@@ -53,19 +67,35 @@ const RESET_AT = new Intl.DateTimeFormat('ja-JP', {
 const NOW = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', dateStyle: 'long', timeStyle: 'short' })
 
 /** 使えないときの理由。使えるなら null */
-export function quotaProblem({ state, resetAt }: AiQuota) {
+export function quotaProblem({ state, resetAt, model }: AiQuota) {
   const until = RESET_AT.format(new Date(resetAt * 1000))
-  if (state === 'off') return 'このモデルは管理者が停止しています。'
+  const name = model ? ` ${AI_MODEL_LABELS[model]} の` : 'の'
+  if (state === 'off') return model ? `${AI_MODEL_LABELS[model]} は管理者が停止しています。` : 'このモデルは管理者が停止しています。'
   if (state === 'month') return `今月の利用上限に達しました。${until}から使えます。`
-  if (state === 'week') return `今週の利用枠を使い切りました。${until}から使えます。`
+  if (state === 'week') return `今週${name}利用枠を使い切りました。${until}から使えます。`
   return null
 }
 
-export function quotaNote(quota: AiQuota) {
-  const problem = quotaProblem(quota)
-  if (problem) return problem
-  const percent = quota.limit > 0 ? Math.min(100, Math.floor((quota.used / quota.limit) * 100)) : 0
-  return `今週の利用枠の ${percent}% を使いました。`
+const QUOTA_SHORT: Record<Exclude<AiQuotaState, 'ok'>, string> = {
+  week: '今週の枠を使い切りました',
+  month: '今月の上限に達しました',
+  off: '停止中',
+}
+
+/** パネルの利用状況の 1 行。key は同じ枠を指す行で共通（提供元か、モデルだけの枠のモデル）、percent は使った割合（0〜100） */
+export type AiUsageMeter = { key: string; label: string; percent: number; state: AiQuotaState; note: string }
+
+function usageMeter(of: AiModel, quota: AiQuota): AiUsageMeter {
+  const { state, used, limit, resetAt, model } = quota
+  const provider = aiProvider(of)
+  return {
+    key: model ?? provider,
+    label: model ? AI_LIMITED_MODEL_QUOTA_LABELS[model] : AI_PROVIDER_QUOTA_LABELS[provider],
+    // 使い切っていなくても満たんにするのは、全体の上限で止まっているときに、本人の割合だけを見て使えると思わせないため
+    percent: state !== 'ok' ? 100 : limit > 0 ? Math.min(100, Math.floor((used / limit) * 100)) : 0,
+    state,
+    note: quotaProblem(quota) ?? `${RESET_AT.format(new Date(resetAt * 1000))}にリセット`,
+  }
 }
 
 const parseJson = (raw: string): unknown => {
@@ -115,7 +145,7 @@ export function createAiAgent({
   abilities,
 }: {
   tools: readonly AiAgentTool[]
-  ledger: Pick<AiLedger, 'getQuota' | 'recordUsage' | 'withinMonthlyLimit' | 'isModelAvailable'>
+  ledger: Pick<AiLedger, 'getQuota' | 'getQuotas' | 'recordUsage' | 'withinMonthlyLimit' | 'isModelAvailable'>
   chats: AiChatStore
   /** 利用者が開いている画面の説明 */
   pageContext: (c: AiToolContext, page: string) => Promise<string>
@@ -126,6 +156,28 @@ export function createAiAgent({
   function hardTaskModel(model: AiModel) {
     const hard = AI_HARD_TASK_MODELS[model]
     return hard && ledger.isModelAvailable(hard) ? hard : model
+  }
+
+  /** model のチャットで確かめる枠の使い具合。「難しい依頼」を任せるモデルだけの枠も含める */
+  function usageOf(userId: number, model: AiModel) {
+    const hard = hardTaskModel(model)
+    return [
+      ...ledger.getQuotas(userId, model).map((q) => usageMeter(model, q)),
+      ...(hard === model
+        ? []
+        : ledger
+            .getQuotas(userId, hard)
+            .filter((q) => q.model)
+            .map((q) => usageMeter(hard, q))),
+    ]
+  }
+
+  /** model のチャットで「難しい依頼」を今使えない短い理由。使えるか、任せる先がなければ null */
+  function hardOff(userId: number, model: AiModel) {
+    const hard = hardTaskModel(model)
+    if (hard === model) return null
+    const { state } = ledger.getQuota(userId, hard)
+    return state === 'ok' ? null : QUOTA_SHORT[state]
   }
 
   const wireTools = [...tools.map((t) => t.tool), SUGGEST_TOOL]
@@ -279,7 +331,12 @@ export function createAiAgent({
     running.add(user.id)
     try {
       if ((await task()) && !chats.saveChat(user.id, chat)) emit({ type: 'closed' })
-      emit({ type: 'done', quota: quotaNote(ledger.getQuota(user.id, chat.model)), revision: chatRevision(chat) })
+      emit({
+        type: 'done',
+        usage: usageOf(user.id, chat.model),
+        hardOff: hardOff(user.id, chat.model),
+        revision: chatRevision(chat),
+      })
     } finally {
       running.delete(user.id)
     }
@@ -345,5 +402,5 @@ export function createAiAgent({
       return true
     })
 
-  return { send, decide, hardTaskModel, isRunning: (userId: number) => running.has(userId), chats, ledger }
+  return { send, decide, hardTaskModel, usageOf, hardOff, isRunning: (userId: number) => running.has(userId), chats, ledger }
 }

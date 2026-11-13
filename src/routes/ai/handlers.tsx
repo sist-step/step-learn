@@ -3,7 +3,7 @@ import { Hono, type Context } from 'hono'
 import { stream } from 'hono/streaming'
 import { AiPanel, type AiCardChange, type AiChatEntry, type AiPanelProps } from '../../components/ai-panel'
 import { AI_CHAT_MODELS, AI_MODEL_LABELS, aiProvider, isAiModel, isProviderEnabled, type AiModel } from '../../lib/ai'
-import { quotaNote, quotaProblem, SUGGEST_REPLIES, type AiAgent, type AiAgentEvent } from '../../lib/ai-agent'
+import { quotaProblem, SUGGEST_REPLIES, type AiAgent, type AiAgentEvent } from '../../lib/ai-agent'
 import { chatRevision, type AiChatContent } from '../../lib/ai-chat'
 import type { AiChange } from '../../lib/ai-tool-kit'
 import { diffHunks, diffLines } from '../../lib/diff'
@@ -71,7 +71,9 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
       value: model,
       label: AI_MODEL_LABELS[model],
       hardLabel: hard === model ? null : AI_MODEL_LABELS[hard],
+      hardOff: agent.hardOff(user.id, model),
       problem: quotaProblem(ledger.getQuota(user.id, model)),
+      usage: agent.usageOf(user.id, model),
     }
   }
 
@@ -88,7 +90,6 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
         replies: chat.content.replies ?? [],
         busy: agent.isRunning(user.id),
       },
-      quota: chat ? quotaNote(ledger.getQuota(user.id, chat.model)) : '',
     }
   }
 

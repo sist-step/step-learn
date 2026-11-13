@@ -2,11 +2,12 @@
 .ai-notice { margin-bottom: 16px; }
 .ai-stats .stat-value { text-align: right; }
 .ai-stats .stat-value small { white-space: nowrap; }
+.ai-stats .stat-label { white-space: normal; }
+.ai-stat-sub { display: block; margin-top: 2px; color: var(--muted); font-size: var(--fs-xs); font-weight: 500; }
 .ai-model-sm { display: none; }
 @media (max-width: 640px) {
   .stats.ai-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ai-stats .stat { flex-direction: column; align-items: flex-start; }
-  .ai-stats .stat-label { white-space: normal; }
   .ai-stats .stat-value { text-align: left; }
   .ai-model-sm { display: block; }
 }

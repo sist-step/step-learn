@@ -1,8 +1,12 @@
 // 通常モードと Moodle モードの両方から使うので、DB を読み込まない
-import type { AiProvider } from './ai-models'
+import type { AiLimitedModel, AiProvider } from './ai-models'
 
 /** 管理画面で保存するまでの月の上限（USD） */
 export const AI_DEFAULT_MONTHLY_LIMITS: Record<AiProvider, number> = { openrouter: 3, anthropic: 15 }
+
+// 月の上限を別に決めず、提供元の枠に対する割合にするのは、利用者の数や月の残りで枠が変わっても、2 つの枠の釣り合いが崩れないため
+/** 管理画面で保存するまでの、モデルだけの週の枠（提供元の 1 人あたりの週の枠に対する割合） */
+export const AI_DEFAULT_WEEKLY_SHARES: Record<AiLimitedModel, number> = { 'claude-sonnet-5-5': 0.5 }
 
 const DAY = 86_400
 // Intl で求めないのは、日本時間には夏時間がなく、固定の時差で計算できるため
@@ -32,8 +36,8 @@ export const aiPool = (monthlyLimit: number, spentBefore: number, { monthEnd, st
 /** off: 月の上限が 0 / month: 全体が月の上限に達した / week: 本人が今週の枠を使い切った */
 export type AiQuotaState = 'ok' | 'week' | 'month' | 'off'
 
-/** limit は本人の今週の枠、used はそのうち使った額（USD）。resetAt は次に使えるようになる時刻 */
-export type AiQuota = { state: AiQuotaState; limit: number; used: number; resetAt: number }
+/** limit は本人の今週の枠、used はそのうち使った額（USD）。resetAt は次に使えるようになる時刻。model はモデルだけの枠のときのそのモデル */
+export type AiQuota = { state: AiQuotaState; limit: number; used: number; resetAt: number; model?: AiLimitedModel }
 
 export function aiQuota(usage: {
   monthlyLimit: number
@@ -48,4 +52,12 @@ export function aiQuota(usage: {
   if (monthlyLimit <= 0) return { state: 'off', limit: 0, used, resetAt: period.end }
   if (monthSpent >= monthlyLimit) return { state: 'month', limit, used, resetAt: period.monthEnd }
   return { state: used >= limit ? 'week' : 'ok', limit, used, resetAt: period.end }
+}
+
+/** model だけの本人の今週の枠。provider は同じ提供元の本人の枠で、全体の上限で止まっているときはそれに従う */
+export function aiModelQuota(provider: AiQuota, { model, share, used }: { model: AiLimitedModel; share: number; used: number }): AiQuota {
+  const limit = provider.limit * share
+  if (provider.state === 'off' || provider.state === 'month') return { ...provider, model, limit, used }
+  if (share <= 0) return { state: 'off', limit: 0, used, resetAt: provider.resetAt, model }
+  return { state: used >= limit ? 'week' : 'ok', limit, used, resetAt: provider.resetAt, model }
 }
