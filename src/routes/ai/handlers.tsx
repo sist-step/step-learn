@@ -3,7 +3,7 @@ import { Hono, type Context } from 'hono'
 import { stream } from 'hono/streaming'
 import { AiPanel, type AiCardChange, type AiChatEntry, type AiPanelProps } from '../../components/ai-panel'
 import { AI_CHAT_MODELS, AI_MODEL_LABELS, aiProvider, isAiModel, isProviderEnabled, type AiModel } from '../../lib/ai'
-import { quotaProblem, SUGGEST_REPLIES, type AiAgent, type AiAgentEvent } from '../../lib/ai-agent'
+import { contextPercent, quotaProblem, SUGGEST_REPLIES, type AiAgent, type AiAgentEvent } from '../../lib/ai-agent'
 import { chatRevision, type AiChatContent } from '../../lib/ai-chat'
 import type { AiChange } from '../../lib/ai-tool-kit'
 import { diffHunks, diffLines } from '../../lib/diff'
@@ -23,12 +23,15 @@ const TOOL_FALLBACK_LABEL = 'ツールを使いました'
 const cardChange = ({ label, before, after, long }: AiChange): AiCardChange =>
   long ? { label, hunks: diffHunks(diffLines(before, after), 1) } : { label, before, after }
 
-function entriesOf({ messages, labels, cards, touched }: AiChatContent): AiChatEntry[] {
-  return messages.flatMap((m): AiChatEntry[] => {
-    if (m.role === 'user') return [{ kind: 'user', text: m.content }]
-    if (m.role !== 'assistant') return []
+function entriesOf({ messages, labels, cards, touched, compactions = [] }: AiChatContent): AiChatEntry[] {
+  return messages.flatMap((m, i): AiChatEntry[] => {
+    const marks = compactions.includes(i) ? [{ kind: 'compacted' as const }] : []
+    if (m.role === 'user') return [...marks, { kind: 'user', text: m.content }]
+    if (m.role !== 'assistant') return marks
     return [
+      ...marks,
       ...(m.content ? [{ kind: 'assistant' as const, text: m.content }] : []),
+      ...(m.stopped ? [{ kind: 'stopped' as const }] : []),
       ...(m.toolCalls ?? [])
         .filter((t) => t.name !== SUGGEST_REPLIES)
         .map((t): AiChatEntry => {
@@ -89,6 +92,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
         entries: entriesOf(chat.content),
         replies: chat.content.replies ?? [],
         busy: agent.isRunning(user.id),
+        context: contextPercent(chat.content),
       },
     }
   }
@@ -173,6 +177,15 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     })
   }
 
+  /** 作成中の応答を止める。ほかのタブで始めた応答も止められるように、チャットではなく利用者で探し、保存し終えてから返す */
+  async function stop(c: Context<AppEnv>) {
+    const user = c.var.user!
+    if (!(await canUse(c))) return c.notFound()
+    const stopped = await agent.stop(user.id)
+    if (wantsJson(c)) return c.json({ ok: true, stopped })
+    return c.redirect(sameOriginReferer(c, '/dashboard'), 303)
+  }
+
   async function close(c: Context<AppEnv>) {
     const user = c.var.user!
     if (!(await canUse(c))) return c.notFound()
@@ -183,7 +196,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     return c.redirect(sameOriginReferer(c, '/dashboard'), 303)
   }
 
-  return { renderPanel, show, state, send, decide, close }
+  return { renderPanel, show, state, send, decide, stop, close }
 }
 
 export type AiHandlers = ReturnType<typeof createAiHandlers>
@@ -194,6 +207,7 @@ export function aiRoutes(h: AiHandlers) {
   app.get('/chat/state', h.state)
   app.post('/chat', h.send)
   app.post('/chat/confirm', h.decide)
+  app.post('/chat/stop', h.stop)
   app.post('/chat/close', h.close)
   return app
 }

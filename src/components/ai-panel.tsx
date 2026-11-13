@@ -16,6 +16,8 @@ export type AiCardChange = { label: string; before: string; after: string } | { 
 
 export type AiChatEntry =
   | { kind: 'user' | 'assistant'; text: string }
+  | { kind: 'stopped' }
+  | { kind: 'compacted' }
   | { kind: 'tool'; label: string; touched?: AiTouched }
   | { kind: 'card'; callId: string; title: string; changes: AiCardChange[]; state: AiCardState; note?: string; touched?: AiTouched }
 
@@ -36,8 +38,19 @@ export type AiPanelProps = {
   models: readonly AiModelOption[]
   /** チャットの版（lib/ai-chat.ts の chatRevision） */
   revision: string
-  /** hard は最後の発言で「難しい依頼」を選んでいたこと、replies は最後の応答のあとに出す、押して送れる続きの依頼 */
-  chat: { id: number; model: AiModelOption; hard: boolean; entries: AiChatEntry[]; replies: string[]; busy: boolean } | null
+  /**
+   * hard は最後の発言で「難しい依頼」を選んでいたこと、replies は最後の応答のあとに出す、押して送れる続きの依頼、
+   * context は会話の大きさ（lib/ai-agent.ts の contextPercent）
+   */
+  chat: {
+    id: number
+    model: AiModelOption
+    hard: boolean
+    entries: AiChatEntry[]
+    replies: string[]
+    busy: boolean
+    context: number
+  } | null
 }
 
 export const AI_PANEL_ID = 'ai-panel'
@@ -136,6 +149,8 @@ const Entry = ({ entry, chatId }: { entry: AiChatEntry; chatId: number }) => {
   if (entry.kind === 'card') return <Card entry={entry} chatId={chatId} />
   if (entry.kind === 'tool') return <ToolLine label={entry.label} touched={entry.touched} />
   if (entry.kind === 'user') return <UserMessage text={entry.text} />
+  if (entry.kind === 'stopped') return <StoppedLine />
+  if (entry.kind === 'compacted') return <CompactedLine />
   return (
     <div class="ai-msg ai-msg-assistant">
       <Markdown source={entry.text} class="ai-prose" />
@@ -171,6 +186,19 @@ const ReplyButton = ({ text }: { text?: string }) => (
     <span data-ai-text>{text}</span>
     <Icon name="arrowUp" size={14} />
   </button>
+)
+
+const StoppedLine = () => (
+  <p class="ai-tool ai-stopped">
+    <Icon name="stop" size={15} />
+    生成を停止しました
+  </p>
+)
+
+const CompactedLine = () => (
+  <p class="ai-compacted" role="note">
+    これまでの会話を要約しました
+  </p>
 )
 
 const ToolLine = ({ label, touched }: { label?: string; touched?: AiTouched }) => (
@@ -243,6 +271,32 @@ const Meter = ({ meter }: { meter: AiUsageMeter }) => (
 )
 
 /** 入力欄の下の、今週の枠の使い具合。モデルを選べるときはモデルごとに描き、client.ts が選んだモデルのものだけを出す */
+const contextLabel = (percent: number) => `会話の長さ（${percent}%）`
+
+/** 会話の大きさ。client.ts（paintAiContext）が応答のあとに書き換える */
+const ContextMeter = ({ percent }: { percent: number }) => (
+  <Popover
+    class="ai-usage-pop ai-context-pop"
+    panelClass="ai-usage-panel"
+    trigger={
+      <summary class="ai-usage-trigger" aria-label={contextLabel(percent)} data-ai-context style={`--ai-used:${percent}%`}>
+        <span class="ai-context-ring" aria-hidden="true" />
+        <span class="ai-usage-text">
+          会話 <span data-ai-context-percent>{percent}</span>%
+        </span>
+      </summary>
+    }
+  >
+    <div class="ai-usage-head">
+      <strong>会話の長さ</strong>
+    </div>
+    <p class="ai-context-note">
+      AI に送っている会話の量です。100%
+      になると、次に送るときに古いやり取りを要約して、続きから話せるようにします。パネルの会話はそのまま残ります。
+    </p>
+  </Popover>
+)
+
 const Usage = ({ option, hidden }: { option: AiModelOption; hidden: boolean }) => {
   const [main] = option.usage
   if (!main) return null
@@ -392,13 +446,15 @@ export const AiPanel = ({ models, revision, chat }: AiPanelProps) => {
             disabled={!chat && usable.length === 0}
           />
           <IconButton type="submit" icon="arrowUp" label="送信" class="ai-send" disabled={!chat && usable.length === 0} />
+          <IconButton icon="stop" label="生成を停止" class="ai-stop" data-ai-stop />
         </div>
         <FieldError id="ai-message" />
         <div class="ai-foot">
           {choices.map((m) => (
             <Usage option={m} hidden={m.value !== current?.value} />
           ))}
-          <p class="ai-note">Enter で送信、Shift + Enter で改行</p>
+          {chat && <ContextMeter percent={chat.context} />}
+          <p class="ai-note">Shift + Enter で改行</p>
         </div>
       </form>
 
@@ -422,8 +478,14 @@ export const AiPanel = ({ models, revision, chat }: AiPanelProps) => {
       <template data-ai-template="pending">
         <p class="ai-tool ai-pending">
           <span class="ai-dots" aria-hidden="true" />
-          考えています…
+          <span data-ai-pending-label>考えています…</span>
         </p>
+      </template>
+      <template data-ai-template="compacted">
+        <CompactedLine />
+      </template>
+      <template data-ai-template="stopped">
+        <StoppedLine />
       </template>
       <template data-ai-template="error">
         <p class="ai-error" role="alert">
