@@ -16,14 +16,15 @@ export type AiChatEntry =
   | { kind: 'tool'; label: string }
   | { kind: 'card'; callId: string; title: string; changes: AiCardChange[]; state: AiCardState; note?: string }
 
-/** problem は今そのモデルを使えない理由 */
-export type AiModelOption = { value: string; label: string; problem: string | null }
+/** hardLabel は「難しい依頼」を選んだときに答えるモデル（なければ選べない）、problem は今そのモデルを使えない理由 */
+export type AiModelOption = { value: string; label: string; hardLabel: string | null; problem: string | null }
 
 export type AiPanelProps = {
   models: readonly AiModelOption[]
   /** チャットの版（lib/ai-chat.ts の chatRevision） */
   revision: string
-  chat: { id: number; model: string; modelLabel: string; entries: AiChatEntry[]; busy: boolean } | null
+  /** hard は最後の発言で「難しい依頼」を選んでいたこと */
+  chat: { id: number; model: AiModelOption; hard: boolean; entries: AiChatEntry[]; busy: boolean } | null
   /** 開いているチャットのモデルの、今週の枠の使い具合 */
   quota: string
 }
@@ -187,6 +188,10 @@ export const AiPanel = ({ models, revision, chat, quota }: AiPanelProps) => {
   useStyle('/src/components/ai-panel.css')
   useStyle('/src/components/markdown.css')
   const usable = models.filter((m) => !m.problem)
+  const current = chat?.model ?? usable[0]
+  const hard = !!chat?.hard && !!current?.hardLabel
+  // 選べるモデルごとの名前を渡すのは、モデルや「難しい依頼」を切り替えたとき、client.ts がヘッダーの名前を書き換えるため
+  const labels = Object.fromEntries((chat ? [chat.model] : usable).map((m) => [m.value, { label: m.label, hard: m.hardLabel }]))
   return (
     <aside
       id={AI_PANEL_ID}
@@ -196,7 +201,7 @@ export const AiPanel = ({ models, revision, chat, quota }: AiPanelProps) => {
       data-keep
       data-ai-panel
       data-chat={chat?.id}
-      data-model={chat?.model}
+      data-model={chat?.model.value}
       data-revision={revision}
       data-busy={chat?.busy ? '' : undefined}
     >
@@ -204,7 +209,11 @@ export const AiPanel = ({ models, revision, chat, quota }: AiPanelProps) => {
         <Icon name="sparkles" size={18} class="ai-panel-mark" />
         <div class="ai-panel-heading">
           <strong>AI アシスタント</strong>
-          {chat && <span class="ai-panel-model">{chat.modelLabel}</span>}
+          {current && (
+            <span class="ai-panel-model" data-ai-model>
+              {hard ? current.hardLabel : current.label}
+            </span>
+          )}
         </div>
         {chat && (
           <form method="post" action="/ai/chat/close" data-ai-close data-confirm="このチャットを閉じますか？閉じた会話は開き直せません。">
@@ -225,8 +234,17 @@ export const AiPanel = ({ models, revision, chat, quota }: AiPanelProps) => {
         )}
       </div>
 
-      <form method="post" action="/ai/chat" class="ai-composer" data-ai-form {...validateWith('aiMessage')}>
+      <form
+        method="post"
+        action="/ai/chat"
+        class="ai-composer"
+        data-ai-form
+        data-ai-labels={JSON.stringify(labels)}
+        {...validateWith('aiMessage')}
+      >
         <input type="hidden" name="chat" value={chat ? String(chat.id) : ''} />
+        <input type="hidden" name="hard" value={hard ? '1' : ''} />
+        {chat && <input type="hidden" name="model" value={chat.model.value} />}
         {!chat && usable.length > 1 && (
           <SegmentedControl
             name="model"
@@ -250,9 +268,23 @@ export const AiPanel = ({ models, revision, chat, quota }: AiPanelProps) => {
           <IconButton type="submit" icon="arrowUp" label="送信" class="ai-send" disabled={!chat && usable.length === 0} />
         </div>
         <FieldError id="ai-message" />
-        <p class="ai-note" data-ai-quota>
-          {quota || 'Enter で送信、Shift + Enter で改行'}
-        </p>
+        <div class="ai-composer-foot">
+          <Button
+            size="sm"
+            variant="ghost"
+            icon="lightBulb"
+            class="ai-hard"
+            data-ai-hard
+            aria-pressed={hard ? 'true' : 'false'}
+            title="よく考える必要のある依頼を、より賢いモデルに任せます"
+            hidden={!current?.hardLabel}
+          >
+            難しい依頼
+          </Button>
+          <p class="ai-note" data-ai-quota>
+            {quota || 'Enter で送信、Shift + Enter で改行'}
+          </p>
+        </div>
       </form>
 
       <template data-ai-template="user">

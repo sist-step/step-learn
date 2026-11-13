@@ -2282,9 +2282,40 @@ function setAiOpen(open: boolean) {
   if (aiDocked()) aiInput()?.focus()
 }
 
+type AiModelLabels = Record<string, { label: string; hard: string | null }>
+
+/** 選んでいるモデルと「難しい依頼」に合わせて、ヘッダーのモデル名と送信する hard をそろえる */
+function syncAiModel(form: HTMLFormElement) {
+  const labels = JSON.parse(form.dataset.aiLabels ?? '{}') as AiModelLabels
+  const model =
+    form.querySelector<HTMLInputElement>('input[name="model"]:checked') ??
+    form.querySelector<HTMLInputElement>('input[type="hidden"][name="model"]')
+  const entry = model ? labels[model.value] : undefined
+  const toggle = form.querySelector<HTMLElement>('[data-ai-hard]')
+  const hardField = form.elements.namedItem('hard')
+  if (!toggle || !(hardField instanceof HTMLInputElement)) return
+  toggle.hidden = !entry?.hard
+  const hard = !!entry?.hard && toggle.getAttribute('aria-pressed') === 'true'
+  toggle.setAttribute('aria-pressed', String(hard))
+  hardField.value = hard ? '1' : ''
+  const name = aiPanel()?.querySelector('[data-ai-model]')
+  if (name && entry) name.textContent = hard ? entry.hard : entry.label
+}
+
+document.addEventListener('change', (e) => {
+  const input = e.target as Element
+  if (input instanceof HTMLInputElement && input.name === 'model' && input.form?.matches('[data-ai-form]')) syncAiModel(input.form)
+})
+
 document.addEventListener('click', (e) => {
   const target = e.target as Element
   if (target.closest('[data-ai-toggle]')) return setAiOpen(!document.documentElement.hasAttribute('data-ai-open'))
+  const hardToggle = target.closest<HTMLElement>('[data-ai-hard]')
+  const hardForm = hardToggle?.closest<HTMLFormElement>('[data-ai-form]')
+  if (hardToggle && hardForm) {
+    hardToggle.setAttribute('aria-pressed', String(hardToggle.getAttribute('aria-pressed') !== 'true'))
+    return syncAiModel(hardForm)
+  }
   const suggestion = target.closest<HTMLElement>('[data-ai-suggest]')
   const input = aiInput()
   if (!suggestion || !input) return
@@ -2316,7 +2347,7 @@ document.addEventListener('compositionend', (e) => {
   if ((e.target as Element).matches('.ai-textarea')) aiComposing = false
 })
 
-/** パネルを取り直す。入力中の文と選んでいたモデルはそのまま残し、model を渡せば、新しいチャットのモデルにそれを選んでおく */
+/** パネルを取り直す。入力中の文と選んでいたモデル・「難しい依頼」はそのまま残し、model を渡せば、新しいチャットのモデルにそれを選んでおく */
 async function refreshAiPanel(model?: string) {
   window.clearTimeout(aiSyncTimer)
   const res = await fetch('/ai/chat', { headers: { Accept: 'text/html' } })
@@ -2327,9 +2358,13 @@ async function refreshAiPanel(model?: string) {
   const draft = aiInput()?.value ?? ''
   const focused = document.activeElement === aiInput()
   const chosen = model ?? current.querySelector<HTMLInputElement>('input[name=model]:checked')?.value
+  const hard = current.querySelector('[data-ai-hard]')?.getAttribute('aria-pressed')
   current.replaceWith(document.adoptNode(next))
   const option = $$<HTMLInputElement>('input[type=radio][name=model]', next).find((r) => r.value === chosen)
   if (option) option.checked = true
+  const form = next.querySelector<HTMLFormElement>('[data-ai-form]')
+  if (hard) next.querySelector('[data-ai-hard]')?.setAttribute('aria-pressed', hard)
+  if (form) syncAiModel(form)
   const input = aiInput()
   if (input && draft) {
     input.value = draft

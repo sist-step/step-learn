@@ -39,6 +39,7 @@ import heading from 'heroicons/24/outline/h2.svg?raw'
 import heart from 'heroicons/24/outline/heart.svg?raw'
 import home from 'heroicons/24/outline/home.svg?raw'
 import info from 'heroicons/24/outline/information-circle.svg?raw'
+import lightBulb from 'heroicons/24/outline/light-bulb.svg?raw'
 import italic from 'heroicons/24/outline/italic.svg?raw'
 import link from 'heroicons/24/outline/link.svg?raw'
 import listBullet from 'heroicons/24/outline/list-bullet.svg?raw'
@@ -91,6 +92,7 @@ const svgs = {
   pencilSquare,
   arrowDown,
   ellipsis,
+  lightBulb,
   link,
   external,
   page,
