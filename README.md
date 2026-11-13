@@ -109,7 +109,7 @@ npm start            # = node dist/server/index.js
 - `SESSION_SECRET`：セッション Cookie の署名鍵（32 文字以上）。未設定なら `data/session-secret` を自動生成して使います。変更すると全員がログアウトされ、保存中の AI のチャットも読めなくなるので消えます
 - `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM`：確認メールの送信に使う SMTP サーバー。`SMTP_HOST` を設定する場合は `MAIL_FROM` と `APP_ORIGIN` も必須です
 - `OPENROUTER_API_KEY`：[OpenRouter](https://openrouter.ai/) 経由のモデルに使う API キー。AI エージェントに送られた発言が STEP Learn の作業と関係あるかの判定（Span-01 Lite、判定できなかったときは Span-02）に使い、未設定なら判定を省きます。DeepSeek V4.1 Flash は予備で、Claude を使えないときと、Anthropic の今月の使用量が月の上限の 60% を超えたときだけ、会話で選べるようになり、コードのアイテムの採点もこちらに切り替わります（`src/lib/ai-models.ts` の `AI_RESERVE_MODELS`）。Jev は一時的に止めています（`AI_PAUSED_MODELS`）
-- `CLAUDE_API_KEY`：Claude（Claude Sonnet 5.5）に使う [Anthropic](https://platform.claude.com/) の API キー。未設定ならこのモデルは使えません。AI エージェントの会話とコードのアイテムの採点はふだんこのモデルを使い、学生が提出したコードと問題文・採点基準が Anthropic の API（DeepSeek に切り替わったあとは OpenRouter）に送られます
+- `CLAUDE_API_KEY`：Claude（Claude Haiku 5.5・Claude Sonnet 5.5）に使う [Anthropic](https://platform.claude.com/) の API キー。未設定ならこれらのモデルは使えません。AI エージェントの会話とコードのアイテムの採点はふだん Claude Haiku 5.5 を使い、AI のパネルで「難しい依頼」を選んで送った発言だけ Claude Sonnet 5.5（考える深さ high）が答えます（`AI_HARD_TASK_MODELS`）。学生が提出したコードと問題文・採点基準が Anthropic の API（DeepSeek に切り替わったあとは OpenRouter）に送られます
 - 使うモデルは `src/lib/ai-models.ts` に並べたものだけです。月の上限（USD）は提供元ごとに管理 > AI で設定します（保存するまでは OpenRouter が $3、Anthropic が $15）。コードのアイテムの採点にかかった額も採点に使ったモデルの提供元の使用量に数え、月の上限に達している間は、提出しても自動では採点しません
 - `AI_EMAIL_DOMAIN`：AI エージェントを使えるメールアドレスのドメイン（`@` より後ろの完全一致）。未設定なら `sist.ac.jp`
 - `SANDBOX_URL`：学生が書いたコードを実行する sandbox のコンテナ（下の「コードを実行する sandbox」）の接続先。未設定ならコードの実行は使えません。Docker Compose で動かす場合は自動で設定されます

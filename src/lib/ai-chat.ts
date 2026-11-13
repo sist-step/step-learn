@@ -23,8 +23,11 @@ export type AiCard = {
   note?: string
 }
 
-/** labels と cards はツール呼び出しの id ごとの、画面に出す説明と確認カード */
-export type AiChatContent = { messages: AiMessage[]; labels: Record<string, string>; cards: Record<string, AiCard> }
+/**
+ * labels と cards はツール呼び出しの id ごとの、画面に出す説明と確認カード。
+ * turnModel は最後の発言に答えているモデルで、チャットのモデルと違うのは難しい依頼を任せたとき（lib/ai-models.ts の AI_HARD_TASK_MODELS）
+ */
+export type AiChatContent = { messages: AiMessage[]; labels: Record<string, string>; cards: Record<string, AiCard>; turnModel?: AiModel }
 
 export type AiChat = { id: number; model: AiModel; content: AiChatContent }
 

@@ -1,5 +1,5 @@
 // DB を読み込まず、ツール・使用量・保存先を渡して作るのは、通常モード（lib/ai-assistant.ts）と Moodle モード（moodle-mode/ai-assistant.ts）で同じ会話の進め方を使うため
-import { AiError, complete, replyMessage, type AiMessage, type AiToolCall } from './ai'
+import { AI_HARD_TASK_MODELS, AiError, complete, isAiModel, replyMessage, type AiMessage, type AiModel, type AiToolCall } from './ai'
 import { chatRevision, type AiChat, type AiChatContent, type AiChatStore } from './ai-chat'
 import type { AiLedger } from './ai-ledger'
 import type { AiQuota } from './ai-quota'
@@ -88,6 +88,12 @@ export function createAiAgent({
   /** システムプロンプトに入れる、できること・できないことの箇条書き */
   abilities: readonly string[]
 }) {
+  /** model のチャットで「難しい依頼」を選んだときに答えるモデル。任せる先がないか使えないときは model のまま */
+  function hardTaskModel(model: AiModel) {
+    const hard = AI_HARD_TASK_MODELS[model]
+    return hard && ledger.isModelAvailable(hard) ? hard : model
+  }
+
   // 同じ利用者の発言を並べて処理しないのは、どちらも同じ会話の続きとして保存し、片方の発言が消えるため
   const running = new Set<number>()
 
@@ -150,7 +156,9 @@ export function createAiAgent({
   /** AI に答えさせる。言い終えるか、確認カードを出すか、失敗するまで続ける。fail は失敗を伝える */
   async function converse(c: AiToolContext, chat: AiChat, page: string, emit: Emit, fail: (message: string) => void) {
     const user = c.var.user!
-    const { messages } = chat.content
+    const { messages, turnModel } = chat.content
+    // 保存したモデルを確かめるのは、モデルを一覧から外したあとも、その前に始めた発言の続き（確認カードの承認）が来るため
+    const model = turnModel && isAiModel(turnModel) ? turnModel : chat.model
     const system = await systemPrompt(c, page)
     for (let round = 0; ; round++) {
       if (round === MAX_ROUNDS) {
@@ -158,12 +166,12 @@ export function createAiAgent({
         messages.push({ role: 'assistant', content: text })
         return emit({ type: 'text', text })
       }
-      const problem = quotaProblem(ledger.getQuota(user.id, chat.model))
+      const problem = quotaProblem(ledger.getQuota(user.id, model))
       if (problem) return fail(problem)
       let reply
       try {
         reply = await complete({
-          model: chat.model,
+          model,
           messages: [system, ...messages],
           tools: tools.map((t) => t.tool),
           onText: (text) => emit({ type: 'text', text }),
@@ -172,7 +180,7 @@ export function createAiAgent({
         if (!(e instanceof AiError)) console.error('[ai]', e)
         return fail(e instanceof AiError ? `${e.message}。` : 'AI を呼び出せませんでした。')
       }
-      ledger.recordUsage(user.id, chat.model, reply.usage)
+      ledger.recordUsage(user.id, model, reply.usage)
 
       if (reply.stop === 'refusal') return fail('AI がこの依頼には応答できませんでした。')
       if (reply.stop === 'length') {
@@ -215,8 +223,11 @@ export function createAiAgent({
     }
   }
 
-  /** chat に message を足して AI に答えさせ、保存する */
-  const send = ({ c, chat, message, page }: { c: AiToolContext; chat: AiChat; message: string; page: string }, emit: Emit) =>
+  /** chat に message を足して AI に答えさせ、保存する。hard は利用者が「難しい依頼」を選んだこと（AI_HARD_TASK_MODELS のモデルに任せる） */
+  const send = (
+    { c, chat, message, page, hard }: { c: AiToolContext; chat: AiChat; message: string; page: string; hard: boolean },
+    emit: Emit,
+  ) =>
     exclusive(c, chat, emit, async () => {
       const { messages } = chat.content
       if (messages.filter((m) => m.role === 'user').length >= MAX_AI_TURNS) {
@@ -227,6 +238,7 @@ export function createAiAgent({
         emit({ type: 'error', message: OFF_TOPIC_MESSAGE, retract: true })
         return false
       }
+      chat.content.turnModel = hard ? hardTaskModel(chat.model) : chat.model
       const before = messages.length
       dismissPending(chat.content, '確認する前に次の発言をしたため、')
       const turnStart = messages.length
@@ -264,5 +276,5 @@ export function createAiAgent({
       return true
     })
 
-  return { send, decide, isRunning: (userId: number) => running.has(userId), chats, ledger }
+  return { send, decide, hardTaskModel, isRunning: (userId: number) => running.has(userId), chats, ledger }
 }
