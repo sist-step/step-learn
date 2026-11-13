@@ -273,7 +273,7 @@
 }
 .mascot-walker:not([data-shown]) { visibility: hidden; opacity: 0; }
 .mascot-walker .mascot { display: block; pointer-events: auto; cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none; }
-.mascot-walker .mascot-svg { transform-origin: 50% 100%; transition: rotate 0.3s ease-out, translate 0.3s ease-out; }
+.mascot-walker .mascot-svg { transform-origin: 50% 100%; transition: rotate 0.3s ease-out, translate 0.3s ease-out, scale 0.3s ease-out, transform-origin 0.3s ease-out; }
 .mascot-walker[data-sitting] .mascot-svg { translate: 0 6px; }
 .mascot-walker[data-heading='left'] .mascot-svg { rotate: -5deg; }
 .mascot-walker[data-heading='right'] .mascot-svg { rotate: 5deg; }
@@ -286,8 +286,16 @@
 .mascot-walker[data-state='drop'] .mascot-svg { animation: mascot-walker-drop 0.5s 0.25s ease-out; }
 .mascot-walker[data-state='crouch'] .mascot-svg { animation: mascot-walker-crouch 0.28s ease-out both; }
 .mascot-walker[data-state='jump'] .mascot-svg { animation: mascot-walker-stretch 0.4s ease-out both; }
-.mascot-walker[data-state='jump'][data-spin] .mascot-svg { transform-origin: 50% 50%; animation: mascot-walker-spin 0.7s 0.1s cubic-bezier(0.4, 0, 0.3, 1) both; }
+/* 宙返りで transform-origin を補間しないのは、回っている間に軸が動いて回り方がぶれるため */
+.mascot-walker[data-state='jump'][data-spin] .mascot-svg { transform-origin: 50% 50%; transition: none; animation: mascot-walker-spin 0.7s 0.1s cubic-bezier(0.4, 0, 0.3, 1) both; }
 .mascot-walker[data-state='land'] .mascot-svg { animation: mascot-walker-drop 0.5s ease-out; }
+/* 押されている間だけ位置を補間するのは、窓を一気に縮めたときに瞬間移動ではなく押し出されたように見せるため */
+/* 潰すのをアニメーションではなく transition にするのは、押されている間は潰れたままにして、離れたときに滑らかに戻すため */
+/* 壁の側を潰す起点にするのは、反対側を起点にすると潰れた分だけ壁から離れ、押されているように見えないため */
+.mascot-walker[data-state='pushed'] { transition: translate 0.18s ease-out, opacity 0.3s; }
+.mascot-walker[data-state='pushed'] .mascot-svg { scale: 0.8 1.08; transition-duration: 0.25s; transition-timing-function: cubic-bezier(0.3, 1.6, 0.5, 1); }
+.mascot-walker[data-pushed='right'] .mascot-svg { transform-origin: 100% 100%; rotate: 6deg; }
+.mascot-walker[data-pushed='left'] .mascot-svg { transform-origin: 0% 100%; rotate: -6deg; }
 .mascot-walker-heart {
   position: absolute;
   top: -4px;

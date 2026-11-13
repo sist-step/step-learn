@@ -1665,6 +1665,7 @@ const WALKER_GAP = 6
 const WALKER_EDGE = 20
 const WALKER_SINK = 2
 const WALKER_SIGHT = 120
+const WALKER_PUSH_REACH = 600
 const WALKER_GAITS = {
   walk: { speed: 46, step: '0.56s' },
   run: { speed: 125, step: '0.28s' },
@@ -1672,7 +1673,7 @@ const WALKER_GAITS = {
 } as const
 
 type Box = { x: number; y: number; w: number; h: number }
-type WalkerState = 'idle' | 'walk' | 'busy' | 'bump' | 'greet' | 'pet' | 'held' | 'drop' | 'pop' | 'crouch' | 'jump' | 'land'
+type WalkerState = 'idle' | 'walk' | 'busy' | 'bump' | 'greet' | 'pet' | 'held' | 'drop' | 'pop' | 'crouch' | 'jump' | 'land' | 'pushed'
 type Ground = { left: number; right: number; y: number }
 type WalkerLook = Partial<Record<'mood' | 'pose' | 'motion' | 'look' | 'prop', string>>
 type WalkerActivity = { weight: number; ms: [number, number]; look: WalkerLook; sit?: boolean; cheer?: boolean }
@@ -1707,6 +1708,7 @@ type Walker = {
 const walkerOf = new WeakMap<HTMLElement, Walker>()
 let walkerPointer: { x: number; y: number; mouse: boolean } | null = null
 let heldWalker: Walker | null = null
+let walkerResizedAt = -Infinity
 
 const overlaps = (a: Box, b: Box) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 const cssPx = (name: string) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0
@@ -1805,6 +1807,7 @@ function setWalkerState(w: Walker, state: WalkerState, now: number, ms: number) 
   w.until = now + ms
   w.el.dataset.state = state
   if (state !== 'walk') delete w.el.dataset.heading
+  if (state !== 'pushed') delete w.el.dataset.pushed
 }
 
 function spawnWalker(w: Walker, now: number) {
@@ -1955,12 +1958,44 @@ function petWalker(w: Walker, now: number) {
   }
 }
 
+// 近くの空いている場所へ移すだけにしないのは、迫ってきた壁の向こう側へすり抜けて瞬間移動したように見えるため
+function pushedSpot(w: Walker): { box: Box; from: -1 | 0 | 1 } | null {
+  const g = w.grounds[w.level]
+  if (!g || w.state === 'drop') return null
+  const box = standAt(w, w.level, w.box.x)
+  if (isFree(w, box)) return { box, from: 0 }
+  const wall = w.walls.find((wall) => overlaps(box, wall))
+  const fromLeft = box.x + box.w > g.right ? false : box.x < g.left || (!!wall && wall.x + wall.w / 2 < box.x + box.w / 2)
+  const from = fromLeft ? -1 : 1
+  const start = Math.min(Math.max(box.x, g.left), g.right - box.w)
+  for (let d = 0; d <= WALKER_PUSH_REACH; d += 2) {
+    const spot = standAt(w, w.level, start - from * d)
+    if (isFree(w, spot)) return { box: spot, from }
+  }
+  return null
+}
+
+function pushWalker(w: Walker, from: -1 | 1, now: number) {
+  const side = from < 0 ? 'left' : 'right'
+  w.target = null
+  w.cheerAfter = false
+  if (w.state !== 'pushed') dressWalker(w, { mood: 'surprised', pose: 'open', motion: 'none', look: side })
+  setWalkerState(w, 'pushed', now, 900)
+  w.el.dataset.pushed = side
+}
+
 function settleWalker(w: Walker, now: number) {
   measureWalker(w, now)
   if (w.el.dataset.shown === undefined) return spawnWalker(w, now)
   const level = levelOf(w, w.box)
   if (level >= 0 && isFree(w, w.box)) {
     w.level = level
+    return true
+  }
+  const pushed = pushedSpot(w)
+  if (pushed) {
+    placeWalker(w, pushed.box.x, pushed.box.y)
+    if (pushed.from !== 0) pushWalker(w, pushed.from, now)
     return true
   }
   const landing = landingSpot(w)
@@ -1980,7 +2015,8 @@ function tickWalker(w: Walker, dt: number, now: number) {
     if (w.state === 'jump' || now >= w.until) flyWalker(w, now)
     return
   }
-  if (now - w.measuredAt > 400 && !settleWalker(w, now)) return
+  const resizing = now - walkerResizedAt < 400
+  if ((resizing || now - w.measuredAt > 400) && !settleWalker(w, now)) return
 
   const near = pointerNearWalker(w)
   if (near && (w.state === 'walk' || w.state === 'busy') && now - w.greetedAt > 6000) {
@@ -2084,6 +2120,9 @@ document.addEventListener('pointermove', (e) => {
 document.addEventListener('pointerout', (e) => {
   if (!e.relatedTarget) walkerPointer = null
 })
+
+// 縮めている間は毎フレーム測り直すのは、いつもの間隔では壁がめり込んでから飛びのいたように見えるため
+addEventListener('resize', () => (walkerResizedAt = performance.now()))
 
 function releaseWalker(e: PointerEvent) {
   const w = heldWalker
