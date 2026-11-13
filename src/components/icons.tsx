@@ -11,6 +11,7 @@ import arrowUp from 'heroicons/24/outline/arrow-up.svg?raw'
 import upload from 'heroicons/24/outline/arrow-up-tray.svg?raw'
 import maximize from 'heroicons/24/outline/arrows-pointing-out.svg?raw'
 import fitWidth from 'heroicons/24/outline/arrows-right-left.svg?raw'
+import format from 'heroicons/24/outline/bars-3-bottom-left.svg?raw'
 import menu from 'heroicons/24/outline/bars-3.svg?raw'
 import bold from 'heroicons/24/outline/bold.svg?raw'
 import book from 'heroicons/24/outline/book-open.svg?raw'
@@ -53,6 +54,7 @@ import pencilSquare from 'heroicons/24/outline/pencil-square.svg?raw'
 import photo from 'heroicons/24/outline/photo.svg?raw'
 import play from 'heroicons/24/outline/play.svg?raw'
 import plus from 'heroicons/24/outline/plus.svg?raw'
+import question from 'heroicons/24/outline/question-mark-circle.svg?raw'
 import pages from 'heroicons/24/outline/rectangle-stack.svg?raw'
 import shield from 'heroicons/24/outline/shield-check.svg?raw'
 import sparkles from 'heroicons/24/outline/sparkles.svg?raw'
@@ -128,6 +130,8 @@ const svgs = {
   terminal,
   play,
   undo,
+  format,
+  question,
 } as const
 
 export type IconName = keyof typeof svgs

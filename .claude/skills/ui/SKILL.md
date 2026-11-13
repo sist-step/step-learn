@@ -133,7 +133,8 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 
 | 部品 | 用途 |
 | --- | --- |
-| `CodeInput` | コードの入力欄。`src/code-editor.ts` が中の textarea を CodeMirror のエディター（行番号・色分け・かっこの補完）に置き換える。`syntax`（`html` / `css` / `js` / `py` / `text`）/ `rows`（最低の高さ）/ `fill`（親の高さいっぱいに広げ、枠を消す）。送信されるのは textarea（`name`）の値で、書き換えるたびに textarea に `input` イベントが出る |
+| `CodeInput` | コードの入力欄。`src/code-editor.ts` が中の textarea を VS Code に寄せた CodeMirror のエディターに置き換える（行番号・色分け・かっこの補完・打つと出る候補・折りたたみ・検索と置換・複数カーソル（Alt + クリック、⌘ / Ctrl + D）・構文の誤りの赤い波線・Tab でカーソル位置に字下げ）。候補は、JavaScript ではブラウザの window・document の名前、HTML では Emmet の略記（`ul>li*3`。タグ名でないただの単語は出さない）。ファイルのタブで並べたとき（`CodeWorkspace` / `CodeStarterCard`）は、HTML の `class` / `id` に CSS のクラス名・id、CSS のセレクターに HTML のクラス名・id、JavaScript の `getElementById` / `querySelector` / `classList` の文字列に HTML の id・クラス名も出す。Shift + Alt + F で Prettier による整形（HTML / CSS / JavaScript。Prettier は整形するときに読み込む）、⌘ / Ctrl + S は書きかけのコードの保存（`CodeWorkspace`）。`syntax`（`html` / `css` / `js` / `py` / `text`）/ `rows`（最低の高さ）/ `fill`（親の高さいっぱいに広げ、枠を消す）。送信されるのは textarea（`name`）の値で、書き換えるたびに textarea に `input` イベントが出る |
+| `CodeEditorTools` | ファイルのタブの帯（`CodeWorkspace`）とカードの見出し（`CodeStarterCard`）に置く、整形のボタン（Web だけ。`data-code-format`、表示中のファイルを整形する）とキーボードショートカットの一覧（`Popover`。Mac では `code-editor.ts` がキーを ⌘ / ⌥ / ⇧ の表示に替える。タッチ端末では隠す） |
 | `CodeField` | ラベル・エラー・ヒント付きの `CodeInput`（`label` / `name` / `syntax` / `value` / `rows` / `error` / `hint`）。コードを受け取る入力欄では `TextAreaField` ではなくこれを使う |
 | `CodeStarterFields` / `CodeGradingFields` / `CodePeriodFields` | Moodle モードの種類ごとの入力欄（`extra-kinds.tsx`）で使う「最初のコード」（言語ごとのファイルと、Python の入力の例）・「判定」（制約と補足。制約の欄は `CodeGradingCard` と同じもの）・「提出の期間」の欄。1 枚のカードの中に並べるので、カードではなく fieldset で包む |
 | `CodePeriodCard` | 通常モードの編集画面の右の列に置く「提出の期間」のカード（開始日時 `opens_at`・終了日時 `closes_at` の `datetime-local`。どちらも必須で、長さは `MAX_SUBMIT_PERIOD`（24 時間）まで）。期間の外は提出だけを止め、問題とエディターは開ける |
