@@ -2251,7 +2251,7 @@ const AI_BUSY_SYNC_INTERVAL = 3000
 // サーバーへの問い合わせだけで済ませないのは、同じブラウザのほかのタブで言い終えた応答を、次の問い合わせまで待たずに出すため
 const aiChannel = new BroadcastChannel('ai-panel')
 
-function aiTemplate(kind: 'user' | 'assistant' | 'tool' | 'pending' | 'error', text?: string) {
+function aiTemplate(kind: 'user' | 'assistant' | 'tool' | 'replies' | 'reply' | 'pending' | 'error', text?: string) {
   const template = aiPanel()?.querySelector<HTMLTemplateElement>(`template[data-ai-template="${kind}"]`)
   const el = template?.content.firstElementChild?.cloneNode(true)
   if (!(el instanceof HTMLElement)) throw new Error(`template ${kind} がありません`)
@@ -2270,11 +2270,23 @@ function aiToolLine(label: string, touched?: AiTouched) {
   return line
 }
 
+function aiReplies(replies: string[]) {
+  const group = aiTemplate('replies')
+  for (const text of replies) {
+    const button = aiTemplate('reply', text)
+    button.dataset.aiSuggest = text
+    group.append(button)
+  }
+  return group
+}
+
+const aiLogAtBottom = (log: HTMLElement) => log.scrollHeight - log.scrollTop - log.clientHeight < 80
+
 function scrollAiLog(force = false) {
   const log = aiPanel()?.querySelector<HTMLElement>('[data-ai-log]')
   if (!log) return
   // 読み返しているときに最下部へ戻さないのは、応答が流れているあいだ、上の発言を読めなくなるため
-  if (force || log.scrollHeight - log.scrollTop - log.clientHeight < 80) log.scrollTop = log.scrollHeight
+  if (force || aiLogAtBottom(log)) log.scrollTop = log.scrollHeight
 }
 
 function fitAiInput(input: HTMLTextAreaElement) {
@@ -2463,6 +2475,8 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
   let bubble: HTMLElement | null = null
   let markdown = ''
   const handle = (event: AiAgentEvent) => {
+    // 書き足したあとに最下部か確かめないのは、続きの依頼のような高さのある塊を足すと、最下部から離れたと見なされて止まるため
+    const following = aiLogAtBottom(log)
     if (event.type === 'text') {
       if (!bubble) {
         bubble = aiTemplate('assistant')
@@ -2492,12 +2506,14 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
       onRetract?.()
     } else if (event.type === 'applied') {
       showAiChange(event.touched)
+    } else if (event.type === 'replies') {
+      pending.before(aiReplies(event.replies))
     } else {
       panel.dataset.revision = event.revision
       const note = panel.querySelector('[data-ai-quota]')
       if (note) note.textContent = event.quota
     }
-    scrollAiLog()
+    scrollAiLog(following)
   }
 
   try {
@@ -2545,6 +2561,8 @@ async function sendAiMessage(retried = false, model = aiPanel()?.dataset.model) 
   const intro = log.querySelector<HTMLElement>('[data-ai-intro]')
   const started = !panel.dataset.chat
   const dismissing = !!log.querySelector('.ai-card[data-state=pending]')
+  const replies = $$<HTMLElement>('[data-ai-replies]', log)
+  replies.forEach((el) => (el.hidden = true))
   if (intro) intro.hidden = true
   const sent = aiTemplate('user', text)
   log.append(sent)
@@ -2554,6 +2572,7 @@ async function sendAiMessage(retried = false, model = aiPanel()?.dataset.model) 
   const outcome = await streamAi(form.action, data, {
     onRetract: () => {
       sent.remove()
+      replies.forEach((el) => (el.hidden = false))
       if (intro && !log.querySelector('.ai-msg')) intro.hidden = false
       if (!input.value) input.value = text
       fitAiInput(input)
@@ -2592,6 +2611,7 @@ async function decideAiCard(form: HTMLFormElement, submitter: HTMLElement | null
   }
   const data = new FormData(form, submitter)
   $$<HTMLButtonElement>('button', form).forEach((btn) => (btn.disabled = true))
+  $$('[data-ai-replies]', aiPanel() ?? document).forEach((el) => el.remove())
   await streamAi(form.action, data)
   await refreshAiPanel()
 }
