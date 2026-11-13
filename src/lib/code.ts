@@ -61,7 +61,7 @@ export type Judge = (typeof JUDGES)[number]
 
 export const isJudge = (s: unknown): s is Judge => (JUDGES as readonly unknown[]).includes(s)
 
-export const JUDGE_LABELS: Record<Judge, string> = { llm: 'AI（DeepSeek）', jev: 'Jev' }
+export const JUDGE_LABELS: Record<Judge, string> = { llm: 'AI', jev: 'Jev' }
 
 /** 判定のうち、できている（pass）の数 */
 export const clearedCount = (verdicts: readonly ConstraintResult[]) => verdicts.filter((v) => v.verdict === 'pass').length

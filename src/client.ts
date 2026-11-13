@@ -2331,11 +2331,11 @@ function watchAiBusy() {
 
 type AiStreamHooks = { onRetract?: () => void; onChat?: (id: number) => void }
 
-/** 応答を届いた分から会話に書き足す。closed はチャットがもうないこと、confirmed は確認カードを出したこと */
+/** 応答を届いた分から会話に書き足す。closed はチャットがもうないこと、confirmed は確認カードを出したこと、errors は出したエラーの文言 */
 async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiStreamHooks = {}) {
   const panel = aiPanel()
   const log = panel?.querySelector<HTMLElement>('[data-ai-log]')
-  const outcome = { closed: false, retracted: false, confirmed: false }
+  const outcome = { closed: false, retracted: false, confirmed: false, errors: [] as string[] }
   if (!panel || !log) return outcome
   data.set('page', location.pathname)
   aiSending = true
@@ -2364,6 +2364,7 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
         outcome.retracted = true
         onRetract?.()
       }
+      outcome.errors.push(event.message)
       pending.before(aiTemplate('error', event.message))
     } else if (event.type === 'chat') {
       panel.dataset.chat = String(event.id)
@@ -2430,8 +2431,15 @@ async function sendAiMessage(form: HTMLFormElement) {
     },
   })
   // 新しく始めたチャットと確認カードを取り直すのは、ヘッダーのモデル名・「閉じる」ボタン・カードを、サーバーの描いたものにそろえるため
-  if (outcome.closed || outcome.confirmed || dismissing || (started && panel.dataset.chat))
+  if (outcome.closed || outcome.confirmed || dismissing || (started && panel.dataset.chat)) {
     await refreshAiPanel(outcome.retracted ? text : '')
+    // 取り直したパネルだけにしないのは、送り直してもらう発言はサーバーに残らず、断った理由まで消えるため
+    if (outcome.retracted) {
+      const next = aiPanel()?.querySelector<HTMLElement>('[data-ai-log]')
+      for (const message of outcome.errors) next?.append(aiTemplate('error', message))
+      scrollAiLog(true)
+    }
+  }
 }
 
 async function decideAiCard(form: HTMLFormElement, submitter: HTMLElement | null) {
