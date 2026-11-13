@@ -1,8 +1,9 @@
 // 通常モードと Moodle モードの両方が読み込むので、DB を開くモジュール（lib/db.ts・lib/courses.ts など）を import しない。
 // モードごとの DB と権限の確認は CodeBackend として受け取る（通常モードは ./index.ts、Moodle モードは moodle-mode/code.tsx）
 import { Hono, type Context } from 'hono'
-import { filesFor, type CodeFiles } from '../../lib/code'
-import { gradingEnabled, type Grader } from '../../lib/code-grader'
+import { AiError } from '../../lib/ai'
+import { filesFor, submitStateOf, type CodeFiles, type SubmitPeriod, type SubmitState } from '../../lib/code'
+import { gradingEnabled, submissionsOf, submitWait, type Grader } from '../../lib/code-grader'
 import type { CodeSettings, CodeStore, StudentRow, SubmissionSummary } from '../../lib/code-store'
 import type { CourseAccess } from '../../lib/courses'
 import { firstError, validate } from '../../lib/forms'
@@ -19,7 +20,15 @@ export type CodeContext = {
   /** URL の :iid。通常モードはアイテムの ID、Moodle モードは活動の cmid */
   itemId: number
   settings: CodeSettings
+  /** 学生が提出できる期間。null なら期間を設けない */
+  period: SubmitPeriod | null
   store: CodeStore
+}
+
+const SUBMIT_CLOSED: Record<Exclude<SubmitState, 'open'>, string> = {
+  unset: '提出の期間が決まっていないため、まだ提出できません。',
+  upcoming: '提出の受付はまだ始まっていません。',
+  closed: '提出の受付は終わりました。',
 }
 
 export type CodeBackend = {
@@ -33,8 +42,8 @@ export type CodeBackend = {
 export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
   // 上限なしにしないのは、sandbox が同時に 4 つまでしか実行できず、1 人が繰り返し実行するとほかの人が待たされるため
   const runLimit = rateLimiter({ limit: 20, windowSec: 60 })
-  // AI が採点するときに回数を絞るのは、提出のたびに AI の利用料がかかるため
-  const submitLimit = rateLimiter(gradingEnabled ? { limit: 1, windowSec: 60 } : { limit: 6, windowSec: 60 })
+  // 回数を絞るのは、押すたびに AI の利用料がかかるため
+  const suggestLimit = rateLimiter({ limit: 5, windowSec: 60 })
   const running = new Set<number>()
 
   async function open(c: C) {
@@ -46,7 +55,7 @@ export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
       userId: c.var.user!.id,
       courseId: access.course.id,
       page: pageUrl(access.course.id, itemId),
-      target: { id: itemId, title: settings.title, language: settings.language, maxScore: settings.maxScore },
+      target: { id: itemId, title: settings.title, language: settings.language },
     }
   }
 
@@ -63,9 +72,9 @@ export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
 
   const summary = (s: SubmissionSummary): SubmissionSummary => ({ ...s, status: grader.statusOf(s) })
 
-  function gradeOf({ store, settings, userId }: Opened) {
+  function gradeOf({ store, userId }: Opened) {
     const latest = store.latestSubmission(userId)
-    return latest ? { ...latest, status: grader.statusOf(latest), maxScore: settings.maxScore } : null
+    return latest ? { ...latest, status: grader.statusOf(latest) } : null
   }
 
   // ---------------------------------------------------------------- 書く・実行する・提出する
@@ -123,10 +132,11 @@ export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
     const { store, userId, page } = ctx
     const input = await readCode(c, ctx)
     if (!input.ok) return redirectWith(c, page, input.error, 'error')
-    const key = String(userId)
-    const wait = submitLimit.retryAfter(key)
-    if (wait) return redirectWith(c, page, `続けて提出できません。${wait} 秒ほど待ってから、もう一度お試しください。`, 'error')
-    submitLimit.hit(key)
+    const state = submitStateOf(ctx.period)
+    if (state !== 'open') return redirectWith(c, page, SUBMIT_CLOSED[state], 'error')
+    // レート制限（rateLimiter）にしないのは、残りの秒数を画面のカウントダウンと合わせるため。提出の時刻から求めれば、再起動しても同じになる
+    const wait = submitWait(store.latestSubmission(userId)?.createdAt)
+    if (wait) return redirectWith(c, page, `続けて提出できません。${wait} 秒待ってから、もう一度お試しください。`, 'error')
     const graded = grader.canGrade()
     const id = store.submit(userId, input.files, input.stdin, graded ? 'pending' : 'none')
     if (graded) grader.enqueue(id)
@@ -160,8 +170,9 @@ export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
         access={access}
         item={target}
         body={settings.body}
+        goals={settings.constraints.map((c) => c.label)}
         canRun={sandboxEnabled}
-        grade={access.role === 'student' ? gradeOf(ctx) : null}
+        submissions={access.role === 'student' ? submissionsOf(ctx.store, ctx.userId, grader, ctx.period) : null}
       />,
       { title: settings.title },
     )
@@ -226,17 +237,41 @@ export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
   async function review(c: C) {
     const ctx = await studentSubmissions(c)
     if (!ctx) return c.notFound()
-    const { settings, store, courseId, itemId, student, history } = ctx
+    const { store, courseId, itemId, student, history } = ctx
     const result = validate('codeReview', await readForm(c))
     if (!result.ok) return redirectWith(c, submissionsUrl(courseId, itemId, student.id), firstError(result.errors), 'error')
-    const { submission, score, comment } = result.values
+    const { submission, comment } = result.values
     const target = history.find((h) => h.id === Number(submission))
     if (!target) return c.notFound()
-    const url = submissionsUrl(courseId, itemId, student.id, target.id)
-    if (score && Number(score) > settings.maxScore)
-      return redirectWith(c, url, `点数は ${settings.maxScore} 点までで入力してください。`, 'error')
-    store.review(target.id, score ? Number(score) : null, comment)
-    return redirectWith(c, url, '採点を保存しました。')
+    store.review(target.id, comment)
+    return redirectWith(c, submissionsUrl(courseId, itemId, student.id, target.id), 'コメントを保存しました。')
+  }
+
+  /** 編集画面の問題文から、最初のコードと制約の下書きを作る（src/code-editor.ts が編集画面の欄に入れる） */
+  async function suggest(c: C) {
+    const ctx = await manage(c)
+    if (!ctx || !gradingEnabled) return c.notFound()
+    if (!wantsJson(c)) return c.redirect(ctx.page, 303)
+    const { settings, userId } = ctx
+    const form = await readForm(c)
+    const body = field(form, 'body', 100_000)
+    if (!body) return c.json({ error: '先に問題文を書いてください。' }, 422)
+    const key = String(userId)
+    const wait = suggestLimit.retryAfter(key)
+    if (wait) return c.json({ error: `続けて作れません。${wait} 秒ほど待ってから、もう一度お試しください。` }, 429)
+    if (!grader.canGrade()) return c.json({ error: 'AI の今月の上限に達しているため、下書きを作れません。' }, 503)
+    suggestLimit.hit(key)
+    try {
+      const draft = await grader.draftSetup(
+        { title: field(form, 'title', 200) || settings.title, body, language: settings.language },
+        userId,
+      )
+      if (draft) return c.json({ draft })
+    } catch (e) {
+      if (!(e instanceof AiError)) throw e
+      console.error('[grading]', e.message)
+    }
+    return c.json({ error: '下書きを作れませんでした。少し待ってから、もう一度お試しください。' }, 502)
   }
 
   async function regrade(c: C) {
@@ -254,7 +289,7 @@ export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
     return redirectWith(c, url, 'AI が採点しています。少し待ってから、ページを読み込み直してください。', 'info')
   }
 
-  return { showState, save, run, submit, reset, showGrading, showPage, list, show, review, regrade }
+  return { showState, save, run, submit, reset, showGrading, showPage, list, show, review, regrade, suggest }
 }
 
 /** /courses の下に組み込むルート。ログインの確認は、組み込む側で先に済ませておく */
@@ -270,5 +305,6 @@ export function codeRoutes(h: ReturnType<typeof createCodeHandlers>) {
   app.get('/:id/items/:iid/code/submissions/:uid', h.show)
   app.post('/:id/items/:iid/code/submissions/:uid/review', h.review)
   app.post('/:id/items/:iid/code/submissions/:uid/regrade', h.regrade)
+  app.post('/:id/items/:iid/code/suggest', h.suggest)
   return app
 }

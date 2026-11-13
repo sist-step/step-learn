@@ -13,6 +13,7 @@ import {
   setItemHidden,
   setSectionHidden,
   showItem,
+  switchJudge,
   toggleComplete,
   updateItem,
   updateSection,
@@ -32,6 +33,7 @@ app.post('/:id/items/:iid', updateItem)
 app.post('/:id/items/:iid/move', moveItem)
 app.post('/:id/items/:iid/delete', removeItem)
 app.post('/:id/items/:iid/visibility', setItemHidden)
+app.post('/:id/items/:iid/judge', switchJudge)
 app.get('/:id/items/:iid', showItem)
 app.post('/:id/items/:iid/complete', toggleComplete)
 app.get('/:id/items/:iid/file', downloadFile)

@@ -15,6 +15,7 @@ import menu from 'heroicons/24/outline/bars-3.svg?raw'
 import bold from 'heroicons/24/outline/bold.svg?raw'
 import book from 'heroicons/24/outline/book-open.svg?raw'
 import calendar from 'heroicons/24/outline/calendar.svg?raw'
+import clock from 'heroicons/24/outline/clock.svg?raw'
 import check from 'heroicons/24/outline/check.svg?raw'
 import checkCircle from 'heroicons/24/outline/check-circle.svg?raw'
 import chevronDoubleLeft from 'heroicons/24/outline/chevron-double-left.svg?raw'
@@ -120,6 +121,7 @@ const svgs = {
   lockOpen,
   academicCap,
   calendar,
+  clock,
   folder,
   arrowPath,
   heart,

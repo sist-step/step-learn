@@ -15,12 +15,23 @@ import type { BundleView } from '../../components/bundle'
 import { bundleBase } from '../../lib/bundle'
 import { bundleKeysOf, bundleStore, bundleSyncStore } from '../../lib/bundle-items'
 import { syncStateOf } from '../../lib/bundle-sync'
-import { CODE_LANGUAGE_LABELS, DEFAULT_MAX_SCORE, DEFAULT_STARTER, MAX_CODE_LENGTH, MAX_STDIN_LENGTH } from '../../lib/code'
-import { gradingEnabled } from '../../lib/code-grader'
-import { grader } from '../../lib/code-grading'
+import {
+  CODE_LANGUAGE_LABELS,
+  DEFAULT_STARTER,
+  MAX_CODE_LENGTH,
+  MAX_CONSTRAINT_LABEL_LENGTH,
+  MAX_CONSTRAINT_LENGTH,
+  MAX_CONSTRAINTS,
+  MAX_STDIN_LENGTH,
+  JUDGE_LABELS,
+  isJudge,
+} from '../../lib/code'
+import { gradingEnabled, submissionsOf } from '../../lib/code-grader'
+import { currentJudge, grader, judgeSwitchable, setJudge } from '../../lib/code-grading'
 import { codeStore, getCodeItem, updateCodeItem } from '../../lib/code-items'
+import { dateTimeInputToUnix } from '../../lib/course-period'
 import { db } from '../../lib/db'
-import { completionError, firstError, isFile, validate, type FieldErrors } from '../../lib/forms'
+import { completionError, firstError, isFile, readConstraints, validate, type FieldErrors } from '../../lib/forms'
 import { field, fileField, intParam, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
 import { previewKind } from '../../lib/preview'
 import { availableCodeLanguages, sandboxEnabled } from '../../lib/sandbox'
@@ -178,8 +189,18 @@ function readItemInput(form: Form): ItemInput {
     },
     stdin: sourceField(form, 'stdin', MAX_STDIN_LENGTH),
     criteria: field(form, 'criteria', 5000),
-    maxScore: field(form, 'max_score', 6),
+    constraints: listField(form, 'constraint_label[]', MAX_CONSTRAINTS * 2).map((label, i) => ({
+      label: label.slice(0, MAX_CONSTRAINT_LABEL_LENGTH * 2),
+      text: (listField(form, 'constraint_text[]', MAX_CONSTRAINTS * 2)[i] ?? '').slice(0, MAX_CONSTRAINT_LENGTH * 2),
+    })),
+    opensAt: field(form, 'opens_at', 16),
+    closesAt: field(form, 'closes_at', 16),
   }
+}
+
+const listField = (form: Form, key: string, max: number) => {
+  const v = form[key]
+  return (Array.isArray(v) ? v : v === undefined ? [] : [v]).slice(0, max).map((s) => (typeof s === 'string' ? s.trim() : ''))
 }
 
 // lib/forms.ts で確かめないのは、上限の値がストレージの設定にあり、実行ファイルかどうかは中身を読まないと分からないため
@@ -259,6 +280,7 @@ export async function editItem(c: Context<AppEnv>) {
       code={getCodeItem(iid)}
       bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
       gradingEnabled={gradingEnabled}
+      judge={judgeSwitchable ? currentJudge() : undefined}
       sections={listSections(access.course.id)}
     />,
     { title: `編集 - ${item.title}` },
@@ -306,6 +328,7 @@ export async function updateItem(c: Context<AppEnv>) {
         code={code}
         bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
         gradingEnabled={gradingEnabled}
+        judge={judgeSwitchable ? currentJudge() : undefined}
         sections={listSections(courseId)}
         values={values}
         errors={errors ?? {}}
@@ -334,11 +357,24 @@ export async function updateItem(c: Context<AppEnv>) {
       starter: input,
       stdin: input.stdin,
       criteria: input.criteria ?? '',
-      maxScore: Number(input.max_score) || DEFAULT_MAX_SCORE,
+      constraints: readConstraints(input).constraints,
+      opensAt: dateTimeInputToUnix(input.opens_at ?? ''),
+      closesAt: dateTimeInputToUnix(input.closes_at ?? ''),
     })
   }
   if (stored && item.fileKey) inBackground(deleteKeys([item.fileKey]))
   return redirectWith(c, `/courses/${courseId}/items/${iid}/edit`, '保存しました。')
+}
+
+/** コードのアイテムの、制約ごとの判定をするものを切り替える。開発サーバーだけで使え、すべてのアイテムに効く */
+export async function switchJudge(c: Context<AppEnv>) {
+  const access = await manageAccess(c)
+  const iid = intParam(c, 'iid')
+  if (!judgeSwitchable || !access || !iid || !getCodeItem(iid) || !getItem(access.course.id, iid)) return c.notFound()
+  const judge = field(await readForm(c), 'judge', 10)
+  if (!isJudge(judge)) return c.notFound()
+  setJudge(judge)
+  return redirectWith(c, `/courses/${access.course.id}/items/${iid}/edit`, `制約の判定を ${JUDGE_LABELS[judge]} で行うようにしました。`)
 }
 
 export async function moveItem(c: Context<AppEnv>) {
@@ -445,11 +481,14 @@ export async function showItem(c: Context<AppEnv>) {
   const next = ordered[idx + 1]
   const section = sectionList.find((s) => s.id === item.sectionId)
   const codeItem = item.type === 'code' ? getCodeItem(iid) : undefined
-  const submitted = codeItem && access.role === 'student' ? codeStore(id, iid).latestSubmission(userId) : undefined
   const code = codeItem && {
     language: codeItem.language,
     canRun: sandboxEnabled,
-    grade: submitted ? { ...submitted, status: grader.statusOf(submitted), maxScore: codeItem.maxScore } : null,
+    goals: codeItem.constraints.map((c) => c.label),
+    submissions:
+      access.role === 'student'
+        ? submissionsOf(codeStore(id, iid), userId, grader, { opensAt: codeItem.opensAt, closesAt: codeItem.closesAt })
+        : null,
   }
   const textPreview =
     item.type === 'file' && item.fileKey && item.fileSize && previewKind(item.fileType ?? '', item.fileName ?? '') === 'text'
