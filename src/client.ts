@@ -2758,9 +2758,10 @@ function slideFrom(el: Element, from: DOMRect) {
 }
 
 function aiTarget({ item, section }: AiTouched) {
-  const row = item ? document.querySelector(`main [data-item="${item}"]`) : null
   const heading = item ? document.querySelector(`[data-ai-watch="item:${item}"] h1`) : null
-  return row ?? (section ? document.getElementById(`section-${section}`) : null) ?? heading
+  const row = item ? document.querySelector(`main [data-item="${item}"]`) : null
+  // 目次の行より見出しを先にするのは、開いているアイテム自体が変わったときに、目次の小さな行ではなく本文の側を示すため
+  return heading ?? row ?? (section ? document.getElementById(`section-${section}`) : null)
 }
 
 // 隠れたままにしないのは、AI が非表示で追加したものや、閉じたセクションの中を変えたとき、どこが変わったのか見えないため

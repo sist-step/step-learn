@@ -1183,6 +1183,7 @@ export const ItemPage = ({
                       )}
                       <a
                         class={cx('outline-link', o.id === item.id && 'active', isHidden(o) && 'is-hidden')}
+                        data-item={o.id}
                         {...openAttrs(id, o)}
                         aria-current={o.id === item.id ? 'page' : undefined}
                         {...(isStudent && completesOnOpen(o) ? { 'data-complete-on-open': completeUrl(o) } : {})}
