@@ -47,7 +47,8 @@
 .ai-intro-title { font-size: var(--fs-lg); }
 .ai-intro-text { font-size: var(--fs-sm); color: var(--muted); line-height: 1.7; }
 .ai-suggestions { display: flex; flex-direction: column; align-self: stretch; gap: 6px; margin-top: 6px; }
-.ai-suggestion {
+/* 続きの依頼（.ai-reply）を別の見た目にしないのは、どちらも押すと送る発言の候補で、同じ部品だと分かるようにするため */
+.ai-suggestion, .ai-reply {
   padding: 9px 12px;
   border: 1px solid var(--card-border);
   border-radius: var(--radius);
@@ -55,37 +56,19 @@
   color: var(--text-2);
   font: inherit;
   font-size: var(--fs-sm);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-@media (hover: hover) {
-  .ai-suggestion:hover { border-color: var(--border-strong); background: var(--surface-2); }
-}
-
-/* AI の発言の下に左寄せで並べないのは、AI の発言の続きではなく、利用者が送る発言の候補だと分かるようにするため */
-.ai-replies { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-top: -4px; animation: rise 0.2s var(--ease); }
-.ai-reply {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 88%;
-  padding: 6px 10px 6px 13px;
-  border: 1px solid color-mix(in srgb, var(--c-ink) 35%, transparent);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  color: var(--c-ink);
-  font: inherit;
-  font-size: var(--fs-sm);
   line-height: 1.5;
   text-align: left;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
-.ai-reply .icon { flex: none; }
 @media (hover: hover) {
-  .ai-reply:hover { border-color: var(--c-ink); background: var(--c-soft); }
+  .ai-suggestion:hover, .ai-reply:hover { border-color: var(--border-strong); background: var(--surface-2); }
 }
+
+/* AI の発言の下に左寄せで並べないのは、AI の発言の続きではなく、利用者が送る発言の候補だと分かるようにするため */
+.ai-replies { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-top: -4px; animation: rise 0.2s var(--ease); }
+.ai-reply { display: inline-flex; align-items: center; gap: 8px; max-width: 88%; }
+.ai-reply .icon { flex: none; color: var(--muted); }
 .ai-replies[hidden] { display: none; }
 @media (max-width: 640px), (pointer: coarse) { .ai-reply { min-height: var(--tap); } }
 .ai-problems { align-self: stretch; padding: 10px 12px; border-radius: var(--radius); background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning-text); font-size: var(--fs-sm); text-align: left; list-style: none; }
