@@ -282,14 +282,6 @@ const Usage = ({ option, hidden }: { option: AiModelOption; hidden: boolean }) =
             <Meter meter={m} />
           ))}
         </div>
-        {option.usage.length > 1 && (
-          <p class="ai-usage-foot">
-            <Icon name="lightBulb" size={14} />
-            <span>
-              「難しい依頼」（{option.hardLabel ?? option.label}）で使った分は、{main.label}の枠にも数えます。
-            </span>
-          </p>
-        )}
       </Popover>
     </div>
   )
@@ -297,7 +289,7 @@ const Usage = ({ option, hidden }: { option: AiModelOption; hidden: boolean }) =
 
 export const AiPanelToggle = () => (
   <IconButton
-    icon="sparkles"
+    icon="assistant"
     label="AI アシスタント"
     iconSize={18}
     class="ai-panel-toggle"
@@ -331,7 +323,7 @@ export const AiPanel = ({ models, revision, chat }: AiPanelProps) => {
       data-busy={chat?.busy ? '' : undefined}
     >
       <header class="ai-panel-head">
-        <Icon name="sparkles" size={18} class="ai-panel-mark" />
+        <Icon name="assistant" size={18} class="ai-panel-mark" />
         <div class="ai-panel-heading">
           <strong>AI アシスタント</strong>
           {current && (

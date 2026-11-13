@@ -19,6 +19,7 @@ import calendar from 'heroicons/24/outline/calendar.svg?raw'
 import clock from 'heroicons/24/outline/clock.svg?raw'
 import check from 'heroicons/24/outline/check.svg?raw'
 import checkCircle from 'heroicons/24/outline/check-circle.svg?raw'
+import assistant from 'heroicons/24/outline/chat-bubble-oval-left-ellipsis.svg?raw'
 import chevronDoubleLeft from 'heroicons/24/outline/chevron-double-left.svg?raw'
 import chevronDown from 'heroicons/24/outline/chevron-down.svg?raw'
 import chevronLeft from 'heroicons/24/outline/chevron-left.svg?raw'
@@ -89,6 +90,7 @@ const svgs = {
   chevronLeft,
   arrowUp,
   sparkles,
+  assistant,
   pencilSquare,
   arrowDown,
   ellipsis,
