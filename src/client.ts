@@ -2283,6 +2283,7 @@ let aiSync: Promise<void> | null = null
 let aiSyncTimer = 0
 const AI_SYNC_INTERVAL = 10_000
 const AI_BUSY_SYNC_INTERVAL = 3000
+const AI_THINKING_AFTER_TEXT = 1500
 // サーバーへの問い合わせだけで済ませないのは、同じブラウザのほかのタブで言い終えた応答を、次の問い合わせまで待たずに出すため
 const aiChannel = new BroadcastChannel('ai-panel')
 
@@ -2513,9 +2514,17 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
 
   let bubble: HTMLElement | null = null
   let markdown = ''
+  let thinkingTimer = 0
+  // 本文が届いた時点で消したままにしないのは、本文のあとにツールを呼ぶあいだ、何も動いていないように見えるため
+  const updateThinking = (writing: boolean) => {
+    clearTimeout(thinkingTimer)
+    pending.hidden = writing
+    if (writing) thinkingTimer = window.setTimeout(() => (pending.hidden = false), AI_THINKING_AFTER_TEXT)
+  }
   const handle = (event: AiAgentEvent) => {
     // 書き足したあとに最下部か確かめないのは、続きの依頼のような高さのある塊を足すと、最下部から離れたと見なされて止まるため
     const following = aiLogAtBottom(log)
+    updateThinking(event.type === 'text')
     if (event.type === 'text') {
       if (!bubble) {
         bubble = aiTemplate('assistant')
@@ -2571,6 +2580,7 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
   } catch {
     pending.before(aiTemplate('error', 'AI と通信できませんでした。少し待ってから、もう一度お試しください。'))
   } finally {
+    clearTimeout(thinkingTimer)
     pending.remove()
     panel.removeAttribute('data-busy')
     scrollAiLog()

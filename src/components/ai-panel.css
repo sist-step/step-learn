@@ -47,7 +47,8 @@
 .ai-intro-title { font-size: var(--fs-lg); }
 .ai-intro-text { font-size: var(--fs-sm); color: var(--muted); line-height: 1.7; }
 .ai-suggestions { display: flex; flex-direction: column; align-self: stretch; gap: 6px; margin-top: 6px; }
-.ai-suggestion {
+/* 続きの依頼（.ai-reply）を別の見た目にしないのは、どちらも押すと送る発言の候補で、同じ部品だと分かるようにするため */
+.ai-suggestion, .ai-reply {
   padding: 9px 12px;
   border: 1px solid var(--card-border);
   border-radius: var(--radius);
@@ -55,37 +56,19 @@
   color: var(--text-2);
   font: inherit;
   font-size: var(--fs-sm);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-@media (hover: hover) {
-  .ai-suggestion:hover { border-color: var(--border-strong); background: var(--surface-2); }
-}
-
-/* AI の発言の下に左寄せで並べないのは、AI の発言の続きではなく、利用者が送る発言の候補だと分かるようにするため */
-.ai-replies { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-top: -4px; animation: rise 0.2s var(--ease); }
-.ai-reply {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 88%;
-  padding: 6px 10px 6px 13px;
-  border: 1px solid color-mix(in srgb, var(--c-ink) 35%, transparent);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  color: var(--c-ink);
-  font: inherit;
-  font-size: var(--fs-sm);
   line-height: 1.5;
   text-align: left;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
-.ai-reply .icon { flex: none; }
 @media (hover: hover) {
-  .ai-reply:hover { border-color: var(--c-ink); background: var(--c-soft); }
+  .ai-suggestion:hover, .ai-reply:hover { border-color: var(--border-strong); background: var(--surface-2); }
 }
+
+/* AI の発言の下に左寄せで並べないのは、AI の発言の続きではなく、利用者が送る発言の候補だと分かるようにするため */
+.ai-replies { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-top: -4px; animation: rise 0.2s var(--ease); }
+.ai-reply { display: inline-flex; align-items: center; gap: 8px; max-width: 88%; }
+.ai-reply .icon { flex: none; color: var(--muted); }
 .ai-replies[hidden] { display: none; }
 @media (max-width: 640px), (pointer: coarse) { .ai-reply { min-height: var(--tap); } }
 .ai-problems { align-self: stretch; padding: 10px 12px; border-radius: var(--radius); background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning-text); font-size: var(--fs-sm); text-align: left; list-style: none; }
@@ -137,24 +120,49 @@
 .ai-card[data-state='approved'] .ai-card-state { color: var(--success-text); }
 .ai-card[data-state='failed'] .ai-card-state { color: var(--danger-text); }
 
+.ai-pending[hidden] { display: none; }
 .ai-dots { flex: none; width: 24px; height: 8px; background: radial-gradient(circle, currentColor 2.5px, transparent 3px) 0 50% / 8px 8px repeat-x; animation: pulse 1.2s ease-in-out infinite; }
 
 .ai-composer { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; border-top: 1px solid var(--border); }
 .ai-models { align-self: stretch; }
 .ai-models label { flex: 1; text-align: center; }
 .ai-models span { justify-content: center; font-size: var(--fs-xs); }
-.ai-input { position: relative; display: flex; flex-direction: row; align-items: flex-end; gap: 6px; padding: 6px 6px 6px 12px; border: 1px solid var(--field-border); border-radius: var(--radius-field); background: var(--surface); transition: border-color 0.15s, box-shadow 0.15s; }
+.ai-input { position: relative; display: flex; flex-direction: row; align-items: flex-end; gap: 6px; padding: 6px; border: 1px solid var(--field-border); border-radius: var(--radius-field); background: var(--surface); transition: border-color 0.15s, box-shadow 0.15s; }
 .ai-input:focus-within { border-color: var(--focus); box-shadow: var(--ring-field); }
 .ai-input.has-error { border-color: var(--danger); }
-.ai-textarea { flex: 1; min-width: 0; max-height: 200px; padding: 6px 0; border: 0; background: none; color: var(--text); font: inherit; font-size: var(--fs-base); line-height: 1.6; resize: none; outline: none; }
+.ai-textarea { flex: 1; min-width: 0; max-height: 200px; padding: 6px 0 6px 6px; border: 0; background: none; color: var(--text); font: inherit; font-size: var(--fs-base); line-height: 1.6; resize: none; outline: none; }
 .ai-textarea:focus-visible { outline: none; }
 .ai-send { flex: none; border-radius: 999px; background: var(--primary); color: var(--on-primary); }
 .ai-send:disabled { opacity: 0.4; cursor: default; }
 .ai-panel[data-busy] .ai-send { opacity: 0.4; pointer-events: none; }
-.ai-composer-foot { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.ai-composer-foot .ai-note { flex: 1; min-width: 0; }
-.ai-hard { flex: none; border-radius: 999px; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
-.ai-hard[aria-pressed='true'] { background: var(--primary-soft); color: var(--primary-text); box-shadow: inset 0 0 0 1px var(--primary); }
+.ai-hard { position: relative; flex: none; border-radius: 999px; }
+.ai-hard[hidden] { display: none; }
+.ai-hard:not([hidden]) + .ai-textarea { padding-left: 0; }
+.ai-hard[aria-pressed='true'] { background: var(--c-soft); color: var(--c-ink); box-shadow: inset 0 0 0 1px var(--c-ink); }
+.ai-hard::after {
+  content: attr(aria-label);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--overlay-border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  translate: 0 4px;
+  pointer-events: none;
+  transition: opacity 0.15s, translate 0.15s;
+}
+.ai-hard:focus-visible::after { opacity: 1; translate: none; }
+@media (hover: hover) {
+  .ai-hard:hover::after { opacity: 1; translate: none; }
+  .ai-hard[aria-pressed='true']:hover { background: var(--c-soft); color: var(--c-ink); }
+}
 .ai-note { font-size: var(--fs-xs); color: var(--muted); }
 @media (max-width: 640px), (pointer: coarse) {
   /* 16px 未満にしないのは、iOS が入力欄にフォーカスしたときに画面を拡大するため */
