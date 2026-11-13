@@ -163,7 +163,43 @@
   .ai-hard:hover::after { opacity: 1; translate: none; }
   .ai-hard[aria-pressed='true']:hover { background: var(--c-soft); color: var(--c-ink); }
 }
-.ai-note { font-size: var(--fs-xs); color: var(--muted); }
+.ai-note { margin-left: auto; font-size: var(--fs-xs); color: var(--muted); text-align: right; }
+
+/* ===== 今週の利用状況（入力欄の下。client.ts の paintAiUsage が応答のあとに書き換える） */
+.ai-foot { display: flex; align-items: center; gap: 8px; min-height: 26px; }
+.ai-usage[hidden] { display: none; }
+.ai-meter, .ai-usage-bar { --ai-meter: var(--c-ink); }
+:is(.ai-meter, .ai-usage-bar)[data-high] { --ai-meter: var(--warning); }
+:is(.ai-meter, .ai-usage-bar):not([data-state='ok']) { --ai-meter: var(--danger); }
+.ai-usage-trigger { display: inline-flex; align-items: center; gap: 8px; margin-left: -4px; padding: 4px 10px 4px 8px; border-radius: 999px; color: var(--muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; cursor: pointer; transition: background-color 0.15s, color 0.15s; }
+.ai-usage-trigger::-webkit-details-marker { display: none; }
+.ai-usage-pop[open] > .ai-usage-trigger { background: var(--surface-3); color: var(--text); }
+@media (hover: hover) {
+  .ai-usage-trigger:hover { background: var(--surface-3); color: var(--text); }
+}
+.ai-usage-bars { display: grid; gap: 3px; width: 30px; }
+.ai-usage-bar { height: 4px; border-radius: 999px; background: linear-gradient(var(--ai-meter), var(--ai-meter)) 0 0 / var(--ai-used) 100% no-repeat, var(--track); transition: background-size 0.6s var(--ease); }
+.ai-usage-bars:has(> :only-child) .ai-usage-bar { height: 6px; }
+.ai-usage-text { white-space: nowrap; }
+.ai-usage-panel { left: 0; right: auto; width: min(320px, calc(100vw - 24px)); padding: 14px 16px 12px; }
+.ai-usage-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.ai-usage-head strong { font-size: var(--fs-base); }
+.ai-usage-head span { overflow: hidden; color: var(--muted); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
+.ai-meters { display: grid; gap: 14px; margin-top: 14px; }
+.ai-meter-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.ai-meter-label { font-size: var(--fs-sm); font-weight: 600; }
+.ai-meter-value { color: var(--muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ai-meter-value [data-ai-meter-percent] { color: var(--text); font-size: var(--fs-sm); font-weight: 650; }
+.ai-meter-track { height: 8px; margin: 6px 0 5px; overflow: hidden; border-radius: 999px; background: var(--track); box-shadow: inset 0 0 0 1px var(--track-border); }
+.ai-meter-fill { display: block; width: var(--ai-used); height: 100%; border-radius: inherit; background: linear-gradient(90deg, color-mix(in srgb, var(--ai-meter) 55%, transparent), var(--ai-meter)); transition: width 0.6s var(--ease); }
+.ai-meter-note { color: var(--muted); font-size: var(--fs-xs); }
+.ai-meter:not([data-state='ok']) .ai-meter-note { color: var(--danger-text); }
+.ai-meter[data-high] .ai-meter-note { color: var(--warning-text); }
+.ai-usage-foot { display: flex; align-items: flex-start; gap: 6px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--muted); font-size: var(--fs-xs); }
+.ai-usage-foot .icon { flex: none; margin-top: 1px; }
+/* ボタンごと薄くしないのは、::after のチップまで薄くなり、使えない理由が読みにくくなるため */
+.ai-hard:disabled { opacity: 1; cursor: default; }
+.ai-hard:disabled .icon { opacity: 0.4; }
 @media (max-width: 640px), (pointer: coarse) {
   /* 16px 未満にしないのは、iOS が入力欄にフォーカスしたときに画面を拡大するため */
   .ai-textarea { font-size: 16px; }

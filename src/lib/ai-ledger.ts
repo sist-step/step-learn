@@ -2,24 +2,38 @@
 import { and, countDistinct, eq, gte, inArray, lt, ne, sql } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import {
+  AI_LIMITED_MODELS,
   AI_PROVIDER_MODELS,
   AI_PROVIDERS,
   AI_RESERVE_THRESHOLD,
   AI_RETIRED_PROVIDER_MODELS,
   OPENROUTER_DECISION_MODELS,
   aiProvider,
+  isLimitedModel,
   isModelPaused,
   isProviderEnabled,
   isReserveModel,
+  type AiLimitedModel,
   type AiModel,
   type DecisionModel,
   type AiProvider,
   type AiUsage,
 } from './ai'
-import { AI_ACTIVE_WINDOW, AI_DEFAULT_MONTHLY_LIMITS, aiPeriod, aiPool, aiQuota, type AiQuota } from './ai-quota'
+import {
+  AI_ACTIVE_WINDOW,
+  AI_DEFAULT_MONTHLY_LIMITS,
+  AI_DEFAULT_WEEKLY_SHARES,
+  aiModelQuota,
+  aiPeriod,
+  aiPool,
+  aiQuota,
+  type AiQuota,
+} from './ai-quota'
 import type { aiUsage as aiUsageTable, appSettings as appSettingsTable } from './schema'
 
 const limitKey = (provider: AiProvider) => `ai_monthly_limit_${provider}`
+
+const shareKey = (model: AiLimitedModel) => `ai_weekly_share_${model}`
 
 const unixNow = () => Math.floor(Date.now() / 1000)
 
@@ -31,6 +45,8 @@ export type AiOverview = {
   /** 今週の全体枠 */
   pool: number
   activeUsers: number
+  /** この提供元のモデルだけの週の枠と、提供元の 1 人あたりの枠に対する割合 */
+  shares: { model: AiLimitedModel; share: number }[]
 }
 
 /** ユーザーとモデルの組ごとの使用量。name などが null の行は、利用者に数えない使用量と、削除されたユーザーの分をまとめたもの */
@@ -79,14 +95,26 @@ export function createAiLedger<S extends Record<string, unknown>>({
     return Number.isFinite(limit) && limit > 0 ? limit : 0
   }
 
-  function setMonthlyLimits(limits: Record<AiProvider, number>) {
+  /** model だけの週の枠の、提供元の 1 人あたりの週の枠に対する割合（0〜1）。0 なら、そのモデルは使えない */
+  function getWeeklyShare(model: AiLimitedModel) {
+    const row = db
+      .select({ value: appSettings.value })
+      .from(appSettings)
+      .where(eq(appSettings.key, shareKey(model)))
+      .get()
+    const share = row ? Number(row.value) : AI_DEFAULT_WEEKLY_SHARES[model]
+    return Number.isFinite(share) ? Math.min(1, Math.max(0, share)) : 0
+  }
+
+  function setLimits(limits: Record<AiProvider, number>, shares: Record<AiLimitedModel, number>) {
+    const entries = [
+      ...AI_PROVIDERS.map((p) => [limitKey(p), limits[p]] as const),
+      ...AI_LIMITED_MODELS.map((m) => [shareKey(m), shares[m]] as const),
+    ]
     db.transaction((tx) => {
-      for (const provider of AI_PROVIDERS) {
-        const value = String(limits[provider])
-        tx.insert(appSettings)
-          .values({ key: limitKey(provider), value })
-          .onConflictDoUpdate({ target: appSettings.key, set: { value } })
-          .run()
+      for (const [key, n] of entries) {
+        const value = String(n)
+        tx.insert(appSettings).values({ key, value }).onConflictDoUpdate({ target: appSettings.key, set: { value } }).run()
       }
     })
   }
@@ -98,13 +126,17 @@ export function createAiLedger<S extends Record<string, unknown>>({
       .run()
   }
 
-  const spent = (provider: AiProvider, from: number, { until, userId }: { until?: number; userId?: number } = {}) =>
+  const spent = (
+    provider: AiProvider,
+    from: number,
+    { until, userId, model }: { until?: number; userId?: number; model?: AiLimitedModel } = {},
+  ) =>
     db
       .select({ cost: totalCost })
       .from(aiUsage)
       .where(
         and(
-          ofProvider(provider),
+          model === undefined ? ofProvider(provider) : eq(aiUsage.model, model),
           gte(aiUsage.createdAt, from),
           until === undefined ? undefined : lt(aiUsage.createdAt, until),
           userId === undefined ? undefined : eq(aiUsage.userId, userId),
@@ -125,11 +157,11 @@ export function createAiLedger<S extends Record<string, unknown>>({
       )
       .get()?.n ?? 0
 
-  /** model の提供元での、本人の今週の枠と使った額 */
-  function getQuota(userId: number, model: AiModel, at = unixNow()): AiQuota {
+  /** model を使うときに確かめる、本人の今週の枠と使った額。先頭は提供元の枠で、model だけの枠があれば続ける */
+  function getQuotas(userId: number, model: AiModel, at = unixNow()): AiQuota[] {
     const provider = aiProvider(model)
     const period = aiPeriod(at)
-    return aiQuota({
+    const quota = aiQuota({
       monthlyLimit: getMonthlyLimit(provider),
       monthSpent: spent(provider, period.monthStart),
       spentBefore: spent(provider, period.monthStart, { until: period.start }),
@@ -138,6 +170,15 @@ export function createAiLedger<S extends Record<string, unknown>>({
       activeUsers: activeUsers(provider, at, userId) + 1,
       period,
     })
+    if (!isLimitedModel(model)) return [quota]
+    const used = spent(provider, period.start, { userId, model })
+    return [quota, aiModelQuota(quota, { model, share: getWeeklyShare(model), used })]
+  }
+
+  /** model を今使えるかを決める枠。使えない枠があればそれを、なければ提供元の枠を返す */
+  function getQuota(userId: number, model: AiModel, at = unixNow()): AiQuota {
+    const quotas = getQuotas(userId, model, at)
+    return quotas.find((q) => q.state !== 'ok') ?? quotas[0]
   }
 
   /** 全体で、今月の使用量が月の上限に達していないか */
@@ -163,8 +204,21 @@ export function createAiLedger<S extends Record<string, unknown>>({
       monthSpent: spent(provider, period.monthStart),
       pool: aiPool(monthlyLimit, spent(provider, period.monthStart, { until: period.start }), period),
       activeUsers: activeUsers(provider, at),
+      shares: AI_LIMITED_MODELS.filter((m) => aiProvider(m) === provider).map((model) => ({ model, share: getWeeklyShare(model) })),
     }
   }
 
-  return { totalCost, weekCost, getMonthlyLimit, setMonthlyLimits, recordUsage, getQuota, withinMonthlyLimit, isModelAvailable, aiOverview }
+  return {
+    totalCost,
+    weekCost,
+    getMonthlyLimit,
+    getWeeklyShare,
+    setLimits,
+    recordUsage,
+    getQuotas,
+    getQuota,
+    withinMonthlyLimit,
+    isModelAvailable,
+    aiOverview,
+  }
 }

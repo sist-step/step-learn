@@ -334,9 +334,19 @@ const usd = (label: string, max: number) =>
     ),
   )
 
+const percent = (label: string) =>
+  z.pipe(
+    z.pipe(
+      text(label, 3, { required: true }),
+      z.string().check(rule((s: string) => (/^\d+$/.test(s) && Number(s) <= 100 ? null : `${label}は 0〜100 の整数で入力してください。`))),
+    ),
+    z.transform((s: string) => Number(s)),
+  )
+
 const aiSettings = z.object({
   openrouter_limit: usd('OpenRouter の月の上限', 10_000),
   anthropic_limit: usd('Anthropic の月の上限', 10_000),
+  'claude-sonnet-5-5_share': percent('Claude Sonnet 5.5 の週の枠'),
 })
 
 export const MAX_AI_MESSAGE_LENGTH = 4000

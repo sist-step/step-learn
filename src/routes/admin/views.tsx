@@ -7,7 +7,17 @@ import { AppShell } from '../../components/layout'
 import { Block, Card, Stat, Stats, Table } from '../../components/card'
 import { Styles } from '../../components/style'
 import { Alert, Avatar, Chip, EmptyState, PageHeader, Person, TabPanel, Tabs, formatDate, userMeta } from '../../components/ui'
-import { AI_MODEL_LABELS, AI_PROVIDER_LABELS, AI_PROVIDER_MODELS, isAiModel, type AiProvider } from '../../lib/ai-models'
+import {
+  AI_LIMITED_MODEL_QUOTA_LABELS,
+  AI_MODEL_LABELS,
+  AI_PROVIDER_LABELS,
+  AI_PROVIDER_MODELS,
+  AI_PROVIDER_QUOTA_LABELS,
+  aiProvider,
+  isAiModel,
+  type AiLimitedModel,
+  type AiProvider,
+} from '../../lib/ai-models'
 import type { AiOverview, AiUserUsage } from '../../lib/ai-ledger'
 import type { FieldErrors } from '../../lib/forms'
 import { LOG_KINDS, LOG_KIND_LABELS, LOG_RETENTION_DAYS, ROLE_LABELS, type LogKind, type Role } from '../../lib/types'
@@ -217,6 +227,13 @@ const modelLabels = (provider: AiProvider) => AI_PROVIDER_MODELS[provider].map((
 
 export const aiLimitField = (provider: AiProvider) => `${provider}_limit` as const
 
+export const aiShareField = (model: AiLimitedModel) => `${model}_share` as const
+
+/** 管理画面の入力欄の値。shares はモデルだけの週の枠（%） */
+export type AiSettingValues = { limits: Record<AiProvider, string>; shares: Record<AiLimitedModel, string> }
+
+const perUser = ({ pool, activeUsers }: AiOverview) => pool / Math.max(1, activeUsers)
+
 const ProviderUsage = ({ overview }: { overview: AiOverview }) => (
   <Block heading={`${AI_PROVIDER_LABELS[overview.provider]}（${modelLabels(overview.provider)}）`}>
     {(!overview.enabled || overview.monthlyLimit === 0) && (
@@ -238,7 +255,19 @@ const ProviderUsage = ({ overview }: { overview: AiOverview }) => (
         }
       />
       <Stat label="今週の全体枠" value={formatUsd(overview.pool)} />
-      <Stat label="今週の 1 人あたりの枠" value={formatUsd(overview.pool / Math.max(1, overview.activeUsers))} />
+      <Stat
+        label="今週の 1 人あたりの枠"
+        value={
+          <>
+            {formatUsd(perUser(overview))}
+            {overview.shares.map(({ model, share }) => (
+              <small class="ai-stat-sub">
+                {AI_LIMITED_MODEL_QUOTA_LABELS[model]} {formatUsd(perUser(overview) * share)}
+              </small>
+            ))}
+          </>
+        }
+      />
       <Stat
         label="直近 4 週間の利用者"
         value={
@@ -260,7 +289,7 @@ export const AiPage = ({
 }: {
   overviews: AiOverview[]
   list: AiUserUsage[]
-  values: Record<AiProvider, string>
+  values: AiSettingValues
   errors?: FieldErrors
   moodleAdminUrl?: string
 }) => (
@@ -271,22 +300,35 @@ export const AiPage = ({
     ))}
 
     <Card
-      heading="月の上限"
+      heading="上限"
       description="上限と使用量は、モデルの提供元ごとに分かれます。今週の全体枠は、月の残りを月末までの日数で割って決まり、直近 4 週間に使った人数で等分します。月曜 0:00 に切り替わります。"
     >
       <form method="post" action="/admin/ai" class="stack" data-loading-form {...validateWith('aiSettings')}>
         <div class="grid-2">
           {overviews.map(({ provider }) => (
             <TextField
-              label={`${AI_PROVIDER_LABELS[provider]}（USD）`}
+              label={`${AI_PROVIDER_LABELS[provider]}の月の上限（USD）`}
               name={aiLimitField(provider)}
-              value={values[provider]}
+              value={values.limits[provider]}
               error={errors[aiLimitField(provider)]}
               hint={`${modelLabels(provider)}。0 にすると使えなくなります。`}
               inputmode="decimal"
               autocomplete="off"
             />
           ))}
+          {overviews.flatMap(({ shares }) =>
+            shares.map(({ model }) => (
+              <TextField
+                label={`${AI_MODEL_LABELS[model]} だけの週の枠（%）`}
+                name={aiShareField(model)}
+                value={values.shares[model]}
+                error={errors[aiShareField(model)]}
+                hint={`${AI_PROVIDER_QUOTA_LABELS[aiProvider(model)]}の 1 人あたりの週の枠に対する割合。使った分は${AI_PROVIDER_QUOTA_LABELS[aiProvider(model)]}の枠にも数えます。0 にすると「難しい依頼」が使えなくなります。`}
+                inputmode="numeric"
+                autocomplete="off"
+              />
+            )),
+          )}
         </div>
         <div class="form-actions">
           <Button type="submit" variant="primary">
