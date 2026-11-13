@@ -29,6 +29,17 @@ const DATE_TIME_INPUT = new Intl.DateTimeFormat('sv-SE', {
 export const unixToDateTimeInput = (unix: number | null | undefined) =>
   unix == null ? '' : DATE_TIME_INPUT.format(new Date(unix * 1000)).replace(' ', 'T')
 
+const WEEKDAYS = '日月火水木金土'
+
+/** 日付（YYYY-MM-DD）か日時（YYYY-MM-DDTHH:mm）の入力欄の値を「2026年11月13日（金） 14:30」の形にする */
+export function formatDateTimeInput(s: string) {
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?$/)
+  if (!m) return s
+  const [, y, mo, d, h, min] = m
+  const weekday = WEEKDAYS[new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d))).getUTCDay()]
+  return `${Number(y)}年${Number(mo)}月${Number(d)}日（${weekday}）${h ? ` ${h}:${min}` : ''}`
+}
+
 /** 終了日はその日の終わりまでを期間に含める。期間を決めていない側は区切らない */
 export const isInPeriod = (period: { startAt: number | null; endAt: number | null }, at = Math.floor(Date.now() / 1000)) =>
   (period.startAt == null || period.startAt <= at) && (period.endAt == null || at < period.endAt + DAY)
