@@ -8,6 +8,7 @@ import {
   AiError,
   aiProvider,
   complete,
+  hidesPrelude,
   isAiModel,
   replyMessage,
   type AiMessage,
@@ -180,12 +181,14 @@ export function createAiAgent({
     return state === 'ok' ? null : QUOTA_SHORT[state]
   }
 
-  const wireTools = [...tools.map((t) => t.tool), SUGGEST_TOOL]
+  const baseTools = tools.map((t) => t.tool)
+  // 候補をあとから別の要求で作らないのは、候補を出すだけのために、応答をもう 1 回作らせることになるため
+  const wireTools = (model: AiModel) => (hidesPrelude(model) ? baseTools : [...baseTools, SUGGEST_TOOL])
 
   // 同じ利用者の発言を並べて処理しないのは、どちらも同じ会話の続きとして保存し、片方の発言が消えるため
   const running = new Set<number>()
 
-  const systemPrompt = async (c: AiToolContext, page: string): Promise<AiMessage> => ({
+  const systemPrompt = async (c: AiToolContext, page: string, model: AiModel): Promise<AiMessage> => ({
     role: 'system',
     content: [
       'あなたは学習管理システム「STEP Learn」で、教師の作業を手伝う AI アシスタントです。',
@@ -196,7 +199,11 @@ export function createAiAgent({
       '- コースや教材の内容について答えるときは、ツールで確かめてから答えてください。確かめていないことを推測で書かないでください。',
       '- ID はツールを呼ぶためのものです。利用者への返事には書かず、名前で伝えてください。',
       ...abilities.map((a) => `- ${a}`),
-      `- 回答を書き終えたら、利用者が次に送りそうな依頼や返事を考え、そのまま送れるものがあれば、最後に必ず ${SUGGEST_REPLIES} を呼んで候補を出してください（例: 内容を確かめたあとの次の作業、提案した構成を実際に作る依頼、質問で終えたときの答えの候補）。次に勧める作業がなく、会話がそこで完結しているときだけ、呼ばずに終えてください。`,
+      ...(hidesPrelude(model)
+        ? []
+        : [
+            `- 回答を書き終えたら、利用者が次に送りそうな依頼や返事を考え、そのまま送れるものがあれば、最後に必ず ${SUGGEST_REPLIES} を呼んで候補を出してください（例: 内容を確かめたあとの次の作業、提案した構成を実際に作る依頼、質問で終えたときの答えの候補）。次に勧める作業がなく、会話がそこで完結しているときだけ、呼ばずに終えてください。`,
+          ]),
       '- 確認カードは、確認が必要なツールを呼んだときにだけ出ます。ツールを呼ばずに「カードを出します」と書かないでください。',
       '- 確認カードを出したら、利用者が承認するか取り消すまで、それ以上ツールを呼ばずに、カードを確かめてほしいことを一言伝えて終えてください。',
       '- 受講者の一覧や成績、提出物は扱えません。',
@@ -217,18 +224,24 @@ export function createAiAgent({
     }
   }
 
-  /** 続きの依頼の候補を受け取る。受け取ったら true で、AI に続きを書かせずに発言を終える */
-  function suggestReplies(chat: AiChat, calls: AiToolCall[], emit: Emit) {
+  /**
+   * 続きの依頼の候補を受け取る。受け取ったら true で、AI に続きを書かせずに発言を終える。
+   * unseen は、回答が利用者に見えていない（hidesPrelude のモデルが本文を書かずに呼んだ）こと
+   */
+  function suggestReplies(chat: AiChat, calls: AiToolCall[], unseen: boolean, emit: Emit) {
     const alone = calls.every((call) => call.name === SUGGEST_REPLIES)
     let accepted = false
     for (const call of calls.filter((c) => c.name === SUGGEST_REPLIES)) {
       const parsed = suggestArgs.safeParse(parseJson(call.arguments))
       const replies = parsed.success ? [...new Set(parsed.data.replies.map((r) => r.trim()).filter(Boolean))] : []
-      const result = !alone
-        ? failure(`${SUGGEST_REPLIES} は、ほかのツールと一緒にせず、回答を書き終えたあとに呼んでください。`, TOOL_FAILED)
-        : replies.length === 0
-          ? failure('引数が正しくありません。説明に合わせて呼び直してください。', TOOL_FAILED)
-          : { content: JSON.stringify({ ok: true }), label: '' }
+      // 候補だけを受け取って終えないのは、このモデルは渡していない候補のツールも会話の履歴を真似て呼び、そのとき書いた回答が見えないブロックに入って、何も答えずに終わるため
+      const result = unseen
+        ? failure(`${SUGGEST_REPLIES} は使えません。ツールを呼ばずに、利用者への回答を書いて終えてください。`, TOOL_FAILED)
+        : !alone
+          ? failure(`${SUGGEST_REPLIES} は、ほかのツールと一緒にせず、回答を書き終えたあとに呼んでください。`, TOOL_FAILED)
+          : replies.length === 0
+            ? failure('引数が正しくありません。説明に合わせて呼び直してください。', TOOL_FAILED)
+            : { content: JSON.stringify({ ok: true }), label: '' }
       chat.content.messages.push({ role: 'tool', toolCallId: call.id, content: result.content, isError: result.isError })
       if (result.isError) continue
       chat.content.replies = replies
@@ -272,7 +285,7 @@ export function createAiAgent({
     const { messages, turnModel } = chat.content
     // 保存したモデルを確かめるのは、モデルを一覧から外したあとも、その前に始めた発言の続き（確認カードの承認）が来るため
     const model = turnModel && isAiModel(turnModel) ? turnModel : chat.model
-    const system = await systemPrompt(c, page)
+    const system = await systemPrompt(c, page, model)
     for (let round = 0; ; round++) {
       if (round === MAX_ROUNDS) {
         const text = 'ツールを使う回数が上限に達したため、ここで止めました。続けるには、もう一度お伝えください。'
@@ -286,7 +299,7 @@ export function createAiAgent({
         reply = await complete({
           model,
           messages: [system, ...messages],
-          tools: wireTools,
+          tools: wireTools(model),
           onText: (text) => emit({ type: 'text', text }),
         })
       } catch (e) {
@@ -303,7 +316,7 @@ export function createAiAgent({
       }
       messages.push(replyMessage(reply))
       if (reply.stop !== 'tools') return
-      if (suggestReplies(chat, reply.toolCalls, emit)) return
+      if (suggestReplies(chat, reply.toolCalls, hidesPrelude(model) && !reply.text.trim(), emit)) return
 
       let waiting = false
       for (const call of reply.toolCalls) if (call.name !== SUGGEST_REPLIES && (await callTool(c, chat, call, emit))) waiting = true
