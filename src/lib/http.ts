@@ -34,7 +34,10 @@ export function safeNext(next: string | undefined) {
   // oxlint-disable-next-line no-control-regex -- 制御文字を含む値を拒否するため
   if (!next || !next.startsWith('/') || /[\x00-\x20\x7f\\]/.test(next)) return '/dashboard'
   const url = new URL(next, NEXT_BASE)
-  return url.origin === NEXT_BASE ? url.pathname + url.search + url.hash : '/dashboard'
+  if (url.origin !== NEXT_BASE) return '/dashboard'
+  const path = url.pathname + url.search + url.hash
+  // 入力の先頭だけで判定しないのは、`/.//evil.example` のドットセグメントが正規化されて `//evil.example` になるため
+  return path.startsWith('//') ? '/dashboard' : path
 }
 
 /** Referer が同一オリジンならそのパスを、そうでなければ fallback を返す */
