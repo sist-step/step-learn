@@ -95,7 +95,7 @@
 .code-suggest { display: flex; align-items: center; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border); }
 .code-suggest > p { flex: 1; min-width: 0; margin: 0; }
 
-.code-section { scroll-margin-top: calc(var(--topbar-h) + 88px); }
+.code-section { scroll-margin-top: calc(var(--topbar-h) + 24px); }
 
 .code-starter { display: grid; border: 1px solid var(--field-border); border-radius: var(--radius-field); overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s; }
 .code-starter:focus-within { border-color: var(--focus); box-shadow: var(--ring-field); }
