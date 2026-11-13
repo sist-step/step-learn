@@ -2,7 +2,7 @@
 import { Hono, type Context } from 'hono'
 import { stream } from 'hono/streaming'
 import { AiPanel, type AiCardChange, type AiChatEntry, type AiPanelProps } from '../../components/ai-panel'
-import { AI_MODEL_LABELS, AI_MODELS, aiProvider, isAiModel, isProviderEnabled } from '../../lib/ai'
+import { AI_CHAT_MODELS, AI_MODEL_LABELS, aiProvider, isAiModel, isProviderEnabled, type AiModel } from '../../lib/ai'
 import { quotaNote, quotaProblem, type AiAgent, type AiAgentEvent } from '../../lib/ai-agent'
 import type { AiChatContent } from '../../lib/ai-chat'
 import type { AiChange } from '../../lib/ai-tool-kit'
@@ -52,15 +52,27 @@ function streamEvents(c: Context<AppEnv>, task: (emit: (event: AiAgentEvent) => 
 
 export function createAiHandlers({ agent, canUse }: AiBackend) {
   const { chats, ledger } = agent
-  const enabledModels = () => AI_MODELS.filter((m) => isProviderEnabled(aiProvider(m)) && ledger.isModelAvailable(m))
+  const usable = (model: AiModel) => isProviderEnabled(aiProvider(model)) && ledger.isModelAvailable(model)
+  const enabledModels = () => AI_CHAT_MODELS.filter(usable)
+
+  const modelOption = (user: User, model: AiModel) => {
+    const hard = agent.hardTaskModel(model)
+    return {
+      value: model,
+      label: AI_MODEL_LABELS[model],
+      hardLabel: hard === model ? null : AI_MODEL_LABELS[hard],
+      problem: quotaProblem(ledger.getQuota(user.id, model)),
+    }
+  }
 
   function panelProps(user: User): AiPanelProps {
     const chat = chats.currentChat(user.id)
     return {
-      models: enabledModels().map((m) => ({ value: m, label: AI_MODEL_LABELS[m], problem: quotaProblem(ledger.getQuota(user.id, m)) })),
+      models: enabledModels().map((m) => modelOption(user, m)),
       chat: chat && {
         id: chat.id,
-        modelLabel: AI_MODEL_LABELS[chat.model],
+        model: modelOption(user, chat.model),
+        hard: chat.content.turnModel !== undefined && chat.content.turnModel !== chat.model,
         entries: entriesOf(chat.content),
         busy: agent.isRunning(user.id),
       },
@@ -84,7 +96,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     const result = validate('aiMessage', await readForm(c))
     return streamEvents(c, async (emit) => {
       if (!result.ok) return emit({ type: 'error', message: firstError(result.errors), retract: true })
-      const { message, model, chat: chatId, page } = result.values
+      const { message, model, chat: chatId, page, hard } = result.values
 
       let chat = chats.currentChat(user.id)
       if (chatId) {
@@ -92,8 +104,9 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
           emit({ type: 'error', message: 'このチャットは閉じられています。新しいチャットで送り直してください。', retract: true })
           return emit({ type: 'closed' })
         }
-        // 断るだけで閉じずにおかないのは、使えなくなったモデルのチャットが残ると、新しいチャットを始められないため
-        if (!enabledModels().includes(chat.model)) {
+        // 断るだけで閉じずにおかないのは、使えなくなったモデルのチャットが残ると、新しいチャットを始められないため。
+        // enabledModels で確かめないのは、選択肢から外す前の Claude Sonnet 5.5 で始めたチャットも続けられるようにするため
+        if (!usable(chat.model)) {
           chats.closeChat(user.id)
           emit({
             type: 'error',
@@ -111,7 +124,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
         chat = chats.startChat(user.id, model)
         emit({ type: 'chat', id: chat.id })
       }
-      await agent.send({ c, chat, message, page }, emit)
+      await agent.send({ c, chat, message, page, hard: hard === 1 }, emit)
       // 何も残らなかったチャットを閉じるのは、最初の発言が失敗したとき、モデルを選び直して始められるようにするため
       if (chat.content.messages.length === 0) {
         chats.closeChat(user.id)
