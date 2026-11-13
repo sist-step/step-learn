@@ -61,6 +61,7 @@ import pages from 'heroicons/24/outline/rectangle-stack.svg?raw'
 import shield from 'heroicons/24/outline/shield-check.svg?raw'
 import sparkles from 'heroicons/24/outline/sparkles.svg?raw'
 import layers from 'heroicons/24/outline/square-3-stack-3d.svg?raw'
+import stop from 'heroicons/24/outline/stop.svg?raw'
 import trash from 'heroicons/24/outline/trash.svg?raw'
 import user from 'heroicons/24/outline/user.svg?raw'
 import userMinus from 'heroicons/24/outline/user-minus.svg?raw'
@@ -89,6 +90,7 @@ const svgs = {
   chevronRight,
   chevronLeft,
   arrowUp,
+  stop,
   sparkles,
   assistant,
   pencilSquare,

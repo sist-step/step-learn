@@ -30,6 +30,9 @@ type Chunk = { choices?: { delta?: WirePart; finish_reason?: string | null }[]; 
 
 const STOPS: Partial<Record<string, AiStop>> = { tool_calls: 'tools', length: 'length', content_filter: 'refusal' }
 
+// 止めて本文が届かなかった発言を送らないのは、中身のない assistant のメッセージを弾く提供元があるため
+const isEmptyReply = (m: AiMessage) => m.role === 'assistant' && !m.content && !m.toolCalls?.length
+
 const toWireMessage = (m: AiMessage) => {
   if (m.role === 'tool') return { role: m.role, tool_call_id: m.toolCallId, content: m.content }
   if (m.role !== 'assistant' || !m.toolCalls?.length) return { role: m.role, content: m.content }
@@ -78,6 +81,7 @@ export async function completeOpenRouter({
   temperature,
   tools,
   onText,
+  signal,
 }: AiRequest & { model: OpenRouterModel }): Promise<AiReply> {
   if (!config.openRouter) throw new AiError('OPENROUTER_API_KEY が設定されていないため、このモデルを利用できません')
   const stream = !!onText
@@ -88,15 +92,16 @@ export async function completeOpenRouter({
       headers: { Authorization: `Bearer ${config.openRouter.apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
-        messages: messages.map(toWireMessage),
+        messages: messages.filter((m) => !isEmptyReply(m)).map(toWireMessage),
         max_tokens: maxTokens,
         temperature,
         tools: tools?.length ? tools.map(toWireTool) : undefined,
         stream: stream || undefined,
       }),
-      signal: AbortSignal.timeout(stream ? AI_STREAM_TIMEOUT : AI_TIMEOUT),
+      signal: AbortSignal.any([AbortSignal.timeout(stream ? AI_STREAM_TIMEOUT : AI_TIMEOUT), ...(signal ? [signal] : [])]),
     })
   } catch (e) {
+    if (signal?.aborted) return { text: '', toolCalls: [], stop: 'stopped', usage: toUsage(model, undefined) }
     console.error('[ai]', e)
     throw new AiError('AI に接続できません')
   }
@@ -137,6 +142,8 @@ export async function completeOpenRouter({
       }
     } catch (e) {
       if (e instanceof AiError) throw e
+      // 入力のトークン数を数えないのは、止めると usage が届かず、このモデルの入力の料金は出力の 1% ほどで、上限の計算にはほとんど響かないため
+      if (signal?.aborted) return { text, toolCalls: [], stop: 'stopped', usage: toUsage(model, { completion_tokens: text.length }) }
       console.error('[ai]', e)
       throw new AiError('AI の応答が途中で切れました')
     }

@@ -2318,6 +2318,7 @@ const aiPanel = () => document.getElementById('ai-panel')
 const aiInput = () => aiPanel()?.querySelector<HTMLTextAreaElement>('.ai-textarea') ?? null
 let aiSending = false
 let aiComposing = false
+let aiStopping = false
 let aiSync: Promise<void> | null = null
 let aiSyncTimer = 0
 const AI_SYNC_INTERVAL = 10_000
@@ -2326,7 +2327,10 @@ const AI_THINKING_AFTER_TEXT = 1500
 // サーバーへの問い合わせだけで済ませないのは、同じブラウザのほかのタブで言い終えた応答を、次の問い合わせまで待たずに出すため
 const aiChannel = new BroadcastChannel('ai-panel')
 
-function aiTemplate(kind: 'user' | 'assistant' | 'tool' | 'replies' | 'reply' | 'pending' | 'error', text?: string) {
+function aiTemplate(
+  kind: 'user' | 'assistant' | 'tool' | 'replies' | 'reply' | 'pending' | 'stopped' | 'compacted' | 'error',
+  text?: string,
+) {
   const template = aiPanel()?.querySelector<HTMLTemplateElement>(`template[data-ai-template="${kind}"]`)
   const el = template?.content.firstElementChild?.cloneNode(true)
   if (!(el instanceof HTMLElement)) throw new Error(`template ${kind} がありません`)
@@ -2441,6 +2445,15 @@ function paintAiUsage(panel: HTMLElement, usage: AiUsageMeter[], hardOff: string
   syncAiModel(form)
 }
 
+function paintAiContext(panel: HTMLElement, percent: number) {
+  const trigger = panel.querySelector<HTMLElement>('[data-ai-context]')
+  if (!trigger) return
+  trigger.style.setProperty('--ai-used', `${percent}%`)
+  trigger.setAttribute('aria-label', `会話の長さ（${percent}%）`)
+  const text = trigger.querySelector('[data-ai-context-percent]')
+  if (text) text.textContent = String(percent)
+}
+
 document.addEventListener('change', (e) => {
   const input = e.target as Element
   if (input instanceof HTMLInputElement && input.name === 'model' && input.form?.matches('[data-ai-form]')) syncAiModel(input.form)
@@ -2449,6 +2462,7 @@ document.addEventListener('change', (e) => {
 document.addEventListener('click', (e) => {
   const target = e.target as Element
   if (target.closest('[data-ai-toggle]')) return setAiOpen(!document.documentElement.hasAttribute('data-ai-open'))
+  if (target.closest('[data-ai-stop]')) return void stopAi()
   const hardToggle = target.closest<HTMLElement>('[data-ai-hard]')
   const hardForm = hardToggle?.closest<HTMLFormElement>('[data-ai-form]')
   if (hardToggle && hardForm) {
@@ -2587,6 +2601,8 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
   data.set('revision', panel.dataset.revision ?? '')
   panel.toggleAttribute('data-busy', true)
   const pending = aiTemplate('pending')
+  const pendingLabel = pending.querySelector('[data-ai-pending-label]')
+  const thinkingText = pendingLabel?.textContent ?? ''
   log.append(pending)
   scrollAiLog(true)
 
@@ -2603,6 +2619,8 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
     // 書き足したあとに最下部か確かめないのは、続きの依頼のような高さのある塊を足すと、最下部から離れたと見なされて止まるため
     const following = aiLogAtBottom(log)
     updateThinking(event.type === 'text')
+    if (pendingLabel) pendingLabel.textContent = event.type === 'compacting' ? 'これまでの会話を要約しています…' : thinkingText
+    if (event.type === 'compacting') return
     if (event.type === 'text') {
       if (!bubble) {
         bubble = aiTemplate('assistant')
@@ -2634,9 +2652,20 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
       showAiChange(event.touched)
     } else if (event.type === 'replies') {
       pending.before(aiReplies(event.replies))
+    } else if (event.type === 'compacted') {
+      const sent = $$<HTMLElement>('.ai-msg-user', log).at(-1)
+      sent?.before(aiTemplate('compacted'))
+    } else if (event.type === 'stopped') {
+      if (event.retract) {
+        outcome.retracted = true
+        onRetract?.()
+      } else {
+        pending.before(aiTemplate('stopped'))
+      }
     } else {
       panel.dataset.revision = event.revision
       paintAiUsage(panel, event.usage, event.hardOff)
+      paintAiContext(panel, event.context)
     }
     scrollAiLog(following)
   }
@@ -2659,10 +2688,31 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
   } finally {
     clearTimeout(thinkingTimer)
     pending.remove()
+    // 入力欄に移すのは、押した停止のボタンが隠れてフォーカスが消え、キーボードで続きを打てなくなるため
+    const stopFocused = !!document.activeElement?.matches('[data-ai-stop]')
     panel.removeAttribute('data-busy')
+    if (stopFocused) aiInput()?.focus()
     scrollAiLog()
   }
   return outcome
+}
+
+/** 作成中の応答を止める。サーバーが止めて保存し終えると、流れていた応答もそこで終わる */
+// 押したボタンを disabled にしないのは、フォーカスが外れて、止めたあとに入力欄へ戻せなくなるため
+async function stopAi() {
+  if (aiStopping) return
+  aiStopping = true
+  try {
+    const res = await fetch('/ai/chat/stop', { method: 'POST', headers: { Accept: 'application/json' } })
+    if (!res.ok) throw new Error(`status ${res.status}`)
+    aiChannel.postMessage('changed')
+    // 応答を流しているのがほかのタブなら取り直すのは、次の問い合わせまで、止めたのに作成中のまま見えるため
+    if (!aiSending) await refreshAiPanel()
+  } catch {
+    toast('生成を停止できませんでした。', 'error')
+  } finally {
+    aiStopping = false
+  }
 }
 
 function noteAiProblem(message: string) {
