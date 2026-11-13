@@ -38,8 +38,6 @@ function entriesOf({ messages, labels, cards }: AiChatContent): AiChatEntry[] {
   })
 }
 
-const enabledModels = () => AI_MODELS.filter((m) => isProviderEnabled(aiProvider(m)))
-
 const NDJSON_HEADERS = {
   'Content-Type': 'application/x-ndjson; charset=utf-8',
   'Cache-Control': 'no-store',
@@ -54,6 +52,7 @@ function streamEvents(c: Context<AppEnv>, task: (emit: (event: AiAgentEvent) => 
 
 export function createAiHandlers({ agent, canUse }: AiBackend) {
   const { chats, ledger } = agent
+  const enabledModels = () => AI_MODELS.filter((m) => isProviderEnabled(aiProvider(m)) && ledger.isModelAvailable(m))
 
   function panelProps(user: User): AiPanelProps {
     const chat = chats.currentChat(user.id)
@@ -91,6 +90,16 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
       if (chatId) {
         if (!chat || String(chat.id) !== chatId) {
           emit({ type: 'error', message: 'このチャットは閉じられています。新しいチャットで送り直してください。', retract: true })
+          return emit({ type: 'closed' })
+        }
+        // 断るだけで閉じずにおかないのは、使えなくなったモデルのチャットが残ると、新しいチャットを始められないため
+        if (!enabledModels().includes(chat.model)) {
+          chats.closeChat(user.id)
+          emit({
+            type: 'error',
+            message: `${AI_MODEL_LABELS[chat.model]} は今は使えません。新しいチャットで送り直してください。`,
+            retract: true,
+          })
           return emit({ type: 'closed' })
         }
       } else {

@@ -4,10 +4,13 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import {
   AI_PROVIDER_MODELS,
   AI_PROVIDERS,
+  AI_RESERVE_THRESHOLD,
   AI_RETIRED_PROVIDER_MODELS,
   OPENROUTER_DECISION_MODELS,
   aiProvider,
+  isModelPaused,
   isProviderEnabled,
+  isReserveModel,
   type AiModel,
   type DecisionModel,
   type AiProvider,
@@ -142,6 +145,14 @@ export function createAiLedger<S extends Record<string, unknown>>({
     return spent(provider, aiPeriod(at).monthStart) < getMonthlyLimit(provider)
   }
 
+  /** model を今使えるか（API キーの有無は別に確かめる）。予備のモデル（AI_RESERVE_MODELS）は、Claude を使えないときと、Anthropic の今月の使用量が月の上限の AI_RESERVE_THRESHOLD を超えたときだけ使える */
+  function isModelAvailable(model: AiModel | DecisionModel, at = unixNow()) {
+    if (isModelPaused(model)) return false
+    if (!isReserveModel(model)) return true
+    const limit = getMonthlyLimit('anthropic')
+    return !isProviderEnabled('anthropic') || limit === 0 || spent('anthropic', aiPeriod(at).monthStart) > limit * AI_RESERVE_THRESHOLD
+  }
+
   function aiOverview(provider: AiProvider, at = unixNow()): AiOverview {
     const period = aiPeriod(at)
     const monthlyLimit = getMonthlyLimit(provider)
@@ -155,5 +166,5 @@ export function createAiLedger<S extends Record<string, unknown>>({
     }
   }
 
-  return { totalCost, weekCost, getMonthlyLimit, setMonthlyLimits, recordUsage, getQuota, withinMonthlyLimit, aiOverview }
+  return { totalCost, weekCost, getMonthlyLimit, setMonthlyLimits, recordUsage, getQuota, withinMonthlyLimit, isModelAvailable, aiOverview }
 }

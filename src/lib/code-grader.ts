@@ -24,8 +24,12 @@ import {
 import type { CodeSettings, CodeStore, GradingResult } from './code-store'
 import { SandboxError, runCode, sandboxEnabled, type RunResult } from './sandbox'
 
-// 学生の提出のたびに呼ぶので、安いモデルにする
-const MODEL: AiModel = 'deepseek/deepseek-v4.1-flash-1017'
+const CLAUDE: AiModel = 'claude-sonnet-5-5'
+const DEEPSEEK: AiModel = 'deepseek/deepseek-v4.1-flash-1017'
+
+// 提出のたびに呼ぶのに安い DeepSeek を常に使わないのは、Claude の予算に余裕があるうちは Claude で採点するため
+/** 採点と下書きに使うモデル。DeepSeek を予備として使えるとき（ai-ledger.ts の isModelAvailable）は DeepSeek にする */
+const gradingModel = (ledger: AiLedger) => (isProviderEnabled('openrouter') && ledger.isModelAvailable(DEEPSEEK) ? DEEPSEEK : CLAUDE)
 // 提出が重なったときに一度に流さないのは、AI の同時呼び出しの上限と、4 つしか同時に動かせない sandbox を、採点だけで使い切らないため
 const CONCURRENCY = 2
 // 出力より大きく取るのは、このモデルが答える前に考える分も同じ上限から使い、足りないと本文が空のまま打ち切られるため
@@ -35,7 +39,7 @@ const MAX_FEEDBACK_LENGTH = 2000
 const MAX_REASON_LENGTH = 300
 
 /** 採点に使うモデルの提供元の API キーが設定されている */
-export const gradingEnabled = isProviderEnabled(aiProvider(MODEL))
+export const gradingEnabled = [CLAUDE, DEEPSEEK].some((m) => isProviderEnabled(aiProvider(m)))
 
 const section = (boundary: string, label: string, body: string) => `【${label}】\n${boundary}\n${body}\n${boundary}`
 
@@ -165,8 +169,9 @@ export function parseJudgement(text: string, count: number): Judgement | null {
  * 使用量を提出した学生のものにしないのは、AI エージェントの今週の枠が利用者の人数で割って決まり、学生の人数だけ教師の枠が小さくなるため
  */
 async function judgeByLlm(input: GradingInput, run: RunResult | null, ledger: AiLedger): Promise<Judgement | null> {
-  const reply = await complete({ model: MODEL, messages: buildJudgeMessages(input, run), maxTokens: MAX_TOKENS, temperature: 0 })
-  ledger.recordUsage(null, MODEL, reply.usage)
+  const model = gradingModel(ledger)
+  const reply = await complete({ model, messages: buildJudgeMessages(input, run), maxTokens: MAX_TOKENS, temperature: 0 })
+  ledger.recordUsage(null, model, reply.usage)
   const judgement = parseJudgement(reply.text, input.constraints.length)
   if (!judgement) console.error('[grading] 判定を読み取れません', reply.stop, reply.text.slice(0, 300))
   return judgement
@@ -220,8 +225,9 @@ async function judgeByJev(
 }
 
 async function feedbackByLlm(input: GradingInput, run: RunResult | null, ledger: AiLedger) {
-  const reply = await complete({ model: MODEL, messages: buildFeedbackMessages(input, run), maxTokens: MAX_TOKENS, temperature: 0 })
-  ledger.recordUsage(null, MODEL, reply.usage)
+  const model = gradingModel(ledger)
+  const reply = await complete({ model, messages: buildFeedbackMessages(input, run), maxTokens: MAX_TOKENS, temperature: 0 })
+  ledger.recordUsage(null, model, reply.usage)
   const feedback = parseFeedback(reply.text)
   if (!feedback) console.error('[grading] 講評を読み取れません', reply.stop, reply.text.slice(0, 300))
   return feedback
@@ -357,14 +363,15 @@ export function createGrader({
 
   return {
     /** いま提出を採点に回せるか。AI が設定されていないときと、月の上限に達しているときは回せない */
-    canGrade: () => gradingEnabled && ledger.withinMonthlyLimit(aiProvider(MODEL)),
+    canGrade: () => gradingEnabled && ledger.withinMonthlyLimit(aiProvider(gradingModel(ledger))),
     /**
      * 問題文から、最初のコードと制約の下書きを作る。応答を読み取れなければ null。
      * 使用量を頼んだ教師に付けるのは、学生の提出と違って、教師が自分で押したときにだけかかるため
      */
     async draftSetup(input: SetupInput, userId: number) {
-      const reply = await complete({ model: MODEL, messages: buildSetupMessages(input), maxTokens: MAX_TOKENS, temperature: 0.3 })
-      ledger.recordUsage(userId, MODEL, reply.usage)
+      const model = gradingModel(ledger)
+      const reply = await complete({ model, messages: buildSetupMessages(input), maxTokens: MAX_TOKENS, temperature: 0.3 })
+      ledger.recordUsage(userId, model, reply.usage)
       const draft = parseSetup(reply.text, input.language)
       if (!draft) console.error('[grading] 下書きを読み取れません', reply.stop, reply.text.slice(0, 300))
       return draft

@@ -500,7 +500,7 @@ export const CodeGradingCard = ({
                 制約の判定 <Chip>開発サーバーだけ</Chip>
               </span>
               <span class="muted small">
-                すべてのアイテムに効きます。本番では常に AI（DeepSeek）です。Jev は理由と講評を返しません。保存していない変更は消えます。
+                すべてのアイテムに効きます。本番では常に AI です。Jev は理由と講評を返しません。保存していない変更は消えます。
               </span>
             </div>
             <div class="code-dev-judge-options" role="group" aria-label="制約の判定">
