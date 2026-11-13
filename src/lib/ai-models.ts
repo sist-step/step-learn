@@ -91,8 +91,8 @@ export type AiToolCall = { id: string; name: string; arguments: string }
 
 export type AiMessage =
   | { role: 'system' | 'user'; content: string }
-  /** native は AiReply の native。次の要求でもそのまま付けて送る */
-  | { role: 'assistant'; content: string; toolCalls?: AiToolCall[]; native?: unknown }
+  /** native は AiReply の native。次の要求でもそのまま付けて送る。stopped は利用者が生成を止めたこと（content はそこまでの本文） */
+  | { role: 'assistant'; content: string; toolCalls?: AiToolCall[]; native?: unknown; stopped?: boolean }
   | { role: 'tool'; toolCallId: string; content: string; isError?: boolean }
 
 /** parameters は引数の JSON Schema */
@@ -110,13 +110,15 @@ export type AiRequest = {
   tools?: AiTool[]
   /** 渡すとストリーミングで受け取り、本文の断片が届くたびに呼ぶ */
   onText?: (delta: string) => void
+  /** 中断すると、そこまでに届いた本文を stop: 'stopped' で返す */
+  signal?: AbortSignal
 }
 
 /**
- * end: 言い終えた / tools: ツールの結果を待っている / length: maxTokens で打ち切られた / refusal: モデルが応答を断った。
- * length のときの toolCalls は引数が途中で切れていることがあるので、実行しない
+ * end: 言い終えた / tools: ツールの結果を待っている / length: maxTokens で打ち切られた / refusal: モデルが応答を断った /
+ * stopped: AiRequest の signal で中断した。length のときの toolCalls は引数が途中で切れていることがあるので、実行しない。stopped のときは空
  */
-export type AiStop = 'end' | 'tools' | 'length' | 'refusal'
+export type AiStop = 'end' | 'tools' | 'length' | 'refusal' | 'stopped'
 
 export type AiReply = {
   text: string
