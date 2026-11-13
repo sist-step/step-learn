@@ -1,5 +1,6 @@
 // lib/ai-usage.ts などを読み込まず、描く内容を props で受け取るのは、AppShell を使う Moodle モードから DB を開くモジュールを読み込まないため
 import type { AiCardState } from '../lib/ai-chat'
+import type { AiTouched } from '../lib/ai-tool-kit'
 import type { DiffLine } from '../lib/diff'
 import { Button, IconButton } from './button'
 import { FieldError, SegmentedControl, validateWith } from './form'
@@ -13,8 +14,8 @@ export type AiCardChange = { label: string; before: string; after: string } | { 
 
 export type AiChatEntry =
   | { kind: 'user' | 'assistant'; text: string }
-  | { kind: 'tool'; label: string }
-  | { kind: 'card'; callId: string; title: string; changes: AiCardChange[]; state: AiCardState; note?: string }
+  | { kind: 'tool'; label: string; touched?: AiTouched }
+  | { kind: 'card'; callId: string; title: string; changes: AiCardChange[]; state: AiCardState; note?: string; touched?: AiTouched }
 
 /** hardLabel は「難しい依頼」を選んだときに答えるモデル（なければ選べない）、problem は今そのモデルを使えない理由 */
 export type AiModelOption = { value: string; label: string; hardLabel: string | null; problem: string | null }
@@ -115,6 +116,7 @@ const Card = ({ entry, chatId }: { entry: Extract<AiChatEntry, { kind: 'card' }>
         <Icon name={entry.state === 'approved' ? 'checkCircle' : entry.state === 'failed' ? 'alert' : 'x'} size={15} />
         {CARD_STATE_LABELS[entry.state]}
         {entry.state === 'failed' && entry.note && `（${entry.note}）`}
+        {entry.touched && <SpotLink touched={entry.touched} />}
       </p>
     )}
   </div>
@@ -122,7 +124,7 @@ const Card = ({ entry, chatId }: { entry: Extract<AiChatEntry, { kind: 'card' }>
 
 const Entry = ({ entry, chatId }: { entry: AiChatEntry; chatId: number }) => {
   if (entry.kind === 'card') return <Card entry={entry} chatId={chatId} />
-  if (entry.kind === 'tool') return <ToolLine label={entry.label} />
+  if (entry.kind === 'tool') return <ToolLine label={entry.label} touched={entry.touched} />
   if (entry.kind === 'user') return <UserMessage text={entry.text} />
   return (
     <div class="ai-msg ai-msg-assistant">
@@ -137,10 +139,19 @@ const UserMessage = ({ text }: { text?: string }) => (
   </div>
 )
 
-const ToolLine = ({ label }: { label?: string }) => (
+/** AI が変えたものを開き、開いた画面でそれを強調するリンク（client.ts が data-ai-spot の AiTouched を読む） */
+const SpotLink = ({ touched }: { touched?: AiTouched }) => (
+  <a href={touched?.href} class="ai-spot-link" data-ai-spot={touched && JSON.stringify(touched)} hidden={!touched}>
+    開く
+    <Icon name="chevronRight" size={12} />
+  </a>
+)
+
+const ToolLine = ({ label, touched }: { label?: string; touched?: AiTouched }) => (
   <p class="ai-tool">
     <Icon name="checkCircle" size={15} />
     <span data-ai-text>{label}</span>
+    <SpotLink touched={touched} />
   </p>
 )
 

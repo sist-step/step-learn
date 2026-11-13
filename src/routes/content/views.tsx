@@ -148,6 +148,7 @@ export const ItemEditPage = ({
           enctype="multipart/form-data"
           class="editor-form"
           data-loading-form
+          data-ai-watch={`item:${item.id}`}
           {...validateWith('itemEdit')}
         >
           <input type="hidden" name="type" value={item.type} />
@@ -349,6 +350,7 @@ export const ItemPage = ({
         <PdfStage src={previewUrl} title={item.fileName ?? 'プレビュー'} />
       ) : code ? (
         <CodeWorkspace
+          itemId={item.id}
           base={`${base}/${item.id}/code`}
           language={code.language}
           body={item.body}
@@ -367,7 +369,7 @@ export const ItemPage = ({
       {code && waitsFor(item, 'view') && <span hidden data-complete-on-view={completeUrl(item)} />}
       {!code && (
         <div class="reader">
-          <article class="reader-main">
+          <article class="reader-main" data-ai-watch={`item:${item.id}`}>
             {!pdf && head}
 
             {item.type === 'link' && embedded && <LinkEmbed url={item.url} title={item.title} />}

@@ -362,7 +362,7 @@ export const ItemFileField = ({ name, size, error }: { name: string; size: numbe
 }
 
 export const CourseLiveSync = ({ courseId, revision }: { courseId: number; revision: string }) => (
-  <span hidden data-live={`/courses/${courseId}/revision`} data-live-rev={revision} />
+  <span hidden data-live={`/courses/${courseId}/revision`} data-live-rev={revision} data-ai-watch={`course:${courseId}`} />
 )
 
 export const LinkTargetField = ({
