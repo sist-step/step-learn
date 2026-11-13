@@ -1,24 +1,62 @@
 /// <reference lib="dom" />
 /// <reference lib="dom.iterable" />
 
-import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete'
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import {
+  acceptCompletion,
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+  completionKeymap,
+  startCompletion,
+  type Completion,
+  type CompletionResult,
+  type CompletionSource,
+} from '@codemirror/autocomplete'
+import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from '@codemirror/commands'
 import { css } from '@codemirror/lang-css'
-import { html } from '@codemirror/lang-html'
-import { javascript } from '@codemirror/lang-javascript'
+import { html, htmlLanguage } from '@codemirror/lang-html'
+import { javascript, javascriptLanguage, scopeCompletionSource } from '@codemirror/lang-javascript'
 import { python } from '@codemirror/lang-python'
-import { HighlightStyle, bracketMatching, indentOnInput, indentUnit, syntaxHighlighting } from '@codemirror/language'
-import type { Extension } from '@codemirror/state'
-import { EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
+import {
+  HighlightStyle,
+  bracketMatching,
+  ensureSyntaxTree,
+  foldGutter,
+  foldKeymap,
+  getIndentUnit,
+  indentOnInput,
+  indentString,
+  indentUnit,
+  syntaxHighlighting,
+  syntaxTree,
+} from '@codemirror/language'
+import { lintGutter, lintKeymap, linter, type Diagnostic } from '@codemirror/lint'
+import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search'
+import { EditorSelection, EditorState, Prec, type Extension } from '@codemirror/state'
+import {
+  EditorView,
+  drawSelection,
+  dropCursor,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  highlightSpecialChars,
+  keymap,
+  lineNumbers,
+  rectangularSelection,
+  type Command,
+} from '@codemirror/view'
+import { abbreviationTracker, emmetCompletionSource } from '@emmetio/codemirror6-plugin'
 import { tags } from '@lezer/highlight'
 import type { CodeSyntax } from './components/code'
 import {
+  CODE_FILES,
   CODE_FILE_KEYS,
   DEFAULT_STARTER,
   buildWebDocument,
   formatWait,
   isPreviewMessage,
   type CodeConstraint,
+  type CodeFileKey,
   type CodeFiles,
   type PreviewMessage,
 } from './lib/code'
@@ -38,48 +76,375 @@ const highlight = HighlightStyle.define([
   { tag: [tags.angleBracket, tags.punctuation, tags.operator], class: 'code-tok-punct' },
 ])
 
-const LANGUAGES: Record<CodeSyntax, () => Extension[]> = {
-  html: () => [html(), indentUnit.of('  ')],
-  css: () => [css(), indentUnit.of('  ')],
-  js: () => [javascript(), indentUnit.of('  ')],
+const PHRASES = {
+  Find: '検索',
+  Replace: '置換',
+  next: '次へ',
+  previous: '前へ',
+  all: 'すべて選択',
+  'match case': '大文字と小文字を区別',
+  regexp: '正規表現',
+  'by word': '単語単位',
+  replace: '置換',
+  'replace all': 'すべて置換',
+  close: '閉じる',
+  'current match': '現在の一致',
+  'on line': '行目',
+  'replaced $ matches': '$ 件を置換しました',
+  'replaced match on line $': '$ 行目を置換しました',
+  'Go to line': '移動する行',
+  go: '移動',
+  'Fold line': '折りたたむ',
+  'Unfold line': '展開する',
+  'folded code': '折りたたんだコード',
+  unfold: '展開する',
+  to: '〜',
+  Diagnostics: '問題',
+  'No diagnostics': '問題はありません',
+  Completions: '候補',
+  'Control character': '制御文字',
+  'Selection deleted': '選んだ部分を消しました',
+}
+
+/** ほかのファイル（Web の HTML・CSS・JavaScript）の今の中身。候補に HTML の id や CSS のクラス名を出すのに使う */
+type Peers = (key: CodeFileKey) => string
+
+const fileName = (key: CodeFileKey) => CODE_FILES.web.find((f) => f.key === key)?.name ?? key
+
+const unique = (values: Iterable<string>) => [...new Set(values)]
+
+/** HTML に書かれたクラス名・id・タグ名 */
+function htmlNames(source: string) {
+  const attr = (name: string) =>
+    [...source.matchAll(new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, 'gi'))].flatMap((m) => (m[1] ?? m[2]).split(/\s+/))
+  return {
+    classes: unique(attr('class').filter(Boolean)),
+    ids: unique(attr('id').filter(Boolean)),
+    tags: unique([...source.matchAll(/<([a-z][\w-]*)/gi)].map((m) => m[1].toLowerCase())),
+  }
+}
+
+const stripCssLiterals = (source: string) => source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(["'])(?:\\.|(?!\1).)*\1/g, '""')
+
+/** CSS のセレクターに書かれたクラス名と id。{ } の中の値（#fff の色や url(a.png) など）は拾わない */
+function cssNames(source: string) {
+  const selectors = stripCssLiterals(source)
+    .split(/[{}]/)
+    .slice(0, -1)
+    .map((part) => part.slice(part.lastIndexOf(';') + 1))
+  const names = (prefix: string) =>
+    unique(selectors.flatMap((s) => [...s.matchAll(new RegExp(`\\${prefix}(-?[_a-zA-Z][\\w-]*)`, 'g'))].map((m) => m[1])))
+  return { classes: names('.'), ids: names('#') }
+}
+
+const nameOptions = (names: readonly string[], type: string, detail: string, prefix = ''): Completion[] =>
+  names.map((name) => ({ label: prefix + name, type, detail }))
+
+/** HTML の class="…" と id="…" の中で、CSS に書いたクラス名と id を出す */
+const htmlAttributeSource =
+  (peers: Peers): CompletionSource =>
+  (context) => {
+    const value = syntaxTree(context.state).resolveInner(context.pos, -1)
+    const nameNode = value.name === 'AttributeValue' ? value.parent?.getChild('AttributeName') : null
+    const attr = nameNode && context.state.sliceDoc(nameNode.from, nameNode.to).toLowerCase()
+    const word = context.matchBefore(/[\w-]*/)
+    if ((attr !== 'class' && attr !== 'id') || !word || word.from <= value.from) return null
+    const { classes, ids } = cssNames(peers('css'))
+    const options = attr === 'class' ? nameOptions(classes, 'class', fileName('css')) : nameOptions(ids, 'constant', fileName('css'))
+    return options.length ? { from: word.from, options, validFor: /^[\w-]*$/ } : null
+  }
+
+/** CSS のセレクターで . や # を打ったときに、HTML に書いたクラス名と id を出す */
+const cssSelectorSource =
+  (peers: Peers): CompletionSource =>
+  (context) => {
+    const word = context.matchBefore(/[.#][\w-]*/)
+    if (!word) return null
+    // 構文の木で判断しないのは、書きかけの color: #f の #f が、{ } の外のセレクターとして読まれるため
+    const before = stripCssLiterals(context.state.sliceDoc(0, word.from))
+    const brace = Math.max(before.lastIndexOf('{'), before.lastIndexOf('}'))
+    if (before[brace] === '{' && before.slice(Math.max(brace, before.lastIndexOf(';')) + 1).includes(':')) return null
+    const { classes, ids } = htmlNames(peers('html'))
+    const options =
+      word.text[0] === '.' ? nameOptions(classes, 'class', fileName('html'), '.') : nameOptions(ids, 'constant', fileName('html'), '#')
+    return options.length ? { from: word.from, options, validFor: /^[.#][\w-]*$/ } : null
+  }
+
+const DOM_QUERY =
+  /\b(getElementById|getElementsByClassName|querySelector(?:All)?|closest|matches|classList\.(?:add|remove|toggle|contains|replace))\(\s*(?:(["'`])[^"'`]*\2\s*,\s*)?["'`]([^"'`]*)$/
+
+/** JavaScript の getElementById('…') や querySelector('…') の文字列の中で、HTML の id・クラス名・タグ名を出す */
+const jsDomSource =
+  (peers: Peers): CompletionSource =>
+  (context) => {
+    const line = context.state.doc.lineAt(context.pos)
+    const match = DOM_QUERY.exec(line.text.slice(0, context.pos - line.from))
+    if (!match) return null
+    const [, method, , typed] = match
+    const { classes, ids, tags } = htmlNames(peers('html'))
+    const detail = fileName('html')
+    if (method === 'getElementById' || method === 'getElementsByClassName' || method.startsWith('classList.')) {
+      const word = /[\w-]*$/.exec(typed)?.[0] ?? ''
+      const options = method === 'getElementById' ? nameOptions(ids, 'constant', detail) : nameOptions(classes, 'class', detail)
+      return options.length ? { from: context.pos - word.length, options, validFor: /^[\w-]*$/ } : null
+    }
+    const word = /[#.]?[\w-]*$/.exec(typed)?.[0] ?? ''
+    const options = [
+      ...nameOptions(ids, 'constant', detail, '#'),
+      ...nameOptions(classes, 'class', detail, '.'),
+      ...nameOptions(tags, 'type', detail),
+    ]
+    return options.length ? { from: context.pos - word.length, options, validFor: /^[#.]?[\w-]*$/ } : null
+  }
+
+const scopeSource = scopeCompletionSource(globalThis)
+// 古くて使わない API が、よく使う名前より先に並んでしまう（document.que で querySelector より queryCommandEnabled が先に出る）ので外す
+const HIDDEN_GLOBALS = /^(__|queryCommand|webkit|onwebkit)|^(captureEvents|releaseEvents|execCommand)$/
+
+/** ブラウザの window・document などにある名前を出す */
+const jsGlobalSource: CompletionSource = async (context) => {
+  const result = await scopeSource(context)
+  return result && { ...result, options: result.options.filter((o) => !HIDDEN_GLOBALS.test(o.label)) }
+}
+
+const HTML_TAGS = new Set(
+  (
+    'a abbr address article aside audio b blockquote body br button canvas caption cite code col colgroup data datalist dd del details dfn ' +
+    'dialog div dl dt em embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 head header hr html i iframe img input ins kbd label ' +
+    'legend li link main map mark menu meta meter nav noscript object ol optgroup option output p picture pre progress q rp rt ruby s samp ' +
+    'script section select slot small source span strong style sub summary sup table tbody td template textarea tfoot th thead time title tr ' +
+    'track u ul var video wbr'
+  ).split(' '),
+)
+
+type EmmetCompletion = Completion & { tracker?: { abbreviation: string } }
+
+/**
+ * Emmet の略記を、略記そのものを見出しにした候補にする。
+ * タグ名でないただの単語は出さないのは、本文の英単語を打って Enter で改行すると <Hello></Hello> に展開されてしまうため
+ */
+function relabelEmmet(result: CompletionResult): CompletionResult | null {
+  const options = result.options.flatMap((option: EmmetCompletion) => {
+    const abbreviation = option.tracker?.abbreviation ?? ''
+    if (/^[a-z][\w-]*$/i.test(abbreviation) && !HTML_TAGS.has(abbreviation.toLowerCase())) return []
+    return [{ ...option, label: abbreviation || option.label, detail: 'Emmet' }]
+  })
+  if (!options.length) return null
+  const { update } = result
+  return {
+    ...result,
+    options,
+    update:
+      update &&
+      ((current, from, to, context) => {
+        const next = update(current, from, to, context)
+        return next && relabelEmmet(next)
+      }),
+  }
+}
+
+const emmetSource: CompletionSource = (context) => {
+  const result = emmetCompletionSource(context)
+  return result && !(result instanceof Promise) ? relabelEmmet(result) : null
+}
+
+const VOID_TAGS = new Set('area base br col embed hr img input link meta source track wbr'.split(' '))
+// 閉じタグを省ける要素は、閉じ忘れとして知らせない
+const OPTIONAL_CLOSE_TAGS = new Set(
+  'html head body p li dt dd option optgroup tr td th thead tbody tfoot colgroup rp rt caption'.split(' '),
+)
+const MAX_DIAGNOSTICS = 30
+const SYNTAX_ERROR = '書き方に誤りがあります。かっこ・引用符の閉じ忘れや、記号の打ち間違いがないか確かめてください。'
+
+/** 構文の木から、書き方の誤りと HTML の閉じタグの誤りを拾う */
+function syntaxDiagnostics(view: EditorView): Diagnostic[] {
+  const { state } = view
+  const tree = ensureSyntaxTree(state, state.doc.length, 200)
+  if (!tree) return []
+  const found: Diagnostic[] = []
+  const push = (from: number, to: number, message: string) => {
+    const last = found.at(-1)
+    if (last && last.message === message && from <= last.to + 1) last.to = Math.max(last.to, to)
+    else found.push({ from, to, severity: 'error', message })
+  }
+  tree.iterate({
+    enter: (node) => {
+      if (found.length >= MAX_DIAGNOSTICS) return false
+      if (node.type.isError) return push(node.from, node.to, SYNTAX_ERROR)
+      if (node.name === 'MismatchedCloseTag') return push(node.from, node.to, '対応する開始タグのない閉じタグです。')
+      if (node.name !== 'Element') return
+      const open = node.node.firstChild
+      const tagName = open?.name === 'OpenTag' ? open.getChild('TagName') : null
+      if (!tagName || node.node.lastChild?.name === 'CloseTag') return
+      const tag = state.sliceDoc(tagName.from, tagName.to).toLowerCase()
+      if (!VOID_TAGS.has(tag) && !OPTIONAL_CLOSE_TAGS.has(tag)) push(tagName.from, tagName.to, `<${tag}> を閉じる </${tag}> がありません。`)
+    },
+  })
+  return found
+}
+
+/** 選んでいないときは、カーソルの位置に字下げの空白を入れる（CodeMirror の既定は行の頭を字下げするが、VS Code と同じにする） */
+const insertIndent: Command = (view) => {
+  const { state } = view
+  if (state.selection.ranges.some((r) => !r.empty)) return indentMore(view)
+  const unit = getIndentUnit(state)
+  view.dispatch(
+    state.changeByRange((range) => {
+      const column = range.head - state.doc.lineAt(range.head).from
+      const insert = indentString(state, unit - (column % unit))
+      return { changes: { from: range.head, insert }, range: EditorSelection.cursor(range.head + insert.length) }
+    }),
+    { scrollIntoView: true, userEvent: 'input' },
+  )
+  return true
+}
+
+const LANGUAGES: Record<CodeSyntax, (peers: Peers) => Extension[]> = {
+  html: (peers) => [
+    html(),
+    indentUnit.of('  '),
+    abbreviationTracker({ mark: false, previewEnabled: false }),
+    htmlLanguage.data.of({ autocomplete: emmetSource }),
+    htmlLanguage.data.of({ autocomplete: htmlAttributeSource(peers) }),
+  ],
+  css: (peers) => {
+    const data = [{ autocomplete: cssSelectorSource(peers) }]
+    return [css(), indentUnit.of('  '), EditorState.languageData.of(() => data)]
+  },
+  js: (peers) => [
+    javascript(),
+    indentUnit.of('  '),
+    javascriptLanguage.data.of({ autocomplete: jsGlobalSource }),
+    javascriptLanguage.data.of({ autocomplete: jsDomSource(peers) }),
+  ],
   py: () => [python(), indentUnit.of('    ')],
   text: () => [],
+}
+
+const LINTED: readonly CodeSyntax[] = ['html', 'css', 'js', 'py']
+
+// --- 整形（Shift + Alt + F）
+const PRETTIER_PARSERS: Partial<Record<CodeSyntax, string>> = { html: 'html', css: 'css', js: 'babel' }
+
+// Prettier をここで import しないのは、整形するときにしか使わないのに大きく、エディターを開くたびに読み込むことになるため
+const loadPrettier = () =>
+  Promise.all([
+    import('prettier/standalone'),
+    import('prettier/plugins/html'),
+    import('prettier/plugins/postcss'),
+    import('prettier/plugins/babel'),
+    import('prettier/plugins/estree'),
+  ]).then(([prettier, ...plugins]) => ({ formatWithCursor: prettier.formatWithCursor, plugins }))
+
+let prettier: ReturnType<typeof loadPrettier> | null = null
+
+/** 整形し、変わった部分だけを書き換える（全体を置き換えないのは、折りたたみやスクロールの位置が失われるため） */
+async function formatEditor(view: EditorView, syntax: CodeSyntax, toast: Toast) {
+  const parser = PRETTIER_PARSERS[syntax]
+  if (!parser) return
+  const source = view.state.doc.toString()
+  let result: { formatted: string; cursorOffset: number }
+  try {
+    prettier ??= loadPrettier()
+    const { formatWithCursor, plugins } = await prettier
+    try {
+      result = await formatWithCursor(source, { parser, plugins, cursorOffset: view.state.selection.main.head })
+    } catch {
+      return toast('書き方に誤りがあるため、整形できませんでした。赤い波線のところを直してから、もう一度お試しください。', 'error')
+    }
+  } catch {
+    prettier = null
+    return toast('整形の機能を読み込めませんでした。', 'error')
+  }
+  const { formatted, cursorOffset } = result
+  if (formatted === source || view.state.doc.toString() !== source) return
+  let start = 0
+  while (start < source.length && source[start] === formatted[start]) start++
+  let end = 0
+  while (end < source.length - start && end < formatted.length - start && source.at(-1 - end) === formatted.at(-1 - end)) end++
+  view.dispatch({
+    changes: { from: start, to: source.length - end, insert: formatted.slice(start, formatted.length - end) },
+    selection: { anchor: Math.min(Math.max(cursorOffset, 0), formatted.length) },
+    scrollIntoView: true,
+    userEvent: 'input.format',
+  })
 }
 
 const isSyntax = (s: string | undefined): s is CodeSyntax => !!s && s in LANGUAGES
 
 type Mounted = { root: HTMLElement; release: () => void; view?: EditorView }
 const mounted = new Set<Mounted>()
+const syntaxOf = new WeakMap<EditorView, CodeSyntax>()
 
-function mountCodeInput(root: HTMLElement, onRun?: () => void) {
+type CodeInputOptions = { toast?: Toast; peers?: Peers; onRun?: () => void; onSave?: () => void }
+
+function mountCodeInput(root: HTMLElement, { toast, peers = () => '', onRun, onSave }: CodeInputOptions = {}) {
   const source = root.querySelector<HTMLTextAreaElement>('.code-input-source')
   const host = root.querySelector<HTMLElement>('[data-code-host]')
   const syntax = root.dataset.codeInput
   if (!source || !host || !isSyntax(syntax) || root.hasAttribute('data-code-ready')) return null
   root.setAttribute('data-code-ready', '')
 
+  const format: Command = (view) => {
+    if (!toast || !PRETTIER_PARSERS[syntax]) return false
+    void formatEditor(view, syntax, toast)
+    return true
+  }
   const view = new EditorView({
     parent: host,
     doc: source.value,
     extensions: [
+      EditorState.phrases.of(PHRASES),
+      EditorState.allowMultipleSelections.of(true),
+      // Alt + クリックでカーソルを足すのは、VS Code と同じ操作にするため（CodeMirror の既定は Ctrl / ⌘ + クリック）
+      EditorView.clickAddsSelectionRange.of((e) => e.altKey),
+      rectangularSelection({ eventFilter: (e) => e.altKey && e.shiftKey }),
       lineNumbers(),
+      foldGutter({ openText: '⌄', closedText: '›' }),
+      ...(LINTED.includes(syntax) ? [lintGutter(), linter(syntaxDiagnostics, { delay: 600 })] : []),
+      highlightSpecialChars(),
       history(),
+      drawSelection(),
+      dropCursor(),
       indentOnInput(),
       bracketMatching(),
       closeBrackets(),
-      autocompletion(),
+      autocompletion({ maxRenderedOptions: 60 }),
       highlightActiveLine(),
       highlightActiveLineGutter(),
+      highlightSelectionMatches(),
+      search({ top: true }),
       syntaxHighlighting(highlight),
-      ...LANGUAGES[syntax](),
+      // Emmet の Tab より先にするのは、候補を閉じたあとの Tab で、本文の英単語までタグに展開されてしまうため（Emmet は候補から確定する）
+      Prec.high(
+        keymap.of([
+          { key: 'Tab', run: acceptCompletion },
+          { key: 'Tab', run: insertIndent, shift: indentLess },
+        ]),
+      ),
+      ...LANGUAGES[syntax](peers),
       keymap.of([
         ...(onRun ? [{ key: 'Mod-Enter', run: () => (onRun(), true) }] : []),
+        // 押してもブラウザの「ページを保存」を開かせないのは、VS Code の癖で押した人を驚かせないため
+        { key: 'Mod-s', run: () => (onSave?.(), true) },
+        // Mac では Ctrl + Space が入力ソースの切り替えに取られるので、VS Code と同じ ⌘ + I でも出せるようにする
+        { key: 'Mod-i', run: startCompletion },
         ...closeBracketsKeymap,
         ...defaultKeymap,
+        ...searchKeymap,
         ...historyKeymap,
+        ...foldKeymap,
         ...completionKeymap,
-        indentWithTab,
+        ...lintKeymap,
       ]),
+      // keymap の Shift-Alt-f にしないのは、Mac では Option を押すと Ï などの文字の入力として扱われ、キーの組み合わせとして届かないため
+      EditorView.domEventHandlers({
+        keydown: (e, view) => {
+          if (e.code !== 'KeyF' || !e.shiftKey || !e.altKey || e.metaKey || e.ctrlKey || !format(view)) return false
+          e.preventDefault()
+          return true
+        },
+      }),
       EditorView.contentAttributes.of({
         'aria-multiline': 'true',
         ...(source.hasAttribute('aria-label') && { 'aria-label': source.getAttribute('aria-label')! }),
@@ -95,6 +460,7 @@ function mountCodeInput(root: HTMLElement, onRun?: () => void) {
   source.hidden = true
   if (source.id) document.querySelector(`label[for="${source.id}"]`)?.addEventListener('click', () => view.focus())
   mounted.add({ root, release: () => view.destroy(), view })
+  syntaxOf.set(view, syntax)
   return view
 }
 
@@ -213,13 +579,22 @@ function mountConstraints(root: HTMLElement) {
 
 // --- ファイルのタブ（CodeWorkspace と CodeStarterCard）
 /** root の中のコードの入力欄をエディターにし、ファイルのタブ（data-code-tab）で、対応する欄（data-code-file）を切り替えられるようにする */
-function mountFileTabs(root: HTMLElement, onRun?: () => void) {
+function mountFileTabs(root: HTMLElement, options: Omit<CodeInputOptions, 'peers'>) {
   const views = new Map<string, EditorView>()
+  const peers: Peers = (key) => root.querySelector<HTMLTextAreaElement>(`textarea[name="${key}"]`)?.value ?? ''
   for (const input of root.querySelectorAll<HTMLElement>('[data-code-input]')) {
-    const view = mountCodeInput(input, onRun)
+    const view = mountCodeInput(input, { ...options, peers })
     const key = input.closest<HTMLElement>('[data-code-file]')?.dataset.codeFile
     if (view && key) views.set(key, view)
   }
+  const visibleView = () => views.get(root.querySelector<HTMLElement>('[data-code-file]:not([hidden])')?.dataset.codeFile ?? '')
+  root.querySelector('[data-code-format]')?.addEventListener('click', () => {
+    const view = visibleView()
+    const syntax = view && syntaxOf.get(view)
+    if (!view || !syntax || !options.toast) return
+    view.focus()
+    void formatEditor(view, syntax, options.toast)
+  })
   const tabs = [...root.querySelectorAll<HTMLButtonElement>('[data-code-tab]')]
   const selectTab = (tab: HTMLButtonElement, focusEditor: boolean) => {
     for (const t of tabs) {
@@ -247,10 +622,10 @@ function mountFileTabs(root: HTMLElement, onRun?: () => void) {
 }
 
 // --- 編集画面の最初のコード（components/code.tsx の CodeStarterCard）
-function mountStarter(root: HTMLElement, confirm: Confirm) {
+function mountStarter(root: HTMLElement, toast: Toast, confirm: Confirm) {
   if (root.hasAttribute('data-code-ready')) return
   root.setAttribute('data-code-ready', '')
-  mountFileTabs(root)
+  mountFileTabs(root, { toast })
 
   const fieldOf = (key: string) => root.querySelector<HTMLTextAreaElement>(`textarea[name="${key}"]`)
   const preview = root.querySelector<HTMLIFrameElement>('[data-code-preview]')
@@ -513,7 +888,7 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
     void run()
   })
 
-  mountFileTabs(root, runButton ? () => void run() : undefined)
+  mountFileTabs(root, { toast, onRun: runButton ? () => void run() : undefined, onSave: () => void save() })
 
   // --- プレビュー（Web）
   const preview = root.querySelector<HTMLIFrameElement>('[data-code-preview]')
@@ -601,16 +976,21 @@ export function releaseDetachedCodeEditors() {
   }
 }
 
+const MAC_KEY_LABELS: Record<string, string> = { mod: '⌘', alt: '⌥', shift: '⇧', ctrl: '⌃' }
+
 export function mountCodeEditors(toast: Toast, confirm: Confirm) {
   listenShowView()
+  if (/Mac|iPhone|iPad/.test(navigator.userAgent))
+    for (const key of document.querySelectorAll<HTMLElement>('[data-code-key]'))
+      key.textContent = MAC_KEY_LABELS[key.dataset.codeKey ?? ''] ?? key.textContent
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-code-submit-timer]')) mountSubmitCountdown(button)
   for (const card of document.querySelectorAll<HTMLElement>('[data-code-grade]')) watchGrading(card, toast)
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-code-suggest]')) mountSuggest(button, toast, confirm)
-  for (const root of document.querySelectorAll<HTMLElement>('[data-code-starter]')) mountStarter(root, confirm)
+  for (const root of document.querySelectorAll<HTMLElement>('[data-code-starter]')) mountStarter(root, toast, confirm)
   for (const root of document.querySelectorAll<HTMLElement>('[data-code-constraints]')) mountConstraints(root)
   for (const root of document.querySelectorAll<HTMLElement>('[data-code-workspace]:not([data-code-ready])'))
     void mountCodeWorkspace(root, toast)
   for (const input of document.querySelectorAll<HTMLElement>('[data-code-input]:not([data-code-ready])')) {
-    if (!input.closest('[data-code-workspace]')) mountCodeInput(input)
+    if (!input.closest('[data-code-workspace]')) mountCodeInput(input, { toast })
   }
 }

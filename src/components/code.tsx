@@ -24,6 +24,7 @@ import { cx } from './cx'
 import { DateTimeField, FieldError, FormField, Input, TextAreaField, Textarea } from './form'
 import { Icon, type IconName } from './icons'
 import { Markdown } from './markdown'
+import { Popover } from './overlay'
 import { useStyle } from './style'
 import { Alert, Chip, formatDateTime } from './ui'
 
@@ -52,6 +53,79 @@ export const CodeInput = ({
     </div>
   )
 }
+
+/** キーの表示。mod / alt / shift は、Mac では src/code-editor.ts が ⌘ / ⌥ / ⇧ に書き換える */
+const KEY_LABELS: Record<string, string> = { mod: 'Ctrl', alt: 'Alt', shift: 'Shift', ctrl: 'Ctrl' }
+
+const CODE_SHORTCUTS: { label: string; keys: string[][]; only?: CodeLanguage }[] = [
+  {
+    label: '候補を出す',
+    keys: [
+      ['mod', 'I'],
+      ['ctrl', 'Space'],
+    ],
+  },
+  { label: '候補を決める', keys: [['Tab'], ['Enter']] },
+  { label: 'コードを整形する', keys: [['shift', 'alt', 'F']], only: 'web' },
+  { label: 'コメントにする・戻す', keys: [['mod', '/']] },
+  { label: '検索・置換', keys: [['mod', 'F']] },
+  { label: '同じ語を続けて選ぶ', keys: [['mod', 'D']] },
+  { label: 'カーソルを増やす', keys: [['alt', 'クリック']] },
+  {
+    label: '行を上下に動かす',
+    keys: [
+      ['alt', '↑'],
+      ['alt', '↓'],
+    ],
+  },
+  { label: '行を複製する', keys: [['shift', 'alt', '↓']] },
+  { label: '行を消す', keys: [['shift', 'mod', 'K']] },
+  {
+    label: '元に戻す・やり直す',
+    keys: [
+      ['mod', 'Z'],
+      ['shift', 'mod', 'Z'],
+    ],
+  },
+  { label: '実行する', keys: [['mod', 'Enter']], only: 'python' },
+]
+
+/**
+ * コードのエディターの道具（Web のコードの整形と、キーボードショートカットの一覧）。
+ * 整形は、同じ data-code-workspace / data-code-starter の中で表示中のファイルに対して src/code-editor.ts が行う
+ */
+export const CodeEditorTools = ({ language }: { language: CodeLanguage }) => (
+  <>
+    {language === 'web' && <IconButton icon="format" label="コードを整形（Shift + Alt + F）" data-code-format />}
+    <Popover
+      class="code-keys"
+      panelClass="code-keys-panel"
+      trigger={<IconButton as="summary" icon="question" label="キーボードショートカット" />}
+    >
+      <p class="code-keys-title">キーボードショートカット</p>
+      <dl>
+        {CODE_SHORTCUTS.filter((s) => !s.only || s.only === language).map((s) => (
+          <div>
+            <dt>{s.label}</dt>
+            <dd>
+              {s.keys.map((combo, i) => (
+                <>
+                  {i > 0 && <span class="muted">/</span>}
+                  <span class="code-keys-combo">
+                    {combo.map((key) => (
+                      <kbd data-code-key={key in KEY_LABELS ? key : undefined}>{KEY_LABELS[key] ?? key}</kbd>
+                    ))}
+                  </span>
+                </>
+              ))}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p class="code-keys-note muted">文字を打つと候補が出ます。HTML では ul&gt;li*3 のような Emmet の略記も使えます。</p>
+    </Popover>
+  </>
+)
 
 export const CodeField = ({
   label,
@@ -221,9 +295,12 @@ export const CodeStarterCard = ({
       heading="最初のコード"
       description="学生が最初に開いたときに入っているコードです。どこに何を書くかをコメントで示しておくと、取りかかりやすくなります。"
       actions={
-        <Button size="sm" variant="ghost" icon="undo" aria-label="ひな形に戻す" data-code-starter-reset={language}>
-          <span class="hide-sm">ひな形に戻す</span>
-        </Button>
+        <>
+          <CodeEditorTools language={language} />
+          <Button size="sm" variant="ghost" icon="undo" aria-label="ひな形に戻す" data-code-starter-reset={language}>
+            <span class="hide-sm">ひな形に戻す</span>
+          </Button>
+        </>
       }
       data-code-starter
     >
@@ -542,6 +619,7 @@ export const CodeWorkspace = ({
               ))}
             </div>
             <span class="code-save muted" role="status" data-code-save />
+            <CodeEditorTools language={language} />
             <IconButton type="submit" form={RESET_FORM} icon="undo" label="最初のコードに戻す" />
           </div>
           {files.map((f, i) => (
