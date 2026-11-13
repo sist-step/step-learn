@@ -16,7 +16,7 @@ import {
 import { Button } from './button'
 import { Card } from './card'
 import { cx } from './cx'
-import { SegmentedControl, SelectField, Switch, TextAreaField, TextField, validateWith } from './form'
+import { SegmentedControl, SelectField, TextAreaField, TextField, validateWith } from './form'
 import { Icon, type IconName } from './icons'
 import { Modal } from './overlay'
 import { Breadcrumbs, Chip, CourseIcon, ProgressRing, Tabs, courseInitials, type Crumb, type TabItem } from './ui'
@@ -32,20 +32,17 @@ export const CourseHeader = ({
   progress,
   actions,
   tabActions,
-  editSwitch: showEditSwitch = true,
 }: {
   access: CourseAccess
   tab?: Tab
   progress?: { done: number; total: number }
   actions?: Child
   tabActions?: Child
-  editSwitch?: boolean
 }) => {
   useStyle('/src/components/course.css')
   const { course, canManage } = access
   const base = `/courses/${course.id}`
   const hero = courseImageUrl(course.id, 'hero', course.heroImage)
-  const editSwitch = showEditSwitch && tab === 'content' && canManage
   const compact = tab === 'participants' || tab === 'settings'
   return (
     <>
@@ -86,12 +83,7 @@ export const CourseHeader = ({
               ] satisfies (TabItem | false)[]
             ).filter((t) => t !== false)}
           />
-          {(editSwitch || tabActions) && (
-            <div class="course-tabs-actions">
-              {editSwitch && <Switch class="course-edit-switch" icon="pencil" label="編集モード" checked={false} data-edit-mode-toggle />}
-              {tabActions}
-            </div>
-          )}
+          {tabActions && <div class="course-tabs-actions">{tabActions}</div>}
         </div>
       )}
     </>
