@@ -5,9 +5,11 @@ import {
   AI_PROVIDER_MODELS,
   AI_PROVIDERS,
   AI_RETIRED_PROVIDER_MODELS,
+  OPENROUTER_DECISION_MODELS,
   aiProvider,
   isProviderEnabled,
   type AiModel,
+  type DecisionModel,
   type AiProvider,
   type AiUsage,
 } from './ai'
@@ -57,7 +59,11 @@ export function createAiLedger<S extends Record<string, unknown>>({
 
   // 提供元の列を持たないのは、モデルから決まるので、記録と一覧がずれる余地を作らないため
   const ofProvider = (provider: AiProvider) =>
-    inArray(aiUsage.model, [...AI_PROVIDER_MODELS[provider], ...AI_RETIRED_PROVIDER_MODELS[provider]])
+    inArray(aiUsage.model, [
+      ...AI_PROVIDER_MODELS[provider],
+      ...AI_RETIRED_PROVIDER_MODELS[provider],
+      ...(provider === 'openrouter' ? OPENROUTER_DECISION_MODELS : []),
+    ])
 
   /** 月の上限（USD）。0 なら、その提供元のモデルは使えない */
   function getMonthlyLimit(provider: AiProvider) {
@@ -83,7 +89,7 @@ export function createAiLedger<S extends Record<string, unknown>>({
   }
 
   /** userId が null のものは、特定の利用者に数えない使用量（コードのアイテムの採点） */
-  function recordUsage(userId: number | null, model: AiModel, usage: AiUsage) {
+  function recordUsage(userId: number | null, model: AiModel | DecisionModel, usage: AiUsage) {
     db.insert(aiUsage)
       .values({ userId, model, ...usage })
       .run()

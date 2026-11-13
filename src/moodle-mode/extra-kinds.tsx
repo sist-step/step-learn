@@ -12,7 +12,6 @@ import {
   CODE_FILE_KEYS,
   CODE_LANGUAGES,
   CODE_LANGUAGE_LABELS,
-  DEFAULT_MAX_SCORE,
   DEFAULT_STARTER,
   filesFor,
   isCodeLanguage,
@@ -137,20 +136,13 @@ const CodeFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
   const starter = codeFilesOf(
     typeof values.starter === 'object' && values.starter !== null ? (values.starter as Record<string, unknown>) : values,
   )
-  const maxScore = values.maxScore ?? values.max_score
   return (
     <>
       <input type="hidden" name="language" value={language} />
       <input type="hidden" name="starter_set" value="1" />
       <MarkdownEditor label="問題文" name="body" id={`${idPrefix}-body`} value={str(values.body)} error={errors.body} rows={10} />
       <CodeStarterFields language={language} starter={starter} stdin={str(values.stdin)} errors={errors} idPrefix={idPrefix} />
-      <CodeGradingFields
-        gradingEnabled={gradingEnabled}
-        criteria={str(values.criteria)}
-        maxScore={typeof maxScore === 'number' || typeof maxScore === 'string' ? String(maxScore) : ''}
-        errors={errors}
-        idPrefix={idPrefix}
-      />
+      <CodeGradingFields gradingEnabled={gradingEnabled} criteria={str(values.criteria)} errors={errors} idPrefix={idPrefix} />
     </>
   )
 }
@@ -170,7 +162,6 @@ const code: ExtraKind = {
       starter: values.starter_set === 1 ? filesFor(language, codeFilesOf(values)) : DEFAULT_STARTER[language],
       stdin: language === 'python' ? str(values.stdin) : '',
       criteria: str(values.criteria),
-      maxScore: Number(values.max_score) || DEFAULT_MAX_SCORE,
     }
   },
   Fields: CodeFields,

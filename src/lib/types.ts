@@ -45,7 +45,7 @@ export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   bundle: 'ファイル自動配布',
 }
 
-export const COMPLETIONS = ['none', 'manual', 'view', 'play'] as const
+export const COMPLETIONS = ['none', 'manual', 'view', 'play', 'clear'] as const
 
 export type Completion = (typeof COMPLETIONS)[number]
 
@@ -54,6 +54,7 @@ export const COMPLETION_LABELS: Record<Completion, string> = {
   manual: '学生が自分で完了にする',
   view: '開いたら完了',
   play: '最後まで再生したら完了',
+  clear: '制約をすべてクリアしたら完了',
 }
 
 export const LINK_TARGETS = ['new', 'same', 'embed'] as const

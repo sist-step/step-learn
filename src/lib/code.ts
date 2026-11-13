@@ -22,12 +22,78 @@ export const GRADING_STATUS_LABELS: Record<GradingStatus, string> = {
   failed: '採点できませんでした',
 }
 
-export const DEFAULT_MAX_SCORE = 100
-export const MAX_MAX_SCORE = 1000
+/**
+ * 判定の観点の 1 つ。label は学生にも見せる短い名前（「クリアの条件」として並べる）、
+ * text は AI が判定に使う詳しい内容で、学生には見せない。text が空なら label で判定する
+ */
+export type CodeConstraint = { label: string; text: string }
 
-/** 成績にする点数。教師が付けた点数があればそれを、なければ AI の点数を使う */
-export const finalScore = (s: { status: GradingStatus; score: number | null; teacherScore: number | null }) =>
-  s.teacherScore ?? (s.status === 'graded' ? s.score : null)
+export const MAX_CONSTRAINTS = 30
+export const MAX_CONSTRAINT_LABEL_LENGTH = 60
+export const MAX_CONSTRAINT_LENGTH = 300
+
+/** AI に渡す制約の書き方。内容があれば、ラベルと内容を並べる */
+export const describeConstraint = ({ label, text }: CodeConstraint) => (text ? `${label}（${text}）` : label)
+
+export const VERDICTS = ['pass', 'partial', 'fail'] as const
+
+export type Verdict = (typeof VERDICTS)[number]
+
+export const isVerdict = (s: unknown): s is Verdict => (VERDICTS as readonly unknown[]).includes(s)
+
+export const VERDICT_LABELS: Record<Verdict, string> = { pass: 'できている', partial: '一部できている', fail: 'できていない' }
+
+/**
+ * 提出 1 つの、制約 1 つへの判定。label と text は判定したときの制約の写しで、
+ * あとから制約が書き換えられても、学生と教師にはこの提出を判定した観点のまま見せる
+ */
+export type ConstraintResult = CodeConstraint & {
+  verdict: Verdict
+  reason: string
+  /** 判定の確からしさ（0〜1）。判定だけを返すモデル（Jev）で判定したときだけ入る */
+  confidence?: number
+}
+
+/** 制約ごとの判定をするもの。llm は文章を作る AI（理由と講評も書く）、jev は判定だけを返す Jev */
+export const JUDGES = ['llm', 'jev'] as const
+
+export type Judge = (typeof JUDGES)[number]
+
+export const isJudge = (s: unknown): s is Judge => (JUDGES as readonly unknown[]).includes(s)
+
+export const JUDGE_LABELS: Record<Judge, string> = { llm: 'AI（DeepSeek）', jev: 'Jev' }
+
+/** 判定のうち、できている（pass）の数 */
+export const clearedCount = (verdicts: readonly ConstraintResult[]) => verdicts.filter((v) => v.verdict === 'pass').length
+
+/** すべての制約ができている。制約のない提出（判定がない）はクリアにしない */
+export const isCleared = (verdicts: readonly ConstraintResult[] | null): boolean =>
+  !!verdicts?.length && clearedCount(verdicts) === verdicts.length
+
+/** 提出の期間の長さの上限（秒）。提出のたびに AI の利用料がかかるので、受け付ける時間を区切る */
+export const MAX_SUBMIT_PERIOD = 24 * 60 * 60
+
+/** 学生が提出できる期間。どちらかが null なら、まだ決まっていない */
+export type SubmitPeriod = { opensAt: number | null; closesAt: number | null }
+
+/** 提出の受付の状態。unset は期間が決まっていない */
+export type SubmitState = 'unset' | 'upcoming' | 'open' | 'closed'
+
+/** period が null（期間を設けないモード。Moodle モード）なら、いつでも受け付ける */
+export function submitStateOf(period: SubmitPeriod | null, now = Math.floor(Date.now() / 1000)): SubmitState {
+  if (!period) return 'open'
+  if (period.opensAt == null || period.closesAt == null) return 'unset'
+  return now < period.opensAt ? 'upcoming' : now >= period.closesAt ? 'closed' : 'open'
+}
+
+/** 残りの秒数の表示（「42 秒」「15 分」「2 時間 5 分」）。1 分以上は分の端数を切り上げる */
+export function formatWait(seconds: number) {
+  if (seconds < 60) return `${seconds} 秒`
+  const minutes = Math.ceil(seconds / 60)
+  if (minutes < 60) return `${minutes} 分`
+  const hours = Math.floor(minutes / 60)
+  return minutes % 60 ? `${hours} 時間 ${minutes % 60} 分` : `${hours} 時間`
+}
 
 export const CODE_FILE_KEYS = ['html', 'css', 'js', 'py'] as const
 

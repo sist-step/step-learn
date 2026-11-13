@@ -17,12 +17,15 @@ import {
   CODE_FILES,
   CODE_LANGUAGES,
   CODE_LANGUAGE_LABELS,
-  DEFAULT_MAX_SCORE,
   DEFAULT_STARTER,
   MAX_CODE_LENGTH,
-  MAX_MAX_SCORE,
+  MAX_CONSTRAINT_LABEL_LENGTH,
+  MAX_CONSTRAINT_LENGTH,
+  MAX_CONSTRAINTS,
   MAX_STDIN_LENGTH,
+  describeConstraint,
   filesFor,
+  type CodeConstraint,
   type CodeFiles,
 } from './code'
 import { unixToDateInput } from './course-period'
@@ -174,8 +177,8 @@ function itemDetail(item: Item) {
         language: code?.language ?? null,
         starter: code?.starter ?? {},
         stdin: code?.stdin ?? '',
+        constraints: code?.constraints ?? [],
         criteria: code?.criteria ?? '',
-        max_score: code?.maxScore ?? null,
       }
     }
     case 'bundle': {
@@ -261,9 +264,29 @@ const createSection = defineTool(
 
 const CREATABLE_TYPES = ['page', 'link', 'code'] as const
 
+const constraintsSchema = (description: string) =>
+  z
+    .array(
+      z.object({
+        label: describedString('学生にも見せる短い名前（15 字程度。例:「名前を見出しにする」）', MAX_CONSTRAINT_LABEL_LENGTH, 1),
+        text: z.optional(
+          describedString(
+            '学生には見せず、AI が判定に使う詳しい内容。コードを読めば満たしているか判定できる文（例:「h1 要素に自分の名前が書かれている」）',
+            MAX_CONSTRAINT_LABEL_LENGTH,
+            MAX_CONSTRAINT_LENGTH,
+          ),
+        ),
+      }),
+    )
+    .check(z.minLength(1), z.maxLength(MAX_CONSTRAINTS), z.describe(description))
+
+const toConstraints = (args: { label: string; text?: string }[]) => args.map((c) => ({ label: c.label.trim(), text: c.text?.trim() ?? '' }))
+
+const constraintLines = (constraints: CodeConstraint[]) => constraints.map(describeConstraint).join('\n')
+
 const createItem = defineTool(
   'create_item',
-  'セクションの末尾にアイテムを追加する。作れるのはページ・リンク・コード（学生がブラウザでコードを書いて提出し、AI が採点する課題）。学生には非表示の状態で作られる。',
+  'セクションの末尾にアイテムを追加する。作れるのはページ・リンク・コード（学生がブラウザでコードを書いて提出し、AI が制約ごとに判定する課題）。学生には非表示の状態で作られる。',
   z.object({
     section_id: id('追加先のセクションの ID'),
     type: z.enum(CREATABLE_TYPES).check(z.describe('page: ページ（Markdown の本文） / link: リンク / code: コード')),
@@ -280,8 +303,8 @@ const createItem = defineTool(
           z.describe(`コードの言語。web: HTML / CSS / JavaScript、python: Python。今作れるのは ${availableCodeLanguages.join('・')} だけ`),
         ),
     ),
-    criteria: z.optional(describedString('コードの採点基準。AI の採点に使い、学生には見せない', 5000)),
-    max_score: z.optional(z.int().check(z.minimum(1), z.maximum(MAX_MAX_SCORE), z.describe('コードの満点'))),
+    constraints: z.optional(constraintsSchema('コードの制約。AI が提出を制約ごとに判定し、すべてできていればクリアになる。コードでは必須')),
+    criteria: z.optional(describedString('コードの補足。制約にしにくい観点（読みやすさなど）。AI の判定に使い、学生には見せない', 5000)),
   }),
   async (c, args) => {
     const found = await sectionOf(c.var.user!, args.section_id)
@@ -293,6 +316,7 @@ const createItem = defineTool(
     const url = args.url?.trim() ?? ''
     if (args.type === 'link' && !isHttpUrl(url)) return fail('リンクには http:// か https:// で始まる URL が必要です。')
     const language = args.language ?? 'web'
+    if (args.type === 'code' && !args.constraints?.length) return fail('コードには制約（constraints）を 1 つ以上渡してください。')
     if (args.type === 'code' && !availableCodeLanguages.includes(language))
       return fail(
         `${CODE_LANGUAGE_LABELS[language]} のコードは作れません。今は ${availableCodeLanguages.map((l) => CODE_LANGUAGE_LABELS[l]).join('・')} だけ作れます。`,
@@ -321,7 +345,7 @@ const createItem = defineTool(
             language,
             starter: DEFAULT_STARTER[language],
             criteria: args.criteria ?? '',
-            maxScore: args.max_score ?? DEFAULT_MAX_SCORE,
+            constraints: toConstraints(args.constraints ?? []),
           })
           .run()
       return row
@@ -452,7 +476,7 @@ const itemSnapshot = (item: Item) => {
     url: item.url,
     linkTarget: item.linkTarget,
     sectionId: item.sectionId,
-    code: code ? { starter: code.starter, stdin: code.stdin, criteria: code.criteria, maxScore: code.maxScore } : null,
+    code: code ? { starter: code.starter, stdin: code.stdin, criteria: code.criteria, constraints: code.constraints } : null,
   }
 }
 
@@ -469,8 +493,8 @@ const updateItemArgs = z.object({
   url: z.optional(describedString('新しい URL（リンクだけ）', 2000)),
   link_target: z.optional(z.enum(LINK_TARGETS).check(z.describe('リンクの開き方（リンクだけ）'))),
   section_id: z.optional(id('移し先のセクションの ID（同じコースの中だけ）。移すと末尾に入る')),
-  criteria: z.optional(describedString('新しい採点基準（コードだけ）', 5000)),
-  max_score: z.optional(z.int().check(z.minimum(1), z.maximum(MAX_MAX_SCORE), z.describe('新しい満点（コードだけ）'))),
+  constraints: z.optional(constraintsSchema('新しい制約の一覧（コードだけ）。一部だけでなくすべての制約を書く')),
+  criteria: z.optional(describedString('新しい補足（コードだけ）', 5000)),
   starter: z.optional(
     starterSchema.check(
       z.describe('最初に入れておくコード（コードだけ）。変えるファイルだけを全文で書く。web は html / css / js、python は py'),
@@ -485,9 +509,9 @@ function checkItemArgs(item: Item, args: UpdateItemArgs, sectionCourse: number |
   if ((args.url !== undefined || args.link_target !== undefined) && item.type !== 'link')
     return 'URL と開き方はリンクのアイテムでだけ変えられます。'
   if (args.url !== undefined && !isHttpUrl(args.url.trim())) return 'URL は http:// か https:// で始めてください。'
-  const codeArgs = [args.criteria, args.max_score, args.starter, args.stdin]
+  const codeArgs = [args.constraints, args.criteria, args.starter, args.stdin]
   if (codeArgs.some((v) => v !== undefined) && item.type !== 'code')
-    return '採点基準・満点・最初のコード・入力の例は、コードのアイテムでだけ変えられます。'
+    return '制約・補足・最初のコード・入力の例は、コードのアイテムでだけ変えられます。'
   if (args.section_id !== undefined && sectionCourse !== item.courseId) return '移し先のセクションが、同じコースにありません。'
   return null
 }
@@ -512,8 +536,8 @@ function itemChanges(item: Item, args: UpdateItemArgs) {
       ? [
           ...files.flatMap((f) => changed(`最初のコード（${f.name}）`, code.starter[f.key] ?? '', args.starter?.[f.key], true)),
           ...changed('入力の例', code.stdin, code.language === 'python' ? args.stdin : undefined, true),
-          ...changed('採点基準', code.criteria, args.criteria, true),
-          ...changed('満点', String(code.maxScore), args.max_score === undefined ? undefined : String(args.max_score)),
+          ...changed('制約', constraintLines(code.constraints), args.constraints && constraintLines(toConstraints(args.constraints)), true),
+          ...changed('補足', code.criteria, args.criteria, true),
         ]
       : []),
   ]
@@ -521,7 +545,7 @@ function itemChanges(item: Item, args: UpdateItemArgs) {
 
 const updateItem = defineConfirmTool(
   'update_item',
-  'アイテムのタイトル・本文・URL・セクション、コードの採点基準や最初のコードを変える。利用者が確認カードで承認してから実行される。変えない欄は省く。',
+  'アイテムのタイトル・本文・URL・セクション、コードの制約・補足・最初のコードを変える。利用者が確認カードで承認してから実行される。変えない欄は省く。',
   updateItemArgs,
   async (c, args) => {
     const found = await itemOf(c.var.user!, args.item_id)
@@ -561,7 +585,7 @@ const updateItem = defineConfirmTool(
             starter: filesFor(code.language, starter),
             stdin: code.language === 'python' ? (args.stdin ?? code.stdin) : '',
             criteria: args.criteria ?? code.criteria,
-            maxScore: args.max_score ?? code.maxScore,
+            constraints: args.constraints ? toConstraints(args.constraints) : code.constraints,
           })
           .where(eq(codeItems.itemId, item.id))
           .run()

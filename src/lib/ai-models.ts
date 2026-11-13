@@ -5,6 +5,12 @@ export const ANTHROPIC_MODELS = ['claude-sonnet-5-5'] as const
 
 export const AI_MODELS = [...OPENROUTER_MODELS, ...ANTHROPIC_MODELS] as const
 
+// AI_MODELS に入れないのは、文章を作らず、決めた選択肢から答えを選ぶだけで、会話（AI エージェントやアシスタント）には使えないため
+/** 判定だけを返すモデル（OpenRouter の Decisions API）。使用量は OpenRouter の月の上限に数える */
+export const OPENROUTER_DECISION_MODELS = ['typesafe/jev-1.14'] as const
+
+export type DecisionModel = (typeof OPENROUTER_DECISION_MODELS)[number]
+
 export type OpenRouterModel = (typeof OPENROUTER_MODELS)[number]
 export type AnthropicModel = (typeof ANTHROPIC_MODELS)[number]
 export type AiModel = (typeof AI_MODELS)[number]

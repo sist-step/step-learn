@@ -52,16 +52,60 @@
 .code-tok-def { color: var(--primary-text); }
 .code-tok-punct { color: var(--text-2); }
 
+/* ===== 編集画面（CodeSuggest / CodeStarterCard / CodeGradingCard） */
+.code-suggest { display: flex; align-items: center; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border); }
+.code-suggest > p { flex: 1; min-width: 0; margin: 0; }
+
+.code-section { scroll-margin-top: calc(var(--topbar-h) + 88px); }
+
+.code-starter { display: grid; border: 1px solid var(--field-border); border-radius: var(--radius-field); overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s; }
+.code-starter:focus-within { border-color: var(--focus); box-shadow: var(--ring-field); }
+.code-starter.has-preview { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.code-starter-editor, .code-starter-preview { display: flex; flex-direction: column; min-width: 0; height: 440px; }
+.code-starter-preview { border-left: 1px solid var(--border); }
+.code-starter .code-file { display: flex; flex-direction: column; gap: 0; margin: 0; }
+.code-starter .code-file[hidden] { display: none; }
+.code-starter .code-input { flex: 1 1 0; height: auto; min-height: 0; }
+.code-starter .code-file > .field-error, .code-starter .code-file > .field-hint { margin: 0; padding: 8px 12px; border-top: 1px solid var(--border); }
+.code-tabs button.has-error { color: var(--danger-text); }
+.code-tabs button.has-error::after { content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: 50%; background: var(--danger); vertical-align: middle; }
+
+.code-constraint-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; counter-reset: constraint; }
+.code-constraint { display: flex; align-items: center; gap: 8px; counter-increment: constraint; }
+.code-constraint::before { content: counter(constraint); flex: none; min-width: 20px; color: var(--muted); font-size: var(--fs-sm); text-align: right; font-variant-numeric: tabular-nums; }
+.code-constraint > .input { flex: 2 1 0; min-width: 0; }
+.code-constraint > .code-constraint-label { flex: 1 1 0; }
+.code-dev-judge { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border: 1px dashed var(--border-strong); border-radius: var(--radius); }
+.code-dev-judge-text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 280px; min-width: 0; }
+.code-dev-judge-options { display: flex; gap: 6px; flex: none; }
+
+.code-constraint-list:empty { display: none; }
+.code-constraint-empty { margin: 8px 0 0; }
+.code-constraints:has(.code-constraint) .code-constraint-empty { display: none; }
+.code-constraint-foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+
+@media (max-width: 1180px) {
+  .code-starter.has-preview { grid-template-columns: minmax(0, 1fr); }
+  .code-starter-preview { height: 320px; border-top: 1px solid var(--border); border-left: 0; }
+}
+@media (max-width: 640px) {
+  .code-suggest { flex-wrap: wrap; }
+  .code-suggest > .btn { width: 100%; }
+  .code-starter-editor { height: 360px; }
+  .code-constraint { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px 8px; }
+  .code-constraint::before { grid-row: 1 / span 2; align-self: center; }
+  .code-constraint > .input { grid-column: 2; }
+  .code-constraint > .icon-btn { grid-column: 3; grid-row: 1 / span 2; align-self: center; }
+}
+
 /* ===== エディターと結果の画面（CodeWorkspace） */
 .code-stage {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   height: calc(100dvh - var(--topbar-h));
   min-height: 480px;
-  border-bottom: 1px solid var(--border);
   background: var(--surface);
 }
-.code-stage + .reader { max-width: 1120px; margin: 40px auto 0; padding: 0 32px; }
 .code-edit, .code-result { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .code-result { border-left: 1px solid var(--border); background: var(--surface-2); }
 
@@ -87,6 +131,11 @@
 .code-task-arrow { margin-left: auto; color: var(--muted); transition: transform 0.15s var(--ease); }
 details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
 .code-task > .prose { max-width: 80ch; padding: 0 16px 16px; }
+.code-goals { max-width: 80ch; margin: 0 16px 16px; padding: 12px 14px; border-radius: var(--radius); background: var(--surface-2); }
+.code-goals h3 { margin: 0 0 8px; font-size: var(--fs-sm); font-weight: 650; }
+.code-goals ul { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.code-goals li { display: flex; align-items: flex-start; gap: 8px; font-size: var(--fs-sm); }
+.code-goals li > svg { flex: none; margin-top: 2px; color: var(--muted); }
 
 .code-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .code-pane-head {
@@ -114,12 +163,16 @@ details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
   transition: background 0.15s, color 0.15s;
 }
 .code-tabs button[aria-selected='true'] { background: var(--c-soft); color: var(--c-ink); font-weight: 600; }
+.code-view-tabs button { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font); }
+/* .icon-btn と .btn が display を指定していて、hidden 属性だけでは隠れないため */
+.code-pane-head > [data-code-view-only][hidden] { display: none; }
 @media (hover: hover) {
   .code-tabs button:not([aria-selected='true']):hover { background: var(--surface-3); color: var(--text); }
 }
 .code-save { flex: none; font-size: var(--fs-xs); white-space: nowrap; }
-.code-file { flex: 1; min-height: 0; }
-.code-file[hidden] { display: none; }
+.code-file, .code-view { flex: 1; min-height: 0; }
+.code-view { display: flex; flex-direction: column; }
+.code-file[hidden], .code-view[hidden] { display: none; }
 
 /* 背景をトークンにしないのは、プレビューするページが背景を指定していないとき、ダークモードでも白地に黒い文字というブラウザの既定で見せるため */
 .code-preview { flex: 1; width: 100%; min-height: 0; border: 0; background: Canvas; color-scheme: light; }
@@ -153,14 +206,33 @@ details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
 }
 .code-output pre.is-error { border-color: color-mix(in srgb, var(--danger) 40%, var(--card-border)); color: var(--danger-text); }
 
-/* ===== エディターだけの画面で、エディターの下に置くもの（routes/code/views.tsx の CodePage） */
-.code-below { max-width: 800px; margin: 40px auto 0; padding: 0 32px 64px; }
-
-/* ===== 提出と採点の結果（CodeGrade） */
-.code-grade { margin-bottom: 24px; scroll-margin-top: calc(var(--topbar-h) + 16px); }
-.code-grade-score { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 0 0 12px; }
-.code-grade-score strong { font-size: var(--fs-display); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
-.code-grade-score .chip { align-self: center; margin-left: 4px; }
+/* ===== 学生の提出のタブ（CodeSubmissions / VerdictList） */
+.code-submissions { display: flex; flex-direction: column; gap: 16px; flex: 1; min-height: 0; padding: 16px; overflow: auto; }
+.code-submissions-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.code-submissions-status .completion-status { min-height: 32px; padding: 0 14px; font-size: var(--fs-sm); }
+.code-countdown { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--success-text); font-size: var(--fs-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
+.code-countdown[data-waiting] { color: var(--text-2); }
+.code-period { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-variant-numeric: tabular-nums; }
+.code-submissions-empty { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 40px 16px; border: 1px dashed var(--border-strong); border-radius: var(--radius); color: var(--muted); text-align: center; }
+.code-submissions-empty p { margin: 0; }
+.code-submissions-empty .strong { margin-top: 6px; color: var(--text); }
+.code-history { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.code-history > li + li { border-top: 1px solid var(--border); }
+.code-history summary { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; list-style: none; }
+.code-history summary::-webkit-details-marker { display: none; }
+.code-history summary .code-task-arrow { margin-left: 0; }
+.code-history-time { margin-right: auto; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.code-history details > .code-verdicts, .code-history details > p { margin: 0; padding: 4px 0 14px; }
+.code-grade-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; }
+.code-grade-summary strong { font-size: var(--fs-lg); font-variant-numeric: tabular-nums; }
+.code-verdicts { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.code-verdict { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); }
+.code-verdict:first-child { border-top: 0; padding-top: 0; }
+.code-verdict-icon { flex: none; margin-top: 2px; }
+.code-verdict.is-pass .code-verdict-icon { color: var(--success-text); }
+.code-verdict.is-partial .code-verdict-icon { color: var(--warning-text); }
+.code-verdict.is-fail .code-verdict-icon { color: var(--danger-text); }
+.code-verdict-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .code-grade-waiting { display: flex; align-items: center; gap: 10px; margin: 0; }
 .code-grade-spinner { flex: none; width: 16px; height: 16px; border: 2px solid var(--border-strong); border-top-color: var(--c-ink); border-radius: 50%; animation: code-spin 0.8s linear infinite; }
 @keyframes code-spin { to { transform: rotate(360deg); } }
@@ -170,12 +242,10 @@ details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
 .code-grade-note { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
 .code-grade-note h3 { margin: 0 0 6px; font-size: var(--fs-sm); font-weight: 650; color: var(--text-2); }
 .code-grade-note p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.code-grade > .muted.small { margin: 16px 0 0; }
 
 @media (max-width: 900px) {
   .code-stage { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 0; }
-  .code-stage + .reader { margin-top: 28px; padding: 0 16px; }
-  .code-below { margin-top: 28px; padding: 0 16px 48px; }
+  .code-submissions { flex: none; overflow: visible; }
   .code-task, .code-console { max-height: none; }
   .code-task > summary, .code-console > summary { position: static; }
   .code-pane { flex: none; height: 60dvh; min-height: 320px; }

@@ -1,17 +1,17 @@
 import { Button } from '../../components/button'
 import { Card, Stat, Stats, Table } from '../../components/card'
-import { CodeBarActions, CodeGrade, CodeWorkspace, type GradeView } from '../../components/code'
+import { CodeBarActions, CodeWorkspace, VerdictList, verdictSummary, type SubmissionsView } from '../../components/code'
 import { ItemBar } from '../../components/course'
-import { TextAreaField, TextField, validateWith } from '../../components/form'
+import { TextAreaField, validateWith } from '../../components/form'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
 import { Alert, Avatar, Breadcrumbs, Chip, EmptyState, PageHeader, Person, formatDateTime, userMeta } from '../../components/ui'
-import { CODE_FILES, GRADING_STATUS_LABELS, buildWebDocument, finalScore, type CodeLanguage, type GradingStatus } from '../../lib/code'
+import { CODE_FILES, GRADING_STATUS_LABELS, buildWebDocument, isCleared, type CodeLanguage, type GradingStatus } from '../../lib/code'
 import type { Student, StudentRow, Submission, SubmissionSummary } from '../../lib/code-store'
 import type { CourseAccess } from '../../lib/courses'
 import type { RunResult } from '../../lib/sandbox'
 
-type CodeTarget = { id: number; title: string; language: CodeLanguage; maxScore: number }
+type CodeTarget = { id: number; title: string; language: CodeLanguage }
 
 export const submissionsUrl = (courseId: number, itemId: number, userId?: number, submissionId?: number) =>
   `/courses/${courseId}/items/${itemId}/code/submissions${userId ? `/${userId}` : ''}${submissionId ? `?submission=${submissionId}` : ''}`
@@ -28,15 +28,18 @@ export const CodePage = ({
   access,
   item,
   body,
+  goals,
   canRun,
-  grade,
+  submissions,
 }: {
   access: CourseAccess
   item: CodeTarget
   body: string
+  /** 学生に見せるクリアの条件（制約のラベル） */
+  goals: string[]
   canRun: boolean
-  /** 見ている学生のいちばん新しい提出の採点 */
-  grade: GradeView | null
+  /** 見ている学生の提出 */
+  submissions: SubmissionsView | null
 }) => {
   const itemUrl = `/courses/${access.course.id}/items/${item.id}`
   const base = `${itemUrl}/code`
@@ -57,16 +60,11 @@ export const CodePage = ({
               <span class="hide-sm">編集</span>
             </Button>
           )}
-          <CodeBarActions base={base} canManage={access.canManage} isStudent={access.role === 'student'} grade={grade} />
+          <CodeBarActions base={base} canManage={access.canManage} submissions={submissions} />
         </ItemBar>
       }
     >
-      <CodeWorkspace base={base} language={item.language} body={body} canRun={canRun} />
-      {grade && (
-        <div class="code-below">
-          <CodeGrade grade={grade} pollUrl={`${base}/grading`} />
-        </div>
-      )}
+      <CodeWorkspace base={base} language={item.language} body={body} goals={goals} canRun={canRun} submissions={submissions} />
     </AppShell>
   )
 }
@@ -78,15 +76,18 @@ const StatusChip = ({ status }: { status: GradingStatus }) =>
     <Chip>{GRADING_STATUS_LABELS.failed}</Chip>
   ) : null
 
-const Score = ({ value, max }: { value: number | null; max: number }) =>
-  value === null ? (
-    <span class="muted">—</span>
+/** 提出 1 つの判定のまとめ。すべてできていれば「クリア」、判定がなければ「—」 */
+const Cleared = ({ submission }: { submission: SubmissionSummary }) => {
+  const summary = submission.status === 'graded' ? verdictSummary(submission.verdicts) : null
+  if (!summary) return <span class="muted">—</span>
+  return isCleared(submission.verdicts) ? (
+    <Chip tone="success" icon="check">
+      {summary}
+    </Chip>
   ) : (
-    <span class="score">
-      <strong>{value}</strong>
-      <span class="muted"> / {max}</span>
-    </span>
+    <span class="score">{summary}</span>
   )
+}
 
 export const SubmissionsPage = ({
   access,
@@ -101,8 +102,7 @@ export const SubmissionsPage = ({
   rows: StudentRow[]
 }) => {
   const submitted = rows.filter((r) => r.latest)
-  const scores = submitted.map((r) => finalScore(r.latest!)).filter((s): s is number => s !== null)
-  const average = scores.length ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10 : null
+  const cleared = submitted.filter((r) => r.latest!.status === 'graded' && isCleared(r.latest!.verdicts))
   return (
     <AppShell tone={access.course.color}>
       <Styles use={['/src/routes/code/code.css']} />
@@ -118,8 +118,7 @@ export const SubmissionsPage = ({
       />
       <Stats compact>
         <Stat label="提出" value={`${submitted.length}/${rows.length}`} />
-        <Stat label="採点済み" value={String(scores.length)} />
-        <Stat label="平均点" value={average === null ? '—' : String(average)} />
+        <Stat label="クリア" value={`${cleared.length}/${rows.length}`} />
       </Stats>
       {rows.length === 0 ? (
         <EmptyState icon="users" title="まだ提出がありません" text="学生が提出すると、ここに並びます。" />
@@ -128,8 +127,7 @@ export const SubmissionsPage = ({
           columns={[
             { label: '学生' },
             { label: '提出', class: 'hide-sm col-submitted' },
-            { label: 'AI の点数', class: 'hide-sm col-score' },
-            { label: '成績', class: 'col-score' },
+            { label: '判定', class: 'col-score' },
             { label: '操作', class: 'hide-sm', srOnly: true },
           ]}
         >
@@ -151,19 +149,10 @@ export const SubmissionsPage = ({
                   </>
                 )}
               </td>
-              <td class="hide-sm col-score">
-                {latest && (
-                  <>
-                    <Score value={latest.status === 'graded' ? latest.score : null} max={item.maxScore} />{' '}
-                    <StatusChip status={latest.status} />
-                  </>
-                )}
-              </td>
               <td class="col-score">
                 {latest ? (
                   <>
-                    <Score value={finalScore(latest)} max={item.maxScore} />
-                    {latest.teacherScore !== null && <Chip icon="check">教師</Chip>}
+                    <Cleared submission={latest} /> <StatusChip status={latest.status} />
                   </>
                 ) : (
                   <span class="muted">未提出</span>
@@ -259,44 +248,38 @@ export const SubmissionPage = ({
         </div>
 
         <aside class="submission-side stack">
-          <Card heading="成績">
-            <p class="submission-score">
-              <Score value={finalScore(submission)} max={item.maxScore} />
-              {submission.teacherScore !== null ? (
-                <Chip icon="check">教師が採点</Chip>
-              ) : (
-                submission.status === 'graded' && <Chip>AI が採点</Chip>
-              )}
-            </p>
-          </Card>
-
           <Card
-            heading="AI の採点"
+            heading="AI の判定"
             actions={
               gradingEnabled &&
               submission.status !== 'pending' && (
                 <form method="post" action={`${base}/regrade`} data-loading-form>
                   <input type="hidden" name="submission" value={submission.id} />
                   <Button type="submit" size="sm" icon="arrowPath">
-                    {submission.status === 'none' ? '採点する' : '採点し直す'}
+                    {submission.status === 'none' ? '判定する' : '判定し直す'}
                   </Button>
                 </form>
               )
             }
           >
             {submission.status === 'graded' ? (
-              <>
-                <p class="submission-score">
-                  <Score value={submission.score} max={item.maxScore} />
-                </p>
-                <p class="submission-note">{submission.feedback}</p>
-              </>
+              <div class="stack">
+                {submission.verdicts?.length ? (
+                  <>
+                    <p class="submission-score">
+                      <Cleared submission={submission} />
+                    </p>
+                    <VerdictList verdicts={submission.verdicts} showText />
+                  </>
+                ) : null}
+                {submission.feedback && <p class="submission-note">{submission.feedback}</p>}
+              </div>
             ) : submission.status === 'pending' ? (
-              <p class="muted">採点しています。少し待ってから、ページを読み込み直してください。</p>
+              <p class="muted">判定しています。少し待ってから、ページを読み込み直してください。</p>
             ) : submission.status === 'failed' ? (
-              <Alert tone="warning">AI で採点できませんでした。</Alert>
+              <Alert tone="warning">AI で判定できませんでした。</Alert>
             ) : (
-              <p class="muted">{gradingEnabled ? 'AI はまだ採点していません。' : 'AI が設定されていないため、採点していません。'}</p>
+              <p class="muted">{gradingEnabled ? 'AI はまだ判定していません。' : 'AI が設定されていないため、判定していません。'}</p>
             )}
           </Card>
 
@@ -305,18 +288,12 @@ export const SubmissionPage = ({
             method="post"
             action={`${base}/review`}
             class="stack"
-            heading="教師の採点"
-            description="点数を入れると、AI の点数の代わりに成績になります。空にすると AI の点数に戻ります。"
+            heading="教師のコメント"
+            description="学生の結果の画面に、AI の講評と並べて表示されます。"
             data-loading-form
             {...validateWith('codeReview')}
           >
             <input type="hidden" name="submission" value={submission.id} />
-            <TextField
-              label={`点数（${item.maxScore} 点満点）`}
-              name="score"
-              inputmode="numeric"
-              value={submission.teacherScore === null ? '' : String(submission.teacherScore)}
-            />
             <TextAreaField label="学生へのコメント" name="comment" rows={4} value={submission.teacherComment} />
             <div class="form-actions">
               <Button type="submit" variant="primary">
@@ -338,7 +315,7 @@ export const SubmissionPage = ({
                       <span>
                         {history.length - i} 回目<span class="muted small"> {formatDateTime(h.createdAt)}</span>
                       </span>
-                      <Score value={finalScore(h)} max={item.maxScore} />
+                      <Cleared submission={h} />
                     </a>
                   </li>
                 ))}
