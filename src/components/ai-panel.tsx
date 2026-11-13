@@ -24,8 +24,8 @@ export type AiPanelProps = {
   models: readonly AiModelOption[]
   /** チャットの版（lib/ai-chat.ts の chatRevision） */
   revision: string
-  /** hard は最後の発言で「難しい依頼」を選んでいたこと */
-  chat: { id: number; model: AiModelOption; hard: boolean; entries: AiChatEntry[]; busy: boolean } | null
+  /** hard は最後の発言で「難しい依頼」を選んでいたこと、replies は最後の応答のあとに出す、押して送れる続きの依頼 */
+  chat: { id: number; model: AiModelOption; hard: boolean; entries: AiChatEntry[]; replies: string[]; busy: boolean } | null
   /** 開いているチャットのモデルの、今週の枠の使い具合 */
   quota: string
 }
@@ -147,6 +147,22 @@ const SpotLink = ({ touched }: { touched?: AiTouched }) => (
   </a>
 )
 
+/** 押すとそのまま送る続きの依頼。client.ts も data-ai-template="replies" を複製して、応答の最後に出す */
+const Replies = ({ replies = [] }: { replies?: string[] }) => (
+  <div class="ai-replies" role="group" aria-label="続けて頼む" data-ai-replies>
+    {replies.map((r) => (
+      <ReplyButton text={r} />
+    ))}
+  </div>
+)
+
+const ReplyButton = ({ text }: { text?: string }) => (
+  <button type="button" class="ai-reply" data-ai-suggest={text}>
+    <span data-ai-text>{text}</span>
+    <Icon name="arrowUp" size={14} />
+  </button>
+)
+
 const ToolLine = ({ label, touched }: { label?: string; touched?: AiTouched }) => (
   <p class="ai-tool">
     <Icon name="checkCircle" size={15} />
@@ -237,6 +253,7 @@ export const AiPanel = ({ models, revision, chat, quota }: AiPanelProps) => {
 
       <div class="ai-log" data-ai-log>
         {chat ? chat.entries.map((e) => <Entry entry={e} chatId={chat.id} />) : <Intro models={models} />}
+        {chat && !chat.busy && chat.replies.length > 0 && <Replies replies={chat.replies} />}
         {chat?.busy && (
           <p class="ai-tool ai-pending">
             <span class="ai-dots" aria-hidden="true" />
@@ -308,6 +325,12 @@ export const AiPanel = ({ models, revision, chat, quota }: AiPanelProps) => {
       </template>
       <template data-ai-template="tool">
         <ToolLine />
+      </template>
+      <template data-ai-template="replies">
+        <Replies />
+      </template>
+      <template data-ai-template="reply">
+        <ReplyButton />
       </template>
       <template data-ai-template="pending">
         <p class="ai-tool ai-pending">

@@ -70,7 +70,7 @@ export const id = (description: string) => z.int().check(z.positive(), z.describ
 export const describedString = (description: string, max: number, min = 0) =>
   z.string().check(z.minLength(min), z.maxLength(max), z.describe(description))
 
-function toolOf<S extends z.ZodMiniObject>(name: string, description: string, schema: S): AiTool {
+export function toolOf<S extends z.ZodMiniObject>(name: string, description: string, schema: S): AiTool {
   const { $schema: _, ...parameters } = z.toJSONSchema(schema) as Record<string, unknown>
   return { name, description, parameters }
 }
