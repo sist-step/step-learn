@@ -126,12 +126,24 @@ function toAiError(model: AnthropicModel, e: unknown) {
   return new AiError('AI の応答を読み取れませんでした')
 }
 
+// 止めたときの出力のトークン数を推測で数えるのは、出力のトークン数は言い終えたときにしか届かず、届いた数のままだと途中までに作った分が上限の計算から漏れるため。
+// 1 文字を 1 トークンとみなすのは、日本語の文章ではおおむねそうなり、英語やコードでは多めに数えて上限を超えにくくなるため
+function stoppedUsage(model: AnthropicModel, snapshot: Anthropic.Beta.BetaMessage | undefined): AiUsage {
+  if (!snapshot) return { promptTokens: 0, completionTokens: 0, cost: 0 }
+  const written = snapshot.content.reduce(
+    (n, b) => n + (b.type === 'text' ? b.text.length : b.type === 'thinking' ? b.thinking.length : JSON.stringify(b).length),
+    0,
+  )
+  return toUsage(model, { ...snapshot.usage, output_tokens: Math.max(snapshot.usage.output_tokens, written) })
+}
+
 export async function completeAnthropic({
   model,
   messages,
   maxTokens,
   tools,
   onText,
+  signal,
 }: AiRequest & { model: AnthropicModel }): Promise<AiReply> {
   if (!config.anthropic) throw new AiError('CLAUDE_API_KEY が設定されていないため、このモデルを利用できません')
   client ??= new Anthropic({ apiKey: config.anthropic.apiKey, maxRetries: 1 })
@@ -148,19 +160,25 @@ export async function completeAnthropic({
     fallbacks: 'default',
     betas: ['server-side-fallback-2026-07-01', 'thinking-binding-controls-2026-08-01'],
   }
-  const options = { timeout: stream ? AI_STREAM_TIMEOUT : AI_TIMEOUT }
+  const options = { timeout: stream ? AI_STREAM_TIMEOUT : AI_TIMEOUT, signal }
 
   let message: Anthropic.Beta.BetaMessage
+  let partial: () => Anthropic.Beta.BetaMessage | undefined = () => undefined
   try {
     if (onText) {
       const running = client.beta.messages.stream(params, options)
+      partial = () => running.currentMessage
       running.on('text', onText)
       message = await running.finalMessage()
     } else {
       message = await client.beta.messages.create(params, options)
     }
   } catch (e) {
-    throw toAiError(model, e)
+    if (!signal?.aborted) throw toAiError(model, e)
+    // 途中の native を返さないのは、署名の届いていない考えた内容のブロックを送り返すと、続きの要求が弾かれるため
+    const snapshot = partial()
+    const text = (snapshot?.content ?? []).flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('')
+    return { text, toolCalls: [], stop: 'stopped', usage: stoppedUsage(model, snapshot) }
   }
 
   const dropped = message.input_transformations?.length
