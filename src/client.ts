@@ -2316,8 +2316,8 @@ document.addEventListener('compositionend', (e) => {
   if ((e.target as Element).matches('.ai-textarea')) aiComposing = false
 })
 
-/** パネルを取り直す。入力中の文はそのまま残す */
-async function refreshAiPanel() {
+/** パネルを取り直す。入力中の文と選んでいたモデルはそのまま残し、model を渡せば、新しいチャットのモデルにそれを選んでおく */
+async function refreshAiPanel(model?: string) {
   window.clearTimeout(aiSyncTimer)
   const res = await fetch('/ai/chat', { headers: { Accept: 'text/html' } })
   const doc = res.ok ? new DOMParser().parseFromString(await res.text(), 'text/html') : null
@@ -2326,7 +2326,10 @@ async function refreshAiPanel() {
   if (!next || !current) return
   const draft = aiInput()?.value ?? ''
   const focused = document.activeElement === aiInput()
+  const chosen = model ?? current.querySelector<HTMLInputElement>('input[name=model]:checked')?.value
   current.replaceWith(document.adoptNode(next))
+  const option = $$<HTMLInputElement>('input[type=radio][name=model]', next).find((r) => r.value === chosen)
+  if (option) option.checked = true
   const input = aiInput()
   if (input && draft) {
     input.value = draft
@@ -2357,11 +2360,11 @@ async function aiPanelOutdated() {
   return state.revision !== (panel.dataset.revision ?? '') || state.busy !== panel.hasAttribute('data-busy')
 }
 
-/** 古ければ取り直す。取り直したら true */
-async function refreshAiIfOutdated() {
+/** 古ければ取り直す。取り直したら true。model は refreshAiPanel と同じ */
+async function refreshAiIfOutdated(model?: string) {
   try {
     if (!(await aiPanelOutdated())) return false
-    await refreshAiPanel()
+    await refreshAiPanel(model)
     return true
   } catch {
     return false
@@ -2475,16 +2478,12 @@ function noteAiProblem(message: string) {
   scrollAiLog(true)
 }
 
-const AI_CHAT_GONE = 'このチャットはほかのタブで閉じられたため、送りませんでした。新しいチャットで送るには、もう一度送信してください。'
-
-/** 取り直したパネルが、取り直す前に開いていたチャット（chat は ID）の続きか */
-const continuesAiChat = (chat: string) => !chat || aiPanel()?.dataset.chat === chat
-
-/** 入力欄の発言を送る。パネルが古ければ取り直してから送り、retried はそのために送り直した 2 回目であること */
-async function sendAiMessage(retried = false) {
-  const chat = aiPanel()?.dataset.chat ?? ''
-  // 閉じられたチャットの続きとして書いた発言を、新しいチャットや別のチャットへ送らないのは、前の会話を踏まえた発言が、文脈のないまま AI に渡るため
-  if ((await refreshAiIfOutdated()) && !continuesAiChat(chat)) return noteAiProblem(AI_CHAT_GONE)
+/**
+ * 入力欄の発言を送る。パネルが古ければ取り直してから送り、開いていたチャットがほかのタブで閉じられていれば、
+ * 同じモデル（model）の新しいチャットで送る。retried は、送ったときにパネルが古かったために送り直した 2 回目であること
+ */
+async function sendAiMessage(retried = false, model = aiPanel()?.dataset.model) {
+  await refreshAiIfOutdated(model)
   const panel = aiPanel()
   const form = panel?.querySelector<HTMLFormElement>('[data-ai-form]')
   const log = panel?.querySelector<HTMLElement>('[data-ai-log]')
@@ -2515,9 +2514,8 @@ async function sendAiMessage(retried = false) {
     },
   })
   if (outcome.outdated) {
-    await refreshAiPanel()
-    if (!continuesAiChat(chat)) return noteAiProblem(AI_CHAT_GONE)
-    if (!retried) return sendAiMessage(true)
+    await refreshAiPanel(model)
+    if (!retried) return sendAiMessage(true, model)
     return noteAiProblem('ほかのタブで会話が進んだため、送れませんでした。会話を確かめて、もう一度送信してください。')
   }
   // 新しく始めたチャットと確認カードを取り直すのは、ヘッダーのモデル名・「閉じる」ボタン・カードを、サーバーの描いたものにそろえるため

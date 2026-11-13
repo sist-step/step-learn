@@ -23,7 +23,7 @@ export type AiPanelProps = {
   models: readonly AiModelOption[]
   /** チャットの版（lib/ai-chat.ts の chatRevision） */
   revision: string
-  chat: { id: number; modelLabel: string; entries: AiChatEntry[]; busy: boolean } | null
+  chat: { id: number; model: string; modelLabel: string; entries: AiChatEntry[]; busy: boolean } | null
   /** 開いているチャットのモデルの、今週の枠の使い具合 */
   quota: string
 }
@@ -196,6 +196,7 @@ export const AiPanel = ({ models, revision, chat, quota }: AiPanelProps) => {
       data-keep
       data-ai-panel
       data-chat={chat?.id}
+      data-model={chat?.model}
       data-revision={revision}
       data-busy={chat?.busy ? '' : undefined}
     >
