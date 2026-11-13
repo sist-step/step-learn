@@ -615,33 +615,68 @@ document.addEventListener(
 addEventListener('resize', placeDt)
 
 // --- 確認ダイアログ（ネイティブ confirm の代わり）
+const DIALOG_HTML = `<form method="dialog"><p class="dialog-msg"></p><div class="form-actions">
+  <button value="cancel" class="btn btn-ghost">キャンセル</button>
+  <button value="ok" class="btn btn-danger">実行する</button></div></form>`
+
+function openDialog(dialog: HTMLDialogElement, message: string, modal: boolean): Promise<boolean> {
+  dialog.querySelector('.dialog-msg')!.textContent = message
+  dialog.returnValue = ''
+  if (modal) dialog.showModal()
+  else dialog.show()
+  ;(dialog.querySelector('[value=cancel]') as HTMLButtonElement).focus()
+  return new Promise((resolve) => dialog.addEventListener('close', () => resolve(dialog.returnValue === 'ok'), { once: true }))
+}
+
 let dialog: HTMLDialogElement | null = null
 function confirmDialog(message: string): Promise<boolean> {
   if (!dialog?.isConnected) {
     dialog = document.createElement('dialog')
     dialog.className = 'dialog'
-    dialog.innerHTML = `<form method="dialog"><p class="dialog-msg"></p><div class="form-actions">
-      <button value="cancel" class="btn btn-ghost">キャンセル</button>
-      <button value="ok" class="btn btn-danger">実行する</button></div></form>`
+    dialog.innerHTML = DIALOG_HTML
     document.body.appendChild(dialog)
     dialog.addEventListener('click', (e) => e.target === dialog && dialog!.close('cancel'))
   }
-  dialog.querySelector('.dialog-msg')!.textContent = message
-  dialog.returnValue = ''
-  dialog.showModal()
-  ;(dialog.querySelector('[value=cancel]') as HTMLButtonElement).focus()
-  return new Promise((resolve) => dialog!.addEventListener('close', () => resolve(dialog!.returnValue === 'ok'), { once: true }))
+  return openDialog(dialog, message, true)
 }
+
+/** scope の上だけを覆って聞く。showModal を使わないのは、scope の外（本文）を操作できるまま残すため */
+async function confirmInScope(scope: HTMLElement, message: string) {
+  const layer = document.createElement('div')
+  layer.className = 'dialog-layer'
+  layer.innerHTML = `<dialog class="dialog">${DIALOG_HTML}</dialog>`
+  const dialog = layer.querySelector('dialog')!
+  layer.addEventListener('click', (e) => e.target === layer && dialog.close('cancel'))
+  // stopPropagation するのは、パネルの中の Esc でパネルごと閉じる処理（keydown の委譲）まで届かないようにするため
+  layer.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return
+    e.stopPropagation()
+    dialog.close('cancel')
+  })
+  scope.append(layer)
+  const ok = await openDialog(dialog, message, false)
+  layer.remove()
+  return ok
+}
+
+const formKey = (form: HTMLFormElement) =>
+  JSON.stringify([form.action, ...[...new FormData(form)].map(([k, v]) => [k, typeof v === 'string' ? v : v.name])])
+
+/** 聞いているあいだに form が描き直されていたら、描き直した先の同じ送り先・同じ値のフォーム */
+const currentForm = (form: HTMLFormElement) =>
+  form.isConnected ? form : $$<HTMLFormElement>('form[data-confirm]').find((f) => formKey(f) === formKey(form))
 
 document.addEventListener('submit', async (e) => {
   const form = e.target as HTMLFormElement
   const msg = form.dataset.confirm
   if (msg && form.dataset.confirmed !== '1') {
     e.preventDefault()
-    if (await confirmDialog(msg)) {
-      form.dataset.confirmed = '1'
-      form.requestSubmit()
-    }
+    const scope = form.closest<HTMLElement>('[data-confirm-scope]')
+    if (!(await (scope ? confirmInScope(scope, msg) : confirmDialog(msg)))) return
+    const target = currentForm(form)
+    if (!target) return
+    target.dataset.confirmed = '1'
+    target.requestSubmit()
     return
   }
   if (form.hasAttribute('data-complete')) return handleComplete(e, form)
@@ -2384,7 +2419,11 @@ async function refreshAiPanel(model?: string) {
   const focused = document.activeElement === aiInput()
   const chosen = model ?? current.querySelector<HTMLInputElement>('input[name=model]:checked')?.value
   const hard = current.querySelector('[data-ai-hard]')?.getAttribute('aria-pressed')
+  const asking = current.querySelector(':scope > .dialog-layer')
+  const askingFocused = !!asking?.contains(document.activeElement)
   current.replaceWith(document.adoptNode(next))
+  if (asking) next.append(asking)
+  if (askingFocused) asking?.querySelector<HTMLButtonElement>('[value=cancel]')?.focus()
   const option = $$<HTMLInputElement>('input[type=radio][name=model]', next).find((r) => r.value === chosen)
   if (option) option.checked = true
   const form = next.querySelector<HTMLFormElement>('[data-ai-form]')
