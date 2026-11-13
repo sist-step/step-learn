@@ -97,6 +97,7 @@ export async function createSession(c: Context<AppEnv>, userId: number) {
     .values({ id, userId, expiresAt: now() + SESSION_TTL })
     .run()
   await setSessionCookie(c, token)
+  c.set('logUserId', userId)
 }
 
 export async function destroySession(c: Context<AppEnv>) {
