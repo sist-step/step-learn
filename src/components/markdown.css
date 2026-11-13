@@ -39,6 +39,7 @@
   .md-modes button:hover { color: var(--text); }
 }
 .md-modes button[aria-pressed='true'] { background: var(--thumb); color: var(--text); box-shadow: var(--shadow-sm), inset 0 0 0 1px var(--card-border); }
+.md-modes button[hidden], .md-toolbar[hidden], .md-preview-head[hidden] { display: none; }
 
 .md-editor-box {
   border: 1px solid var(--field-border);
@@ -81,6 +82,13 @@
 
 .md-preview { padding: 12px 14px; }
 .md-preview > :first-child { margin-top: 0; }
+
+.md-editor[data-md-view='split'] .md-editor-box { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+/* プレビューの見出しを枠の外に置かないのは、書式ボタンの帯と高さがずれて、左右の枠の頭がそろわないため */
+.md-preview-head { display: flex; align-items: center; gap: 6px; padding: 0 16px; border-bottom: 1px solid var(--border); border-left: 1px solid var(--border); background: var(--surface-2); color: var(--muted); font-size: var(--fs-xs); font-weight: 600; }
+.md-editor[data-md-view='split'] .md-editor-host { display: flex; flex-direction: column; }
+.md-editor[data-md-view='split'] .md-editor-host .cm-editor { flex: 1; }
+.md-editor[data-md-view='split'] .md-preview { padding: 12px 20px; border-left: 1px solid var(--border); }
 
 .md-help summary { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: var(--fs-xs); cursor: pointer; list-style: none; }
 .md-help summary::-webkit-details-marker { display: none; }

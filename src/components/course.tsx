@@ -1,7 +1,9 @@
 import type { Child } from 'hono/jsx'
+import { formatBytes } from '../lib/bytes'
 import { courseImageUrl } from '../lib/course-images'
 import type { CourseAccess } from '../lib/courses'
 import { completionChoices } from '../lib/forms'
+import { MAX_FILE_SIZE } from '../lib/storage'
 import {
   COMPLETION_LABELS,
   COMPLETIONS,
@@ -13,12 +15,12 @@ import {
   type ItemType,
   type LinkTarget,
 } from '../lib/types'
-import { Button } from './button'
+import { Button, IconButton } from './button'
 import { Card } from './card'
 import { cx } from './cx'
-import { SegmentedControl, SelectField, TextAreaField, TextField, validateWith } from './form'
+import { FieldError, FileChip, FileInput, SegmentedControl, SelectField, TextAreaField, TextField, validateWith } from './form'
 import { Icon, type IconName } from './icons'
-import { Modal } from './overlay'
+import { MenuItem, Modal, Popover } from './overlay'
 import { Breadcrumbs, Chip, CourseIcon, ProgressRing, Tabs, courseInitials, type Crumb, type TabItem } from './ui'
 import { useStyle } from './style'
 
@@ -263,24 +265,23 @@ export const ItemIcon = ({ type }: { type: ItemType }) => {
   )
 }
 
-/** アイテムを画面いっぱいに出すとき（PDF・コード）に、AppShell の topbar に渡す帯 */
+/** アイテムを画面いっぱいに出すとき（PDF・コード・編集画面）に、AppShell の topbar に渡す帯。icon は種類のアイコンの代わりに置くもの */
 export const ItemBar = ({
-  type,
   crumbs,
   title,
   hiddenNote,
   children,
+  ...kind
 }: {
-  type: ItemType
   crumbs: readonly Crumb[]
   title: string
   hiddenNote?: string
   children?: Child
-}) => {
+} & ({ type: ItemType } | { icon: Child })) => {
   useStyle('/src/components/course.css')
   return (
     <div class="item-bar">
-      <ItemIcon type={type} />
+      {'icon' in kind ? kind.icon : <ItemIcon type={kind.type} />}
       <div class="item-bar-text">
         <Breadcrumbs items={crumbs} />
         <h1 class="truncate" title={title}>
@@ -294,6 +295,57 @@ export const ItemBar = ({
       )}
       <div class="item-bar-actions">{children}</div>
     </div>
+  )
+}
+
+export const ITEM_FORM = 'item-form'
+
+/**
+ * アイテムの編集画面で ItemBar に置く操作（表示・保存と、削除を入れたその他の操作）。保存は id が ITEM_FORM のフォームを送る。
+ * 削除をカードにして本文に置かないのは、右の列を固定して設定を見えたままにするときに、めったに使わない危険な操作が場所を取り続けるため
+ */
+export const ItemEditActions = ({ href, deleteAction, deleteConfirm }: { href: string; deleteAction: string; deleteConfirm: string }) => (
+  <>
+    <Chip tone="accent" icon="pencil" class="item-bar-editing">
+      編集中
+    </Chip>
+    <Button href={href} variant="ghost" size="sm" icon="eye" aria-label="表示">
+      <span class="hide-sm">表示</span>
+    </Button>
+    <Button type="submit" form={ITEM_FORM} variant="primary" size="sm" icon="check" title="保存（⌘S / Ctrl+S）" data-save-shortcut>
+      保存
+    </Button>
+    <Popover class="row-menu" panelClass="row-menu-panel" trigger={<IconButton as="summary" icon="ellipsis" label="その他の操作" />}>
+      <form method="post" action={deleteAction} data-confirm={deleteConfirm}>
+        <MenuItem type="submit" icon="trash" class="is-danger">
+          アイテムを削除
+        </MenuItem>
+      </form>
+    </Popover>
+  </>
+)
+
+/** ファイルのアイテムの編集画面の、今のファイルと差し替えるファイルの欄（入力欄の id は f-file） */
+export const ItemFileField = ({ name, size, error }: { name: string; size: number; error?: string }) => {
+  useStyle('/src/components/form.css', '/src/components/course.css')
+  return (
+    <fieldset class={cx('field item-file-field', error && 'has-error')}>
+      <legend>ファイル</legend>
+      <div class="item-file-field-body">
+        <FileChip name={name} meta={`現在のファイル・${formatBytes(size)}`} />
+        <FileInput
+          id="f-file"
+          name="file"
+          buttonLabel="差し替えるファイルを選択"
+          aria-invalid={error ? 'true' : undefined}
+          aria-describedby="f-file-error f-file-desc"
+        />
+      </div>
+      <FieldError id="f-file" error={error} />
+      <p id="f-file-desc" class="field-hint">
+        選ばなければ今のファイルのまま（最大 {formatBytes(MAX_FILE_SIZE)}）
+      </p>
+    </fieldset>
   )
 }
 
