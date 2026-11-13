@@ -18,7 +18,17 @@ import {
 import { Button, IconButton } from './button'
 import { Card } from './card'
 import { cx } from './cx'
-import { FieldError, FileChip, FileInput, SegmentedControl, SelectField, TextAreaField, TextField, validateWith } from './form'
+import {
+  DateTimeField,
+  FieldError,
+  FileChip,
+  FileInput,
+  SegmentedControl,
+  SelectField,
+  TextAreaField,
+  TextField,
+  validateWith,
+} from './form'
 import { Icon, type IconName } from './icons'
 import { MenuItem, Modal, Popover } from './overlay'
 import { Breadcrumbs, Chip, CourseIcon, ProgressRing, Tabs, courseInitials, type Crumb, type TabItem } from './ui'
@@ -141,18 +151,20 @@ const CourseFields = ({ values, errors = {} }: { values: CourseFormValues; error
         placeholder="このコースで学べることを簡潔に"
       />
       <div class="grid-2">
-        <TextField
+        <DateTimeField
           label="開始日（任意）"
           name="start_date"
-          type="date"
+          mode="date"
+          optional
           value={values.startDate}
           error={errors.start_date}
           hint="空欄なら、開始前の期間を区切りません"
         />
-        <TextField
+        <DateTimeField
           label="終了日（任意）"
           name="end_date"
-          type="date"
+          mode="date"
+          optional
           value={values.endDate}
           error={errors.end_date}
           hint="終了日を過ぎると、ダッシュボードやコース一覧の「進行中」に出なくなります"

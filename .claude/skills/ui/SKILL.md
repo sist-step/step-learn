@@ -36,6 +36,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `SelectField` | ラベル付きのセレクト。`options`（`{ value, label }[]`）と `value` |
 | `TextAreaField` | ラベル付きの複数行入力 |
 | `FileField` | ラベル付きのファイル選択（中身は `FileInput`） |
+| `DateTimeField` | ラベル付きの日時（`mode="datetime"`、値は `YYYY-MM-DDTHH:mm`）か日付（`mode="date"`、値は `YYYY-MM-DD`）の選択。ブラウザ標準の `datetime-local` / `date` は使わずこれを使う。欄は「2026年11月13日（金） 14:30」と出すボタンで、押すと `client.ts` がパネルを出す。パソコン（幅 641px 以上かつ細かいポインター）では欄の下にカレンダーと時・分（5 分刻み）の一覧のポップオーバーを出し、選んだそばから欄に入れる（矢印キーで日を、PageUp / PageDown で月を移せる）。スマホ・タブレットでは下からシートを出し、カレンダーと時・分のホイールで選んで「決定」で入れる（背景を押すと取り消し）。`optional` で値を消す × とパネルの「クリア」が付く。送信されるのは隠した入力欄（`name`）の値なので、サーバー側の検証はそのまま使える |
 | `ImageField` | プレビュー付きの画像選択。`src`（保存済みの画像の URL）/ `aspect`（プレビューの縦横比、既定 `16 / 9`）/ `width`。`FileInput` のドロップ領域がそのままプレビューになり、画像があるときはホバー・ドラッグ中だけ案内を重ねる。選ぶとプレビューが替わり、上限を超えるファイルは `client.ts` が送信前に取り消す。受け取ったファイルは `lib/images.ts` の `putImage(prefix, file)` で検証・保存し、`serveImage(key)` で配信する |
 | `FormField` | ラベル・エラー・ヒントの枠だけ。中身を自由に組みたいとき（`children` に `Input` などを置く） |
 | `Input` / `Select` / `Textarea` | ラベルなしの部品。表の中や横並びのフォームで使う（`aria-label` を付ける）。`compact` で小さくなる |

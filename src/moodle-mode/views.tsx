@@ -13,7 +13,7 @@ import {
 import { Button, IconButton } from '../components/button'
 import { Card, LinkCard } from '../components/card'
 import { cx } from '../components/cx'
-import { FileField, SegmentedControl, SelectField, TextAreaField, TextField, validateWith } from '../components/form'
+import { DateTimeField, FileField, SegmentedControl, SelectField, TextAreaField, TextField, validateWith } from '../components/form'
 import { Icon, type IconName } from '../components/icons'
 import { AppShell, AuthShell } from '../components/layout'
 import { Markdown } from '../components/markdown'
@@ -1473,18 +1473,18 @@ export const RestrictionPage = ({
             {...validateWith('restriction')}
           >
             <div class="grid-2">
-              <TextField
+              <DateTimeField
                 label="開始日時（任意）"
                 name="from"
-                type="datetime-local"
+                optional
                 value={v.from}
                 error={errors.from}
                 hint="この日時から開けるようになります"
               />
-              <TextField
+              <DateTimeField
                 label="終了日時（任意）"
                 name="until"
-                type="datetime-local"
+                optional
                 value={v.until}
                 error={errors.until}
                 hint="この日時になると開けなくなります"
