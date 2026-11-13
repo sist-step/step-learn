@@ -226,6 +226,7 @@ export const AiPanel = ({ models, revision, chat, quota }: AiPanelProps) => {
       aria-label="AI アシスタント"
       data-persist
       data-keep
+      data-confirm-scope
       data-ai-panel
       data-chat={chat?.id}
       data-model={chat?.model.value}
