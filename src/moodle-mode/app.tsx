@@ -51,6 +51,9 @@ app.use(async (c, next) => {
 })
 
 app.get('/', (c) => c.redirect(c.var.user ? '/dashboard' : '/login'))
+// 操作ログを残さないのは、Moodle モードの操作は Moodle の Web サービスを通り、Moodle のログに残るため。
+// 受けるだけにするのは、client.ts が先読みした画面を開くたびに送り、404 が並ぶため
+app.post('/views', (c) => c.body(null, 204))
 
 app.get('/login', h.showLogin)
 app.get('/auth/moodle/start', h.startLoginFromMoodle)

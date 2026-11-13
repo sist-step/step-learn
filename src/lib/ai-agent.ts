@@ -1,6 +1,6 @@
 // DB を読み込まず、ツール・使用量・保存先を渡して作るのは、通常モード（lib/ai-assistant.ts）と Moodle モード（moodle-mode/ai-assistant.ts）で同じ会話の進め方を使うため
 import { AI_HARD_TASK_MODELS, AiError, complete, isAiModel, replyMessage, type AiMessage, type AiModel, type AiToolCall } from './ai'
-import type { AiChat, AiChatContent, AiChatStore } from './ai-chat'
+import { chatRevision, type AiChat, type AiChatContent, type AiChatStore } from './ai-chat'
 import type { AiLedger } from './ai-ledger'
 import type { AiQuota } from './ai-quota'
 import { judgeOffTopic } from './ai-scope'
@@ -9,7 +9,8 @@ import { ROLE_LABELS } from './types'
 
 /**
  * パネルへ流す出来事。chat は新しく始めたチャットの ID、error の retract は送った発言を会話に残さなかったこと（入力欄に戻してよい）、
- * confirm は確認カードを出したこと、closed は開いていたチャットがもうないこと
+ * confirm は確認カードを出したこと、closed は開いていたチャットがもうないこと、outdated は送った画面が古く、発言を受け付けなかったこと、
+ * done の revision は保存したチャットの版
  */
 export type AiAgentEvent =
   | { type: 'chat'; id: number }
@@ -18,7 +19,8 @@ export type AiAgentEvent =
   | { type: 'confirm' }
   | { type: 'error'; message: string; retract?: boolean }
   | { type: 'closed' }
-  | { type: 'done'; quota: string }
+  | { type: 'outdated' }
+  | { type: 'done'; quota: string; revision: string }
 
 type Emit = (event: AiAgentEvent) => void
 
@@ -215,7 +217,7 @@ export function createAiAgent({
     running.add(user.id)
     try {
       if ((await task()) && !chats.saveChat(user.id, chat)) emit({ type: 'closed' })
-      emit({ type: 'done', quota: quotaNote(ledger.getQuota(user.id, chat.model)) })
+      emit({ type: 'done', quota: quotaNote(ledger.getQuota(user.id, chat.model)), revision: chatRevision(chat) })
     } finally {
       running.delete(user.id)
     }
