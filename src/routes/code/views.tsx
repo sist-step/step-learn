@@ -64,7 +64,15 @@ export const CodePage = ({
         </ItemBar>
       }
     >
-      <CodeWorkspace base={base} language={item.language} body={body} goals={goals} canRun={canRun} submissions={submissions} />
+      <CodeWorkspace
+        itemId={item.id}
+        base={base}
+        language={item.language}
+        body={body}
+        goals={goals}
+        canRun={canRun}
+        submissions={submissions}
+      />
     </AppShell>
   )
 }

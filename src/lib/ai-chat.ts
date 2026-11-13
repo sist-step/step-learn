@@ -3,7 +3,7 @@ import crypto from 'node:crypto'
 import { and, desc, eq, lt } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { isAiModel, type AiMessage, type AiModel } from './ai'
-import type { AiChange } from './ai-tool-kit'
+import type { AiChange, AiTouched } from './ai-tool-kit'
 import { config } from './config'
 import type { aiChats as aiChatsTable } from './schema'
 
@@ -23,12 +23,17 @@ export type AiCard = {
   note?: string
 }
 
-/** labels と cards はツール呼び出しの id ごとの、画面に出す説明と確認カード */
-export type AiChatContent = { messages: AiMessage[]; labels: Record<string, string>; cards: Record<string, AiCard> }
+/** labels・cards・touched はツール呼び出しの id ごとの、画面に出す説明・確認カード・変えたもの */
+export type AiChatContent = {
+  messages: AiMessage[]
+  labels: Record<string, string>
+  cards: Record<string, AiCard>
+  touched: Record<string, AiTouched>
+}
 
 export type AiChat = { id: number; model: AiModel; content: AiChatContent }
 
-const emptyContent = (): AiChatContent => ({ messages: [], labels: {}, cards: {} })
+const emptyContent = (): AiChatContent => ({ messages: [], labels: {}, cards: {}, touched: {} })
 
 // SESSION_SECRET をそのまま鍵にしないのは、Cookie の署名と同じ鍵を別の用途に使い回さないため
 const KEY = Buffer.from(crypto.hkdfSync('sha256', config.sessionSecret, 'step-learn', 'ai-chat', 32))

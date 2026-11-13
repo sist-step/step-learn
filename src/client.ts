@@ -5,8 +5,10 @@
 import checkSvg from 'heroicons/24/outline/check.svg?raw'
 import chevronLeftSvg from 'heroicons/24/outline/chevron-left.svg?raw'
 import chevronRightSvg from 'heroicons/24/outline/chevron-right.svg?raw'
+import sparklesSvg from 'heroicons/24/outline/sparkles.svg?raw'
 import { bundlePath, isExcludedPath } from './lib/bundle'
 import type { AiAgentEvent } from './lib/ai-agent'
+import type { AiTouched } from './lib/ai-tool-kit'
 import { formatBytes } from './lib/bytes'
 import { formatDateTimeInput } from './lib/course-period'
 import { isFormName, validate, type FieldErrors, type FormInput } from './lib/forms'
@@ -2251,6 +2253,17 @@ function aiTemplate(kind: 'user' | 'assistant' | 'tool' | 'pending' | 'error', t
   return el
 }
 
+function aiToolLine(label: string, touched?: AiTouched) {
+  const line = aiTemplate('tool', label)
+  const link = line.querySelector<HTMLAnchorElement>('.ai-spot-link')
+  if (link && touched) {
+    link.href = touched.href
+    link.dataset.aiSpot = JSON.stringify(touched)
+    link.hidden = false
+  }
+  return line
+}
+
 function scrollAiLog(force = false) {
   const log = aiPanel()?.querySelector<HTMLElement>('[data-ai-log]')
   if (!log) return
@@ -2357,7 +2370,7 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
     } else if (event.type === 'tool' || event.type === 'confirm') {
       bubble = null
       markdown = ''
-      if (event.type === 'tool') pending.before(aiTemplate('tool', event.label))
+      if (event.type === 'tool') pending.before(aiToolLine(event.label, event.touched))
       else outcome.confirmed = true
     } else if (event.type === 'error') {
       if (event.retract) {
@@ -2371,6 +2384,8 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
       onChat?.(event.id)
     } else if (event.type === 'closed') {
       outcome.closed = true
+    } else if (event.type === 'applied') {
+      showAiChange(event.touched)
     } else {
       const note = panel.querySelector('[data-ai-quota]')
       if (note) note.textContent = event.quota
@@ -2475,6 +2490,180 @@ function initAiPanel() {
   const open = document.documentElement.hasAttribute('data-ai-open')
   $$('.ai-panel-toggle').forEach((el) => el.setAttribute('aria-expanded', String(open)))
   watchAiBusy()
+}
+
+// --- AI が変えたところを、開いている画面にすぐ反映して強調する（lib/ai-tool-kit.ts の AiTouched）
+// 反映を CourseLiveSync の確認の間隔に任せないのは、頼んだ結果がどこに出たのかを、変えた直後に見せるため
+/** touch は文字などを塗り、frame は大きな入れ物（差し替えたエディターのカードなど）を塗らずに縁だけ光らせる */
+type AiMark = 'enter' | 'move' | 'touch' | 'frame' | 'spot'
+
+const AI_MARK_MS = 2600
+const AI_MARK_LABELS: Record<AiMark, string> = {
+  enter: 'AI が追加',
+  move: 'AI が移動',
+  touch: 'AI が変更',
+  frame: 'AI が変更',
+  spot: 'AI が変更',
+}
+const AI_KEYED = '[data-item], details.section-card[id]'
+// 大きな入れ物を塗らないのは、カード一面が色づくと、中のどこが変わったのかがかえって見えなくなるため
+const AI_WIDE_HEIGHT = 160
+// 編集のボタンやメニューの中に印を付けないのは、変わったのは閉じたフォームの初期値で、見えている教材ではないため
+const AI_QUIET = '.row-actions, .row-menu, details.popover, [popover], button, select, template'
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches
+const aiMarkTimers = new WeakMap<Element, Map<AiMark, number>>()
+let aiArrival: AiTouched | null = null
+
+function flashAi(el: Element, mark: AiMark) {
+  const timers = aiMarkTimers.get(el) ?? new Map<AiMark, number>()
+  aiMarkTimers.set(el, timers)
+  clearTimeout(timers.get(mark))
+  el.classList.remove(`ai-${mark}`)
+  // 付け直す前に描かせるのは、続けて変わったときに、光り始めからやり直させるため
+  void (el as HTMLElement).offsetWidth
+  el.classList.add(`ai-${mark}`)
+  timers.set(
+    mark,
+    window.setTimeout(() => el.classList.remove(`ai-${mark}`), AI_MARK_MS),
+  )
+}
+
+const keyOfLive = (el: Element) => (el instanceof HTMLElement && el.dataset.item ? `item:${el.dataset.item}` : el.id)
+
+const keyedRects = () =>
+  new Map($$(AI_KEYED, document.querySelector('main') ?? document).map((el) => [keyOfLive(el), el.getBoundingClientRect()]))
+
+/** 差し替える前の位置 from から、今の位置へ滑らせる。動いていなければ false */
+function slideFrom(el: Element, from: DOMRect) {
+  const to = el.getBoundingClientRect()
+  const dx = from.left - to.left
+  const dy = from.top - to.top
+  if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return false
+  if (!reducedMotion())
+    el.animate([{ translate: `${dx}px ${dy}px` }, { translate: '0 0' }], { duration: 560, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)' })
+  return true
+}
+
+function aiTarget({ item, section }: AiTouched) {
+  const row = item ? document.querySelector(`main [data-item="${item}"]`) : null
+  const heading = item ? document.querySelector(`[data-ai-watch="item:${item}"] h1`) : null
+  return row ?? (section ? document.getElementById(`section-${section}`) : null) ?? heading
+}
+
+// 隠れたままにしないのは、AI が非表示で追加したものや、閉じたセクションの中を変えたとき、どこが変わったのか見えないため
+function revealAiTarget(target: Element) {
+  const section = target.parentElement?.closest<HTMLDetailsElement>('details.section-card')
+  if (section && !section.open) section.open = true
+  if (target.closest('.edit-only') && !document.documentElement.hasAttribute('data-edit-mode') && $$('[data-edit-mode-toggle]').length) {
+    applyEditMode(true)
+    setSetting('editMode', true)
+    toast('AI が変えた非表示の教材を見せるため、編集モードにしました。', 'info')
+  }
+  const r = target.getBoundingClientRect()
+  if (r.top < 0 || r.bottom > innerHeight) target.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' })
+}
+
+function tagAiTarget(target: Element, mark: AiMark) {
+  const r = target.getBoundingClientRect()
+  if (!r.width) return
+  const tag = document.createElement('span')
+  tag.className = 'ai-tag'
+  tag.setAttribute('aria-hidden', 'true')
+  tag.innerHTML = sparklesSvg.replace('<svg ', '<svg class="icon" width="14" height="14" ')
+  tag.append(AI_MARK_LABELS[mark])
+  tag.style.left = `${r.right + scrollX - 12}px`
+  tag.style.top = `${r.top + scrollY}px`
+  document.body.append(tag)
+  tag.addEventListener('animationend', () => tag.remove(), { once: true })
+}
+
+function spotAi(target: Element, mark: AiMark) {
+  revealAiTarget(target)
+  flashAi(target, 'spot')
+  // スクロールを待ってから札を出すのは、動いている途中の位置に置くと、止まったあとの対象からずれるため
+  window.setTimeout(() => tagAiTarget(target, mark), reducedMotion() ? 0 : 400)
+}
+
+/** 差分で差し込んだ inserted に、追加・移動・変更の印を付け、AI が変えたもの（touched）を強調する。before は差し替える前の位置 */
+function markAiChanges(touched: AiTouched, inserted: Node[], before: Map<string, DOMRect>) {
+  const marks = new Map<Element, AiMark>()
+  const mark = (el: Element, kind: AiMark) => {
+    marks.set(el, kind)
+    flashAi(el, kind)
+  }
+  // 位置を測れなかったとき（丸ごと描き直したとき）に新しいものと決めないのは、すべての行が追加に見えてしまうため
+  const isNew = (el: Element) => before.size > 0 && !before.has(keyOfLive(el))
+  for (const node of inserted) {
+    if (node instanceof Text && !node.data.trim()) continue
+    const el = node instanceof Element ? node : node.parentElement
+    if (!el || el.matches(LIVE_REGIONS.join()) || el.closest(AI_QUIET)) continue
+    const keyed = node === el && el.matches(AI_KEYED)
+    const from = keyed ? before.get(keyOfLive(el)) : undefined
+    // 入れ物ごと差し替わったときに、中の新しい行だけを追加として見せるのは、入れ物全体を塗ると、どれが増えたのか分からないため
+    const fresh = $$(AI_KEYED, el).filter(isNew)
+    if (keyed && isNew(el)) mark(el, 'enter')
+    else if (from && slideFrom(el, from)) mark(el, 'move')
+    else if (fresh.length === 0) mark(el, el.getBoundingClientRect().height > AI_WIDE_HEIGHT ? 'frame' : 'touch')
+    fresh.forEach((child) => mark(child, 'enter'))
+  }
+  const target = aiTarget(touched)
+  if (!target) return
+  const moved = [...marks].some(([el, kind]) => kind === 'move' && target.contains(el))
+  spotAi(target, marks.get(target) ?? (moved ? 'move' : 'touch'))
+}
+
+const codeFields = () => $$<HTMLTextAreaElement>('main [data-code-input] textarea[name]')
+
+function flashCodeFields(before: Map<string, string>) {
+  const changed = codeFields().filter((f) => before.has(f.name) && before.get(f.name) !== f.value)
+  if (changed.length === 0) return
+  void codeEditor?.then(({ flashCodeChanges }) => changed.forEach((f) => flashCodeChanges(f, before.get(f.name)!)))
+}
+
+const formValues = (form: HTMLFormElement) => JSON.stringify([...new FormData(form)].filter(([, v]) => typeof v === 'string'))
+
+function showAiChange(touched: AiTouched) {
+  const keys = [`course:${touched.course}`, ...(touched.item ? [`item:${touched.item}`] : [])]
+  const watched = $$<HTMLElement>('[data-ai-watch]').filter((el) => keys.includes(el.dataset.aiWatch ?? ''))
+  if (watched.length === 0) return
+  const form = watched.find((el) => el instanceof HTMLFormElement)
+  const drawn = form?.id ? liveBase[0]?.querySelector<HTMLFormElement>(`form#${CSS.escape(form.id)}`) : null
+  // 書き換えている途中の編集画面を差し替えないのは、まだ保存していない入力を消してしまうため
+  if (form && (!drawn || formValues(form) !== formValues(drawn)))
+    return toast(
+      'AI がこのアイテムを変更しました。このまま保存すると AI の変更を上書きするので、読み込み直してから編集してください。',
+      'info',
+    )
+  const codeBefore = new Map(codeFields().map((f) => [f.name, f.value]))
+  void syncLive(liveRun, liveRevision, touched).then(() => flashCodeFields(codeBefore))
+  const workspace = watched.find((el) => el.matches('[data-code-workspace]'))
+  if (workspace) void codeEditor?.then(({ reloadCodeWorkspace }) => reloadCodeWorkspace(workspace))
+}
+
+document.addEventListener('click', (e) => {
+  const link = (e.target as Element).closest<HTMLAnchorElement>('a[data-ai-spot]')
+  if (!link?.dataset.aiSpot || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+  const touched = JSON.parse(link.dataset.aiSpot) as AiTouched
+  // 重ねて出すパネルを閉じるのは、開いた先の強調がパネルの下に隠れるため
+  if (!aiDocked()) setAiOpen(false)
+  const here = new URL(link.href).pathname === location.pathname ? aiTarget(touched) : null
+  if (!here) {
+    aiArrival = touched
+    return
+  }
+  e.preventDefault()
+  spotAi(here, 'spot')
+})
+
+function spotArrival() {
+  const touched = aiArrival
+  aiArrival = null
+  if (!touched) return
+  // 遷移のアニメーションと # へのスクロールが終わってから強調する
+  window.setTimeout(() => {
+    const target = aiTarget(touched)
+    if (target) spotAi(target, 'spot')
+  }, 350)
 }
 
 // --- ページ遷移を再読み込みなしで行う（JS がなければ通常のリンク・フォーム送信で遷移する）
@@ -2647,7 +2836,7 @@ function slideTabIndicator() {
 function render(doc: Document, scroll: () => void, settled?: () => void) {
   // DOMParser はスクリプト無効として解析し noscript の中身を要素にするので、そのまま差し込むと表示されるブラウザがある
   $$('noscript', doc.body).forEach((el) => el.remove())
-  liveBase = cloneMain(doc)
+  liveBase = cloneRegions(doc)
   holdRail()
   const tabSlide = markTabSwitch(doc)
   const swap = () => {
@@ -2800,11 +2989,13 @@ const LIVE_INTERVAL = 10_000
 const EDITING = 'input, textarea, select, [contenteditable]'
 const OPENED = 'details.popover[open], [popover]:popover-open'
 
-const cloneMain = (doc: Document) => (doc.querySelector('main')?.cloneNode(true) as Element | undefined) ?? null
+// ヘッダーの帯も比べるのは、コードや PDF のアイテムでは、タイトルが <main> ではなく帯にあるため
+const LIVE_REGIONS = ['main', '.topbar-main'] as const
+const cloneRegions = (doc: Document) => LIVE_REGIONS.map((sel) => (doc.querySelector(sel)?.cloneNode(true) as Element | undefined) ?? null)
 const liveMarker = (root: ParentNode = document) => root.querySelector<HTMLElement>('[data-live]')
 
 // 画面の要素と新しい内容を直接比べないのは、開閉や完了の切り替えなど画面で変えた状態まで、サーバーでの変更として扱ってしまうため
-let liveBase = cloneMain(document)
+let liveBase = cloneRegions(document)
 let liveRevision: string | null = null
 let liveTimer = 0
 let liveRun = 0
@@ -2826,6 +3017,9 @@ const sameShell = (a: Node, b: Node) =>
   a.attributes.length === b.attributes.length &&
   [...a.attributes].every((attr) => b.getAttribute(attr.name) === attr.value)
 
+// エディターを組み込んだ入力欄は、変わっていたら中を比べず丸ごと置き換え、組み込み直させる。入力欄の文字だけを差し替えると、エディターが古い中身のまま残るため
+const MOUNTED_EDITORS = '[data-code-input][data-code-ready], [data-code-starter][data-code-ready], [data-md-ready]'
+
 // 子は位置で対応させるので、画面で子を足し引きした要素（エディターを組み込んだ入力欄など）は、中を比べず丸ごと置き換える
 function diffChildren(base: Node, next: Node, live: Node, changes: LiveChange[]) {
   const b = [...base.childNodes]
@@ -2846,7 +3040,8 @@ function diffChildren(base: Node, next: Node, live: Node, changes: LiveChange[])
     return true
   }
   bMid.forEach((node, i) => {
-    if (node.isEqualNode(nMid[i]) || (sameShell(node, nMid[i]) && diffChildren(node, nMid[i], lMid[i], changes))) return
+    const mounted = lMid[i] instanceof Element && lMid[i].matches(MOUNTED_EDITORS)
+    if (node.isEqualNode(nMid[i]) || (!mounted && sameShell(node, nMid[i]) && diffChildren(node, nMid[i], lMid[i], changes))) return
     changes.push({
       baseParent: base,
       liveParent: live,
@@ -2869,14 +3064,17 @@ function inUse(node: Node) {
   return (!!active?.matches(EDITING) && node.contains(active)) || node.matches(OPENED) || !!node.querySelector(OPENED) || isPlaying(node)
 }
 
+/** 差分を当て、画面に差し込んだ要素を返す */
 function applyChange(change: LiveChange) {
-  change.next.forEach((node) => change.liveParent.insertBefore(document.importNode(node, true), change.liveAnchor))
+  const inserted = change.next.map((node) => change.liveParent.insertBefore(document.importNode(node, true), change.liveAnchor))
   change.live.forEach((node) => node.remove())
   change.next.forEach((node) => change.baseParent.insertBefore(node.cloneNode(true), change.baseAnchor))
   change.base.forEach((node) => node.remove())
+  return inserted
 }
 
-async function syncLive(run: number, revision: string | null) {
+/** 同じ URL を取り直して差分を当てる。touched を渡すと（AI が変えたとき）、CourseLiveSync のない画面でも差分を当て、変わったところを強調する */
+async function syncLive(run: number, revision: string | null, touched?: AiTouched) {
   const page = await fetchPage(new URL(location.href))
   if (run !== liveRun || navController) return
   const doc = new DOMParser().parseFromString(page.html, 'text/html')
@@ -2890,21 +3088,33 @@ async function syncLive(run: number, revision: string | null) {
   const live = document.querySelector('main')
   if (run !== liveRun || navController || document.querySelector('dialog[open]') || !live) return
 
-  const next = doc.querySelector('main')
   const changes: LiveChange[] = []
-  if (!liveMarker(doc) || !next || !liveBase || !sameShell(liveBase, next) || !diffChildren(liveBase, next, live, changes)) {
+  const diffable =
+    (!!touched || !!liveMarker(doc)) &&
+    LIVE_REGIONS.every((sel, i) => {
+      const base = liveBase[i]
+      const next = doc.querySelector(sel)
+      const current = document.querySelector(sel)
+      if (!base || !next || !current) return !base && !next && !current
+      return sameShell(base, next) && diffChildren(base, next, current, changes)
+    })
+  if (!diffable) {
     if (inUse(live)) return
     const y = scrollY
-    return render(doc, () => scrollTo(0, y))
+    await render(doc, () => scrollTo(0, y))
+    if (touched) markAiChanges(touched, [], new Map())
+    return
   }
   const ready = changes.filter((change) => !change.live.some(inUse))
-  ready.forEach(applyChange)
+  const before = touched ? keyedRects() : new Map<string, DOMRect>()
+  const inserted = ready.flatMap(applyChange)
   if (ready.length > 0) {
     document.title = doc.title
     initContent()
   }
+  if (touched) markAiChanges(touched, inserted, before)
   // 見送った部分があるときに版を進めないのは、次の確認でもう一度取り直して反映するため
-  if (ready.length === changes.length) liveRevision = liveMarker(doc)!.dataset.liveRev ?? null
+  if (ready.length === changes.length) liveRevision = liveMarker(doc)?.dataset.liveRev ?? null
 }
 
 async function checkLive() {
@@ -2945,6 +3155,7 @@ function initPage() {
   watchLive()
   initAuthArt()
   initAiPanel()
+  spotArrival()
 }
 
 function initContent() {

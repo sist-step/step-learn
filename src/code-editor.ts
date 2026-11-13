@@ -32,8 +32,9 @@ import {
 } from '@codemirror/language'
 import { lintGutter, lintKeymap, linter, type Diagnostic } from '@codemirror/lint'
 import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search'
-import { EditorSelection, EditorState, Prec, type Extension } from '@codemirror/state'
+import { EditorSelection, EditorState, Prec, StateEffect, StateField, type Extension } from '@codemirror/state'
 import {
+  Decoration,
   EditorView,
   drawSelection,
   dropCursor,
@@ -44,6 +45,7 @@ import {
   lineNumbers,
   rectangularSelection,
   type Command,
+  type DecorationSet,
 } from '@codemirror/view'
 import { abbreviationTracker, emmetCompletionSource } from '@emmetio/codemirror6-plugin'
 import { tags } from '@lezer/highlight'
@@ -60,6 +62,7 @@ import {
   type CodeFiles,
   type PreviewMessage,
 } from './lib/code'
+import { diffLines } from './lib/diff'
 import type { RunResult } from './lib/sandbox'
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void
@@ -376,6 +379,34 @@ type Mounted = { root: HTMLElement; release: () => void; view?: EditorView }
 const mounted = new Set<Mounted>()
 const syntaxOf = new WeakMap<EditorView, CodeSyntax>()
 
+// --- AI が変えた行の強調（client.ts の showAiChange）
+const AI_FLASH_MS = 3200
+const setAiFlash = StateEffect.define<number[]>()
+const aiFlashLine = Decoration.line({ class: 'cm-ai-line' })
+const aiFlash = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(lines, tr) {
+    let next = lines.map(tr.changes)
+    for (const e of tr.effects) {
+      if (e.is(setAiFlash)) next = Decoration.set(e.value.map((n) => aiFlashLine.range(tr.state.doc.line(n).from)))
+    }
+    return next
+  },
+  provide: (field) => EditorView.decorations.from(field),
+})
+
+/** before から今の中身へ変わって増えた行を、しばらく光らせて、最初の行まで送る */
+function flashAiLines(view: EditorView, before: string) {
+  const { doc } = view.state
+  const lines = diffLines(before, doc.toString()).flatMap((l) => (l.kind === 'add' && l.after && l.after <= doc.lines ? [l.after] : []))
+  if (lines.length === 0) return false
+  view.dispatch({ effects: [setAiFlash.of(lines), EditorView.scrollIntoView(doc.line(lines[0]).from, { y: 'center' })] })
+  window.setTimeout(() => view.dom.isConnected && view.dispatch({ effects: setAiFlash.of([]) }), AI_FLASH_MS)
+  return true
+}
+
+const viewOf = (field: Element) => [...mounted].find((m) => m.view && m.root.contains(field))?.view
+
 type CodeInputOptions = { toast?: Toast; peers?: Peers; onRun?: () => void; onSave?: () => void }
 
 function mountCodeInput(root: HTMLElement, { toast, peers = () => '', onRun, onSave }: CodeInputOptions = {}) {
@@ -413,6 +444,7 @@ function mountCodeInput(root: HTMLElement, { toast, peers = () => '', onRun, onS
       highlightActiveLine(),
       highlightActiveLineGutter(),
       highlightSelectionMatches(),
+      aiFlash,
       search({ top: true }),
       syntaxHighlighting(highlight),
       // Emmet の Tab より先にするのは、候補を閉じたあとの Tab で、本文の英単語までタグに展開されてしまうため（Emmet は候補から確定する）
@@ -466,7 +498,7 @@ function mountCodeInput(root: HTMLElement, { toast, peers = () => '', onRun, onS
 
 /** 入力欄の値を書き換える。エディターに置き換えた欄は、エディターの中身ごと書き換える */
 function setFieldValue(field: HTMLTextAreaElement | HTMLInputElement, value: string) {
-  const view = [...mounted].find((m) => m.view && m.root.contains(field))?.view
+  const view = viewOf(field)
   if (view) {
     view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } })
     return
@@ -578,6 +610,9 @@ function mountConstraints(root: HTMLElement) {
 }
 
 // --- ファイルのタブ（CodeWorkspace と CodeStarterCard）
+/** 開いているファイルのタブを切り替える（エディターにフォーカスしない）。mountFileTabs で作る */
+const fileTabSelectors = new WeakMap<HTMLElement, (key: string) => void>()
+
 /** root の中のコードの入力欄をエディターにし、ファイルのタブ（data-code-tab）で、対応する欄（data-code-file）を切り替えられるようにする */
 function mountFileTabs(root: HTMLElement, options: Omit<CodeInputOptions, 'peers'>) {
   const views = new Map<string, EditorView>()
@@ -608,6 +643,10 @@ function mountFileTabs(root: HTMLElement, options: Omit<CodeInputOptions, 'peers
     view?.requestMeasure()
     if (focusEditor) view?.focus()
   }
+  fileTabSelectors.set(root, (key) => {
+    const tab = tabs.find((t) => t.dataset.codeTab === key)
+    if (tab && tab.getAttribute('aria-selected') !== 'true') selectTab(tab, false)
+  })
   for (const tab of tabs) {
     tab.addEventListener('click', () => selectTab(tab, true))
     tab.addEventListener('keydown', (e) => {
@@ -803,20 +842,25 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
   const saveStatus = root.querySelector<HTMLElement>('[data-code-save]')
   const setStatus = (text: string) => saveStatus && (saveStatus.textContent = text)
 
-  let loaded = false
-  try {
-    const res = await fetch(`${base}/state`, { headers: { Accept: 'application/json' }, cache: 'no-store' })
-    if (res.ok) {
-      const state = (await res.json()) as { files: CodeFiles; stdin: string }
-      for (const key of CODE_FILE_KEYS) {
-        const field = fieldOf(key)
-        if (field && typeof state.files[key] === 'string') field.value = state.files[key]
-      }
-      const stdin = fieldOf('stdin')
-      if (stdin) stdin.value = state.stdin
-      loaded = true
+  const fetchState = async () => {
+    try {
+      const res = await fetch(`${base}/state`, { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      return res.ok ? ((await res.json()) as { files: CodeFiles; stdin: string }) : null
+    } catch {
+      return null
     }
-  } catch {}
+  }
+
+  const state = await fetchState()
+  if (state) {
+    for (const key of CODE_FILE_KEYS) {
+      const field = fieldOf(key)
+      if (field && typeof state.files[key] === 'string') field.value = state.files[key]
+    }
+    const stdin = fieldOf('stdin')
+    if (stdin) stdin.value = state.stdin
+  }
+  const loaded = !!state
   if (!root.isConnected) return
   if (!loaded) {
     // 保存を止めるのは、読み込めなかった書きかけのコードを、最初のコードで上書きしてしまうため
@@ -907,12 +951,16 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
   root.querySelector('[data-code-refresh]')?.addEventListener('click', renderPreview)
   renderPreview()
 
+  // AI の変更を入れているあいだは書きかけとして保存しない。保存すると、そのあとの最初のコードの変更が、書きかけのコードに隠れて届かなくなる
+  let applyingAi = false
   root.addEventListener('input', (e) => {
     if (!(e.target instanceof HTMLTextAreaElement) || e.target.form !== form) return
-    dirty = true
-    if (loaded) setStatus('')
-    clearTimeout(saveTimer)
-    saveTimer = window.setTimeout(() => void save(), SAVE_DELAY)
+    if (!applyingAi) {
+      dirty = true
+      if (loaded) setStatus('')
+      clearTimeout(saveTimer)
+      saveTimer = window.setTimeout(() => void save(), SAVE_DELAY)
+    }
     if (preview && e.target.name !== 'stdin') {
       clearTimeout(previewTimer)
       previewTimer = window.setTimeout(renderPreview, PREVIEW_DELAY)
@@ -925,6 +973,38 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
     if (!target.dataset.confirm || target.dataset.confirmed === '1') discardPending()
   })
 
+  // 書いている途中なら取り直さないのは、書いたばかりのコードを、AI の変えた最初のコードで消してしまうため
+  workspaceReloaders.set(root, async () => {
+    if (dirty || !loaded) return
+    const next = await fetchState()
+    if (!next || dirty || !root.isConnected) return
+    const changed = CODE_FILE_KEYS.filter((key) => {
+      const field = fieldOf(key)
+      return field && typeof next.files[key] === 'string' && next.files[key] !== field.value
+    })
+    applyingAi = true
+    try {
+      for (const key of changed) {
+        const field = fieldOf(key)!
+        const view = viewOf(field)
+        const before = field.value
+        setFieldValue(field, next.files[key]!)
+        if (view) flashAiLines(view, before)
+      }
+      const stdin = fieldOf('stdin')
+      if (stdin && stdin.value !== next.stdin) setFieldValue(stdin, next.stdin)
+    } finally {
+      applyingAi = false
+    }
+    if (changed.length === 0) return
+    const shown = root.querySelector<HTMLElement>('[data-code-file]:not([hidden])')?.dataset.codeFile
+    if (!changed.some((key) => key === shown)) fileTabSelectors.get(root)?.(changed[0])
+    const tabs = changed.flatMap((key) => [...root.querySelectorAll(`[data-code-tab="${key}"]`)])
+    tabs.forEach((tab) => tab.classList.add('ai-touch'))
+    window.setTimeout(() => tabs.forEach((tab) => tab.classList.remove('ai-touch')), AI_FLASH_MS)
+    renderPreview()
+  })
+
   mounted.add({
     root,
     release: () => {
@@ -932,6 +1012,22 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
       void save(true)
     },
   })
+}
+
+const workspaceReloaders = new WeakMap<HTMLElement, () => Promise<void>>()
+
+/** AI が変えたアイテムのエディターを取り直し、変わった行を光らせる。書いている途中なら何もしない */
+export const reloadCodeWorkspace = (root: HTMLElement) => workspaceReloaders.get(root)?.()
+
+/** AI の変更で差し替わった編集画面のコードの欄で、before から変わった行を光らせ、そのファイルのタブを開く */
+export function flashCodeChanges(field: HTMLTextAreaElement, before: string) {
+  const view = viewOf(field)
+  if (!view || !flashAiLines(view, before)) return
+  const key = field.closest<HTMLElement>('[data-code-file]')?.dataset.codeFile
+  const tabs = field.closest<HTMLElement>('[data-code-starter]')
+  if (key && tabs) fileTabSelectors.get(tabs)?.(key)
+  // 入力の知らせを出すのは、最初のコードのカードのプレビューを、新しい中身で描き直させるため
+  field.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
 // --- 採点の終わりを待つ（components/code.tsx の CodeSubmissions）

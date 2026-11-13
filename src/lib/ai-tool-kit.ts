@@ -7,8 +7,14 @@ import type { AppEnv } from './types'
 /** ツールを呼んだ要求。利用者は c.var.user、Moodle モードではトークンも c.var から読む */
 export type AiToolContext = Context<AppEnv>
 
-/** label は画面の会話に出す、ツールで何をしたかの説明 */
-export type AiToolResult = { content: string; label: string; isError?: boolean }
+/**
+ * AI が変えたもの。client.ts が開いている画面に反映して強調し、会話の行から href を開けるようにする。
+ * section と item は、変えたもの（並べ替えはそのセクション）があればその ID
+ */
+export type AiTouched = { course: number; section?: number; item?: number; href: string }
+
+/** label は画面の会話に出す、ツールで何をしたかの説明。touched は内容を変えたときだけ渡す */
+export type AiToolResult = { content: string; label: string; isError?: boolean; touched?: AiTouched }
 
 /** 確認カードの 1 行。long は差分で見せる複数行の文章 */
 export type AiChange = { label: string; before: string; after: string; long?: boolean }
@@ -27,7 +33,27 @@ export type AiAgentTool =
 
 export const isToolResult = (v: AiProposal | AiToolResult): v is AiToolResult => 'content' in v
 
-export const success = (data: unknown, label: string): AiToolResult => ({ content: JSON.stringify(data), label })
+// 開く先をコースページとアイテムの画面に決めてよいのは、通常モードと Moodle モードで URL の形が同じため
+/** コースページで見るもの（セクションと、その中の並び・表示） */
+export const inCourse = (course: number, section?: number): AiTouched => ({
+  course,
+  section,
+  href: `/courses/${course}${section ? `#section-${section}` : ''}`,
+})
+
+/** アイテムの画面で見るもの（アイテムの中身） */
+export const inItem = (course: number, item: number, section?: number): AiTouched => ({
+  course,
+  item,
+  section,
+  href: `/courses/${course}/items/${item}`,
+})
+
+export const success = (data: unknown, label: string, touched?: AiTouched): AiToolResult => ({
+  content: JSON.stringify(data),
+  label,
+  touched,
+})
 
 export const failure = (message: string, label: string): AiToolResult => ({
   content: JSON.stringify({ error: message }),
