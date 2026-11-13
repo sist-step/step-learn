@@ -45,7 +45,6 @@
 
 .ai-intro { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: auto 0; text-align: center; }
 .ai-intro-title { font-size: var(--fs-lg); }
-.ai-intro-text { font-size: var(--fs-sm); color: var(--muted); line-height: 1.7; }
 .ai-suggestions { display: flex; flex-direction: column; align-self: stretch; gap: 6px; margin-top: 6px; }
 /* 続きの依頼（.ai-reply）を別の見た目にしないのは、どちらも押すと送る発言の候補で、同じ部品だと分かるようにするため */
 .ai-suggestion, .ai-reply {

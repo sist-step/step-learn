@@ -185,9 +185,6 @@ const Intro = ({ models }: { models: readonly AiModelOption[] }) => (
   <div class="ai-intro" data-ai-intro>
     <Mascot act="greet" size={76} stand={false} />
     <h2 class="ai-intro-title">何をお手伝いしましょうか？</h2>
-    <p class="ai-intro-text">
-      管理しているコースの内容を読んで、質問に答えたり、教材の追加や見直しを手伝ったりします。追加したものは学生に非表示で作り、今ある内容を変えるときは、実行する前に確認します。
-    </p>
     <div class="ai-suggestions">
       {SUGGESTIONS.map((s) => (
         <button type="button" class="ai-suggestion" data-ai-suggest={s}>
