@@ -22,25 +22,58 @@
 .editor-head-actions { display: flex; gap: 8px; flex: none; }
 
 .editor { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 32px 24px; align-items: start; }
-/* グリッドをフォームの中で組まないのは、左の列に置く配布ファイルのフォームが保存のフォームの入れ子になるため */
-.editor-form { display: contents; }
-.editor-main, .editor-extra { grid-column: 1; }
-.editor-side { grid-column: 2; display: flex; flex-direction: column; gap: 20px; }
-/* 右の列を左のカードと同じ行に収めないのは、右の列のほうが高いと、左のカードの間にすき間ができるため */
-.editor:has(> .editor-extra) { grid-template-rows: auto 1fr; }
-.editor:has(> .editor-extra) .editor-side { grid-row: span 2; }
-/* 始まりの行まで決めるのは、コードのカードが右の列より前に並ぶので、自動の配置では右の列が最後のカードの行に置かれるため */
-.editor:has(.code-section) { grid-template-rows: auto auto 1fr; }
-.editor:has(.code-section) .editor-side { grid-row: 1 / span 3; }
-.editor-danger { margin-top: 12px; }
+.editor > .editor-main { grid-column: 1; }
+.editor > .editor-side { grid-column: 2; display: flex; flex-direction: column; gap: 20px; }
 .editor-title { height: var(--control-h-lg); font-size: 16px; font-weight: 600; }
 
 @media (max-width: 900px) {
-  .editor, .editor:has(> .editor-extra), .editor:has(.code-section) { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
-  .editor-main, .editor-extra { grid-column: auto; }
-  /* 右の列をまとまりのまま並べないのは、削除のカードが配布ファイルのカードより上に来るため */
-  .editor-side { display: contents; }
-  .editor-danger { order: 1; margin-top: 0; }
+  .editor { grid-template-columns: minmax(0, 1fr); }
+  .editor > .editor-main, .editor > .editor-side { grid-column: auto; }
+}
+
+/* ===== アイテムの編集（見出しと保存はヘッダーの帯に置き、本文は横幅いっぱいに広げる） */
+.item-editor {
+  --editor-side-w: clamp(300px, 22vw, 360px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--editor-side-w);
+  /* 右の列が何行目までかを左の列の数で変えず、最後を 1fr にして固定するのは、右の列のほうが高いときに伸びるのを最後の行だけにして、左のカードの間にすき間を作らないため */
+  /* 下の余白を padding だけで取らないのは、右の列がその分だけ早く押し上げられ、ページの最後でヘッダーの下に潜るため */
+  grid-template-rows: repeat(3, auto) minmax(48px, 1fr);
+  column-gap: 24px;
+  align-items: start;
+  max-width: 1920px;
+  margin: 0 auto;
+  padding: 24px 32px;
+}
+/* グリッドをフォームの中で組まないのは、左の列に置く配布ファイルのフォームが保存のフォームの入れ子になるため */
+.editor-form { display: contents; }
+/* カードの間を row-gap で空けないのは、左の列のカードが少ないときに空の行の分まで間が足され、下の余白が種類ごとに変わるため */
+.item-editor .editor-main, .item-editor .editor-extra { grid-column: 1; margin-bottom: 24px; }
+/* 内側に余白を取ってその分だけはみ出させるのは、スクロールさせる箱がカードの影を切り落とすため */
+.item-editor .editor-side {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  position: sticky;
+  top: calc(var(--topbar-h) + 16px);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-height: calc(100dvh - var(--topbar-h) - 32px);
+  margin: -8px;
+  padding: 8px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.editor-link { display: grid; grid-template-columns: minmax(0, 3fr) minmax(220px, 2fr); gap: 16px; align-items: start; }
+
+@media (max-width: 1100px) {
+  .editor-link { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 900px) {
+  .item-editor { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; gap: 20px; padding: 16px 16px 72px; }
+  .item-editor .editor-main, .item-editor .editor-extra { grid-column: auto; margin-bottom: 0; }
+  /* 設定を最後に回すのは、配布するファイルのような本体の欄より先に、公開と配置が割り込んで並ぶため */
+  .item-editor .editor-side { grid-column: auto; grid-row: auto; order: 1; position: static; max-height: none; margin: 0; padding: 0; overflow: visible; }
 }
 
 /* ===== 閲覧 */
