@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { blob, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import type { CodeFiles, GradingStatus } from '../lib/code'
+import type { CodeFiles, ConstraintResult, GradingStatus } from '../lib/code'
 import type { RunResult } from '../lib/sandbox'
 
 const now = sql`(unixepoch())`
@@ -100,10 +100,9 @@ export const codeSubmissions = sqliteTable(
     files: text('files', { mode: 'json' }).$type<CodeFiles>().notNull(),
     // CHECK を付けないのは、完全移行で捨てる一時的なデータで、状態を足すたびにテーブルを作り直すマイグレーションを作らずに済ませるため
     status: text('status').$type<GradingStatus>().notNull().default('none'),
-    score: integer('score'),
     feedback: text('feedback').notNull().default(''),
     output: text('output', { mode: 'json' }).$type<RunResult>(),
-    teacherScore: integer('teacher_score'),
+    verdicts: text('verdicts', { mode: 'json' }).$type<ConstraintResult[]>(),
     teacherComment: text('teacher_comment').notNull().default(''),
     createdAt: integer('created_at').notNull().default(now),
   },

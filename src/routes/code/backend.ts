@@ -23,6 +23,7 @@ export const backend: CodeBackend = {
       .get()
     const code = item && getCodeItem(itemId)
     if (!code || (!access.canManage && !isVisibleItem(itemId))) return null
-    return { access, itemId, settings: { ...item, ...code }, store: codeStore(courseId, itemId) }
+    const period = { opensAt: code.opensAt, closesAt: code.closesAt }
+    return { access, itemId, settings: { ...item, ...code }, period, store: codeStore(courseId, itemId) }
   },
 }

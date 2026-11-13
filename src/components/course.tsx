@@ -357,9 +357,9 @@ const COMPLETION_HINTS: Record<ItemType | 'any', string> = {
   link: '「開いたら完了」は、学生がリンクを開いたときに完了になります。',
   file: '「開いたら完了」はプレビューを表示するかダウンロードしたとき、「最後まで再生したら完了」は動画・音声を最後まで再生したときに完了になります。',
   screen: '画面共有では「なし」か「学生が自分で完了にする」を選べます。',
-  code: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
+  code: '「開いたら完了」は学生がこのアイテムを開いたとき、「制約をすべてクリアしたら完了」は提出が AI の判定ですべての制約を満たしたときに完了になります。',
   bundle: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
-  any: '「開いたら完了」はページ・リンク・ファイルで、「最後まで再生したら完了」は動画・音声のファイルで選べます。',
+  any: '「開いたら完了」はページ・リンク・ファイルで、「最後まで再生したら完了」は動画・音声のファイルで、「制約をすべてクリアしたら完了」はコードで選べます。',
 }
 
 export const CompletionField = ({ type, id, value = 'none', error }: { type?: ItemType; id?: string; value?: string; error?: string }) => (
@@ -383,6 +383,7 @@ const COMPLETION_WAITING: Record<Exclude<Completion, 'none' | 'manual'>, Partial
     bundle: 'このアイテムを開くと完了になります',
   },
   play: { file: '最後まで再生すると完了になります' },
+  clear: { code: '制約をすべてクリアすると完了になります' },
 }
 
 export const CompletionStatus = ({

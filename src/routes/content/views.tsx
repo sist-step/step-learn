@@ -1,5 +1,14 @@
 import { BundleEditPanel, BundleOpen, type BundleView } from '../../components/bundle'
-import { CodeBarActions, CodeGrade, CodeGradingFields, CodeStarterFields, CodeWorkspace, type GradeView } from '../../components/code'
+import {
+  CodeBarActions,
+  CodeGradingCard,
+  CodePeriodCard,
+  CodeStarterCard,
+  CodeSuggest,
+  CodeWorkspace,
+  type ConstraintRow,
+  type SubmissionsView,
+} from '../../components/code'
 import {
   CompletionField,
   CompletionStatus,
@@ -22,7 +31,8 @@ import { Card, DangerRow, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import { bundleBase } from '../../lib/bundle'
-import type { CodeFiles, CodeLanguage } from '../../lib/code'
+import type { CodeFiles, CodeLanguage, Judge } from '../../lib/code'
+import { unixToDateTimeInput } from '../../lib/course-period'
 import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
 import { previewKind } from '../../lib/preview'
@@ -39,11 +49,14 @@ export type ItemInput = {
   starter: CodeFiles
   stdin: string
   criteria: string
-  maxScore: string
+  constraints: ConstraintRow[]
+  /** 提出の期間（日時の入力欄の値） */
+  opensAt: string
+  closesAt: string
 }
 
-/** コードのアイテムの言語と、見ている学生のいちばん新しい提出の採点 */
-export type CodeView = { language: CodeLanguage; canRun: boolean; grade: GradeView | null }
+/** コードのアイテムの言語と、見ている学生の提出。goals は学生に見せるクリアの条件（制約のラベル） */
+export type CodeView = { language: CodeLanguage; canRun: boolean; goals: string[]; submissions: SubmissionsView | null }
 
 export type OutlineItem = Pick<
   Item,
@@ -64,12 +77,15 @@ const hostName = (url: string) => {
   }
 }
 
+const JUDGE_FORM = 'code-judge-form'
+
 export const ItemEditPage = ({
   access,
   item,
   code,
   bundle,
   gradingEnabled,
+  judge,
   sections,
   values,
   errors = {},
@@ -81,6 +97,8 @@ export const ItemEditPage = ({
   bundle?: BundleView
   /** AI が設定されていて、提出を自動で採点するか */
   gradingEnabled: boolean
+  /** 制約ごとの判定をするもの。切り替えられる開発サーバーでだけ渡す */
+  judge?: Judge
   sections: Section[]
   values?: Partial<ItemInput> & { hidden?: number; sectionId?: number; completion?: string }
   errors?: FieldErrors
@@ -98,7 +116,9 @@ export const ItemEditPage = ({
     starter: code?.starter ?? {},
     stdin: code?.stdin ?? '',
     criteria: code?.criteria ?? '',
-    maxScore: String(code?.maxScore ?? ''),
+    constraints: (code?.constraints ?? []).map((c) => ({ label: c.label, text: c.text })),
+    opensAt: unixToDateTimeInput(code?.opensAt),
+    closesAt: unixToDateTimeInput(code?.closesAt),
     ...values,
   }
   const section = sections.find((s) => s.id === item.sectionId)
@@ -154,11 +174,21 @@ export const ItemEditPage = ({
               error={errors.body}
               rows={item.type === 'page' ? 18 : item.type === 'code' ? 10 : 5}
             />
-            {code && <CodeStarterFields language={code.language} starter={v.starter} stdin={v.stdin} errors={errors} />}
-            {code && <CodeGradingFields gradingEnabled={gradingEnabled} criteria={v.criteria} maxScore={v.maxScore} errors={errors} />}
+            {code && gradingEnabled && <CodeSuggest action={`${base}/code/suggest`} />}
           </Card>
+          {code && <CodeStarterCard language={code.language} starter={v.starter} stdin={v.stdin} errors={errors} />}
+          {code && (
+            <CodeGradingCard
+              gradingEnabled={gradingEnabled}
+              criteria={v.criteria}
+              constraints={v.constraints}
+              judge={judge && { current: judge, form: JUDGE_FORM }}
+              errors={errors}
+            />
+          )}
 
           <aside class="editor-side">
+            {code && <CodePeriodCard opensAt={v.opensAt} closesAt={v.closesAt} errors={errors} />}
             <Card heading="公開と配置">
               <div class="stack">
                 <fieldset class="field">
@@ -220,6 +250,7 @@ export const ItemEditPage = ({
 
         {bundle && <BundleEditPanel base={bundleBase(courseId, item.id)} {...bundle} class="editor-extra" />}
 
+        {judge && code && <form id={JUDGE_FORM} method="post" action={`${base}/judge`} hidden />}
         <form id="item-delete-form" method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`} hidden />
       </div>
     </AppShell>
@@ -344,7 +375,7 @@ export const ItemPage = ({
   const codeBar = code ? (
     <ItemBar type="code" crumbs={barCrumbs} title={item.title} hiddenNote={hiddenNote}>
       {editButton}
-      <CodeBarActions base={`${base}/${item.id}/code`} canManage={access.canManage} isStudent={isStudent} grade={code.grade} />
+      <CodeBarActions base={`${base}/${item.id}/code`} canManage={access.canManage} submissions={code.submissions} />
     </ItemBar>
   ) : undefined
 
@@ -354,208 +385,222 @@ export const ItemPage = ({
       {pdf ? (
         <PdfStage src={previewUrl} title={item.fileName ?? 'プレビュー'} />
       ) : code ? (
-        <CodeWorkspace base={`${base}/${item.id}/code`} language={code.language} body={item.body} canRun={code.canRun} />
+        <CodeWorkspace
+          base={`${base}/${item.id}/code`}
+          language={code.language}
+          body={item.body}
+          goals={code.goals}
+          canRun={code.canRun}
+          submissions={code.submissions}
+          completion={
+            isStudent &&
+            isTracked(item) && <CompletionStatus itemId={item.id} type={item.type} completion={item.completion} done={isDone} />
+          }
+        />
       ) : (
         crumbs
       )}
-      <div class="reader">
-        <article class="reader-main">
-          {!pdf && !code && head}
-          {code?.grade && <CodeGrade grade={code.grade} pollUrl={`${base}/${item.id}/code/grading`} />}
+      {/* コードのアイテムで本文の欄を出さないのは、エディターを画面いっぱいに置き、ページをスクロールさせないため */}
+      {code && waitsFor(item, 'view') && <span hidden data-complete-on-view={completeUrl(item)} />}
+      {!code && (
+        <div class="reader">
+          <article class="reader-main">
+            {!pdf && head}
 
-          {item.type === 'link' && embedded && <LinkEmbed url={item.url} title={item.title} />}
+            {item.type === 'link' && embedded && <LinkEmbed url={item.url} title={item.title} />}
 
-          {item.type === 'link' && !embedded && (
-            <LinkCard
-              icon="link"
-              class={`link-card-lg kind-${item.type}`}
-              {...linkOpenAttrs(item.url, item.linkTarget, navHref(item))}
-              {...onOpen(item)}
-            >
-              <span class="file-name">
-                <span class="strong">外部サイトを開く</span>
-                <span class="muted small truncate">{hostName(item.url)}</span>
-              </span>
-              <Button as="span" variant="primary" iconEnd="external">
-                開く
-              </Button>
-            </LinkCard>
-          )}
-
-          {bundle && (
-            <BundleOpen base={bundleBase(id, item.id)} {...bundle} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />
-          )}
-
-          {item.type === 'screen' && (
-            <LinkCard
-              href={`${base}/${item.id}/screen`}
-              icon="monitor"
-              class={`link-card-lg kind-${item.type}`}
-              target="_blank"
-              rel="noopener"
-              data-no-prefetch
-            >
-              <span class="file-name">
-                <span class="strong">画面共有を開く</span>
-                <span class="muted small truncate">別のタブで開きます</span>
-              </span>
-              {sharing && <Chip tone="live">配信中</Chip>}
-              <Button as="span" variant="primary" iconEnd="external">
-                開く
-              </Button>
-            </LinkCard>
-          )}
-
-          {item.type === 'file' && !pdf && (
-            <>
-              <LinkCard icon="file" class={`link-card-lg kind-${item.type}`}>
+            {item.type === 'link' && !embedded && (
+              <LinkCard
+                icon="link"
+                class={`link-card-lg kind-${item.type}`}
+                {...linkOpenAttrs(item.url, item.linkTarget, navHref(item))}
+                {...onOpen(item)}
+              >
                 <span class="file-name">
-                  <span class="strong">ファイルをダウンロード</span>
-                  <span class="file-meta muted small">
-                    <span class="truncate">{item.fileName}</span>
-                    <span>{formatBytes(item.fileSize ?? 0)}</span>
-                  </span>
+                  <span class="strong">外部サイトを開く</span>
+                  <span class="muted small truncate">{hostName(item.url)}</span>
                 </span>
-                <Button href={fileUrl} variant="primary" icon="download" data-no-prefetch download {...onOpen(item)}>
-                  ダウンロード
+                <Button as="span" variant="primary" iconEnd="external">
+                  開く
                 </Button>
               </LinkCard>
-              {textPreview !== null && (
-                <div class="file-preview-text">
-                  <pre>{textPreview}</pre>
-                  {(item.fileSize ?? 0) > TEXT_PREVIEW_MAX && (
-                    <p class="muted small">
-                      先頭の {formatBytes(TEXT_PREVIEW_MAX)} だけを表示しています。全体はダウンロードして確認してください。
-                    </p>
-                  )}
-                </div>
-              )}
-              {preview === 'image' && <img class="file-preview-img" src={previewUrl} alt={item.title} loading="lazy" />}
-              {preview === 'video' && (
-                <video
-                  class="file-preview-video"
-                  src={previewUrl}
-                  controls
-                  preload="metadata"
-                  data-complete-on-ended={waitsFor(item, 'play') ? completeUrl(item) : undefined}
-                />
-              )}
-              {preview === 'audio' && (
-                <audio
-                  class="file-preview-audio"
-                  src={previewUrl}
-                  controls
-                  preload="metadata"
-                  data-complete-on-ended={waitsFor(item, 'play') ? completeUrl(item) : undefined}
-                />
-              )}
-            </>
-          )}
+            )}
 
-          {!code && (item.body || item.type === 'page') && (
-            <div class="reader-sheet">{item.body ? <Markdown source={item.body} /> : <p class="muted">本文はまだありません。</p>}</div>
-          )}
+            {bundle && (
+              <BundleOpen base={bundleBase(id, item.id)} {...bundle} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />
+            )}
 
-          {waitsFor(item, 'view') && opensOnView && <span hidden data-complete-on-view={completeUrl(item)} />}
-
-          {isStudent && isTracked(item) && item.completion !== 'manual' && (
-            <div class="complete-bar">
-              <CompletionStatus itemId={item.id} type={item.type} completion={item.completion} done={isDone} />
-            </div>
-          )}
-
-          {isStudent && isTracked(item) && item.completion === 'manual' && (
-            <form method="post" action={completeUrl(item)} class="complete-bar" data-complete>
-              <Button
-                type="submit"
-                variant={isDone ? 'success' : next ? 'default' : 'primary'}
-                size="lg"
-                icon="check"
-                aria-pressed={isDone ? 'true' : 'false'}
-                data-complete-secondary={!isDone && next ? '' : undefined}
+            {item.type === 'screen' && (
+              <LinkCard
+                href={`${base}/${item.id}/screen`}
+                icon="monitor"
+                class={`link-card-lg kind-${item.type}`}
+                target="_blank"
+                rel="noopener"
+                data-no-prefetch
               >
-                <span data-complete-label>{isDone ? '完了済み' : '完了にする'}</span>
-              </Button>
-              {!isDone && next && (
-                <Button type="submit" variant="primary" size="lg" iconEnd="chevronRight" data-complete-then={navHref(next)}>
-                  完了して次へ
-                </Button>
-              )}
-            </form>
-          )}
-
-          <nav class="pager" aria-label="前後のアイテム">
-            {prev && (
-              <a href={navHref(prev)} class="pager-link pager-prev">
-                <span class="pager-arrow">
-                  <Icon name="chevronLeft" size={18} />
+                <span class="file-name">
+                  <span class="strong">画面共有を開く</span>
+                  <span class="muted small truncate">別のタブで開きます</span>
                 </span>
+                {sharing && <Chip tone="live">配信中</Chip>}
+                <Button as="span" variant="primary" iconEnd="external">
+                  開く
+                </Button>
+              </LinkCard>
+            )}
+
+            {item.type === 'file' && !pdf && (
+              <>
+                <LinkCard icon="file" class={`link-card-lg kind-${item.type}`}>
+                  <span class="file-name">
+                    <span class="strong">ファイルをダウンロード</span>
+                    <span class="file-meta muted small">
+                      <span class="truncate">{item.fileName}</span>
+                      <span>{formatBytes(item.fileSize ?? 0)}</span>
+                    </span>
+                  </span>
+                  <Button href={fileUrl} variant="primary" icon="download" data-no-prefetch download {...onOpen(item)}>
+                    ダウンロード
+                  </Button>
+                </LinkCard>
+                {textPreview !== null && (
+                  <div class="file-preview-text">
+                    <pre>{textPreview}</pre>
+                    {(item.fileSize ?? 0) > TEXT_PREVIEW_MAX && (
+                      <p class="muted small">
+                        先頭の {formatBytes(TEXT_PREVIEW_MAX)} だけを表示しています。全体はダウンロードして確認してください。
+                      </p>
+                    )}
+                  </div>
+                )}
+                {preview === 'image' && <img class="file-preview-img" src={previewUrl} alt={item.title} loading="lazy" />}
+                {preview === 'video' && (
+                  <video
+                    class="file-preview-video"
+                    src={previewUrl}
+                    controls
+                    preload="metadata"
+                    data-complete-on-ended={waitsFor(item, 'play') ? completeUrl(item) : undefined}
+                  />
+                )}
+                {preview === 'audio' && (
+                  <audio
+                    class="file-preview-audio"
+                    src={previewUrl}
+                    controls
+                    preload="metadata"
+                    data-complete-on-ended={waitsFor(item, 'play') ? completeUrl(item) : undefined}
+                  />
+                )}
+              </>
+            )}
+
+            {(item.body || item.type === 'page') && (
+              <div class="reader-sheet">{item.body ? <Markdown source={item.body} /> : <p class="muted">本文はまだありません。</p>}</div>
+            )}
+
+            {waitsFor(item, 'view') && opensOnView && <span hidden data-complete-on-view={completeUrl(item)} />}
+
+            {isStudent && isTracked(item) && item.completion !== 'manual' && (
+              <div class="complete-bar">
+                <CompletionStatus itemId={item.id} type={item.type} completion={item.completion} done={isDone} />
+              </div>
+            )}
+
+            {isStudent && isTracked(item) && item.completion === 'manual' && (
+              <form method="post" action={completeUrl(item)} class="complete-bar" data-complete>
+                <Button
+                  type="submit"
+                  variant={isDone ? 'success' : next ? 'default' : 'primary'}
+                  size="lg"
+                  icon="check"
+                  aria-pressed={isDone ? 'true' : 'false'}
+                  data-complete-secondary={!isDone && next ? '' : undefined}
+                >
+                  <span data-complete-label>{isDone ? '完了済み' : '完了にする'}</span>
+                </Button>
+                {!isDone && next && (
+                  <Button type="submit" variant="primary" size="lg" iconEnd="chevronRight" data-complete-then={navHref(next)}>
+                    完了して次へ
+                  </Button>
+                )}
+              </form>
+            )}
+
+            <nav class="pager" aria-label="前後のアイテム">
+              {prev && (
+                <a href={navHref(prev)} class="pager-link pager-prev">
+                  <span class="pager-arrow">
+                    <Icon name="chevronLeft" size={18} />
+                  </span>
+                  <span class="pager-text">
+                    <span class="pager-label muted small">前へ</span>
+                    <span class="pager-title truncate">{prev.title}</span>
+                  </span>
+                </a>
+              )}
+              <a href={next ? navHref(next) : `/courses/${id}`} class="pager-link pager-next">
                 <span class="pager-text">
-                  <span class="pager-label muted small">前へ</span>
-                  <span class="pager-title truncate">{prev.title}</span>
+                  <span class="pager-label muted small">{next ? '次へ' : 'コースへ'}</span>
+                  <span class="pager-title truncate">{next ? next.title : access.course.title}</span>
+                </span>
+                <span class="pager-arrow">
+                  <Icon name="chevronRight" size={18} />
                 </span>
               </a>
-            )}
-            <a href={next ? navHref(next) : `/courses/${id}`} class="pager-link pager-next">
-              <span class="pager-text">
-                <span class="pager-label muted small">{next ? '次へ' : 'コースへ'}</span>
-                <span class="pager-title truncate">{next ? next.title : access.course.title}</span>
-              </span>
-              <span class="pager-arrow">
-                <Icon name="chevronRight" size={18} />
-              </span>
-            </a>
-          </nav>
-        </article>
+            </nav>
+          </article>
 
-        <aside class="reader-outline" aria-label="コースの目次">
-          <div class="outline-head">
-            <a href={`/courses/${id}`} class="strong truncate">
-              {access.course.title}
-            </a>
-            {isStudent && tracked.length > 0 && (
-              <span class="muted small">
-                <span data-progress-done>{tracked.filter((o) => done.has(o.id)).length}</span> / {tracked.length} 完了
-              </span>
-            )}
-          </div>
-          {outlineSections.map(({ section: s, items }) => (
-            <div class={cx('outline-section', items.length === 0 && 'is-empty')}>
-              <div class={cx('outline-title', !!s.hidden && 'is-hidden')}>
-                {s.title}
-                {!!s.hidden && <Icon name="eyeSlash" size={12} />}
-                {items.length === 0 && <span class="outline-count">0</span>}
-              </div>
-              {items.length > 0 && (
-                <ul>
-                  {items.map((o) => (
-                    <li>
-                      <a
-                        href={o.type === 'screen' ? `${navHref(o)}/screen` : navHref(o)}
-                        class={cx('outline-link', o.id === item.id && 'active', isHidden(o) && 'is-hidden')}
-                        {...(opensNewTab(o) ? { target: '_blank', rel: 'noopener', 'data-no-prefetch': '' } : {})}
-                        {...(o.type === 'link' ? linkOpenAttrs(o.url, o.linkTarget, navHref(o)) : {})}
-                        aria-current={o.id === item.id ? 'page' : undefined}
-                        {...(o.type === 'link' && o.linkTarget !== 'embed' ? onOpen(o) : {})}
-                      >
-                        {isTracked(o) ? (
-                          <span class={cx('outline-dot', done.has(o.id) && 'done')} data-outline-dot={o.id}>
-                            {done.has(o.id) && <Icon name="check" size={10} />}
-                          </span>
-                        ) : (
-                          <Icon name={ITEM_ICONS[o.type]} size={14} class="outline-kind" />
-                        )}
-                        <span class="truncate">{o.title}</span>
-                        {!!o.hidden && <Icon name="eyeSlash" size={12} class="outline-hidden" />}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
+          <aside class="reader-outline" aria-label="コースの目次">
+            <div class="outline-head">
+              <a href={`/courses/${id}`} class="strong truncate">
+                {access.course.title}
+              </a>
+              {isStudent && tracked.length > 0 && (
+                <span class="muted small">
+                  <span data-progress-done>{tracked.filter((o) => done.has(o.id)).length}</span> / {tracked.length} 完了
+                </span>
               )}
             </div>
-          ))}
-        </aside>
-      </div>
+            {outlineSections.map(({ section: s, items }) => (
+              <div class={cx('outline-section', items.length === 0 && 'is-empty')}>
+                <div class={cx('outline-title', !!s.hidden && 'is-hidden')}>
+                  {s.title}
+                  {!!s.hidden && <Icon name="eyeSlash" size={12} />}
+                  {items.length === 0 && <span class="outline-count">0</span>}
+                </div>
+                {items.length > 0 && (
+                  <ul>
+                    {items.map((o) => (
+                      <li>
+                        <a
+                          href={o.type === 'screen' ? `${navHref(o)}/screen` : navHref(o)}
+                          class={cx('outline-link', o.id === item.id && 'active', isHidden(o) && 'is-hidden')}
+                          {...(opensNewTab(o) ? { target: '_blank', rel: 'noopener', 'data-no-prefetch': '' } : {})}
+                          {...(o.type === 'link' ? linkOpenAttrs(o.url, o.linkTarget, navHref(o)) : {})}
+                          aria-current={o.id === item.id ? 'page' : undefined}
+                          {...(o.type === 'link' && o.linkTarget !== 'embed' ? onOpen(o) : {})}
+                        >
+                          {isTracked(o) ? (
+                            <span class={cx('outline-dot', done.has(o.id) && 'done')} data-outline-dot={o.id}>
+                              {done.has(o.id) && <Icon name="check" size={10} />}
+                            </span>
+                          ) : (
+                            <Icon name={ITEM_ICONS[o.type]} size={14} class="outline-kind" />
+                          )}
+                          <span class="truncate">{o.title}</span>
+                          {!!o.hidden && <Icon name="eyeSlash" size={12} class="outline-hidden" />}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </aside>
+        </div>
+      )}
       <CourseLiveSync courseId={id} revision={revision} />
     </AppShell>
   )

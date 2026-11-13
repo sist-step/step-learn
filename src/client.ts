@@ -214,7 +214,18 @@ document.addEventListener(
     e.preventDefault()
     e.stopImmediatePropagation()
     unplaced.forEach(([, message]) => toast(message!, 'error'))
-    $$<HTMLElement>('[aria-invalid="true"]', form)[0]?.focus()
+    const invalid = $$<HTMLElement>('[aria-invalid="true"]', form)
+    for (const control of invalid) {
+      const details = control.closest('details')
+      if (details) details.open = true
+    }
+    const hiddenPanel = invalid[0]?.closest<HTMLElement>('[role="tabpanel"][hidden]')
+    if (hiddenPanel) document.querySelector<HTMLElement>(`[role="tab"][aria-controls="${hiddenPanel.id}"]`)?.click()
+    else if (invalid[0]) {
+      invalid[0].focus()
+      // フォーカスできない要素（行をまとめた fieldset など）は、エラーが見える位置まで動かすだけにする
+      if (document.activeElement !== invalid[0]) invalid[0].scrollIntoView({ block: 'center' })
+    }
   },
   true,
 )
@@ -1087,10 +1098,15 @@ function initMarkdownEditors() {
 let codeEditor: Promise<typeof import('./code-editor')> | null = null
 function initCodeEditors() {
   void codeEditor?.then(({ releaseDetachedCodeEditors }) => releaseDetachedCodeEditors())
-  if (!document.querySelector('[data-code-input]:not([data-code-ready]), [data-code-grade]:not([data-code-watching])')) return
+  if (
+    !document.querySelector(
+      '[data-code-input]:not([data-code-ready]), [data-code-grade]:not([data-code-watching]), [data-code-submit-timer]:not([data-code-counting])',
+    )
+  )
+    return
   codeEditor ??= import('./code-editor')
   codeEditor
-    .then(({ mountCodeEditors }) => mountCodeEditors(toast))
+    .then(({ mountCodeEditors }) => mountCodeEditors(toast, confirmDialog))
     .catch(() => {
       codeEditor = null
       toast('エディターを読み込めませんでした。', 'error')

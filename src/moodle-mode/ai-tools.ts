@@ -14,17 +14,7 @@ import {
   type AiAgentTool,
   type AiToolContext,
 } from '../lib/ai-tool-kit'
-import {
-  CODE_FILES,
-  CODE_LANGUAGES,
-  CODE_LANGUAGE_LABELS,
-  DEFAULT_MAX_SCORE,
-  DEFAULT_STARTER,
-  MAX_CODE_LENGTH,
-  MAX_MAX_SCORE,
-  MAX_STDIN_LENGTH,
-  filesFor,
-} from '../lib/code'
+import { CODE_FILES, CODE_LANGUAGES, CODE_LANGUAGE_LABELS, DEFAULT_STARTER, MAX_CODE_LENGTH, MAX_STDIN_LENGTH, filesFor } from '../lib/code'
 import { config } from '../lib/config'
 import { isHttpUrl } from '../lib/forms'
 import { availableCodeLanguages } from '../lib/sandbox'
@@ -152,7 +142,6 @@ function itemDetail(item: MItem) {
       starter: settings.starter,
       stdin: settings.stdin,
       criteria: settings.criteria,
-      max_score: settings.maxScore,
     }
   return { description: item.body.slice(0, MAX_BODY_LENGTH) }
 }
@@ -216,7 +205,7 @@ const CREATABLE_TYPES = ['link', 'code'] as const
 
 const createItem = defineTool(
   'create_item',
-  'セクションの末尾にアイテムを追加する。作れるのはリンク（Moodle の URL の活動）とコード（学生がブラウザでコードを書いて提出し、AI が採点する課題）。学生には非表示の状態で作られる。',
+  'セクションの末尾にアイテムを追加する。作れるのはリンク（Moodle の URL の活動）とコード（学生がブラウザでコードを書いて提出し、AI が講評する課題）。学生には非表示の状態で作られる。',
   z.object({
     course_id: id('コースの ID'),
     section_id: id('追加先のセクションの ID'),
@@ -235,7 +224,6 @@ const createItem = defineTool(
         ),
     ),
     criteria: z.optional(describedString('コードの採点基準。AI の採点に使い、学生には見せない', 5000)),
-    max_score: z.optional(z.int().check(z.minimum(1), z.maximum(MAX_MAX_SCORE), z.describe('コードの満点'))),
   }),
   async (c, args) => {
     const loaded = await manageable(c, args.course_id)
@@ -271,7 +259,6 @@ const createItem = defineTool(
           starter: DEFAULT_STARTER[language],
           stdin: '',
           criteria: args.criteria ?? '',
-          maxScore: args.max_score ?? DEFAULT_MAX_SCORE,
         },
       })
     }
@@ -402,7 +389,6 @@ const updateItemArgs = z.object({
   section_id: z.optional(id('移し先のセクションの ID（同じコースの中だけ）。移すと末尾に入る')),
   body: z.optional(describedString('新しい問題文（コードだけ。Markdown）。全文を書く', 100_000)),
   criteria: z.optional(describedString('新しい採点基準（コードだけ）', 5000)),
-  max_score: z.optional(z.int().check(z.minimum(1), z.maximum(MAX_MAX_SCORE), z.describe('新しい満点（コードだけ）'))),
   starter: z.optional(
     starterSchema.check(
       z.describe('最初に入れておくコード（コードだけ）。変えるファイルだけを全文で書く。web は html / css / js、python は py'),
@@ -429,9 +415,9 @@ function checkItemArgs(loaded: LoadedCourse, item: MItem, args: UpdateItemArgs) 
   if ((args.url !== undefined || args.link_target !== undefined) && item.kind !== 'link')
     return 'URL と開き方はリンクのアイテムでだけ変えられます。'
   if (args.url !== undefined && !isHttpUrl(args.url.trim())) return 'URL は http:// か https:// で始めてください。'
-  const codeArgs = [args.body, args.criteria, args.max_score, args.starter, args.stdin]
+  const codeArgs = [args.body, args.criteria, args.starter, args.stdin]
   if (codeArgs.some((v) => v !== undefined) && !codeKind(item))
-    return '問題文・採点基準・満点・最初のコード・入力の例は、コードのアイテムでだけ変えられます。'
+    return '問題文・採点基準・最初のコード・入力の例は、コードのアイテムでだけ変えられます。'
   if (args.section_id !== undefined && !loaded.sections.some((s) => s.id === args.section_id))
     return '移し先のセクションが、同じコースにありません。'
   return null
@@ -456,7 +442,6 @@ function itemChanges(loaded: LoadedCourse, item: MItem, args: UpdateItemArgs) {
           ),
           ...changed('入力の例', code.stdin, code.language === 'python' ? args.stdin : undefined, true),
           ...changed('採点基準', code.criteria, args.criteria, true),
-          ...changed('満点', String(code.maxScore), args.max_score === undefined ? undefined : String(args.max_score)),
         ]
       : []),
   ]
@@ -464,7 +449,7 @@ function itemChanges(loaded: LoadedCourse, item: MItem, args: UpdateItemArgs) {
 
 const updateItem = defineConfirmTool(
   'update_item',
-  'リンクのタイトル・URL・開き方・セクション、コードのタイトル・問題文・最初のコード・採点基準・満点を変える。利用者が確認カードで承認してから実行される。変えない欄は省く。',
+  'リンクのタイトル・URL・開き方・セクション、コードのタイトル・問題文・最初のコード・採点基準を変える。利用者が確認カードで承認してから実行される。変えない欄は省く。',
   updateItemArgs,
   async (c, args) => {
     const found = await courseOfItem(c, args.item_id, args.course_id)
@@ -511,7 +496,6 @@ const updateItem = defineConfirmTool(
         starter: filesFor(code.language, { ...code.starter, ...args.starter }),
         stdin: code.language === 'python' ? (args.stdin ?? code.stdin) : '',
         criteria: args.criteria ?? code.criteria,
-        maxScore: args.max_score ?? code.maxScore,
       })
       // リンク先を送り直すのは、save_url が URL を必須にしているため。Moodle の画面で書き換えられていても /m/<key> に戻す
       if (title !== item.title) await api.saveUrl({ ...activity, externalurl: extraUrl(c, item.extraKey!), display: 'keep' })

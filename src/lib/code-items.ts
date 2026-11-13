@@ -1,5 +1,5 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
-import { filesFor, type CodeFiles, type CodeLanguage } from './code'
+import { filesFor, type CodeConstraint, type CodeFiles, type CodeLanguage, type SubmitPeriod } from './code'
 import type { CodeStore } from './code-store'
 import { db, type DB } from './db'
 import { codeDrafts, codeItems, codeSubmissions, enrollments, users } from './schema'
@@ -9,11 +9,18 @@ export const getCodeItem = (itemId: number) => db.select().from(codeItems).where
 export const updateCodeItem = (
   itemId: number,
   language: CodeLanguage,
-  { starter, stdin, criteria, maxScore }: { starter: CodeFiles; stdin: string; criteria: string; maxScore: number },
+  {
+    starter,
+    stdin,
+    criteria,
+    constraints,
+    opensAt,
+    closesAt,
+  }: { starter: CodeFiles; stdin: string; criteria: string; constraints: CodeConstraint[] } & SubmitPeriod,
 ) =>
   db
     .update(codeItems)
-    .set({ starter: filesFor(language, starter), stdin: language === 'python' ? stdin : '', criteria, maxScore })
+    .set({ starter: filesFor(language, starter), stdin: language === 'python' ? stdin : '', criteria, constraints, opensAt, closesAt })
     .where(eq(codeItems.itemId, itemId))
     .run()
 
@@ -21,8 +28,7 @@ const SUMMARY = {
   id: codeSubmissions.id,
   userId: codeSubmissions.userId,
   status: codeSubmissions.status,
-  score: codeSubmissions.score,
-  teacherScore: codeSubmissions.teacherScore,
+  verdicts: codeSubmissions.verdicts,
   createdAt: codeSubmissions.createdAt,
 }
 
@@ -61,8 +67,7 @@ export function codeStore(courseId: number, itemId: number): CodeStore {
     listSubmissions: () => db.select(SUMMARY).from(codeSubmissions).where(ofItem).orderBy(desc(codeSubmissions.id)).limit(5000).all(),
     listUserSubmissions: (userId) =>
       db.select(SUMMARY).from(codeSubmissions).where(ofUser(userId)).orderBy(desc(codeSubmissions.id)).limit(100).all(),
-    review: (id, teacherScore, teacherComment) =>
-      void db.update(codeSubmissions).set({ teacherScore, teacherComment }).where(byId(id)).run(),
+    review: (id, teacherComment) => void db.update(codeSubmissions).set({ teacherComment }).where(byId(id)).run(),
     setStatus: (id, status) => void db.update(codeSubmissions).set({ status }).where(byId(id)).run(),
     listStudents: () =>
       db

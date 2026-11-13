@@ -135,10 +135,12 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | --- | --- |
 | `CodeInput` | コードの入力欄。`src/code-editor.ts` が中の textarea を CodeMirror のエディター（行番号・色分け・かっこの補完）に置き換える。`syntax`（`html` / `css` / `js` / `py` / `text`）/ `rows`（最低の高さ）/ `fill`（親の高さいっぱいに広げ、枠を消す）。送信されるのは textarea（`name`）の値で、書き換えるたびに textarea に `input` イベントが出る |
 | `CodeField` | ラベル・エラー・ヒント付きの `CodeInput`（`label` / `name` / `syntax` / `value` / `rows` / `error` / `hint`）。コードを受け取る入力欄では `TextAreaField` ではなくこれを使う |
-| `CodeStarterFields` / `CodeGradingFields` | アイテムの編集画面の「最初のコード」（言語ごとのファイルと、Python の入力の例）と「採点」（採点基準・満点）の欄。通常モードの編集画面と、Moodle モードの種類ごとの入力欄（`extra-kinds.tsx`）の両方で使う |
-| `CodeBarActions` | ヘッダーの帯（`ItemBar`）に置く、提出の一覧への入口（教師）と、提出の状況・提出ボタン（学生） |
-| `CodeGrade` | 学生に見せる提出と採点の結果のカード。採点中は `code-editor.ts` が終わりを待ち、カードとヘッダーの帯の表示を取り直す |
-| `CodeWorkspace` | コードのアイテムの本体（`AppShell` の `topbar` と一緒に使う）。左に問題文とファイルのタブ付きのエディター、右にプレビューとコンソール（Web）か入力と実行結果（Python）。コードはサーバーで描かず、`code-editor.ts` が `${base}/state` から読み込み、書きかけのコードを `${base}/draft` に自動で保存する。提出は `CODE_FORM` のフォームの送信（ヘッダーの帯のボタンに `form={CODE_FORM}` を付ける） |
+| `CodeStarterFields` / `CodeGradingFields` | Moodle モードの種類ごとの入力欄（`extra-kinds.tsx`）で使う「最初のコード」（言語ごとのファイルと、Python の入力の例）と「AI の講評」（採点基準）の欄。Moodle モードには制約がないので、AI は講評だけを返す |
+| `CodePeriodCard` | 通常モードの編集画面の右の列に置く「提出の期間」のカード（開始日時 `opens_at`・終了日時 `closes_at` の `datetime-local`。どちらも必須で、長さは `MAX_SUBMIT_PERIOD`（24 時間）まで）。期間の外は提出だけを止め、問題とエディターは開ける |
+| `CodeSuggest` / `CodeStarterCard` / `CodeGradingCard` | 通常モードの編集画面の部品。`CodeSuggest` は問題のカードの一番下に置く、問題文から最初のコードと制約の下書きを AI に作らせる 1 行（`action` に問題文を送り、`code-editor.ts` が返ってきた最初のコードと制約を同じフォームの欄に入れ、最初のコードのカードまで移動する）。`CodeStarterCard` はファイルのタブで切り替えるエディターと、Web なら学生に見えるページのプレビューを横に並べたカード（「ひな形に戻す」付き。エラーのあるファイルのタブを最初に選び、ブラウザの検証でエラーが出たときは `client.ts` がそのタブに切り替える）。`CodeGradingCard` は「判定」のカードで、制約（1 行ずつ、学生にも見せるラベル `constraint_label[]` と、AI だけが使う判定の内容 `constraint_text[]`（空ならラベルで判定）。1 つ以上が必須。エラーは fieldset の `constraints` に出す）と補足の欄。開発サーバーでは `judge` を渡すと、制約の判定をするもの（AI / Jev）の切り替えを出す |
+| `CodeBarActions` | ヘッダーの帯（`ItemBar`）に置く、提出の一覧への入口（教師）と、提出の状況（「クリア」「3 / 4 クリア」「判定中…」。押すと右の枠の提出のタブを開く）・提出ボタン（学生、`submissions`）。続けて提出できないあいだは、提出ボタンを押せなくして「あと 42 秒」と出し、`code-editor.ts` が数え直す |
+| `CodeSubmissions` / `VerdictList` | 学生の提出のタブの中身（次に提出できるまでの残り・完了の状態・いちばん新しい提出の判定・開いて判定を見られるこれまでの提出）と、制約ごとの ○ / △ / × と理由の一覧（学生にはラベルだけ、`VerdictList` に `showText` を付けた教師の提出画面では判定の内容も出す。Jev の判定は理由の代わりに確からしさを出す）。判定中は `code-editor.ts` が終わりを待ち、タブの中身とヘッダーの帯の表示を取り直す |
+| `CodeWorkspace` | コードのアイテムの本体（`AppShell` の `topbar` と一緒に使う）。ヘッダーの下いっぱいに置き、ページはスクロールしない（下に本文や前後のアイテムを置かない）。左に問題文と「クリアの条件」（`goals`、制約のラベル）とファイルのタブ付きのエディター、右にプレビューとコンソール（Web）か入力と実行結果（Python）。学生には `submissions`（`lib/code-grader.ts` の `submissionsOf`）を渡し、右の枠を「プレビュー / 提出」のタブにする（判定中は提出のタブから始める。`completion` は提出のタブに出す完了の状態）。コードはサーバーで描かず、`code-editor.ts` が `${base}/state` から読み込み、書きかけのコードを `${base}/draft` に自動で保存する。提出は `CODE_FORM` のフォームの送信（ヘッダーの帯のボタンに `form={CODE_FORM}` を付ける） |
 
 ### ファイル自動配布 — `src/components/bundle.tsx`
 

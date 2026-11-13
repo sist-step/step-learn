@@ -1,6 +1,6 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import type { Context } from 'hono'
-import { DEFAULT_MAX_SCORE, isCodeLanguage, type CodeFiles } from '../lib/code'
+import { isCodeLanguage, type CodeConstraint, type CodeFiles } from '../lib/code'
 import { createGrader } from '../lib/code-grader'
 import type { CodeSettings, CodeStore } from '../lib/code-store'
 import { intParam } from '../lib/http'
@@ -28,7 +28,8 @@ export function codeSettingsOf(data: Record<string, unknown>, title = text(data.
     starter: typeof data.starter === 'object' && data.starter !== null ? (data.starter as CodeFiles) : {},
     stdin: text(data.stdin),
     criteria: text(data.criteria),
-    maxScore: Number(data.maxScore) || DEFAULT_MAX_SCORE,
+    // Moodle モードの入力欄には制約がないので、制約で採点するのは、通常モードと同じ形の data を持つアイテムだけ
+    constraints: Array.isArray(data.constraints) ? (data.constraints as CodeConstraint[]) : [],
   }
 }
 
@@ -36,8 +37,7 @@ const SUMMARY = {
   id: codeSubmissions.id,
   userId: codeSubmissions.userId,
   status: codeSubmissions.status,
-  score: codeSubmissions.score,
-  teacherScore: codeSubmissions.teacherScore,
+  verdicts: codeSubmissions.verdicts,
   createdAt: codeSubmissions.createdAt,
 }
 
@@ -76,8 +76,7 @@ function codeStore(key: string): CodeStore {
     listSubmissions: () => db.select(SUMMARY).from(codeSubmissions).where(ofItem).orderBy(desc(codeSubmissions.id)).limit(5000).all(),
     listUserSubmissions: (userId) =>
       db.select(SUMMARY).from(codeSubmissions).where(ofUser(userId)).orderBy(desc(codeSubmissions.id)).limit(100).all(),
-    review: (id, teacherScore, teacherComment) =>
-      void db.update(codeSubmissions).set({ teacherScore, teacherComment }).where(byId(id)).run(),
+    review: (id, teacherComment) => void db.update(codeSubmissions).set({ teacherComment }).where(byId(id)).run(),
     setStatus: (id, status) => void db.update(codeSubmissions).set({ status }).where(byId(id)).run(),
     // コースの学生を並べないのは、参加者が Moodle にあり、STEP Learn は自分にログインした人しか知らないため。提出した人だけを並べる
     listStudents: () =>
@@ -108,7 +107,7 @@ const grader = createGrader({
   save: (id, result, output) =>
     db
       .update(codeSubmissions)
-      .set({ ...result, output })
+      .set({ ...result, verdicts: result.status === 'graded' ? result.verdicts : null, output })
       .where(eq(codeSubmissions.id, id))
       .run(),
   ledger: aiLedger,
@@ -127,6 +126,7 @@ export const codeBackend: CodeBackend = {
     const item = outlineOf(loaded).find((it) => it.id === itemId && !it.locked && it.extra?.type === CODE_KIND)
     const settings = item?.extra && codeSettingsOf(item.extra.data, item.title)
     if (!item?.extraKey || !settings) return null
-    return { access: loaded.access, itemId, settings, store: codeStore(item.extraKey) }
+    // 提出の期間を設けないのは、Moodle モードの入力欄に期間の欄がないため
+    return { access: loaded.access, itemId, settings, period: null, store: codeStore(item.extraKey) }
   },
 }

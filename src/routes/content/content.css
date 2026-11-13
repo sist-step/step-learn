@@ -29,11 +29,14 @@
 /* 右の列を左のカードと同じ行に収めないのは、右の列のほうが高いと、左のカードの間にすき間ができるため */
 .editor:has(> .editor-extra) { grid-template-rows: auto 1fr; }
 .editor:has(> .editor-extra) .editor-side { grid-row: span 2; }
+/* 始まりの行まで決めるのは、コードのカードが右の列より前に並ぶので、自動の配置では右の列が最後のカードの行に置かれるため */
+.editor:has(.code-section) { grid-template-rows: auto auto 1fr; }
+.editor:has(.code-section) .editor-side { grid-row: 1 / span 3; }
 .editor-danger { margin-top: 12px; }
 .editor-title { height: var(--control-h-lg); font-size: 16px; font-weight: 600; }
 
 @media (max-width: 900px) {
-  .editor, .editor:has(> .editor-extra) { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+  .editor, .editor:has(> .editor-extra), .editor:has(.code-section) { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
   .editor-main, .editor-extra { grid-column: auto; }
   /* 右の列をまとまりのまま並べないのは、削除のカードが配布ファイルのカードより上に来るため */
   .editor-side { display: contents; }
