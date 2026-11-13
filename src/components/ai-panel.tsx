@@ -212,7 +212,7 @@ const ToolLine = ({ label, touched }: { label?: string; touched?: AiTouched }) =
 const Intro = ({ models }: { models: readonly AiModelOption[] }) => (
   <div class="ai-intro" data-ai-intro>
     <Mascot act="greet" size={76} stand={false} />
-    <h2 class="ai-intro-title">何をお手伝いしましょうか？</h2>
+    <h2 class="ai-intro-title">なにかお手伝いできますか？</h2>
     <div class="ai-suggestions">
       {SUGGESTIONS.map((s) => (
         <button type="button" class="ai-suggestion" data-ai-suggest={s}>
