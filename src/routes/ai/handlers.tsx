@@ -4,7 +4,7 @@ import { stream } from 'hono/streaming'
 import { AiPanel, type AiCardChange, type AiChatEntry, type AiPanelProps } from '../../components/ai-panel'
 import { AI_MODEL_LABELS, AI_MODELS, aiProvider, isAiModel, isProviderEnabled } from '../../lib/ai'
 import { quotaNote, quotaProblem, type AiAgent, type AiAgentEvent } from '../../lib/ai-agent'
-import type { AiChatContent } from '../../lib/ai-chat'
+import { chatRevision, type AiChatContent } from '../../lib/ai-chat'
 import type { AiChange } from '../../lib/ai-tool-kit'
 import { diffHunks, diffLines } from '../../lib/diff'
 import { firstError, validate } from '../../lib/forms'
@@ -58,6 +58,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     const chat = chats.currentChat(user.id)
     return {
       models: enabledModels().map((m) => ({ value: m, label: AI_MODEL_LABELS[m], problem: quotaProblem(ledger.getQuota(user.id, m)) })),
+      revision: chatRevision(chat),
       chat: chat && {
         id: chat.id,
         modelLabel: AI_MODEL_LABELS[chat.model],
@@ -71,11 +72,19 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
   /** AppShell の右に出すパネル。使えるかは呼ぶ側で確かめる */
   const renderPanel = (user: User) => <AiPanel {...panelProps(user)} />
 
-  /** パネルだけのページ。client.ts が応答のあとや、応答の作成中に開いたときに、パネルを取り直すのに使う */
+  /** パネルだけのページ。client.ts が応答のあとや、ほかのタブでの発言を反映するときに、パネルを取り直すのに使う */
   async function show(c: Context<AppEnv>) {
     const user = c.var.user!
     if (!(await canUse(c))) return c.notFound()
     return c.render(<AiPanel {...panelProps(user)} />, { title: 'AI アシスタント' })
+  }
+
+  /** パネルの版と応答の作成中か。client.ts が、パネルを取り直すべきかを確かめるのに使う */
+  async function state(c: Context<AppEnv>) {
+    const user = c.var.user!
+    if (!(await canUse(c))) return c.notFound()
+    c.header('Cache-Control', 'no-store')
+    return c.json({ revision: chatRevision(chats.currentChat(user.id)), busy: agent.isRunning(user.id) })
   }
 
   async function send(c: Context<AppEnv>) {
@@ -84,9 +93,11 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     const result = validate('aiMessage', await readForm(c))
     return streamEvents(c, async (emit) => {
       if (!result.ok) return emit({ type: 'error', message: firstError(result.errors), retract: true })
-      const { message, model, chat: chatId, page } = result.values
+      const { message, model, chat: chatId, page, revision } = result.values
 
       let chat = chats.currentChat(user.id)
+      // 古い画面からの発言を今のチャットに足さないのは、利用者が読んでいない発言を踏まえた応答になり、チャットがないと思って送ると、ほかのタブのチャットを消して始めてしまうため
+      if (revision !== chatRevision(chat)) return emit({ type: 'outdated' })
       if (chatId) {
         if (!chat || String(chat.id) !== chatId) {
           emit({ type: 'error', message: 'このチャットは閉じられています。新しいチャットで送り直してください。', retract: true })
@@ -140,12 +151,14 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
   async function close(c: Context<AppEnv>) {
     const user = c.var.user!
     if (!(await canUse(c))) return c.notFound()
-    chats.closeChat(user.id)
+    const chatId = field(await readForm(c), 'chat', 20)
+    // 開いていたチャットでなければ閉じないのは、ほかのタブで始めた、まだ見ていないチャットを消さないため
+    if (String(chats.currentChat(user.id)?.id ?? '') === chatId) chats.closeChat(user.id)
     if (wantsJson(c)) return c.json({ ok: true })
     return c.redirect(sameOriginReferer(c, '/dashboard'), 303)
   }
 
-  return { renderPanel, show, send, decide, close }
+  return { renderPanel, show, state, send, decide, close }
 }
 
 export type AiHandlers = ReturnType<typeof createAiHandlers>
@@ -153,6 +166,7 @@ export type AiHandlers = ReturnType<typeof createAiHandlers>
 export function aiRoutes(h: AiHandlers) {
   const app = new Hono<AppEnv>()
   app.get('/chat', h.show)
+  app.get('/chat/state', h.state)
   app.post('/chat', h.send)
   app.post('/chat/confirm', h.decide)
   app.post('/chat/close', h.close)
