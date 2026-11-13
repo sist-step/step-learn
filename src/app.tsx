@@ -9,7 +9,8 @@ import { session } from './lib/auth'
 import { SYNC_BODY_LIMIT } from './lib/bundle-sync'
 import { config } from './lib/config'
 import { touchCourse } from './lib/courses'
-import { flashMiddleware, limitBody } from './lib/http'
+import { field, flashMiddleware, limitBody, readForm } from './lib/http'
+import { operationLog, recordPrefetchedView } from './lib/operation-log'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE } from './lib/storage'
 import type { AppEnv } from './lib/types'
 import { renderer } from './renderer'
@@ -54,6 +55,12 @@ app.post('/courses/:id/*', async (c, next) => {
   const id = Number(c.req.param('id'))
   // ログインしていない要求を除くのは、requireAuth のログイン画面へのリダイレクト（302）も 400 未満なので、誰でも任意のコースを進められてしまうため
   if (c.var.user && Number.isSafeInteger(id) && c.res.status < 400 && !PERSONAL_POST.test(c.req.path)) touchCourse(id)
+})
+
+app.use(operationLog)
+app.post('/views', async (c) => {
+  recordPrefetchedView(c, field(await readForm(c), 'path', 500))
+  return c.body(null, 204)
 })
 
 app.get('/', (c) => c.redirect(c.var.user ? '/dashboard' : '/login'))
