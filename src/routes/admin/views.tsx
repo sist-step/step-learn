@@ -6,18 +6,19 @@ import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Block, Card, Stat, Stats, Table } from '../../components/card'
 import { Styles } from '../../components/style'
-import { Alert, Avatar, EmptyState, PageHeader, Person, TabPanel, Tabs, formatDate, userMeta } from '../../components/ui'
+import { Alert, Avatar, Chip, EmptyState, PageHeader, Person, TabPanel, Tabs, formatDate, userMeta } from '../../components/ui'
 import { AI_MODEL_LABELS, AI_PROVIDER_LABELS, AI_PROVIDER_MODELS, isAiModel, type AiProvider } from '../../lib/ai-models'
 import type { AiOverview, AiUserUsage } from '../../lib/ai-ledger'
 import type { FieldErrors } from '../../lib/forms'
-import { ROLE_LABELS, type Role } from '../../lib/types'
+import { LOG_KINDS, LOG_KIND_LABELS, LOG_RETENTION_DAYS, ROLE_LABELS, type LogKind, type Role } from '../../lib/types'
 
-type Tab = 'users' | 'courses' | 'ai'
+type Tab = 'users' | 'courses' | 'ai' | 'logs'
 
 const TABS: { tab: Tab; href: string; label: string }[] = [
   { tab: 'users', href: '/admin', label: 'ユーザー' },
   { tab: 'courses', href: '/admin/courses', label: 'コース' },
   { tab: 'ai', href: '/admin/ai', label: 'AI' },
+  { tab: 'logs', href: '/admin/logs', label: '操作ログ' },
 ]
 
 const ROLE_OPTIONS = (['student', 'teacher', 'admin'] as Role[]).map((r) => ({ value: r, label: ROLE_LABELS[r] }))
@@ -41,7 +42,7 @@ const AdminShell = ({ tab, moodleAdminUrl, children }: { tab: Tab; moodleAdminUr
     </AppShell>
   ) : (
     <AppShell>
-      <PageHeader title="管理" description="ユーザー・コース・AI の利用をまとめて管理します。" />
+      <PageHeader title="管理" description="ユーザー・コース・AI の利用と操作ログをまとめて管理します。" />
       <Tabs label="管理メニュー" items={TABS.map((t) => ({ href: t.href, label: t.label, active: tab === t.tab }))} />
       <TabPanel>{children}</TabPanel>
     </AppShell>
@@ -336,3 +337,183 @@ export const AiPage = ({
     </Block>
   </AdminShell>
 )
+
+// ---------------------------------------------------------------- 操作ログ
+
+export type LogRow = {
+  id: number
+  createdAt: number
+  kind: LogKind
+  action: string
+  label: string
+  path: string
+  target: string | null
+  ip: string
+  userAgent: string | null
+  courseId: number | null
+  courseTitle: string | null
+  userId: number | null
+  name: string | null
+  username: string | null
+  email: string | null
+}
+
+type LogFilter = { q?: string; kind?: LogKind; user?: number; before?: number }
+
+const logsUrl = (filter: LogFilter) => {
+  const params = new URLSearchParams(
+    Object.entries(filter)
+      .filter(([, v]) => v !== undefined && v !== '')
+      .map(([k, v]) => [k, String(v)]),
+  )
+  return params.size ? `/admin/logs?${params}` : '/admin/logs'
+}
+
+// formatDateTime を使わないのは、年と秒がなく、消さずに残す記録や、続けて行った操作の前後がわからないため
+const LOG_TIME = new Intl.DateTimeFormat('ja-JP', {
+  timeZone: 'Asia/Tokyo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+})
+const formatLogTime = (unix: number) => LOG_TIME.format(new Date(unix * 1000))
+
+const KIND_DESCRIPTIONS: Record<LogKind, string> = {
+  view: '閲覧（コースやアイテムを開いた記録）',
+  change: '操作（ログイン・教材の編集・提出など）',
+  important: '重要な操作（削除・ロールと参加者の変更・パスワードの変更など）',
+}
+
+const retentionNote = (kind: LogKind) => {
+  const days = LOG_RETENTION_DAYS[kind]
+  return `${KIND_DESCRIPTIONS[kind]}は${days === null ? '消さずに残します' : ` ${days} 日たつと消えます`}。`
+}
+
+const KIND_OPTIONS = [{ value: '', label: 'すべての種類' }, ...LOG_KINDS.map((k) => ({ value: k, label: LOG_KIND_LABELS[k] }))]
+
+// 操作を最初の列にするのは、Table は最初の列だけを伸ばして折り返し、ほかの列は折り返さないため
+const LogEntry = ({ log }: { log: LogRow }) => (
+  <tr>
+    <td>
+      <div class="log-action">
+        <Chip tone={log.kind === 'important' ? 'accent' : 'default'}>{LOG_KIND_LABELS[log.kind]}</Chip>
+        <span>
+          {log.label}
+          {log.target && <>「{log.target}」</>}
+        </span>
+      </div>
+      {log.courseId !== null && log.target !== log.courseTitle && (
+        <div class="small">
+          {log.courseTitle === null ? (
+            <span class="muted">削除されたコース</span>
+          ) : (
+            <a href={`/courses/${log.courseId}`} class="muted">
+              {log.courseTitle}
+            </a>
+          )}
+        </div>
+      )}
+      {log.action === 'other' && <code class="small muted">{log.path}</code>}
+      <div class="log-time-sm muted small">
+        {formatLogTime(log.createdAt)}・{log.ip}
+      </div>
+    </td>
+    <td class="log-user">
+      {log.userId !== null && log.name !== null ? (
+        <Person
+          href={logsUrl({ user: log.userId })}
+          avatar={<Avatar name={log.name} />}
+          name={log.name}
+          meta={userMeta({ username: log.username, email: log.email ?? undefined })}
+        />
+      ) : (
+        <span class="muted">ユーザーなし</span>
+      )}
+    </td>
+    <td class="hide-sm muted log-time">{formatLogTime(log.createdAt)}</td>
+    <td class="hide-sm muted" title={log.userAgent ?? undefined}>
+      {log.ip}
+    </td>
+  </tr>
+)
+
+export const LogsPage = ({
+  q,
+  kind,
+  user,
+  before,
+  list,
+  nextBefore,
+}: {
+  q: string
+  kind?: LogKind
+  user: { id: number; name: string } | null
+  before?: number
+  list: LogRow[]
+  nextBefore?: number
+}) => {
+  const filter: LogFilter = { q, kind, user: user?.id }
+  const filtered = !!(q || kind || user)
+  return (
+    <AdminShell tab="logs">
+      <Styles use={['/src/routes/admin/admin.css']} />
+      <p class="muted log-notice">{LOG_KINDS.map(retentionNote).join('')}</p>
+
+      <form method="get" class="toolbar log-toolbar" data-autosubmit>
+        <div class="toolbar-grow">
+          <SearchBox label="ユーザーで絞り込む" value={q} placeholder="名前・ユーザー名・メールで絞り込む" />
+        </div>
+        <Select name="kind" options={KIND_OPTIONS} value={kind ?? ''} aria-label="種類" />
+        {user && <input type="hidden" name="user" value={String(user.id)} />}
+      </form>
+
+      {user && (
+        <div class="log-filter">
+          <Chip tone="accent">{user.name} さんの記録</Chip>
+          <a href={logsUrl({ ...filter, user: undefined })} class="small">
+            絞り込みを解除
+          </a>
+        </div>
+      )}
+
+      {list.length === 0 ? (
+        <EmptyState
+          icon="search"
+          title={filtered || before ? '一致する記録はありません' : 'まだ記録がありません'}
+          text={filtered ? '条件を変えてお試しください。' : 'ログインや教材の閲覧・編集などを行うと、ここに記録が出ます。'}
+        />
+      ) : (
+        <Table
+          columns={[
+            { label: '操作' },
+            { label: 'ユーザー' },
+            { label: '日時', class: 'hide-sm' },
+            { label: 'IP アドレス', class: 'hide-sm' },
+          ]}
+        >
+          {list.map((log) => (
+            <LogEntry log={log} />
+          ))}
+        </Table>
+      )}
+
+      {(before || nextBefore) && (
+        <div class="row log-pager">
+          {before && (
+            <Button href={logsUrl(filter)} variant="ghost">
+              最新の記録へ
+            </Button>
+          )}
+          {nextBefore && (
+            <Button href={logsUrl({ ...filter, before: nextBefore })} iconEnd="chevronRight">
+              さらに古い記録
+            </Button>
+          )}
+        </div>
+      )}
+    </AdminShell>
+  )
+}
