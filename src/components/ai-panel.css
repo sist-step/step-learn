@@ -137,6 +137,7 @@
 .ai-card[data-state='approved'] .ai-card-state { color: var(--success-text); }
 .ai-card[data-state='failed'] .ai-card-state { color: var(--danger-text); }
 
+.ai-pending[hidden] { display: none; }
 .ai-dots { flex: none; width: 24px; height: 8px; background: radial-gradient(circle, currentColor 2.5px, transparent 3px) 0 50% / 8px 8px repeat-x; animation: pulse 1.2s ease-in-out infinite; }
 
 .ai-composer { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; border-top: 1px solid var(--border); }
