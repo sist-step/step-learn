@@ -23,17 +23,35 @@ export type AiCard = {
   note?: string
 }
 
-/** labels・cards・touched はツール呼び出しの id ごとの、画面に出す説明・確認カード・変えたもの */
+/**
+ * labels・cards・touched はツール呼び出しの id ごとの、画面に出す説明・確認カード・変えたもの。
+ * turnModel は最後の発言に答えているモデルで、チャットのモデルと違うのは難しい依頼を任せたとき（lib/ai-models.ts の AI_HARD_TASK_MODELS）
+ */
 export type AiChatContent = {
   messages: AiMessage[]
   labels: Record<string, string>
   cards: Record<string, AiCard>
   touched: Record<string, AiTouched>
+  turnModel?: AiModel
 }
 
 export type AiChat = { id: number; model: AiModel; content: AiChatContent }
 
 const emptyContent = (): AiChatContent => ({ messages: [], labels: {}, cards: {}, touched: {} })
+
+/**
+ * チャットの版。内容が変わるか、別のチャットになると変わり、チャットがなければ空。
+ * client.ts がほかのタブでの発言を反映しているかを確かめ、古い画面からの発言を見分けるのに使う
+ */
+// 更新日時を版にしないのは、秒単位では同じ秒に続いた保存を見分けられず、保存しても中身が変わらないこともあるため
+export const chatRevision = (chat: AiChat | null) =>
+  chat
+    ? crypto
+        .createHash('sha256')
+        .update(`${chat.id}:${JSON.stringify(chat.content)}`)
+        .digest('base64url')
+        .slice(0, 22)
+    : ''
 
 // SESSION_SECRET をそのまま鍵にしないのは、Cookie の署名と同じ鍵を別の用途に使い回さないため
 const KEY = Buffer.from(crypto.hkdfSync('sha256', config.sessionSecret, 'step-learn', 'ai-chat', 32))

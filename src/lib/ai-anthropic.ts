@@ -13,12 +13,23 @@ import {
 } from './ai-models'
 import { config } from './config'
 
+type Price = { input: number; output: number; cacheRead: number; cacheWrite: number }
+
+/** Haiku 5.5 は、入力がこのトークン数を超えると LONG_PROMPT_PRICES の料金になる */
+const LONG_PROMPT_TOKENS = 100_000
+
 // 応答に請求額が入らないので、1 トークンあたりの料金（USD）から計算する
-const PRICES: Record<AnthropicModel, { input: number; output: number; cacheRead: number; cacheWrite: number }> = {
+const PRICES: Record<AnthropicModel, Price> = {
+  'claude-haiku-5-5': { input: 0.1e-6, output: 0.5e-6, cacheRead: 0.01e-6, cacheWrite: 0.125e-6 },
   'claude-sonnet-5-5': { input: 2e-6, output: 10e-6, cacheRead: 0.1e-6, cacheWrite: 2.5e-6 },
 }
 
-const EFFORT = 'medium'
+const LONG_PROMPT_PRICES: Partial<Record<AnthropicModel, Price>> = {
+  'claude-haiku-5-5': { input: 0.5e-6, output: 2.5e-6, cacheRead: 0.05e-6, cacheWrite: 0.625e-6 },
+}
+
+// Sonnet を Haiku と同じ深さにしないのは、Sonnet に任せるのは難しい依頼だけで、そこで考える量を減らすと任せる意味が薄れるため
+const EFFORT: Record<AnthropicModel, 'medium' | 'high'> = { 'claude-haiku-5-5': 'medium', 'claude-sonnet-5-5': 'high' }
 
 const STOPS: Partial<Record<string, AiStop>> = {
   tool_use: 'tools',
@@ -83,12 +94,13 @@ const toWireTool = (t: AiTool, stream: boolean): Anthropic.Beta.BetaTool => ({
 })
 
 function toUsage(model: AnthropicModel, usage: Anthropic.Beta.BetaUsage): AiUsage {
-  // 応答の model で料金を選ばないのは、断られたときに代わりに応答する Claude Sonnet 5 も、キャッシュの読み取り以外は同じ料金のため
-  const price = PRICES[model]
   const cacheRead = usage.cache_read_input_tokens ?? 0
   const cacheWrite = usage.cache_creation_input_tokens ?? 0
+  const promptTokens = usage.input_tokens + cacheRead + cacheWrite
+  // 応答の model で料金を選ばないのは、Sonnet 5.5 が断られたときに代わりに応答する Claude Sonnet 5 も、キャッシュの読み取り以外は同じ料金のため
+  const price = (promptTokens > LONG_PROMPT_TOKENS ? LONG_PROMPT_PRICES[model] : undefined) ?? PRICES[model]
   return {
-    promptTokens: usage.input_tokens + cacheRead + cacheWrite,
+    promptTokens,
     completionTokens: usage.output_tokens,
     cost:
       usage.input_tokens * price.input + cacheRead * price.cacheRead + cacheWrite * price.cacheWrite + usage.output_tokens * price.output,
@@ -131,7 +143,7 @@ export async function completeAnthropic({
     tools: tools?.length ? tools.map((t) => toWireTool(t, stream)) : undefined,
     // drop_block にするのは、保存した会話の途中でシステムプロンプトやツールの定義が変わったときに、要求ごと弾かれるのを避けるため
     thinking: { type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } },
-    output_config: { effort: EFFORT },
+    output_config: { effort: EFFORT[model] },
     cache_control: { type: 'ephemeral' },
     fallbacks: 'default',
     betas: ['server-side-fallback-2026-07-01', 'thinking-binding-controls-2026-08-01'],

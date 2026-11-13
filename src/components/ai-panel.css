@@ -125,6 +125,10 @@
 .ai-send { flex: none; border-radius: 999px; background: var(--primary); color: var(--on-primary); }
 .ai-send:disabled { opacity: 0.4; cursor: default; }
 .ai-panel[data-busy] .ai-send { opacity: 0.4; pointer-events: none; }
+.ai-composer-foot { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ai-composer-foot .ai-note { flex: 1; min-width: 0; }
+.ai-hard { flex: none; border-radius: 999px; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
+.ai-hard[aria-pressed='true'] { background: var(--primary-soft); color: var(--primary-text); box-shadow: inset 0 0 0 1px var(--primary); }
 .ai-note { font-size: var(--fs-xs); color: var(--muted); }
 @media (max-width: 640px), (pointer: coarse) {
   /* 16px 未満にしないのは、iOS が入力欄にフォーカスしたときに画面を拡大するため */
