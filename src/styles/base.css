@@ -347,6 +347,18 @@ kbd {
 .dialog[open] { animation: rise 0.2s var(--ease); }
 .dialog::backdrop { background: rgb(0 0 0 / 0.45); backdrop-filter: blur(3px); animation: fade 0.2s; }
 .dialog-msg { font-size: var(--fs-base); font-weight: 500; margin-bottom: 20px; line-height: 1.6; }
+.dialog-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.45);
+  backdrop-filter: blur(3px);
+  animation: fade 0.2s;
+}
+.dialog-layer > .dialog { position: static; width: 100%; max-width: 360px; margin: 0; }
 
 .noscript {
   display: flex;
