@@ -1,4 +1,5 @@
 // lib/ai-usage.ts などを読み込まず、描く内容を props で受け取るのは、AppShell を使う Moodle モードから DB を開くモジュールを読み込まないため
+import type { AiUsageMeter } from '../lib/ai-agent'
 import type { AiCardState } from '../lib/ai-chat'
 import type { AiTouched } from '../lib/ai-tool-kit'
 import type { DiffLine } from '../lib/diff'
@@ -7,6 +8,7 @@ import { FieldError, SegmentedControl, validateWith } from './form'
 import { Icon } from './icons'
 import { Markdown } from './markdown'
 import { Mascot } from './mascot'
+import { Popover } from './overlay'
 import { useStyle } from './style'
 
 /** 確認カードの 1 行。複数行の文章は差分（hunks）で見せる */
@@ -17,8 +19,18 @@ export type AiChatEntry =
   | { kind: 'tool'; label: string; touched?: AiTouched }
   | { kind: 'card'; callId: string; title: string; changes: AiCardChange[]; state: AiCardState; note?: string; touched?: AiTouched }
 
-/** hardLabel は「難しい依頼」を選んだときに答えるモデル（なければ選べない）、problem は今そのモデルを使えない理由 */
-export type AiModelOption = { value: string; label: string; hardLabel: string | null; problem: string | null }
+/**
+ * hardLabel は「難しい依頼」を選んだときに答えるモデル（なければ選べない）、hardOff はそれを今使えない短い理由、
+ * problem は今そのモデルを使えない理由、usage はそのモデルで使う今週の枠の使い具合
+ */
+export type AiModelOption = {
+  value: string
+  label: string
+  hardLabel: string | null
+  hardOff: string | null
+  problem: string | null
+  usage: AiUsageMeter[]
+}
 
 export type AiPanelProps = {
   models: readonly AiModelOption[]
@@ -26,8 +38,6 @@ export type AiPanelProps = {
   revision: string
   /** hard は最後の発言で「難しい依頼」を選んでいたこと、replies は最後の応答のあとに出す、押して送れる続きの依頼 */
   chat: { id: number; model: AiModelOption; hard: boolean; entries: AiChatEntry[]; replies: string[]; busy: boolean } | null
-  /** 開いているチャットのモデルの、今週の枠の使い具合 */
-  quota: string
 }
 
 export const AI_PANEL_ID = 'ai-panel'
@@ -199,6 +209,92 @@ const Intro = ({ models }: { models: readonly AiModelOption[] }) => (
   </div>
 )
 
+// 8 割から色を変えるのは、使い切る前に「難しい依頼」を控えるかを決められるようにするため
+const isHigh = (meter: AiUsageMeter) => meter.state === 'ok' && meter.percent >= 80
+
+const hardName = (off: string | null) => (off ? `難しい依頼（${off}）` : '難しい依頼')
+
+/** 枠ごとの使い具合のバー。client.ts が応答のあと、data-ai-meter の同じ key の行をすべて書き換える */
+const Meter = ({ meter }: { meter: AiUsageMeter }) => (
+  <div
+    class="ai-meter"
+    data-ai-meter={meter.key}
+    data-state={meter.state}
+    data-high={isHigh(meter) ? '' : undefined}
+    style={`--ai-used:${meter.percent}%`}
+  >
+    <div class="ai-meter-top">
+      <span class="ai-meter-label">{meter.label}</span>
+      <span class="ai-meter-value">
+        <span data-ai-meter-percent>{meter.percent}</span>% 使用
+      </span>
+    </div>
+    <div
+      class="ai-meter-track"
+      role="progressbar"
+      aria-label={`${meter.label}の今週の使用量`}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={meter.percent}
+    >
+      <span class="ai-meter-fill" />
+    </div>
+    <p class="ai-meter-note" data-ai-meter-note>
+      {meter.note}
+    </p>
+  </div>
+)
+
+/** 入力欄の下の、今週の枠の使い具合。モデルを選べるときはモデルごとに描き、client.ts が選んだモデルのものだけを出す */
+const Usage = ({ option, hidden }: { option: AiModelOption; hidden: boolean }) => {
+  const [main] = option.usage
+  if (!main) return null
+  return (
+    <div class="ai-usage" data-ai-usage={option.value} hidden={hidden}>
+      <Popover
+        class="ai-usage-pop"
+        panelClass="ai-usage-panel"
+        trigger={
+          <summary class="ai-usage-trigger" aria-label={`今週の利用状況（${main.label} ${main.percent}% 使用）`} data-ai-usage-trigger>
+            <span class="ai-usage-bars" aria-hidden="true">
+              {option.usage.map((m) => (
+                <span
+                  class="ai-usage-bar"
+                  data-ai-meter={m.key}
+                  data-state={m.state}
+                  data-high={isHigh(m) ? '' : undefined}
+                  style={`--ai-used:${m.percent}%`}
+                />
+              ))}
+            </span>
+            <span class="ai-usage-text">
+              今週 <span data-ai-usage-main>{main.percent}</span>%
+            </span>
+          </summary>
+        }
+      >
+        <div class="ai-usage-head">
+          <strong>今週の利用状況</strong>
+          <span>{option.label}</span>
+        </div>
+        <div class="ai-meters">
+          {option.usage.map((m) => (
+            <Meter meter={m} />
+          ))}
+        </div>
+        {option.usage.length > 1 && (
+          <p class="ai-usage-foot">
+            <Icon name="lightBulb" size={14} />
+            <span>
+              「難しい依頼」（{option.hardLabel ?? option.label}）で使った分は、{main.label}の枠にも数えます。
+            </span>
+          </p>
+        )}
+      </Popover>
+    </div>
+  )
+}
+
 export const AiPanelToggle = () => (
   <IconButton
     icon="sparkles"
@@ -211,14 +307,15 @@ export const AiPanelToggle = () => (
   />
 )
 
-export const AiPanel = ({ models, revision, chat, quota }: AiPanelProps) => {
+export const AiPanel = ({ models, revision, chat }: AiPanelProps) => {
   useStyle('/src/components/ai-panel.css')
   useStyle('/src/components/markdown.css')
   const usable = models.filter((m) => !m.problem)
   const current = chat?.model ?? usable[0]
-  const hard = !!chat?.hard && !!current?.hardLabel
+  const hard = !!chat?.hard && !!current?.hardLabel && !current.hardOff
+  const choices = chat ? [chat.model] : usable
   // 選べるモデルごとの名前を渡すのは、モデルや「難しい依頼」を切り替えたとき、client.ts がヘッダーの名前を書き換えるため
-  const labels = Object.fromEntries((chat ? [chat.model] : usable).map((m) => [m.value, { label: m.label, hard: m.hardLabel }]))
+  const labels = Object.fromEntries(choices.map((m) => [m.value, { label: m.label, hard: m.hardLabel, hardOff: m.hardOff }]))
   return (
     <aside
       id={AI_PANEL_ID}
@@ -287,12 +384,13 @@ export const AiPanel = ({ models, revision, chat, quota }: AiPanelProps) => {
           {/* title を空にするのは、ブラウザ標準のツールチップが CSS のチップと重なって 2 つ出るため */}
           <IconButton
             icon="lightBulb"
-            label="難しい依頼"
+            label={hardName(current?.hardOff ?? null)}
             title=""
             class="ai-hard"
             data-ai-hard
             aria-pressed={hard ? 'true' : 'false'}
             hidden={!current?.hardLabel}
+            disabled={!!current?.hardOff}
           />
           <textarea
             id="ai-message"
@@ -307,9 +405,12 @@ export const AiPanel = ({ models, revision, chat, quota }: AiPanelProps) => {
           <IconButton type="submit" icon="arrowUp" label="送信" class="ai-send" disabled={!chat && usable.length === 0} />
         </div>
         <FieldError id="ai-message" />
-        <p class="ai-note" data-ai-quota>
-          {quota || 'Enter で送信、Shift + Enter で改行'}
-        </p>
+        <div class="ai-foot">
+          {choices.map((m) => (
+            <Usage option={m} hidden={m.value !== current?.value} />
+          ))}
+          <p class="ai-note">Enter で送信、Shift + Enter で改行</p>
+        </div>
       </form>
 
       <template data-ai-template="user">
