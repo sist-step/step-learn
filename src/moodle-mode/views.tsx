@@ -1,18 +1,19 @@
-import { CourseHeader, CourseLiveSync, ItemIcon, LinkEmbed, LinkTargetField, linkOpenAttrs } from '../components/course'
-import { Button, IconButton } from '../components/button'
-import { Card, DangerRow, LinkCard } from '../components/card'
-import { cx } from '../components/cx'
 import {
-  FileChip,
-  FileField,
-  FileInput,
-  FormField,
-  SegmentedControl,
-  SelectField,
-  TextAreaField,
-  TextField,
-  validateWith,
-} from '../components/form'
+  CourseHeader,
+  CourseLiveSync,
+  ITEM_FORM,
+  ItemBar,
+  ItemEditActions,
+  ItemFileField,
+  ItemIcon,
+  LinkEmbed,
+  LinkTargetField,
+  linkOpenAttrs,
+} from '../components/course'
+import { Button, IconButton } from '../components/button'
+import { Card, LinkCard } from '../components/card'
+import { cx } from '../components/cx'
+import { FileField, SegmentedControl, SelectField, TextAreaField, TextField, validateWith } from '../components/form'
 import { Icon, type IconName } from '../components/icons'
 import { AppShell, AuthShell } from '../components/layout'
 import { Markdown } from '../components/markdown'
@@ -1248,37 +1249,28 @@ export const ItemEditPage = ({
   }
   const section = sections.find((s) => s.id === item.sectionId)
   const extraKind = kindOfItem(item)
-  const typeLabel = extraKind ? extraKind.label : item.kind === 'link' ? 'リンク' : 'ファイル'
+  const crumbs = [
+    { href: '/courses', label: 'コース一覧' },
+    { href: `/courses/${courseId}`, label: access.course.title },
+    ...(section ? [{ href: sectionHref(courseId, layout, sections, section.id), label: section.title }] : []),
+  ]
   return (
-    <AppShell tone={access.course.color}>
+    <AppShell
+      tone={access.course.color}
+      topbar={
+        <ItemBar icon={<KindIcon item={item} />} crumbs={crumbs} title={item.title}>
+          <ItemEditActions
+            href={base}
+            deleteAction={`${base}/delete`}
+            deleteConfirm={`「${item.title}」を削除しますか？旧STEP Learn からも削除され、学生の完了記録も消えます。`}
+          />
+        </ItemBar>
+      }
+    >
       <Styles use={['/src/routes/content/content.css']} />
-      <Breadcrumbs
-        items={[
-          { href: '/courses', label: 'コース一覧' },
-          { href: `/courses/${courseId}`, label: access.course.title },
-          section && { href: sectionHref(courseId, layout, sections, section.id), label: section.title },
-          { href: base, label: item.title },
-        ].filter((b) => !!b)}
-      />
-      <header class="editor-head">
-        <KindIcon item={item} />
-        <div class="editor-head-text">
-          <span class="eyebrow">{typeLabel}を編集</span>
-          <h1 class="truncate">{item.title}</h1>
-        </div>
-        <div class="editor-head-actions">
-          <Button href={base} variant="ghost" icon="eye" aria-label="表示">
-            <span class="hide-sm">表示</span>
-          </Button>
-          <Button type="submit" form="item-form" variant="primary" icon="check" title="保存（⌘S / Ctrl+S）" data-save-shortcut>
-            保存
-          </Button>
-        </div>
-      </header>
-
-      <div class="editor">
+      <div class="item-editor">
         <form
-          id="item-form"
+          id={ITEM_FORM}
           method="post"
           action={base}
           enctype="multipart/form-data"
@@ -1291,24 +1283,20 @@ export const ItemEditPage = ({
             <TextField label="タイトル" name="title" value={v.title} error={errors.title} class="editor-title" />
             {extraKind && <extraKind.Fields values={extraValues ?? item.extra?.data ?? {}} errors={errors} idPrefix="f" />}
             {item.kind === 'link' && (
-              <TextField label="URL" name="url" type="url" value={v.url} error={errors.url} placeholder="https://" />
+              <div class="editor-link">
+                <TextField label="URL" name="url" type="url" value={v.url} error={errors.url} placeholder="https://" />
+                <LinkTargetField
+                  id="f-link-target"
+                  value={v.linkTarget}
+                  hint={
+                    item.display && !isExactDisplay(item.display)
+                      ? `旧STEP Learn では表示方法が「${MOODLE_DISPLAY_LABELS[item.display]}」に設定されています。開き方を変えなければ、その設定のまま残ります。`
+                      : undefined
+                  }
+                />
+              </div>
             )}
-            {item.kind === 'link' && (
-              <LinkTargetField
-                id="f-link-target"
-                value={v.linkTarget}
-                hint={
-                  item.display && !isExactDisplay(item.display)
-                    ? `旧STEP Learn では表示方法が「${MOODLE_DISPLAY_LABELS[item.display]}」に設定されています。開き方を変えなければ、その設定のまま残ります。`
-                    : undefined
-                }
-              />
-            )}
-            {item.completion === 'auto' && (
-              <Alert tone="info">
-                完了の条件は旧STEP Learn の画面で設定されているため、ここでは変えられません（保存してもそのまま残ります）。
-              </Alert>
-            )}
+            {item.kind === 'file' && <ItemFileField name={item.fileName} size={item.fileSize} error={errors.file} />}
           </Card>
 
           <aside class="editor-side">
@@ -1336,41 +1324,17 @@ export const ItemEditPage = ({
                 {!!access.course.completionEnabled && item.completion !== 'auto' && (
                   <MoodleCompletionField id="f-completion" value={v.completion} error={errors.completion} />
                 )}
+                {item.completion === 'auto' && (
+                  <Alert tone="info">
+                    完了の条件は旧STEP Learn の画面で設定されているため、ここでは変えられません（保存してもそのまま残ります）。
+                  </Alert>
+                )}
               </div>
-            </Card>
-            {item.kind === 'file' && (
-              <Card heading="ファイル">
-                <div class="stack">
-                  <FileChip name={item.fileName} meta={`現在のファイル・${formatBytes(item.fileSize)}`} />
-                  <FormField
-                    id="f-file"
-                    error={errors.file}
-                    label="差し替えるファイル"
-                    hint={`選ばなければ今のファイルのまま（最大 ${formatBytes(MAX_FILE_SIZE)}）`}
-                  >
-                    <FileInput
-                      id="f-file"
-                      name="file"
-                      aria-invalid={errors.file ? 'true' : undefined}
-                      aria-describedby="f-file-error f-file-desc"
-                    />
-                  </FormField>
-                </div>
-              </Card>
-            )}
-            <Card tone="danger" class="editor-danger">
-              <DangerRow heading="アイテムを削除" description="旧STEP Learn からも削除され、学生の完了記録も消えます。">
-                <Button type="submit" form="item-delete-form" variant="danger-outline" size="sm" icon="trash">
-                  削除
-                </Button>
-              </DangerRow>
             </Card>
           </aside>
         </form>
 
         {extraKind?.Panel && <extraKind.Panel item={item} access={access} />}
-
-        <form id="item-delete-form" method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`} hidden />
       </div>
     </AppShell>
   )

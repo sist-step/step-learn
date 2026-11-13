@@ -161,7 +161,7 @@ const CodeFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
     <>
       <input type="hidden" name="language" value={language} />
       <input type="hidden" name="starter_set" value="1" />
-      <MarkdownEditor label="問題文" name="body" id={`${idPrefix}-body`} value={str(values.body)} error={errors.body} rows={10} />
+      <MarkdownEditor label="問題文" name="body" id={`${idPrefix}-body`} value={str(values.body)} error={errors.body} rows={10} split />
       <CodeStarterFields language={language} starter={starter} stdin={str(values.stdin)} errors={errors} idPrefix={idPrefix} />
       <CodeGradingFields
         gradingEnabled={gradingEnabled}

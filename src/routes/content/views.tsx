@@ -13,8 +13,11 @@ import {
   CompletionField,
   CompletionStatus,
   CourseLiveSync,
+  ITEM_FORM,
   ITEM_ICONS,
   ItemBar,
+  ItemEditActions,
+  ItemFileField,
   ItemIcon,
   LinkEmbed,
   LinkTargetField,
@@ -25,9 +28,9 @@ import { Icon } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
 import { Button } from '../../components/button'
-import { FileChip, FileInput, FormField, SegmentedControl, SelectField, TextField, validateWith } from '../../components/form'
+import { SegmentedControl, SelectField, TextField, validateWith } from '../../components/form'
 import { Markdown, MarkdownEditor } from '../../components/markdown'
-import { Card, DangerRow, LinkCard } from '../../components/card'
+import { Card, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import { bundleBase } from '../../lib/bundle'
@@ -37,8 +40,7 @@ import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
 import { previewKind } from '../../lib/preview'
 import { formatBytes } from '../../lib/bytes'
-import { MAX_FILE_SIZE } from '../../lib/storage'
-import { ITEM_TYPE_LABELS, type CodeItem, type Item, type Section } from '../../lib/types'
+import type { CodeItem, Item, Section } from '../../lib/types'
 
 export type ItemInput = {
   title: string
@@ -122,37 +124,25 @@ export const ItemEditPage = ({
     ...values,
   }
   const section = sections.find((s) => s.id === item.sectionId)
-  const typeLabel = ITEM_TYPE_LABELS[item.type]
+  const crumbs = [
+    { href: '/courses', label: 'コース一覧' },
+    { href: `/courses/${courseId}`, label: access.course.title },
+    ...(section ? [{ href: editUrl(courseId, section.id), label: section.title }] : []),
+  ]
+  const lost = `${bundle ? '配布するファイルと、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : ''}完了記録も消え、元に戻せません。`
   return (
-    <AppShell tone={access.course.color}>
+    <AppShell
+      tone={access.course.color}
+      topbar={
+        <ItemBar type={item.type} crumbs={crumbs} title={item.title}>
+          <ItemEditActions href={base} deleteAction={`${base}/delete`} deleteConfirm={`「${item.title}」を削除しますか？${lost}`} />
+        </ItemBar>
+      }
+    >
       <Styles use={['/src/routes/content/content.css']} />
-      <Breadcrumbs
-        items={[
-          { href: '/courses', label: 'コース一覧' },
-          { href: `/courses/${courseId}`, label: access.course.title },
-          section && { href: editUrl(courseId, section.id), label: section.title },
-          { href: base, label: item.title },
-        ].filter((b) => !!b)}
-      />
-      <header class="editor-head">
-        <ItemIcon type={item.type} />
-        <div class="editor-head-text">
-          <span class="eyebrow truncate">{typeLabel}を編集</span>
-          <h1 class="truncate">{item.title}</h1>
-        </div>
-        <div class="editor-head-actions">
-          <Button href={base} variant="ghost" icon="eye" aria-label="表示">
-            <span class="hide-sm">表示</span>
-          </Button>
-          <Button type="submit" form="item-form" variant="primary" icon="check" title="保存（⌘S / Ctrl+S）" data-save-shortcut>
-            保存
-          </Button>
-        </div>
-      </header>
-
-      <div class="editor">
+      <div class="item-editor">
         <form
-          id="item-form"
+          id={ITEM_FORM}
           method="post"
           action={base}
           enctype="multipart/form-data"
@@ -164,15 +154,19 @@ export const ItemEditPage = ({
           <Card class="editor-main stack">
             <TextField label="タイトル" name="title" value={v.title} error={errors.title} class="editor-title" />
             {item.type === 'link' && (
-              <TextField label="URL" name="url" type="url" value={v.url} error={errors.url} placeholder="https://" />
+              <div class="editor-link">
+                <TextField label="URL" name="url" type="url" value={v.url} error={errors.url} placeholder="https://" />
+                <LinkTargetField id="f-link-target" value={v.linkTarget} />
+              </div>
             )}
-            {item.type === 'link' && <LinkTargetField id="f-link-target" value={v.linkTarget} />}
+            {item.type === 'file' && <ItemFileField name={item.fileName ?? ''} size={item.fileSize ?? 0} error={errors.file} />}
             <MarkdownEditor
               label={item.type === 'page' ? '本文' : item.type === 'code' ? '問題文' : '説明（任意）'}
               name="body"
               value={v.body}
               error={errors.body}
               rows={item.type === 'page' ? 18 : item.type === 'code' ? 10 : 5}
+              split
             />
             {code && gradingEnabled && <CodeSuggest action={`${base}/code/suggest`} />}
           </Card>
@@ -215,43 +209,12 @@ export const ItemEditPage = ({
                 )}
               </div>
             </Card>
-            {item.type === 'file' && (
-              <Card heading="ファイル">
-                <div class="stack">
-                  <FileChip name={item.fileName ?? ''} meta={`現在のファイル・${formatBytes(item.fileSize ?? 0)}`} />
-                  <FormField
-                    id="f-file"
-                    error={errors.file}
-                    label="差し替えるファイル"
-                    hint={`選ばなければ今のファイルのまま（最大 ${formatBytes(MAX_FILE_SIZE)}）`}
-                  >
-                    <FileInput
-                      id="f-file"
-                      name="file"
-                      aria-invalid={errors.file ? 'true' : undefined}
-                      aria-describedby="f-file-error f-file-desc"
-                    />
-                  </FormField>
-                </div>
-              </Card>
-            )}
-            <Card tone="danger" class="editor-danger">
-              <DangerRow
-                heading="アイテムを削除"
-                description={`${bundle ? '配布するファイルと、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : ''}完了記録も消え、元に戻せません。`}
-              >
-                <Button type="submit" form="item-delete-form" variant="danger-outline" size="sm" icon="trash">
-                  削除
-                </Button>
-              </DangerRow>
-            </Card>
           </aside>
         </form>
 
         {bundle && <BundleEditPanel base={bundleBase(courseId, item.id)} {...bundle} class="editor-extra" />}
 
         {judge && code && <form id={JUDGE_FORM} method="post" action={`${base}/judge`} hidden />}
-        <form id="item-delete-form" method="post" action={`${base}/delete`} data-confirm={`「${item.title}」を削除しますか？`} hidden />
       </div>
     </AppShell>
   )
