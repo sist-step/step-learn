@@ -10,3 +10,18 @@
   .ai-stats .stat-value { text-align: left; }
   .ai-model-sm { display: block; }
 }
+
+/* ===== 管理 > 操作ログ ===== */
+.log-notice { margin: 0 0 16px; font-size: 13px; }
+.log-toolbar .input { width: auto; }
+.log-filter { display: flex; align-items: center; gap: 12px; margin: -8px 0 16px; }
+.log-time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.log-action { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.log-action .chip { flex-shrink: 0; }
+.log-time-sm { display: none; font-variant-numeric: tabular-nums; }
+.log-pager { justify-content: center; margin-top: 16px; }
+@media (max-width: 640px) {
+  .log-time-sm { display: block; }
+  .log-toolbar .input { width: 100%; }
+  .log-user .person > :not(.person-meta), .log-user .person-meta > .muted { display: none; }
+}

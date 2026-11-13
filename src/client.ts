@@ -2503,8 +2503,9 @@ function linkUrl(target: EventTarget | null) {
   return { a, url }
 }
 
-async function fetchPage(url: URL, init: RequestInit = {}): Promise<Page> {
-  const res = await fetch(url, { ...init, headers: { Accept: 'text/html' } })
+/** background は先読みと開いている画面の更新。サーバーは操作ログに数えない（lib/operation-log.ts） */
+async function fetchPage(url: URL, init: RequestInit = {}, background = false): Promise<Page> {
+  const res = await fetch(url, { ...init, headers: background ? { Accept: 'text/html', 'X-Background': '1' } : { Accept: 'text/html' } })
   const isHtml = (res.headers.get('content-type') ?? '').includes('text/html')
   if (!isHtml) await res.body?.cancel()
   return { url: res.url, redirected: res.redirected, isHtml, html: isHtml ? await res.text() : '' }
@@ -2521,7 +2522,7 @@ function prefetch(url: URL) {
   if (navController) return
   const hit = prefetched.get(urlKey(url))
   if (hit && Date.now() - hit.at < PREFETCH_TTL) return
-  const page = fetchPage(url)
+  const page = fetchPage(url, {}, true)
   page.catch(() => prefetched.delete(urlKey(url)))
   prefetched.set(urlKey(url), { at: Date.now(), page })
 }
@@ -2684,11 +2685,13 @@ async function visit(url: URL, { method = 'GET', body, pop = false, onFail }: Vi
   if (!pop) saveScroll()
   document.documentElement.setAttribute('aria-busy', 'true')
   try {
-    const page = await ((method === 'GET' && !pop && takePrefetched(url)) || fetchPage(url, { method, body, signal: controller.signal }))
+    const fromPrefetch = method === 'GET' && !pop && takePrefetched(url)
+    const page = await (fromPrefetch || fetchPage(url, { method, body, signal: controller.signal }))
     if (controller.signal.aborted) return
     if (!page.isHtml) return location.assign(page.url)
     const doc = new DOMParser().parseFromString(page.html, 'text/html')
     if (needsFullLoad(doc)) return location.assign(page.url)
+    if (fromPrefetch) navigator.sendBeacon('/views', new URLSearchParams({ path: new URL(page.url).pathname }))
     await loadStyles(doc)
     if (controller.signal.aborted) return
 
@@ -2877,7 +2880,7 @@ function applyChange(change: LiveChange) {
 }
 
 async function syncLive(run: number, revision: string | null) {
-  const page = await fetchPage(new URL(location.href))
+  const page = await fetchPage(new URL(location.href), {}, true)
   if (run !== liveRun || navController) return
   const doc = new DOMParser().parseFromString(page.html, 'text/html')
   // 読み込み直しが要るときやログイン画面などへ移されたときに切り替えないのは、見ている画面がいきなり別の画面になるため

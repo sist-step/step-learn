@@ -183,6 +183,13 @@
       "when": 1794536860913,
       "tag": "0025_big_surge",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1794552276610,
+      "tag": "0026_burly_cerise",
+      "breakpoints": true
     }
   ]
 }
