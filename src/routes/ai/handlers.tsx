@@ -23,7 +23,7 @@ const TOOL_FALLBACK_LABEL = 'ツールを使いました'
 const cardChange = ({ label, before, after, long }: AiChange): AiCardChange =>
   long ? { label, hunks: diffHunks(diffLines(before, after), 1) } : { label, before, after }
 
-function entriesOf({ messages, labels, cards }: AiChatContent): AiChatEntry[] {
+function entriesOf({ messages, labels, cards, touched }: AiChatContent): AiChatEntry[] {
   return messages.flatMap((m): AiChatEntry[] => {
     if (m.role === 'user') return [{ kind: 'user', text: m.content }]
     if (m.role !== 'assistant') return []
@@ -31,8 +31,16 @@ function entriesOf({ messages, labels, cards }: AiChatContent): AiChatEntry[] {
       ...(m.content ? [{ kind: 'assistant' as const, text: m.content }] : []),
       ...(m.toolCalls ?? []).map((t): AiChatEntry => {
         const card = cards[t.id]
-        if (!card) return { kind: 'tool', label: labels[t.id] ?? TOOL_FALLBACK_LABEL }
-        return { kind: 'card', callId: t.id, title: card.title, changes: card.changes.map(cardChange), state: card.state, note: card.note }
+        if (!card) return { kind: 'tool', label: labels[t.id] ?? TOOL_FALLBACK_LABEL, touched: touched[t.id] }
+        return {
+          kind: 'card',
+          callId: t.id,
+          title: card.title,
+          changes: card.changes.map(cardChange),
+          state: card.state,
+          note: card.note,
+          touched: touched[t.id],
+        }
       }),
     ]
   })

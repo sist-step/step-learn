@@ -6,6 +6,8 @@ import {
   changed,
   defineConfirmTool,
   defineTool,
+  inCourse,
+  inItem,
   describedString,
   failure,
   id,
@@ -195,7 +197,7 @@ const createSection = defineTool(
     await api.updateCourse(course_id, 'section_hide', [sid])
     if (summary?.trim()) await api.updateSection(course_id, sid, name, summary.trim())
     forgetCourse(course_id)
-    return success({ section_id: sid, hidden: true }, `セクション「${name}」を追加しました（非表示）`)
+    return success({ section_id: sid, hidden: true }, `セクション「${name}」を追加しました（非表示）`, inCourse(course_id, sid))
   },
 )
 
@@ -263,7 +265,7 @@ const createItem = defineTool(
       })
     }
     forgetCourse(args.course_id)
-    return success({ item_id: cmid, hidden: true }, `「${title}」を追加しました（非表示）`)
+    return success({ item_id: cmid, hidden: true }, `「${title}」を追加しました（非表示）`, inItem(args.course_id, cmid, args.section_id))
   },
 )
 
@@ -301,7 +303,7 @@ const reorderSections = defineTool(
       after = sections.find((s) => s.id === sid)!
     }
     forgetCourse(course_id)
-    return success({ ok: true }, `「${loaded.course.fullname}」のセクションを並べ替えました`)
+    return success({ ok: true }, `「${loaded.course.fullname}」のセクションを並べ替えました`, inCourse(course_id))
   },
 )
 
@@ -327,7 +329,7 @@ const reorderItems = defineTool(
     // Moodle は「この活動の前へ」かセクションの末尾へしか動かせないので、新しい順に 1 つずつ末尾へ送る
     for (const cmid of item_ids) await api.updateCourse(course_id, 'cm_move', [cmid], { sectionid: section_id })
     forgetCourse(course_id)
-    return success({ ok: true }, `「${section.title}」のアイテムを並べ替えました`)
+    return success({ ok: true }, `「${section.title}」のアイテムを並べ替えました`, inCourse(course_id, section_id))
   },
 )
 
@@ -370,7 +372,7 @@ const updateSection = defineConfirmTool(
     const name = title?.trim() || found.section.title
     await moodle(moodleContext(c)).updateSection(course_id, section_id, name, summary?.trim() ?? found.section.summary)
     forgetCourse(course_id)
-    return success({ ok: true }, `セクション「${name}」を変更しました`)
+    return success({ ok: true }, `セクション「${name}」を変更しました`, inCourse(course_id, section_id))
   },
 )
 
@@ -503,7 +505,7 @@ const updateItem = defineConfirmTool(
     if (args.section_id !== undefined && args.section_id !== item.sectionId)
       await api.updateCourse(courseId, 'cm_move', [item.id], { sectionid: args.section_id })
     forgetCourse(courseId)
-    return success({ ok: true }, `「${title}」を変更しました`)
+    return success({ ok: true }, `「${title}」を変更しました`, inItem(courseId, item.id, args.section_id ?? item.sectionId))
   },
 )
 
@@ -521,13 +523,21 @@ async function visibilityTarget(
   if (target === 'section') {
     const section = topSections(loaded).find((s) => s.id === targetId)
     if (!section || section.number === 0) return null
-    return { title: `セクション「${section.title}」`, hidden: section.hidden, ids: [section.id], on: 'section' as const }
+    return {
+      title: `セクション「${section.title}」`,
+      hidden: section.hidden,
+      ids: [section.id],
+      on: 'section' as const,
+      touched: inCourse(courseId, section.id),
+    }
   }
   const item = findItem(loaded, targetId)
   if (!item) return null
   // サブセクションに cm_hide を使わないのは、Moodle 5.1 では表示の更新を返すときにセクション ID を取り違えて失敗するため
-  if (item.childSectionId) return { title: `「${item.title}」`, hidden: item.hidden, ids: [item.childSectionId], on: 'section' as const }
-  return { title: `「${item.title}」`, hidden: item.hidden, ids: [item.id], on: 'cm' as const }
+  const touched = { ...inCourse(courseId, item.sectionId), item: item.id }
+  if (item.childSectionId)
+    return { title: `「${item.title}」`, hidden: item.hidden, ids: [item.childSectionId], on: 'section' as const, touched }
+  return { title: `「${item.title}」`, hidden: item.hidden, ids: [item.id], on: 'cm' as const, touched }
 }
 
 const setVisibility = defineConfirmTool(
@@ -556,7 +566,7 @@ const setVisibility = defineConfirmTool(
     const action = found.on === 'section' ? (hidden ? 'section_hide' : 'section_show') : hidden ? 'cm_hide' : 'cm_show'
     await moodle(moodleContext(c)).updateCourse(course_id, action, found.ids)
     forgetCourse(course_id)
-    return success({ ok: true }, `${found.title}を${shown(hidden)}にしました`)
+    return success({ ok: true }, `${found.title}を${shown(hidden)}にしました`, found.touched)
   },
 )
 

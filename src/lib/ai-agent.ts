@@ -4,17 +4,18 @@ import type { AiChat, AiChatContent, AiChatStore } from './ai-chat'
 import type { AiLedger } from './ai-ledger'
 import type { AiQuota } from './ai-quota'
 import { judgeOffTopic } from './ai-scope'
-import { failure, isToolResult, type AiAgentTool, type AiToolContext, type AiToolResult } from './ai-tool-kit'
+import { failure, isToolResult, type AiAgentTool, type AiToolContext, type AiToolResult, type AiTouched } from './ai-tool-kit'
 import { ROLE_LABELS } from './types'
 
 /**
  * パネルへ流す出来事。chat は新しく始めたチャットの ID、error の retract は送った発言を会話に残さなかったこと（入力欄に戻してよい）、
- * confirm は確認カードを出したこと、closed は開いていたチャットがもうないこと
+ * confirm は確認カードを出したこと、applied はツールが内容を変えたこと、closed は開いていたチャットがもうないこと
  */
 export type AiAgentEvent =
   | { type: 'chat'; id: number }
   | { type: 'text'; text: string }
-  | { type: 'tool'; label: string }
+  | { type: 'tool'; label: string; touched?: AiTouched }
+  | { type: 'applied'; touched: AiTouched }
   | { type: 'confirm' }
   | { type: 'error'; message: string; retract?: boolean }
   | { type: 'closed' }
@@ -122,7 +123,7 @@ export function createAiAgent({
 
   /** 確認カードを出したら true。そのツールの結果は、利用者が決めるまで会話に足さない */
   async function callTool(c: AiToolContext, chat: AiChat, call: AiToolCall, emit: Emit) {
-    const { messages, labels, cards } = chat.content
+    const { messages, labels, cards, touched: touchedBy } = chat.content
     const tool = tools.find((t) => t.tool.name === call.name)
     const args = parseJson(call.arguments)
     let result: AiToolResult
@@ -140,7 +141,10 @@ export function createAiAgent({
       result = proposal
     }
     labels[call.id] = result.label
-    emit({ type: 'tool', label: result.label })
+    const touched = result.isError ? undefined : result.touched
+    if (touched) touchedBy[call.id] = touched
+    emit({ type: 'tool', label: result.label, touched })
+    if (touched) emit({ type: 'applied', touched })
     messages.push({ role: 'tool', toolCallId: call.id, content: result.content, isError: result.isError })
     return false
   }
@@ -257,6 +261,11 @@ export function createAiAgent({
           : failure(`${card.name} というツールはありません。`, TOOL_FAILED)
       card.state = !approve ? 'rejected' : result.isError ? 'failed' : 'approved'
       card.note = result.isError && approve ? (parseJson(result.content) as { error?: string } | null)?.error : result.label
+      const touched = result.isError ? undefined : result.touched
+      if (touched) {
+        chat.content.touched[callId] = touched
+        emit({ type: 'applied', touched })
+      }
       chat.content.messages.push({ role: 'tool', toolCallId: callId, content: result.content, isError: result.isError })
       if (pendingCalls(chat.content).length === 0) await converse(c, chat, page, emit, (message) => emit({ type: 'error', message }))
       return true

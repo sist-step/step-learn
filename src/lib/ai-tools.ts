@@ -9,6 +9,8 @@ import {
   describedString,
   failure,
   id,
+  inCourse,
+  inItem,
   sameSnapshot,
   success,
   type AiAgentTool,
@@ -258,7 +260,7 @@ const createSection = defineTool(
       .returning({ id: sections.id })
       .get()
     touchCourse(course_id)
-    return success({ section_id: row.id, hidden: true }, `セクション「${name}」を追加しました（非表示）`)
+    return success({ section_id: row.id, hidden: true }, `セクション「${name}」を追加しました（非表示）`, inCourse(course_id, row.id))
   },
 )
 
@@ -351,7 +353,11 @@ const createItem = defineTool(
       return row
     })
     touchCourse(courseId)
-    return success({ item_id: created.id, hidden: true }, `「${title}」を追加しました（非表示）`)
+    return success(
+      { item_id: created.id, hidden: true },
+      `「${title}」を追加しました（非表示）`,
+      inItem(courseId, created.id, args.section_id),
+    )
   },
 )
 
@@ -388,7 +394,7 @@ const reorderSections = defineTool(
         'セクションを並べ替えられませんでした',
       )
     touchCourse(course_id)
-    return success({ ok: true }, `「${access.course.title}」のセクションを並べ替えました`)
+    return success({ ok: true }, `「${access.course.title}」のセクションを並べ替えました`, inCourse(course_id))
   },
 )
 
@@ -415,7 +421,7 @@ const reorderItems = defineTool(
         'アイテムを並べ替えられませんでした',
       )
     touchCourse(found.section.courseId)
-    return success({ ok: true }, `「${found.section.title}」のアイテムを並べ替えました`)
+    return success({ ok: true }, `「${found.section.title}」のアイテムを並べ替えました`, inCourse(found.section.courseId, section_id))
   },
 )
 
@@ -453,7 +459,11 @@ const updateSection = defineConfirmTool(
       .where(eq(sections.id, section_id))
       .run()
     touchCourse(found.section.courseId)
-    return success({ ok: true }, `セクション「${title?.trim() || found.section.title}」を変更しました`)
+    return success(
+      { ok: true },
+      `セクション「${title?.trim() || found.section.title}」を変更しました`,
+      inCourse(found.section.courseId, section_id),
+    )
   },
 )
 
@@ -592,7 +602,11 @@ const updateItem = defineConfirmTool(
       }
     })
     touchCourse(item.courseId)
-    return success({ ok: true }, `「${args.title?.trim() || item.title}」を変更しました`)
+    return success(
+      { ok: true },
+      `「${args.title?.trim() || item.title}」を変更しました`,
+      inItem(item.courseId, item.id, moving ? args.section_id : item.sectionId),
+    )
   },
 )
 
@@ -607,11 +621,20 @@ async function visibilityTarget(user: User, target: (typeof VISIBILITY_TARGETS)[
         title: `セクション「${found.section.title}」`,
         hidden: found.section.hidden,
         courseId: found.section.courseId,
+        touched: inCourse(found.section.courseId, found.section.id),
       }
     )
   }
   const found = await itemOf(user, targetId)
-  return found && { table: items, title: `「${found.item.title}」`, hidden: found.item.hidden, courseId: found.item.courseId }
+  return (
+    found && {
+      table: items,
+      title: `「${found.item.title}」`,
+      hidden: found.item.hidden,
+      courseId: found.item.courseId,
+      touched: { ...inCourse(found.item.courseId, found.item.sectionId), item: found.item.id },
+    }
+  )
 }
 
 const setVisibility = defineConfirmTool(
@@ -640,7 +663,7 @@ const setVisibility = defineConfirmTool(
     const next = hidden ? 1 : 0
     db.update(found.table).set({ hidden: next }).where(eq(found.table.id, targetId)).run()
     touchCourse(found.courseId)
-    return success({ ok: true }, `${found.title}を${shown(next)}にしました`)
+    return success({ ok: true }, `${found.title}を${shown(next)}にしました`, found.touched)
   },
 )
 
