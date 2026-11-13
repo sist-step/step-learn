@@ -3,7 +3,7 @@ import { Hono, type Context } from 'hono'
 import { stream } from 'hono/streaming'
 import { AiPanel, type AiCardChange, type AiChatEntry, type AiPanelProps } from '../../components/ai-panel'
 import { AI_CHAT_MODELS, AI_MODEL_LABELS, aiProvider, isAiModel, isProviderEnabled, type AiModel } from '../../lib/ai'
-import { quotaNote, quotaProblem, type AiAgent, type AiAgentEvent } from '../../lib/ai-agent'
+import { quotaNote, quotaProblem, SUGGEST_REPLIES, type AiAgent, type AiAgentEvent } from '../../lib/ai-agent'
 import { chatRevision, type AiChatContent } from '../../lib/ai-chat'
 import type { AiChange } from '../../lib/ai-tool-kit'
 import { diffHunks, diffLines } from '../../lib/diff'
@@ -29,19 +29,21 @@ function entriesOf({ messages, labels, cards, touched }: AiChatContent): AiChatE
     if (m.role !== 'assistant') return []
     return [
       ...(m.content ? [{ kind: 'assistant' as const, text: m.content }] : []),
-      ...(m.toolCalls ?? []).map((t): AiChatEntry => {
-        const card = cards[t.id]
-        if (!card) return { kind: 'tool', label: labels[t.id] ?? TOOL_FALLBACK_LABEL, touched: touched[t.id] }
-        return {
-          kind: 'card',
-          callId: t.id,
-          title: card.title,
-          changes: card.changes.map(cardChange),
-          state: card.state,
-          note: card.note,
-          touched: touched[t.id],
-        }
-      }),
+      ...(m.toolCalls ?? [])
+        .filter((t) => t.name !== SUGGEST_REPLIES)
+        .map((t): AiChatEntry => {
+          const card = cards[t.id]
+          if (!card) return { kind: 'tool', label: labels[t.id] ?? TOOL_FALLBACK_LABEL, touched: touched[t.id] }
+          return {
+            kind: 'card',
+            callId: t.id,
+            title: card.title,
+            changes: card.changes.map(cardChange),
+            state: card.state,
+            note: card.note,
+            touched: touched[t.id],
+          }
+        }),
     ]
   })
 }
@@ -83,6 +85,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
         model: modelOption(user, chat.model),
         hard: chat.content.turnModel !== undefined && chat.content.turnModel !== chat.model,
         entries: entriesOf(chat.content),
+        replies: chat.content.replies ?? [],
         busy: agent.isRunning(user.id),
       },
       quota: chat ? quotaNote(ledger.getQuota(user.id, chat.model)) : '',

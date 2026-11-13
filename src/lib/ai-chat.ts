@@ -25,7 +25,8 @@ export type AiCard = {
 
 /**
  * labels・cards・touched はツール呼び出しの id ごとの、画面に出す説明・確認カード・変えたもの。
- * turnModel は最後の発言に答えているモデルで、チャットのモデルと違うのは難しい依頼を任せたとき（lib/ai-models.ts の AI_HARD_TASK_MODELS）
+ * turnModel は最後の発言に答えているモデルで、チャットのモデルと違うのは難しい依頼を任せたとき（lib/ai-models.ts の AI_HARD_TASK_MODELS）。
+ * replies は最後の応答で AI が出した、押して送れる続きの依頼（lib/ai-agent.ts の SUGGEST_REPLIES）
  */
 export type AiChatContent = {
   messages: AiMessage[]
@@ -33,6 +34,7 @@ export type AiChatContent = {
   cards: Record<string, AiCard>
   touched: Record<string, AiTouched>
   turnModel?: AiModel
+  replies?: string[]
 }
 
 export type AiChat = { id: number; model: AiModel; content: AiChatContent }
