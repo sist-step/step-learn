@@ -262,11 +262,15 @@ const itemEdit = z
       const message = completionIssue(v)
       if (message) ctx.issues.push({ code: 'custom', message, input: v, path: ['completion'] })
       if (v.type !== 'code') return
-      const error = readConstraints(v).error
-      if (error) ctx.issues.push({ code: 'custom', message: error, input: v, path: ['constraints'] })
-      for (const issue of submitPeriodIssues(v.opens_at ?? '', v.closes_at ?? '')) ctx.issues.push({ code: 'custom', input: v, ...issue })
+      for (const issue of codeItemIssues(v)) ctx.issues.push({ code: 'custom', input: v, ...issue })
     }),
   )
+
+/** コードのアイテムの編集画面の、制約と提出の期間の誤り */
+function codeItemIssues(v: Parameters<typeof readConstraints>[0] & { opens_at?: string; closes_at?: string }) {
+  const error = readConstraints(v).error
+  return [...(error ? [{ message: error, path: ['constraints'] }] : []), ...submitPeriodIssues(v.opens_at ?? '', v.closes_at ?? '')]
+}
 
 /** コードのアイテムの提出の期間（日時の入力欄の値）の誤り。形の誤りは欄ごとのスキーマ（dateTime）が出すので、ここでは見ない */
 function submitPeriodIssues(opensAt: string, closesAt: string) {
@@ -291,14 +295,26 @@ export const extraItemFields = {
 const extraItem = z.object(extraItemFields)
 
 /** Moodle モードのコードのアイテム。starter_set は、最初のコードの欄を出している画面（編集画面）から送られたときに 1 になる */
-const extraCode = z.object({
-  ...extraItemFields,
-  ...codeFields,
-  body: text('問題文', 100_000),
-  language: choice(CODE_LANGUAGES, 'web'),
-  starter_set: flag(),
-  criteria: text('採点基準', 5000),
-})
+const extraCode = z
+  .object({
+    ...extraItemFields,
+    ...codeFields,
+    body: text('問題文', 100_000),
+    language: choice(CODE_LANGUAGES, 'web'),
+    starter_set: flag(),
+    criteria: text('補足', 5000),
+    'constraint_label[]': list(),
+    'constraint_text[]': list(),
+    opens_at: z.optional(dateTime('開始日時')),
+    closes_at: z.optional(dateTime('終了日時')),
+  })
+  .check(
+    z.superRefine((v, ctx) => {
+      // 追加のモーダルは言語しか送らないので、制約と期間は編集画面から送られたときだけ求める
+      if (v.starter_set !== 1) return
+      for (const issue of codeItemIssues(v)) ctx.issues.push({ code: 'custom', input: v, ...issue })
+    }),
+  )
 
 const image = z.object({ image: file('画像を選択してください。') })
 

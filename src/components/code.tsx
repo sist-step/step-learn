@@ -134,35 +134,43 @@ export const CodeStarterFields = ({
   </fieldset>
 )
 
-/** Moodle モードの入力欄の、AI の講評に使う採点基準の欄（教師）。Moodle モードには制約の欄がないので、講評だけを返す */
+const gradingDescription = (gradingEnabled: boolean) =>
+  gradingEnabled
+    ? '学生が提出すると、AI が制約ごとに「できている・一部できている・できていない」を判定します。'
+    : 'AI が設定されていないため、判定されません。提出の画面で教師がコメントを書きます。'
+
+const CRITERIA_HINT = '制約にしにくい、見てほしい点（読みやすさなど）を書きます。AI が判定と講評の参考にします。学生には表示されません。'
+
+/** Moodle モードの入力欄の、判定の欄（教師）。通常モードの CodeGradingCard と同じく、制約と補足を書く */
 export const CodeGradingFields = ({
   gradingEnabled,
   criteria,
+  constraints,
   errors,
   idPrefix = 'f',
 }: {
-  /** AI が設定されていて、提出に講評を付けるか */
+  /** AI が設定されていて、提出を判定するか */
   gradingEnabled: boolean
   criteria: string
+  constraints: ConstraintRow[]
   errors: FieldErrors
   idPrefix?: string
 }) => (
   <fieldset class="field">
-    <legend>AI の講評</legend>
-    <p class="field-hint">
-      {gradingEnabled
-        ? '学生が提出すると、AI が講評を付けます。'
-        : 'AI が設定されていないため、講評は付きません。提出の画面で教師がコメントを書きます。'}
-    </p>
-    <TextAreaField
-      label="採点基準"
-      name="criteria"
-      id={`${idPrefix}-criteria`}
-      rows={6}
-      value={criteria}
-      error={errors.criteria}
-      hint="学生には表示されません。AI に見てほしい点を書きます。"
-    />
+    <legend>判定</legend>
+    <p class="field-hint">{gradingDescription(gradingEnabled)}</p>
+    <div class="stack">
+      <CodeConstraintsField constraints={constraints} errors={errors} idPrefix={idPrefix} mode="moodle" />
+      <TextAreaField
+        label="補足（任意）"
+        name="criteria"
+        id={`${idPrefix}-criteria`}
+        rows={3}
+        value={criteria}
+        error={errors.criteria}
+        hint={CRITERIA_HINT}
+      />
+    </div>
   </fieldset>
 )
 
@@ -305,22 +313,97 @@ const ConstraintRowView = ({ row }: { row: ConstraintRow }) => (
   </li>
 )
 
-/**
- * 通常モードの編集画面の「判定」のカード（教師）。制約を 1 行ずつ書く。行の追加と削除は src/code-editor.ts が受け持つ。
- * 制約の欄のエラーは fieldset（name="constraints"）に出す。行ごとの入力欄は同じ名前が並ぶので、エラーの置き場所にできないため
- */
-/** アイテムの編集画面の右の列に置く、学生が提出できる期間の欄 */
-export const CodePeriodCard = ({ opensAt, closesAt, errors }: { opensAt: string; closesAt: string; errors: FieldErrors }) => (
-  <Card
-    heading="提出の期間"
-    description={`学生はこの期間だけ提出できます。長さは ${MAX_SUBMIT_PERIOD / 3600} 時間までです。期間の外でも、問題を見てコードを書くことはできます。`}
-  >
-    <div class="stack">
-      <TextField label="開始日時" name="opens_at" type="datetime-local" value={opensAt} error={errors.opens_at} />
-      <TextField label="終了日時" name="closes_at" type="datetime-local" value={closesAt} error={errors.closes_at} />
-    </div>
+type PeriodProps = { opensAt: string; closesAt: string; errors: FieldErrors; idPrefix?: string }
+
+const PERIOD_DESCRIPTION = `学生はこの期間だけ提出できます。長さは ${MAX_SUBMIT_PERIOD / 3600} 時間までです。期間の外でも、問題を見てコードを書くことはできます。`
+
+const PeriodInputs = ({ opensAt, closesAt, errors, idPrefix = 'f' }: PeriodProps) => (
+  <div class="stack">
+    <TextField label="開始日時" name="opens_at" id={`${idPrefix}-opens_at`} type="datetime-local" value={opensAt} error={errors.opens_at} />
+    <TextField
+      label="終了日時"
+      name="closes_at"
+      id={`${idPrefix}-closes_at`}
+      type="datetime-local"
+      value={closesAt}
+      error={errors.closes_at}
+    />
+  </div>
+)
+
+/** 通常モードの編集画面の右の列に置く、学生が提出できる期間のカード */
+export const CodePeriodCard = (props: PeriodProps) => (
+  <Card heading="提出の期間" description={PERIOD_DESCRIPTION}>
+    <PeriodInputs {...props} />
   </Card>
 )
+
+/** Moodle モードの入力欄の、学生が提出できる期間の欄 */
+export const CodePeriodFields = (props: PeriodProps) => (
+  <fieldset class="field">
+    <legend>提出の期間</legend>
+    <p class="field-hint">{PERIOD_DESCRIPTION}</p>
+    <PeriodInputs {...props} />
+  </fieldset>
+)
+
+/**
+ * 制約の欄。1 行ずつ、学生にも見えるラベルと AI だけが使う判定の内容を書く。行の追加と削除は src/code-editor.ts が受け持つ。
+ * エラーは fieldset（name="constraints"）に出す。行ごとの入力欄は同じ名前が並ぶので、エラーの置き場所にできないため
+ */
+const CodeConstraintsField = ({
+  constraints,
+  errors,
+  idPrefix,
+  mode,
+}: {
+  constraints: ConstraintRow[]
+  errors: FieldErrors
+  idPrefix: string
+  /** moodle では、ない機能（AI の下書き・「制約をすべてクリアしたら完了」）の案内を出さない */
+  mode: 'normal' | 'moodle'
+}) => {
+  useStyle('/src/components/code.css')
+  const id = `${idPrefix}-constraints`
+  return (
+    <fieldset
+      name="constraints"
+      id={id}
+      class={cx('field code-constraints', errors.constraints && 'has-error')}
+      aria-invalid={errors.constraints ? 'true' : undefined}
+      aria-describedby={`${id}-error`}
+      data-code-constraints
+    >
+      <legend>制約</legend>
+      <p class="field-hint">
+        問題文の要件を 1 行ずつ書きます。ラベルは「クリアの条件」として学生にも見え、判定の内容は AI
+        だけが使います（空ならラベルで判定します）。
+        {mode === 'normal' && '完了の条件を「制約をすべてクリアしたら完了」にすると、すべて「できている」になったときに完了します。'}
+      </p>
+      <ol class="code-constraint-list" data-code-constraint-list>
+        {constraints.map((row) => (
+          <ConstraintRowView row={row} />
+        ))}
+      </ol>
+      <p class="code-constraint-empty muted small">
+        制約はまだありません。
+        {mode === 'normal' ? '問題文から AI で作るか、「制約を追加」で書き足します。' : '「制約を追加」で書き足します。'}
+        保存するには 1 つ以上必要です。
+      </p>
+      <div class="code-constraint-foot">
+        <Button size="sm" icon="plus" data-code-constraint-add>
+          制約を追加
+        </Button>
+      </div>
+      <FieldError id={id} error={errors.constraints} />
+      <template data-code-constraint-template>
+        <ConstraintRowView row={{ label: '', text: '' }} />
+      </template>
+    </fieldset>
+  )
+}
+
+/** 通常モードの編集画面の「判定」のカード（教師）。制約と補足の欄に、開発サーバーでは判定するものの切り替えを足す */
 
 export const CodeGradingCard = ({
   gradingEnabled,
@@ -338,15 +421,7 @@ export const CodeGradingCard = ({
 }) => {
   useStyle('/src/components/code.css')
   return (
-    <Card
-      class="editor-extra code-section code-grading"
-      heading="判定"
-      description={
-        gradingEnabled
-          ? '学生が提出すると、AI が制約ごとに「できている・一部できている・できていない」を判定します。'
-          : 'AI が設定されていないため、判定されません。提出の画面で教師がコメントを書きます。'
-      }
-    >
+    <Card class="editor-extra code-section code-grading" heading="判定" description={gradingDescription(gradingEnabled)}>
       <div class="stack">
         {judge && (
           <div class="code-dev-judge">
@@ -375,37 +450,7 @@ export const CodeGradingCard = ({
             </div>
           </div>
         )}
-        <fieldset
-          name="constraints"
-          id="f-constraints"
-          class={cx('field code-constraints', errors.constraints && 'has-error')}
-          aria-invalid={errors.constraints ? 'true' : undefined}
-          aria-describedby="f-constraints-error"
-          data-code-constraints
-        >
-          <legend>制約</legend>
-          <p class="field-hint">
-            問題文の要件を 1 行ずつ書きます。ラベルは「クリアの条件」として学生にも見え、判定の内容は AI
-            だけが使います（空ならラベルで判定します）。完了の条件を「制約をすべてクリアしたら完了」にすると、すべて「できている」になったときに完了します。
-          </p>
-          <ol class="code-constraint-list" data-code-constraint-list>
-            {constraints.map((row) => (
-              <ConstraintRowView row={row} />
-            ))}
-          </ol>
-          <p class="code-constraint-empty muted small">
-            制約はまだありません。問題文から AI で作るか、「制約を追加」で書き足します。保存するには 1 つ以上必要です。
-          </p>
-          <div class="code-constraint-foot">
-            <Button size="sm" icon="plus" data-code-constraint-add>
-              制約を追加
-            </Button>
-          </div>
-          <FieldError id="f-constraints" error={errors.constraints} />
-          <template data-code-constraint-template>
-            <ConstraintRowView row={{ label: '', text: '' }} />
-          </template>
-        </fieldset>
+        <CodeConstraintsField constraints={constraints} errors={errors} idPrefix="f" mode="normal" />
         <TextAreaField
           label="補足（任意）"
           name="criteria"
@@ -413,7 +458,7 @@ export const CodeGradingCard = ({
           rows={3}
           value={criteria}
           error={errors.criteria}
-          hint="制約にしにくい、見てほしい点（読みやすさなど）を書きます。AI が判定と講評の参考にします。学生には表示されません。"
+          hint={CRITERIA_HINT}
         />
       </div>
     </Card>
