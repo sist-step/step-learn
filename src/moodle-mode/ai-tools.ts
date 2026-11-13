@@ -4,6 +4,8 @@ import {
   NOT_FOUND,
   STALE,
   changed,
+  constraintLines,
+  constraintsSchema,
   defineConfirmTool,
   defineTool,
   inCourse,
@@ -13,6 +15,7 @@ import {
   id,
   sameSnapshot,
   success,
+  toConstraints,
   type AiAgentTool,
   type AiToolContext,
 } from '../lib/ai-tool-kit'
@@ -143,6 +146,7 @@ function itemDetail(item: MItem) {
       language: settings.language,
       starter: settings.starter,
       stdin: settings.stdin,
+      constraints: settings.constraints,
       criteria: settings.criteria,
     }
   return { description: item.body.slice(0, MAX_BODY_LENGTH) }
@@ -150,7 +154,7 @@ function itemDetail(item: MItem) {
 
 const getItem = defineTool(
   'get_item',
-  'アイテムの中身を返す。リンクは URL、コードは問題文・最初のコード・採点基準。course_id が分かっていれば一緒に渡す。',
+  'アイテムの中身を返す。リンクは URL、コードは問題文・最初のコード・制約・補足。course_id が分かっていれば一緒に渡す。',
   z.object({ item_id: id('アイテムの ID'), course_id: z.optional(id('アイテムのあるコースの ID')) }),
   async (c, { item_id, course_id }) => {
     const found = await courseOfItem(c, item_id, course_id)
@@ -207,7 +211,7 @@ const CREATABLE_TYPES = ['link', 'code'] as const
 
 const createItem = defineTool(
   'create_item',
-  'セクションの末尾にアイテムを追加する。作れるのはリンク（Moodle の URL の活動）とコード（学生がブラウザでコードを書いて提出し、AI が講評する課題）。学生には非表示の状態で作られる。',
+  'セクションの末尾にアイテムを追加する。作れるのはリンク（Moodle の URL の活動）とコード（学生がブラウザでコードを書いて提出し、AI が制約ごとに判定する課題）。学生には非表示の状態で作られる。',
   z.object({
     course_id: id('コースの ID'),
     section_id: id('追加先のセクションの ID'),
@@ -225,7 +229,8 @@ const createItem = defineTool(
           z.describe(`コードの言語。web: HTML / CSS / JavaScript、python: Python。今作れるのは ${availableCodeLanguages.join('・')} だけ`),
         ),
     ),
-    criteria: z.optional(describedString('コードの採点基準。AI の採点に使い、学生には見せない', 5000)),
+    constraints: z.optional(constraintsSchema('コードの制約。AI が提出を制約ごとに判定し、すべてできていればクリアになる。コードでは必須')),
+    criteria: z.optional(describedString('コードの補足。制約にしにくい観点（読みやすさなど）。AI の判定に使い、学生には見せない', 5000)),
   }),
   async (c, args) => {
     const loaded = await manageable(c, args.course_id)
@@ -235,6 +240,7 @@ const createItem = defineTool(
     if (!title) return fail('タイトルが空です。')
     const url = args.url?.trim() ?? ''
     if (args.type === 'link' && !isHttpUrl(url)) return fail('リンクには http:// か https:// で始まる URL が必要です。')
+    if (args.type === 'code' && !args.constraints?.length) return fail('コードには制約（constraints）を 1 つ以上渡してください。')
     if (args.type === 'code' && !availableCodeLanguages.includes(args.language ?? 'web'))
       return fail(
         `${CODE_LANGUAGE_LABELS[args.language ?? 'web']} のコードは作れません。今は ${availableCodeLanguages.map((l) => CODE_LANGUAGE_LABELS[l]).join('・')} だけ作れます。`,
@@ -261,6 +267,9 @@ const createItem = defineTool(
           starter: DEFAULT_STARTER[language],
           stdin: '',
           criteria: args.criteria ?? '',
+          constraints: toConstraints(args.constraints ?? []),
+          opensAt: null,
+          closesAt: null,
         },
       })
     }
@@ -390,7 +399,8 @@ const updateItemArgs = z.object({
   link_target: z.optional(z.enum(LINK_TARGETS).check(z.describe('リンクの開き方（リンクだけ）'))),
   section_id: z.optional(id('移し先のセクションの ID（同じコースの中だけ）。移すと末尾に入る')),
   body: z.optional(describedString('新しい問題文（コードだけ。Markdown）。全文を書く', 100_000)),
-  criteria: z.optional(describedString('新しい採点基準（コードだけ）', 5000)),
+  constraints: z.optional(constraintsSchema('新しい制約の一覧（コードだけ）。一部だけでなくすべての制約を書く')),
+  criteria: z.optional(describedString('新しい補足（コードだけ）', 5000)),
   starter: z.optional(
     starterSchema.check(
       z.describe('最初に入れておくコード（コードだけ）。変えるファイルだけを全文で書く。web は html / css / js、python は py'),
@@ -417,9 +427,9 @@ function checkItemArgs(loaded: LoadedCourse, item: MItem, args: UpdateItemArgs) 
   if ((args.url !== undefined || args.link_target !== undefined) && item.kind !== 'link')
     return 'URL と開き方はリンクのアイテムでだけ変えられます。'
   if (args.url !== undefined && !isHttpUrl(args.url.trim())) return 'URL は http:// か https:// で始めてください。'
-  const codeArgs = [args.body, args.criteria, args.starter, args.stdin]
+  const codeArgs = [args.body, args.constraints, args.criteria, args.starter, args.stdin]
   if (codeArgs.some((v) => v !== undefined) && !codeKind(item))
-    return '問題文・採点基準・最初のコード・入力の例は、コードのアイテムでだけ変えられます。'
+    return '問題文・制約・補足・最初のコード・入力の例は、コードのアイテムでだけ変えられます。'
   if (args.section_id !== undefined && !loaded.sections.some((s) => s.id === args.section_id))
     return '移し先のセクションが、同じコースにありません。'
   return null
@@ -443,7 +453,8 @@ function itemChanges(loaded: LoadedCourse, item: MItem, args: UpdateItemArgs) {
             changed(`最初のコード（${f.name}）`, code.starter[f.key] ?? '', args.starter?.[f.key], true),
           ),
           ...changed('入力の例', code.stdin, code.language === 'python' ? args.stdin : undefined, true),
-          ...changed('採点基準', code.criteria, args.criteria, true),
+          ...changed('制約', constraintLines(code.constraints), args.constraints && constraintLines(toConstraints(args.constraints)), true),
+          ...changed('補足', code.criteria, args.criteria, true),
         ]
       : []),
   ]
@@ -451,7 +462,7 @@ function itemChanges(loaded: LoadedCourse, item: MItem, args: UpdateItemArgs) {
 
 const updateItem = defineConfirmTool(
   'update_item',
-  'リンクのタイトル・URL・開き方・セクション、コードのタイトル・問題文・最初のコード・採点基準を変える。利用者が確認カードで承認してから実行される。変えない欄は省く。',
+  'リンクのタイトル・URL・開き方・セクション、コードのタイトル・問題文・最初のコード・制約・補足を変える。利用者が確認カードで承認してから実行される。変えない欄は省く。',
   updateItemArgs,
   async (c, args) => {
     const found = await courseOfItem(c, args.item_id, args.course_id)
@@ -492,12 +503,14 @@ const updateItem = defineConfirmTool(
     } else {
       const code = codeOf(item)!
       updateExtraData(item.extraKey!, courseId, {
+        ...item.extra!.data,
         title,
         body: args.body ?? code.body,
         language: code.language,
         starter: filesFor(code.language, { ...code.starter, ...args.starter }),
         stdin: code.language === 'python' ? (args.stdin ?? code.stdin) : '',
         criteria: args.criteria ?? code.criteria,
+        constraints: args.constraints ? toConstraints(args.constraints) : code.constraints,
       })
       // リンク先を送り直すのは、save_url が URL を必須にしているため。Moodle の画面で書き換えられていても /m/<key> に戻す
       if (title !== item.title) await api.saveUrl({ ...activity, externalurl: extraUrl(c, item.extraKey!), display: 'keep' })

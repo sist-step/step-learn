@@ -4,6 +4,8 @@ import {
   NOT_FOUND,
   STALE,
   changed,
+  constraintLines,
+  constraintsSchema,
   defineConfirmTool,
   defineTool,
   describedString,
@@ -13,6 +15,7 @@ import {
   inItem,
   sameSnapshot,
   success,
+  toConstraints,
   type AiAgentTool,
 } from './ai-tool-kit'
 import {
@@ -21,13 +24,8 @@ import {
   CODE_LANGUAGE_LABELS,
   DEFAULT_STARTER,
   MAX_CODE_LENGTH,
-  MAX_CONSTRAINT_LABEL_LENGTH,
-  MAX_CONSTRAINT_LENGTH,
-  MAX_CONSTRAINTS,
   MAX_STDIN_LENGTH,
-  describeConstraint,
   filesFor,
-  type CodeConstraint,
   type CodeFiles,
 } from './code'
 import { unixToDateInput } from './course-period'
@@ -202,7 +200,7 @@ function itemDetail(item: Item) {
 
 const getItem = defineTool(
   'get_item',
-  'アイテムの中身を返す。ページは本文（Markdown）、リンクは URL、コードは問題文・最初のコード・採点基準、ファイル自動配布は配るファイルの一覧。',
+  'アイテムの中身を返す。ページは本文（Markdown）、リンクは URL、コードは問題文・最初のコード・制約・補足、ファイル自動配布は配るファイルの一覧。',
   z.object({ item_id: id('アイテムの ID') }),
   async (c, { item_id }) => {
     const found = await itemOf(c.var.user!, item_id)
@@ -265,26 +263,6 @@ const createSection = defineTool(
 )
 
 const CREATABLE_TYPES = ['page', 'link', 'code'] as const
-
-const constraintsSchema = (description: string) =>
-  z
-    .array(
-      z.object({
-        label: describedString('学生にも見せる短い名前（15 字程度。例:「名前を見出しにする」）', MAX_CONSTRAINT_LABEL_LENGTH, 1),
-        text: z.optional(
-          describedString(
-            '学生には見せず、AI が判定に使う詳しい内容。コードを読めば満たしているか判定できる文（例:「h1 要素に自分の名前が書かれている」）',
-            MAX_CONSTRAINT_LABEL_LENGTH,
-            MAX_CONSTRAINT_LENGTH,
-          ),
-        ),
-      }),
-    )
-    .check(z.minLength(1), z.maxLength(MAX_CONSTRAINTS), z.describe(description))
-
-const toConstraints = (args: { label: string; text?: string }[]) => args.map((c) => ({ label: c.label.trim(), text: c.text?.trim() ?? '' }))
-
-const constraintLines = (constraints: CodeConstraint[]) => constraints.map(describeConstraint).join('\n')
 
 const createItem = defineTool(
   'create_item',
