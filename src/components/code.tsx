@@ -547,6 +547,7 @@ type ResultView = 'output' | 'submissions'
  * 描く内容が変わり、コースの変更の反映（CourseLiveSync）が、書いている途中のエディターの入力欄を差し替えてしまう
  */
 export const CodeWorkspace = ({
+  itemId,
   base,
   language,
   body,
@@ -555,6 +556,8 @@ export const CodeWorkspace = ({
   submissions,
   completion,
 }: {
+  /** AI がこのアイテムを変えたときに、client.ts がエディターを取り直すための目印 */
+  itemId: number
   /** 実行・保存・提出の送信先の共通部分（`/courses/1/items/2/code`） */
   base: string
   language: CodeLanguage
@@ -577,7 +580,7 @@ export const CodeWorkspace = ({
   const viewAttrs = (view: ResultView) =>
     submissions ? { role: 'tabpanel', id: `code-view-${view}`, 'aria-labelledby': `code-view-tab-${view}`, hidden: view !== startView } : {}
   return (
-    <div class="code-stage" data-code-workspace={language} data-code-base={base}>
+    <div class="code-stage" data-code-workspace={language} data-code-base={base} data-ai-watch={`item:${itemId}`}>
       <form id={CODE_FORM} method="post" action={`${base}/submit`} class="code-edit" data-loading-form>
         {(body || goals.length > 0) && (
           <details class="code-task" open>

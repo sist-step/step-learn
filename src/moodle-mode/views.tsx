@@ -1026,7 +1026,7 @@ export const ItemPage = ({
       <Styles use={['/src/routes/content/content.css', '/src/moodle-mode/moodle-mode.css']} />
       {pdf ? <PdfStage src={previewUrl} title={item.fileName} /> : crumbs}
       <div class="reader">
-        <article class="reader-main">
+        <article class="reader-main" data-ai-watch={`item:${item.id}`}>
           {!pdf && head}
 
           {embedded && <LinkEmbed url={item.url} title={item.title} />}
@@ -1276,6 +1276,7 @@ export const ItemEditPage = ({
           enctype="multipart/form-data"
           class="editor-form"
           data-loading-form
+          data-ai-watch={`item:${item.id}`}
           {...validateWith(extraKind ? extraKind.form : 'itemEdit')}
         >
           <input type="hidden" name="type" value={item.extra?.type ?? item.kind} />

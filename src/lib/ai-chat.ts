@@ -3,7 +3,7 @@ import crypto from 'node:crypto'
 import { and, desc, eq, lt } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { isAiModel, type AiMessage, type AiModel } from './ai'
-import type { AiChange } from './ai-tool-kit'
+import type { AiChange, AiTouched } from './ai-tool-kit'
 import { config } from './config'
 import type { aiChats as aiChatsTable } from './schema'
 
@@ -24,14 +24,20 @@ export type AiCard = {
 }
 
 /**
- * labels と cards はツール呼び出しの id ごとの、画面に出す説明と確認カード。
+ * labels・cards・touched はツール呼び出しの id ごとの、画面に出す説明・確認カード・変えたもの。
  * turnModel は最後の発言に答えているモデルで、チャットのモデルと違うのは難しい依頼を任せたとき（lib/ai-models.ts の AI_HARD_TASK_MODELS）
  */
-export type AiChatContent = { messages: AiMessage[]; labels: Record<string, string>; cards: Record<string, AiCard>; turnModel?: AiModel }
+export type AiChatContent = {
+  messages: AiMessage[]
+  labels: Record<string, string>
+  cards: Record<string, AiCard>
+  touched: Record<string, AiTouched>
+  turnModel?: AiModel
+}
 
 export type AiChat = { id: number; model: AiModel; content: AiChatContent }
 
-const emptyContent = (): AiChatContent => ({ messages: [], labels: {}, cards: {} })
+const emptyContent = (): AiChatContent => ({ messages: [], labels: {}, cards: {}, touched: {} })
 
 /**
  * チャットの版。内容が変わるか、別のチャットになると変わり、チャットがなければ空。
