@@ -17,7 +17,8 @@
   top: 0;
   right: 0;
   left: 0;
-  z-index: 20;
+  /* AI パネル（25）より下にしないのは、ユーザーメニューのようにヘッダーから下へ開くパネルが AI パネルの裏に隠れるため */
+  z-index: 26;
   display: flex;
   align-items: center;
   justify-content: space-between;
