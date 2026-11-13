@@ -7,7 +7,7 @@ export const AI_MODELS = [...OPENROUTER_MODELS, ...ANTHROPIC_MODELS] as const
 
 // AI_MODELS に入れないのは、文章を作らず、決めた選択肢から答えを選ぶだけで、会話（AI エージェントやアシスタント）には使えないため
 /** 判定だけを返すモデル（OpenRouter の Decisions API）。使用量は OpenRouter の月の上限に数える */
-export const OPENROUTER_DECISION_MODELS = ['typesafe/jev-1.14'] as const
+export const OPENROUTER_DECISION_MODELS = ['typesafe/jev-1.14', 'respan/span-01-lite', 'respan/span-02'] as const
 
 export type DecisionModel = (typeof OPENROUTER_DECISION_MODELS)[number]
 
@@ -40,6 +40,20 @@ export const AI_RETIRED_PROVIDER_MODELS: Record<AiProvider, readonly string[]> =
 }
 
 export const aiProvider = (model: AiModel): AiProvider => (isAnthropicModel(model) ? 'anthropic' : 'openrouter')
+
+// 一覧から消さないのは、再開するときにここから外すだけで戻せて、止める前にそのモデルで使った今月の額も月の上限に数え続けるため
+/** 一時的に止めているモデル。会話の選択肢に出さず、呼び出しても断る */
+export const AI_PAUSED_MODELS: readonly (AiModel | DecisionModel)[] = ['typesafe/jev-1.14']
+
+export const isModelPaused = (model: AiModel | DecisionModel) => AI_PAUSED_MODELS.includes(model)
+
+// 利用者ごとの週の枠で切り替えないのは、守りたいのは全体の予算で、一人が枠を使い切っただけで予備を出す必要はないため
+/** Claude を使えないか、Anthropic の今月の使用量が月の上限の AI_RESERVE_THRESHOLD を超えたときだけ使う予備のモデル */
+export const AI_RESERVE_MODELS: readonly AiModel[] = ['deepseek/deepseek-v4.1-flash-1017']
+
+export const AI_RESERVE_THRESHOLD = 0.6
+
+export const isReserveModel = (model: AiModel | DecisionModel) => (AI_RESERVE_MODELS as readonly string[]).includes(model)
 
 /** arguments はモデルが書いた JSON の文字列。壊れていることがあるので、使う側で検証する */
 export type AiToolCall = { id: string; name: string; arguments: string }

@@ -1,5 +1,15 @@
 import { completeAnthropic } from './ai-anthropic'
-import { AI_PROVIDERS, AiError, isAiModel, isAnthropicModel, type AiProvider, type AiReply, type AiRequest } from './ai-models'
+import {
+  AI_MODEL_LABELS,
+  AI_PROVIDERS,
+  AiError,
+  isAiModel,
+  isAnthropicModel,
+  isModelPaused,
+  type AiProvider,
+  type AiReply,
+  type AiRequest,
+} from './ai-models'
 import { completeOpenRouter } from './ai-openrouter'
 import { config } from './config'
 
@@ -16,6 +26,7 @@ export async function complete(request: AiRequest): Promise<AiReply> {
   const { model } = request
   // 型だけに任せないのは、as でのキャストや設定・入力から来た文字列が、一覧にないモデルのまま提供元に届くのを防ぐため
   if (!isAiModel(model)) throw new AiError(`利用できないモデルです（${String(model)}）`)
+  if (isModelPaused(model)) throw new AiError(`${AI_MODEL_LABELS[model]} は一時的に停止しています`)
   return isAnthropicModel(model) ? completeAnthropic({ ...request, model }) : completeOpenRouter({ ...request, model })
 }
 

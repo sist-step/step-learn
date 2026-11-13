@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm'
+import { isModelPaused } from './ai'
 import { aiLedger } from './ai-usage'
 import { isCleared, isJudge, type Judge } from './code'
 import { createGrader } from './code-grader'
@@ -6,10 +7,10 @@ import { db } from './db'
 import { appSettings, codeItems, codeSubmissions, completions, courses, items } from './schema'
 
 /**
- * 制約ごとの判定をするものを切り替えられるか。開発サーバー（npm run dev）だけで切り替えられ、本番では常に llm で判定する。
+ * 制約ごとの判定をするものを切り替えられるか。開発サーバー（npm run dev）だけで切り替えられ、本番と Jev を止めている間は常に llm で判定する。
  * 環境変数にしないのは、本番の設定に書かれても Jev で採点されないよう、ビルドしたコードから切り替えそのものを消すため
  */
-export const judgeSwitchable = import.meta.env.DEV
+export const judgeSwitchable = import.meta.env.DEV && !isModelPaused('typesafe/jev-1.14')
 
 const JUDGE_KEY = 'dev_code_judge'
 
