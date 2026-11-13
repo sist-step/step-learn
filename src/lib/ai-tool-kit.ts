@@ -2,6 +2,7 @@
 import * as z from 'zod/mini'
 import type { AiTool } from './ai'
 import type { Context } from 'hono'
+import { MAX_CONSTRAINT_LABEL_LENGTH, MAX_CONSTRAINT_LENGTH, MAX_CONSTRAINTS, describeConstraint, type CodeConstraint } from './code'
 import type { AppEnv } from './types'
 
 /** ツールを呼んだ要求。利用者は c.var.user、Moodle モードではトークンも c.var から読む */
@@ -69,6 +70,26 @@ export const id = (description: string) => z.int().check(z.positive(), z.describ
 
 export const describedString = (description: string, max: number, min = 0) =>
   z.string().check(z.minLength(min), z.maxLength(max), z.describe(description))
+
+export const constraintsSchema = (description: string) =>
+  z
+    .array(
+      z.object({
+        label: describedString('学生にも見せる短い名前（15 字程度。例:「名前を見出しにする」）', MAX_CONSTRAINT_LABEL_LENGTH, 1),
+        text: z.optional(
+          describedString(
+            '学生には見せず、AI が判定に使う詳しい内容。コードを読めば満たしているか判定できる文（例:「h1 要素に自分の名前が書かれている」）',
+            MAX_CONSTRAINT_LENGTH,
+          ),
+        ),
+      }),
+    )
+    .check(z.minLength(1), z.maxLength(MAX_CONSTRAINTS), z.describe(description))
+
+export const toConstraints = (args: { label: string; text?: string }[]) =>
+  args.map((c) => ({ label: c.label.trim(), text: c.text?.trim() ?? '' }))
+
+export const constraintLines = (constraints: CodeConstraint[]) => constraints.map(describeConstraint).join('\n')
 
 export function toolOf<S extends z.ZodMiniObject>(name: string, description: string, schema: S): AiTool {
   const { $schema: _, ...parameters } = z.toJSONSchema(schema) as Record<string, unknown>
