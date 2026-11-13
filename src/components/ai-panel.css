@@ -195,8 +195,6 @@
 .ai-meter-note { color: var(--muted); font-size: var(--fs-xs); }
 .ai-meter:not([data-state='ok']) .ai-meter-note { color: var(--danger-text); }
 .ai-meter[data-high] .ai-meter-note { color: var(--warning-text); }
-.ai-usage-foot { display: flex; align-items: flex-start; gap: 6px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--muted); font-size: var(--fs-xs); }
-.ai-usage-foot .icon { flex: none; margin-top: 1px; }
 /* ボタンごと薄くしないのは、::after のチップまで薄くなり、使えない理由が読みにくくなるため */
 .ai-hard:disabled { opacity: 1; cursor: default; }
 .ai-hard:disabled .icon { opacity: 0.4; }
