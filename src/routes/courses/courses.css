@@ -77,7 +77,8 @@
 .item-form:not([data-kind='page']) .when-other-inline { display: inline; }
 .item-form:not([data-kind='page']) .when-page-inline { display: none; }
 .item-form:not([data-kind='bundle']) .when-bundle { display: none; }
-.item-form[data-kind='code'] .unless-code, .item-form:is([data-kind='bundle'], [data-kind='code']) .unless-edit-next { display: none; }
+.item-form:not([data-kind='agent']) .when-agent { display: none; }
+.item-form[data-kind='code'] .unless-code, .item-form:is([data-kind='bundle'], [data-kind='code'], [data-kind='agent']) .unless-edit-next { display: none; }
 
 :root:not([data-edit-mode]) .edit-only,
 :root[data-edit-mode] .view-only { display: none; }

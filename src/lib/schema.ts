@@ -153,7 +153,7 @@ export const items = sqliteTable(
     sectionId: integer('section_id')
       .notNull()
       .references(() => sections.id, { onDelete: 'cascade' }),
-    type: text('type', { enum: ['page', 'link', 'file', 'screen', 'code', 'bundle'] }).notNull(),
+    type: text('type', { enum: ['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent'] }).notNull(),
     title: text('title').notNull(),
     body: text('body').notNull().default(''),
     url: text('url').notNull().default(''),
@@ -180,7 +180,7 @@ export const items = sqliteTable(
   (t) => [
     index('items_section').on(t.sectionId, t.position),
     index('items_course').on(t.courseId),
-    check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle')`),
+    check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle', 'agent')`),
     check('items_completion', sql`${t.completion} IN ('none', 'manual', 'view', 'play', 'clear')`),
     check('items_link_target', sql`${t.linkTarget} IN ('new', 'same', 'embed')`),
   ],
@@ -326,6 +326,60 @@ export const bundleSyncVersions = sqliteTable(
     createdAt: integer('created_at').notNull().default(now),
   },
   (t) => [index('bundle_sync_versions_item_user').on(t.itemId, t.userId, t.id), index('bundle_sync_versions_user').on(t.userId)],
+)
+
+/** コーディングエージェントのアイテムの設定。管理者が API キーを入れるまで、誰も使えない */
+export const agentItems = sqliteTable('agent_items', {
+  itemId: integer('item_id')
+    .primaryKey()
+    .references(() => items.id, { onDelete: 'cascade' }),
+  // 環境変数の CLAUDE_API_KEY を使わないのは、アイテムごとに請求先と上限を分け、管理者が入れたアイテムだけで使えるようにするため
+  /** Anthropic の API キーを AES-256-GCM で暗号化したもの（lib/agent.ts）。NULL は未設定 */
+  apiKey: blob('api_key', { mode: 'buffer' }),
+  /** 入れたキーの末尾の数文字。キーそのものは画面に出さないので、どのキーかを見分けるのに使う */
+  apiKeyHint: text('api_key_hint').notNull().default(''),
+  /** 使える期間（UNIX 秒） */
+  opensAt: integer('opens_at'),
+  closesAt: integer('closes_at'),
+  /** 1 人あたりと、アイテム全体で使える額（USD） */
+  userLimit: real('user_limit').notNull().default(0.5),
+  totalLimit: real('total_limit').notNull().default(10),
+})
+
+/** 拡張機能に渡した、コーディングエージェントを使うためのトークン。中身ではなく SHA-256 のハッシュを置く */
+export const agentTokens = sqliteTable(
+  'agent_tokens',
+  {
+    id: integer('id').primaryKey(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+    lastUsedAt: integer('last_used_at'),
+  },
+  (t) => [uniqueIndex('agent_tokens_hash').on(t.tokenHash), index('agent_tokens_item_user').on(t.itemId, t.userId)],
+)
+
+/** コーディングエージェントが AI を呼ぶたびの使用量。アイテムの API キーに請求される分で、ai_usage（CLAUDE_API_KEY の分）とは分ける */
+export const agentUsage = sqliteTable(
+  'agent_usage',
+  {
+    id: integer('id').primaryKey(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    // cascade にしないのは、利用者を消すとアイテムの使用額が減り、全体の上限に余裕ができてしまうため
+    userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+    promptTokens: integer('prompt_tokens').notNull().default(0),
+    completionTokens: integer('completion_tokens').notNull().default(0),
+    cost: real('cost').notNull().default(0),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [index('agent_usage_item_user').on(t.itemId, t.userId)],
 )
 
 /** 書きかけのコード。利用者ごとに 1 つで、編集のたびに上書きする */

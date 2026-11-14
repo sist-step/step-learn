@@ -17,6 +17,7 @@ import bold from 'heroicons/24/outline/bold.svg?raw'
 import book from 'heroicons/24/outline/book-open.svg?raw'
 import calendar from 'heroicons/24/outline/calendar.svg?raw'
 import clock from 'heroicons/24/outline/clock.svg?raw'
+import cpuChip from 'heroicons/24/outline/cpu-chip.svg?raw'
 import check from 'heroicons/24/outline/check.svg?raw'
 import checkCircle from 'heroicons/24/outline/check-circle.svg?raw'
 import assistant from 'heroicons/24/outline/chat-bubble-oval-left-ellipsis.svg?raw'
@@ -93,6 +94,7 @@ const svgs = {
   stop,
   sparkles,
   assistant,
+  cpuChip,
   pencilSquare,
   arrowDown,
   ellipsis,

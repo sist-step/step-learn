@@ -1,8 +1,8 @@
 {
   "name": "step-learn-for-vscode",
   "displayName": "STEP Learn for VSCode",
-  "description": "STEP Learn で配られたプログラムのファイルを、ボタン 1 つで VS Code に用意して開きます。先生が指定したアイテムでは、保存した内容を変更履歴として STEP Learn に記録します。",
-  "version": "0.2.0",
+  "description": "STEP Learn で配られたプログラムのファイルを、ボタン 1 つで VS Code に用意して開きます。先生が指定したアイテムでは、保存した内容を変更履歴として STEP Learn に記録します。コーディングエージェントのアイテムでは、使える期間のあいだ AI がファイルを読み書きしてプログラムを書きます。",
+  "version": "0.3.0",
   "publisher": "mint1535",
   "private": true,
   "license": "UNLICENSED",
@@ -39,8 +39,53 @@
         "command": "stepLearn.forgetServers",
         "title": "ファイルを受け取ってよいサーバーの記録を消す",
         "category": "STEP Learn"
+      },
+      {
+        "command": "stepLearn.agent.newChat",
+        "title": "新しいチャット",
+        "category": "STEP Learn",
+        "icon": "$(add)"
+      },
+      {
+        "command": "stepLearn.agent.disconnect",
+        "title": "コーディングエージェントの接続を解除する",
+        "category": "STEP Learn"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "stepLearn",
+          "title": "STEP Learn",
+          "icon": "images/agent.svg"
+        }
+      ]
+    },
+    "views": {
+      "stepLearn": [
+        {
+          "type": "webview",
+          "id": "stepLearn.agent",
+          "name": "コーディングエージェント",
+          "when": "stepLearn.agentAvailable"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "stepLearn.agent.newChat",
+          "when": "view == stepLearn.agent",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "stepLearn.agent.newChat",
+          "when": "stepLearn.agentAvailable"
+        }
+      ]
+    },
     "configuration": {
       "title": "STEP Learn",
       "properties": {
