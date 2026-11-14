@@ -40,6 +40,12 @@ const STOPS: Partial<Record<string, AiStop>> = {
 
 let client: Anthropic | null = null
 
+function sharedClient() {
+  if (!config.anthropic) throw new AiError('CLAUDE_API_KEY が設定されていないため、このモデルを利用できません')
+  client ??= new Anthropic({ apiKey: config.anthropic.apiKey, maxRetries: 1 })
+  return client
+}
+
 const parseJson = (raw: string): unknown => {
   try {
     return JSON.parse(raw)
@@ -108,6 +114,10 @@ function toUsage(model: AnthropicModel, usage: Anthropic.Beta.BetaUsage): AiUsag
 }
 
 function toAiError(model: AnthropicModel, e: unknown) {
+  if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) {
+    console.error('[ai]', model, e.status, e.message)
+    return new AiError('AI の API キーが使えません')
+  }
   if (e instanceof Anthropic.RateLimitError) {
     console.error('[ai]', model, e.status, e.message)
     return new AiError('AI が混み合っています。しばらくしてからお試しください')
@@ -137,16 +147,12 @@ function stoppedUsage(model: AnthropicModel, snapshot: Anthropic.Beta.BetaMessag
   return toUsage(model, { ...snapshot.usage, output_tokens: Math.max(snapshot.usage.output_tokens, written) })
 }
 
-export async function completeAnthropic({
-  model,
-  messages,
-  maxTokens,
-  tools,
-  onText,
-  signal,
-}: AiRequest & { model: AnthropicModel }): Promise<AiReply> {
-  if (!config.anthropic) throw new AiError('CLAUDE_API_KEY が設定されていないため、このモデルを利用できません')
-  client ??= new Anthropic({ apiKey: config.anthropic.apiKey, maxRetries: 1 })
+/** apiKey を渡すと、CLAUDE_API_KEY の代わりにそのキーで呼ぶ（コーディングエージェントのアイテムごとのキー） */
+export async function completeAnthropic(
+  { model, messages, maxTokens, tools, onText, signal }: AiRequest & { model: AnthropicModel },
+  apiKey?: string,
+): Promise<AiReply> {
+  const api = apiKey ? new Anthropic({ apiKey, maxRetries: 1 }) : sharedClient()
   const stream = !!onText
   const params: Anthropic.Beta.MessageCreateParamsNonStreaming = {
     model,
@@ -166,12 +172,12 @@ export async function completeAnthropic({
   let partial: () => Anthropic.Beta.BetaMessage | undefined = () => undefined
   try {
     if (onText) {
-      const running = client.beta.messages.stream(params, options)
+      const running = api.beta.messages.stream(params, options)
       partial = () => running.currentMessage
       running.on('text', onText)
       message = await running.finalMessage()
     } else {
-      message = await client.beta.messages.create(params, options)
+      message = await api.beta.messages.create(params, options)
     }
   } catch (e) {
     if (!signal?.aborted) throw toAiError(model, e)
@@ -191,4 +197,17 @@ export async function completeAnthropic({
   const stop = STOPS[message.stop_reason ?? ''] ?? 'end'
   if (!text && toolCalls.length === 0 && stop !== 'refusal') throw new AiError('AI の応答が空でした')
   return { text, toolCalls, stop, usage: toUsage(model, message.usage), native: message.content }
+}
+
+/** API キーで model を呼べるか。invalid はキーが使えない、unreachable は Anthropic に届かなかった */
+export async function checkAnthropicKey(apiKey: string, model: AnthropicModel): Promise<'ok' | 'invalid' | 'unreachable'> {
+  try {
+    await new Anthropic({ apiKey, maxRetries: 1, timeout: 15_000 }).models.retrieve(model)
+    return 'ok'
+  } catch (e) {
+    if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError || e instanceof Anthropic.NotFoundError)
+      return 'invalid'
+    console.error('[ai]', model, e instanceof Error ? e.message : typeof e)
+    return 'unreachable'
+  }
 }

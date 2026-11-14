@@ -1,5 +1,6 @@
 // サーバーの handlers と client.ts の両方が読み込むので、DB や Node の API を使うモジュールを import しない
 import * as z from 'zod/mini'
+import { MAX_AGENT_LIMIT, MAX_AGENT_PERIOD } from './agent'
 import {
   CODE_LANGUAGES,
   MAX_CODE_LENGTH,
@@ -224,11 +225,27 @@ const codeReview = z.object({
   comment: text('コメント', 2000),
 })
 
+const usd = (label: string, max: number) =>
+  z.pipe(
+    z.pipe(
+      text(label, 20, { required: true }),
+      z
+        .string()
+        .check(
+          rule((s: string) => (/^\d+(\.\d{1,2})?$/.test(s) ? null : `${label}は 0 以上の数値（小数第 2 位まで）で入力してください。`)),
+        ),
+    ),
+    z.pipe(
+      z.transform((s: string) => Number(s)),
+      z.number().check(z.maximum(max, `${label}は ${max} 以下で入力してください。`)),
+    ),
+  )
+
 const itemFields = {
   title: text('タイトル', 200, { required: true }),
   body: text('本文', 100_000),
   hidden: flag(),
-  type: choice(['page', 'link', 'file', 'screen', 'code', 'bundle'], 'page'),
+  type: choice(['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent'], 'page'),
   language: choice(CODE_LANGUAGES, 'web'),
   link_target: choice(LINK_TARGETS, 'new'),
   completion: z.optional(z.enum(COMPLETIONS, '完了の条件が正しくありません。')),
@@ -258,16 +275,30 @@ const itemEdit = z
     'constraint_text[]': list(),
     opens_at: z.optional(dateTime('開始日時')),
     closes_at: z.optional(dateTime('終了日時')),
+    user_limit: z.optional(usd('1 人あたりの上限', MAX_AGENT_LIMIT)),
     url: z.optional(z.pipe(text('URL', 2000), z.string().check(rule((s: string) => (isHttpUrl(s) ? null : URL_INVALID))))),
   })
   .check(
     z.superRefine((v, ctx) => {
       const message = completionIssue(v)
       if (message) ctx.issues.push({ code: 'custom', message, input: v, path: ['completion'] })
-      if (v.type !== 'code') return
-      for (const issue of codeItemIssues(v)) ctx.issues.push({ code: 'custom', input: v, ...issue })
+      const issues = v.type === 'code' ? codeItemIssues(v) : v.type === 'agent' ? agentItemIssues(v) : []
+      for (const issue of issues) ctx.issues.push({ code: 'custom', input: v, ...issue })
     }),
   )
+
+/** コーディングエージェントのアイテムの編集画面の、使える期間と上限の誤り */
+function agentItemIssues(v: { opens_at?: string; closes_at?: string; user_limit?: number }) {
+  const issues = periodIssues(
+    v.opens_at ?? '',
+    v.closes_at ?? '',
+    MAX_AGENT_PERIOD,
+    `使える期間は ${MAX_AGENT_PERIOD / 86_400} 日以内にしてください。`,
+  )
+  // 欄そのものがないときだけ足すのは、欄の値の誤りは user_limit のスキーマ（usd）が出すため
+  if (v.user_limit === undefined) issues.push({ message: '1 人あたりの上限を入力してください。', path: ['user_limit'] })
+  return issues
+}
 
 /** コードのアイテムの編集画面の、制約と提出の期間の誤り */
 function codeItemIssues(v: Parameters<typeof readConstraints>[0] & { opens_at?: string; closes_at?: string }) {
@@ -276,15 +307,17 @@ function codeItemIssues(v: Parameters<typeof readConstraints>[0] & { opens_at?: 
 }
 
 /** コードのアイテムの提出の期間（日時の入力欄の値）の誤り。形の誤りは欄ごとのスキーマ（dateTime）が出すので、ここでは見ない */
-function submitPeriodIssues(opensAt: string, closesAt: string) {
+const submitPeriodIssues = (opensAt: string, closesAt: string) =>
+  periodIssues(opensAt, closesAt, MAX_SUBMIT_PERIOD, `提出の期間は ${MAX_SUBMIT_PERIOD / 3600} 時間以内にしてください。`)
+
+function periodIssues(opensAt: string, closesAt: string, maxLength: number, tooLong: string) {
   const issues: { message: string; path: string[] }[] = []
   if (!opensAt) issues.push({ message: '開始日時を入力してください。', path: ['opens_at'] })
   if (!closesAt) issues.push({ message: '終了日時を入力してください。', path: ['closes_at'] })
   if (!isDateTimeInput(opensAt) || !isDateTimeInput(closesAt)) return issues
   const length = dateTimeInputToUnix(closesAt) - dateTimeInputToUnix(opensAt)
   if (length <= 0) issues.push({ message: '終了日時は開始日時より後にしてください。', path: ['closes_at'] })
-  else if (length > MAX_SUBMIT_PERIOD)
-    issues.push({ message: `提出の期間は ${MAX_SUBMIT_PERIOD / 3600} 時間以内にしてください。`, path: ['closes_at'] })
+  else if (length > maxLength) issues.push({ message: tooLong, path: ['closes_at'] })
   return issues
 }
 
@@ -321,22 +354,6 @@ const extraCode = z
 
 const image = z.object({ image: file('画像を選択してください。') })
 
-const usd = (label: string, max: number) =>
-  z.pipe(
-    z.pipe(
-      text(label, 20, { required: true }),
-      z
-        .string()
-        .check(
-          rule((s: string) => (/^\d+(\.\d{1,2})?$/.test(s) ? null : `${label}は 0 以上の数値（小数第 2 位まで）で入力してください。`)),
-        ),
-    ),
-    z.pipe(
-      z.transform((s: string) => Number(s)),
-      z.number().check(z.maximum(max, `${label}は ${max} 以下で入力してください。`)),
-    ),
-  )
-
 const percent = (label: string) =>
   z.pipe(
     z.pipe(
@@ -345,6 +362,19 @@ const percent = (label: string) =>
     ),
     z.transform((s: string) => Number(s)),
   )
+
+// sk-ant- で始まるかだけを見るのは、キーの形は Anthropic が変えることがあり、使えるかは保存するときに Anthropic に確かめるため
+const agentKey = z.object({
+  api_key: z.pipe(
+    text('API キー', 400),
+    z
+      .string()
+      .check(
+        rule((s: string) => (!s || /^sk-ant-[\w-]+$/.test(s) ? null : 'Anthropic の API キー（sk-ant- で始まる）を入力してください。')),
+      ),
+  ),
+  total_limit: usd('アイテム全体の上限', MAX_AGENT_LIMIT),
+})
 
 const aiSettings = z.object({
   openrouter_limit: usd('OpenRouter の月の上限', 10_000),
@@ -384,6 +414,7 @@ export const FORMS = {
   image,
   aiSettings,
   aiMessage,
+  agentKey,
 }
 
 export type FormName = keyof typeof FORMS
