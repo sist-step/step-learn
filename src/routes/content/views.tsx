@@ -1,3 +1,4 @@
+import { AgentEditPanel, AgentOpen, AgentPeriodCard, type AgentView } from '../../components/agent'
 import { BundleEditPanel, BundleOpen, type BundleView } from '../../components/bundle'
 import {
   CodeBarActions,
@@ -33,6 +34,7 @@ import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
+import { agentBase } from '../../lib/agent'
 import { bundleBase } from '../../lib/bundle'
 import type { CodeFiles, CodeLanguage, Judge } from '../../lib/code'
 import { unixToDateTimeInput } from '../../lib/course-period'
@@ -52,9 +54,11 @@ export type ItemInput = {
   stdin: string
   criteria: string
   constraints: ConstraintRow[]
-  /** 提出の期間（日時の入力欄の値） */
+  /** 提出の期間（コード）・使える期間（コーディングエージェント）の、日時の入力欄の値 */
   opensAt: string
   closesAt: string
+  /** コーディングエージェントの 1 人あたりの上限（入力欄の値） */
+  userLimit: string
 }
 
 /** コードのアイテムの言語と、見ている学生の提出。goals は学生に見せるクリアの条件（制約のラベル） */
@@ -91,6 +95,7 @@ export const ItemEditPage = ({
   item,
   code,
   bundle,
+  agent,
   gradingEnabled,
   judge,
   sections,
@@ -102,6 +107,8 @@ export const ItemEditPage = ({
   code?: CodeItem
   /** ファイル自動配布のアイテムで配るファイルと、同期の状態 */
   bundle?: BundleView
+  /** コーディングエージェントのアイテムの設定と利用状況 */
+  agent?: AgentView
   /** AI が設定されていて、提出を自動で採点するか */
   gradingEnabled: boolean
   /** 制約ごとの判定をするもの。切り替えられる開発サーバーでだけ渡す */
@@ -124,8 +131,9 @@ export const ItemEditPage = ({
     stdin: code?.stdin ?? '',
     criteria: code?.criteria ?? '',
     constraints: (code?.constraints ?? []).map((c) => ({ label: c.label, text: c.text })),
-    opensAt: unixToDateTimeInput(code?.opensAt),
-    closesAt: unixToDateTimeInput(code?.closesAt),
+    opensAt: unixToDateTimeInput(code?.opensAt ?? agent?.settings.opensAt ?? undefined),
+    closesAt: unixToDateTimeInput(code?.closesAt ?? agent?.settings.closesAt ?? undefined),
+    userLimit: agent ? String(agent.settings.userLimit) : '',
     ...values,
   }
   const section = sections.find((s) => s.id === item.sectionId)
@@ -134,7 +142,7 @@ export const ItemEditPage = ({
     { href: `/courses/${courseId}`, label: access.course.title },
     ...(section ? [{ href: editUrl(courseId, section.id), label: section.title }] : []),
   ]
-  const lost = `${bundle ? '配布するファイルと、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : ''}完了記録も消え、元に戻せません。`
+  const lost = `${bundle ? '配布するファイルと、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : agent ? '利用状況と' : ''}完了記録も消え、元に戻せません。`
   return (
     <AppShell
       tone={access.course.color}
@@ -171,6 +179,7 @@ export const ItemEditPage = ({
               name="body"
               value={v.body}
               error={errors.body}
+              hint={agent ? '学生に見せるほか、AI への指示としても渡します（課題の内容や、使ってほしい書き方など）。' : undefined}
               rows={item.type === 'page' ? 18 : item.type === 'code' ? 10 : 5}
               split
             />
@@ -189,6 +198,7 @@ export const ItemEditPage = ({
 
           <aside class="editor-side">
             {code && <CodePeriodCard opensAt={v.opensAt} closesAt={v.closesAt} errors={errors} />}
+            {agent && <AgentPeriodCard opensAt={v.opensAt} closesAt={v.closesAt} userLimit={v.userLimit} errors={errors} />}
             <Card heading="公開と配置">
               <div class="stack">
                 <fieldset class="field">
@@ -219,6 +229,9 @@ export const ItemEditPage = ({
         </form>
 
         {bundle && <BundleEditPanel base={bundleBase(courseId, item.id)} {...bundle} class="editor-extra" />}
+        {agent?.manage && (
+          <AgentEditPanel base={agentBase(courseId, item.id)} settings={agent.settings} manage={agent.manage} class="editor-extra" />
+        )}
 
         {judge && code && <form id={JUDGE_FORM} method="post" action={`${base}/judge`} hidden />}
       </div>
@@ -240,6 +253,7 @@ export const ItemPage = ({
   textPreview,
   code,
   bundle,
+  agent,
   revision,
 }: {
   access: CourseAccess
@@ -255,6 +269,7 @@ export const ItemPage = ({
   textPreview: string | null
   code?: CodeView
   bundle?: BundleView
+  agent?: AgentView
   revision: string
 }) => {
   const id = access.course.id
@@ -273,7 +288,12 @@ export const ItemPage = ({
   const onOpen = (o: OutlineItem) => (waitsFor(o, 'view') ? { 'data-complete-on-open': completeUrl(o) } : {})
   const embedded = item.type === 'link' && item.linkTarget === 'embed'
   const opensOnView =
-    item.type === 'page' || item.type === 'bundle' || embedded || !!code || (!!preview && (preview !== 'text' || textPreview !== null))
+    item.type === 'page' ||
+    item.type === 'bundle' ||
+    item.type === 'agent' ||
+    embedded ||
+    !!code ||
+    (!!preview && (preview !== 'text' || textPreview !== null))
   const tracked = outline.filter(isTracked)
 
   const navHref = (o: OutlineItem) => `${base}/${o.id}`
@@ -404,6 +424,10 @@ export const ItemPage = ({
 
             {bundle && (
               <BundleOpen base={bundleBase(id, item.id)} {...bundle} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />
+            )}
+
+            {agent && (
+              <AgentOpen base={agentBase(id, item.id)} {...agent} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />
             )}
 
             {item.type === 'screen' && (

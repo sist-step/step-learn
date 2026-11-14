@@ -1,5 +1,7 @@
 import path from 'node:path'
 import * as vscode from 'vscode'
+import { claimAgent } from './agent-core'
+import { AgentController } from './agent-view'
 import { HistorySession, confirmSync, tokenKey } from './history-session'
 import {
   SyncError,
@@ -23,6 +25,8 @@ const RECORDS_KEY = 'bundles'
 const ACCOUNTS_KEY = 'accounts'
 
 const sessions = new Map<string, HistorySession>()
+
+let agent: AgentController | null = null
 
 const recordsOf = (context: vscode.ExtensionContext) => context.globalState.get<Record<string, Synced>>(RECORDS_KEY, {})
 
@@ -60,7 +64,13 @@ async function trust(context: vscode.ExtensionContext, server: URL) {
 }
 
 /** 前に開いたときと違うアカウントのリンクなら、開いてよいかを確かめる。開くときは、このサーバーのアカウントとして覚えておく */
-async function confirmAccount(context: vscode.ExtensionContext, server: URL, title: string, user: ManifestUser) {
+async function confirmAccount(
+  context: vscode.ExtensionContext,
+  server: URL,
+  title: string,
+  user: ManifestUser,
+  consequence = '保存した内容がその人の変更履歴として記録されることがあります',
+) {
   const accounts = context.globalState.get<Record<string, ManifestUser>>(ACCOUNTS_KEY, {})
   // アイテムごとに覚えないのは、まだ開いていないアイテムのリンクでも、ほかの人のアカウントのフォルダーを黙って用意しないため
   const known = accounts[server.origin]
@@ -76,7 +86,7 @@ async function confirmAccount(context: vscode.ExtensionContext, server: URL, tit
         modal: true,
         detail: [
           known && `前回は ${known.name} さんのアカウントで開いていました。`,
-          `ほかの人から送られたリンクを開くと、保存した内容がその人の変更履歴として記録されることがあります。自分で STEP Learn の画面から開いたときだけ「${accept}」を押してください。`,
+          `ほかの人から送られたリンクを開くと、${consequence}。自分で STEP Learn の画面から開いたときだけ「${accept}」を押してください。`,
           !known && '次からは、違うアカウントのリンクのときだけ確認します。',
         ]
           .filter(Boolean)
@@ -132,10 +142,30 @@ async function openFolder(folder: string) {
   await vscode.commands.executeCommand('vscode.openFolder', uri, { forceNewWindow: open.length > 0 })
 }
 
+/** STEP Learn のコーディングエージェントのアイテムの「VS Code で使う」から開いたとき。トークンを受け取ってサイドバーを出す */
+async function connectAgent(context: vscode.ExtensionContext, server: URL, token: string) {
+  if (!(await trust(context, server))) return
+  try {
+    const grant = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: 'STEP Learn: コーディングエージェントを確認しています' },
+      () => claimAgent(server, token),
+    )
+    if (!(await confirmAccount(context, server, grant.title, grant.user, 'その人の利用枠で AI を使うことになります'))) return
+    await agent?.connect(server, grant)
+  } catch (e) {
+    const message =
+      e instanceof SyncError
+        ? e.message
+        : `コーディングエージェントを用意できませんでした（${e instanceof Error ? e.message : String(e)}）。`
+    void vscode.window.showErrorMessage(message)
+  }
+}
+
 async function openFromLink(context: vscode.ExtensionContext, uri: vscode.Uri) {
   const query = new URLSearchParams(uri.query)
   const server = parseServer(query.get('server') ?? '')
   const token = query.get('token') ?? ''
+  if (uri.path === '/agent' && server && token) return connectAgent(context, server, token)
   if (uri.path !== '/open' || !server || !token) {
     void vscode.window.showErrorMessage('リンクが正しくありません。STEP Learn の画面からもう一度開いてください。')
     return
@@ -182,6 +212,8 @@ async function openFromLink(context: vscode.ExtensionContext, uri: vscode.Uri) {
 
 export function activate(context: vscode.ExtensionContext) {
   void startSessions(context)
+  agent = new AgentController(context)
+  agent.start()
   context.subscriptions.push(
     vscode.window.registerUriHandler({ handleUri: (uri) => openFromLink(context, uri) }),
     vscode.workspace.onDidChangeWorkspaceFolders(() => void startSessions(context)),

@@ -6,6 +6,7 @@ import { Button } from './components/button'
 import { AppShell, AuthShell } from './components/layout'
 import { EmptyState } from './components/ui'
 import { session } from './lib/auth'
+import { AGENT_BODY_LIMIT } from './lib/agent'
 import { SYNC_BODY_LIMIT } from './lib/bundle-sync'
 import { config } from './lib/config'
 import { touchCourse } from './lib/courses'
@@ -16,6 +17,7 @@ import type { AppEnv } from './lib/types'
 import { renderer } from './renderer'
 import account from './routes/account'
 import admin from './routes/admin'
+import agent, { isAgentRequest, api as agentApi } from './routes/agent'
 import ai, { renderAiPanel } from './routes/ai'
 import auth from './routes/auth'
 import bundle, { isSyncRequest, api as vscodeApi } from './routes/bundle'
@@ -39,7 +41,10 @@ app.use(csrf(config.appOrigin ? { origin: config.appOrigin } : undefined))
 app.use(flashMiddleware)
 app.use(session)
 const syncBodyLimit = limitBody(SYNC_BODY_LIMIT)
-app.use((c, next) => (c.var.user ? userBodyLimit : isSyncRequest(c) ? syncBodyLimit : guestBodyLimit)(c, next))
+const agentBodyLimit = limitBody(AGENT_BODY_LIMIT)
+app.use((c, next) =>
+  (isAgentRequest(c) ? agentBodyLimit : c.var.user ? userBodyLimit : isSyncRequest(c) ? syncBodyLimit : guestBodyLimit)(c, next),
+)
 app.use(renderer)
 // 要求ごとに描いておかず、AppShell が呼ぶまで待つのは、JSON やファイルを返す要求のたびに会話を復号することになるため
 app.use(async (c, next) => {
@@ -48,8 +53,8 @@ app.use(async (c, next) => {
 })
 
 // 各ハンドラで呼ばないのは、内容を変える操作を足したときに呼び忘れると、開いている画面に反映されなくなるため
-// 完了の切り替えと、コードのアイテムの実行・保存・提出と、VS Code で開くリンクの発行を除くのは、本人にしか関係がないのに、コースを開いている全員に取り直させることになるため
-const PERSONAL_POST = /\/complete$|\/items\/\d+\/code\/|\/items\/\d+\/bundle\/launch$/
+// 完了の切り替えと、コードのアイテムの実行・保存・提出と、VS Code で開くリンク（ファイル自動配布・コーディングエージェント）の発行を除くのは、本人にしか関係がないのに、コースを開いている全員に取り直させることになるため
+const PERSONAL_POST = /\/complete$|\/items\/\d+\/code\/|\/items\/\d+\/(bundle|agent)\/launch$/
 app.post('/courses/:id/*', async (c, next) => {
   await next()
   const id = Number(c.req.param('id'))
@@ -73,6 +78,8 @@ app.route('/courses', participants)
 app.route('/courses', screen)
 app.route('/courses', code)
 app.route('/courses', bundle)
+app.route('/courses', agent)
+app.route('/api/vscode/agent', agentApi)
 app.route('/api/vscode', vscodeApi)
 app.route('/account', account)
 app.route('/admin', admin)

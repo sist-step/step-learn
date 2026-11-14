@@ -11,8 +11,11 @@ import {
   visibleItem,
   type CourseAccess,
 } from '../../lib/courses'
+import type { AgentView } from '../../components/agent'
 import type { BundleView } from '../../components/bundle'
 import { RestrictionPage } from '../../components/restriction'
+import { agentState, usagePercent } from '../../lib/agent'
+import { agentSettings, agentSpent, agentTokenCount, agentUsageByUser, agentUsed, saveAgentPeriod } from '../../lib/agent-items'
 import { canOpenItem, courseAvailability, restrictionChoices } from '../../lib/availability'
 import { bundleBase } from '../../lib/bundle'
 import { bundleKeysOf, bundleStore, bundleSyncStore } from '../../lib/bundle-items'
@@ -76,6 +79,21 @@ function bundleView(c: Context<AppEnv>, access: CourseAccess, itemId: number): B
   return {
     files: bundleStore(itemId).list(),
     sync: syncStateOf(bundleSyncStore(courseId, itemId), bundleBase(courseId, itemId), viewer),
+  }
+}
+
+async function agentView(c: Context<AppEnv>, access: CourseAccess, itemId: number): Promise<AgentView> {
+  const settings = agentSettings(itemId)
+  const userId = c.var.user!.id
+  const used = agentUsed(itemId, userId)
+  const spent = agentSpent(itemId)
+  return {
+    settings,
+    state: agentState(settings, { used, spent }, Math.floor(Date.now() / 1000)),
+    usage: usagePercent(used, settings.userLimit),
+    manage: access.canManage
+      ? { spent, users: agentUsageByUser(itemId), tokens: await agentTokenCount(itemId), isAdmin: c.var.user!.role === 'admin' }
+      : undefined,
   }
 }
 
@@ -208,6 +226,7 @@ function readItemInput(form: Form): ItemInput {
     })),
     opensAt: field(form, 'opens_at', 16),
     closesAt: field(form, 'closes_at', 16),
+    userLimit: field(form, 'user_limit', 20),
   }
 }
 
@@ -276,6 +295,12 @@ export async function createItem(c: Context<AppEnv>) {
       `/courses/${courseId}/items/${created.id}/edit`,
       `「${input.title}」を追加しました。問題文と最初のコードを設定してください。`,
     )
+  if (type === 'agent')
+    return redirectWith(
+      c,
+      `/courses/${courseId}/items/${created.id}/edit`,
+      `「${input.title}」を追加しました。使える期間と上限を設定してください。`,
+    )
   const next = field(form, 'then') === 'view' ? `/courses/${courseId}/items/${created.id}` : editUrl(courseId, sectionId)
   return redirectWith(c, next, `「${input.title}」を追加しました。`)
 }
@@ -292,6 +317,7 @@ export async function editItem(c: Context<AppEnv>) {
       item={item}
       code={getCodeItem(iid)}
       bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
+      agent={item.type === 'agent' ? await agentView(c, access, iid) : undefined}
       gradingEnabled={gradingEnabled}
       judge={judgeSwitchable ? currentJudge() : undefined}
       sections={listSections(access.course.id)}
@@ -340,6 +366,7 @@ export async function updateItem(c: Context<AppEnv>) {
         item={item}
         code={code}
         bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
+        agent={item.type === 'agent' ? await agentView(c, access, iid) : undefined}
         gradingEnabled={gradingEnabled}
         judge={judgeSwitchable ? currentJudge() : undefined}
         sections={listSections(courseId)}
@@ -375,6 +402,12 @@ export async function updateItem(c: Context<AppEnv>) {
       closesAt: dateTimeInputToUnix(input.closes_at ?? ''),
     })
   }
+  if (item.type === 'agent')
+    saveAgentPeriod(iid, {
+      opensAt: dateTimeInputToUnix(input.opens_at ?? ''),
+      closesAt: dateTimeInputToUnix(input.closes_at ?? ''),
+      userLimit: input.user_limit ?? 0,
+    })
   if (stored && item.fileKey) inBackground(deleteKeys([item.fileKey]))
   return redirectWith(c, `/courses/${courseId}/items/${iid}/edit`, '保存しました。')
 }
@@ -622,6 +655,7 @@ export async function showItem(c: Context<AppEnv>) {
       textPreview={textPreview}
       code={code}
       bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
+      agent={item.type === 'agent' ? await agentView(c, access, iid) : undefined}
       revision={revision}
     />,
     { title: item.title },
