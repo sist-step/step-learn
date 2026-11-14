@@ -26,6 +26,26 @@ export const users = sqliteTable(
   (t) => [uniqueIndex('users_username').on(t.username), check('users_role', sql`${t.role} IN ('admin', 'teacher', 'student')`)],
 )
 
+/** 外部のアカウント（Microsoft）とユーザーの結び付き。subject は Microsoft のテナント ID とオブジェクト ID を : でつないだもの */
+export const userIdentities = sqliteTable(
+  'user_identities',
+  {
+    provider: text('provider', { enum: ['microsoft'] }).notNull(),
+    // sub を使わないのは、アプリの登録ごとに値が変わり、登録をやり直すと全員の結び付きが切れるため
+    subject: text('subject').notNull(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    email: textNocase('email').notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [
+    primaryKey({ columns: [t.provider, t.subject] }),
+    uniqueIndex('user_identities_user').on(t.userId, t.provider),
+    check('user_identities_provider', sql`${t.provider} IN ('microsoft')`),
+  ],
+)
+
 export const sessions = sqliteTable(
   'sessions',
   {

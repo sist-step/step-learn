@@ -7,7 +7,7 @@ import type { AppEnv, Role, User } from './types'
 import { config } from './config'
 import { isInPeriod } from './course-period'
 import { db } from './db'
-import { courses, emailVerifications, enrollments, passwordResets, sessions, users } from './schema'
+import { courses, emailVerifications, enrollments, passwordResets, sessions, userIdentities, users } from './schema'
 
 const SESSION_COOKIE = 'sid'
 const SESSION_TTL = 60 * 60 * 24 * 30 // 30日
@@ -61,6 +61,8 @@ export async function verifyPassword(password: string, stored: string) {
   return timingSafeEqual(new Uint8Array(derived), fromB64(hash))
 }
 
+export const hasPassword = (stored: string) => stored.startsWith('pbkdf2$')
+
 export function needsRehash(stored: string) {
   const [scheme, iter] = stored.split('$')
   return scheme !== 'pbkdf2' || Number(iter) < PBKDF2_ITERATIONS
@@ -75,10 +77,12 @@ const randomToken = () =>
 const hashToken = async (token: string) => toHex(await crypto.subtle.digest('SHA-256', enc.encode(token)))
 const sessionIdFromToken = hashToken
 
+export const isHttps = (c: Context) => new URL(c.req.url).protocol === 'https:' || c.req.header('x-forwarded-proto') === 'https'
+
 function setSessionCookie(c: Context, token: string) {
   return setSignedCookie(c, SESSION_COOKIE, token, config.sessionSecret, {
     httpOnly: true,
-    secure: new URL(c.req.url).protocol === 'https:' || c.req.header('x-forwarded-proto') === 'https',
+    secure: isHttps(c),
     sameSite: 'Lax',
     path: '/',
     maxAge: SESSION_TTL,
@@ -118,9 +122,19 @@ export const isUsernameTaken = (username: string, exceptUserId?: number) =>
     .where(and(eq(users.username, username), exceptUserId ? ne(users.id, exceptUserId) : undefined))
     .get()
 
-/** 作成できたらユーザー ID を、メールアドレスかユーザー名が登録済みならどちらが重複したかを返す */
-export async function createUser(user: { email: string; name: string; username: string; password: string; role?: Role }) {
-  const passwordHash = await hashPassword(user.password)
+/**
+ * 作成できたらユーザー ID を、メールアドレスかユーザー名が登録済みならどちらが重複したかを返す。
+ * password が null ならパスワードを設定せず、identity の外部のアカウントと結び付ける
+ */
+export async function createUser(user: {
+  email: string
+  name: string
+  username: string
+  password: string | null
+  role?: Role
+  identity?: { provider: 'microsoft'; subject: string }
+}) {
+  const passwordHash = user.password === null ? NO_PASSWORD : await hashPassword(user.password)
   return db.transaction((tx): { id: number } | { taken: 'email' | 'username' } => {
     const inserted = tx
       .insert(users)
@@ -129,6 +143,10 @@ export async function createUser(user: { email: string; name: string; username: 
       .onConflictDoNothing()
       .returning({ id: users.id })
       .get()
+    if (inserted && user.identity)
+      tx.insert(userIdentities)
+        .values({ ...user.identity, userId: inserted.id, email: user.email })
+        .run()
     const emailTaken = !inserted && !!tx.select({ id: users.id }).from(users).where(eq(users.email, user.email)).get()
     // ユーザー名の重複で確認用トークンを消さないのは、別のユーザー名で登録をやり直せるようにするため
     if (inserted || emailTaken) tx.delete(emailVerifications).where(eq(emailVerifications.email, user.email)).run()
