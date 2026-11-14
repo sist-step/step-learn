@@ -2,7 +2,7 @@
   "name": "step-learn-for-vscode",
   "displayName": "STEP Learn for VSCode",
   "description": "STEP Learn で配られたプログラムのファイルを、ボタン 1 つで VS Code に用意して開きます。先生が指定したアイテムでは、保存した内容を変更履歴として STEP Learn に記録します。コーディングエージェントのアイテムでは、使える期間のあいだ AI がファイルを読み書きしてプログラムを書きます。",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "mint1535",
   "private": true,
   "license": "UNLICENSED",
@@ -12,7 +12,7 @@
     "url": "https://github.com/sist-step/step-learn"
   },
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.93.0"
   },
   "categories": [
     "Education",
@@ -41,6 +41,11 @@
         "category": "STEP Learn"
       },
       {
+        "command": "stepLearn.agent.open",
+        "title": "コーディングエージェントを開く",
+        "category": "STEP Learn"
+      },
+      {
         "command": "stepLearn.agent.newChat",
         "title": "新しいチャット",
         "category": "STEP Learn",
@@ -57,7 +62,16 @@
         {
           "id": "stepLearn",
           "title": "STEP Learn",
-          "icon": "images/agent.svg"
+          "icon": "images/agent.svg",
+          "when": "stepLearn.noSecondarySidebar"
+        }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "stepLearnSecondary",
+          "title": "STEP Learn",
+          "icon": "images/agent.svg",
+          "when": "!stepLearn.noSecondarySidebar"
         }
       ]
     },
@@ -65,9 +79,17 @@
       "stepLearn": [
         {
           "type": "webview",
-          "id": "stepLearn.agent",
           "name": "コーディングエージェント",
-          "when": "stepLearn.agentAvailable"
+          "id": "stepLearn.agent",
+          "when": "stepLearn.agentAvailable && stepLearn.noSecondarySidebar"
+        }
+      ],
+      "stepLearnSecondary": [
+        {
+          "type": "webview",
+          "name": "コーディングエージェント",
+          "id": "stepLearn.agentSecondary",
+          "when": "stepLearn.agentAvailable && !stepLearn.noSecondarySidebar"
         }
       ]
     },
@@ -75,13 +97,17 @@
       "view/title": [
         {
           "command": "stepLearn.agent.newChat",
-          "when": "view == stepLearn.agent",
+          "when": "view == stepLearn.agent || view == stepLearn.agentSecondary",
           "group": "navigation"
         }
       ],
       "commandPalette": [
         {
           "command": "stepLearn.agent.newChat",
+          "when": "stepLearn.agentAvailable"
+        },
+        {
+          "command": "stepLearn.agent.open",
           "when": "stepLearn.agentAvailable"
         }
       ]
@@ -107,7 +133,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.17.0",
-    "@types/vscode": "~1.90.0",
+    "@types/vscode": "~1.93.0",
     "@vscode/vsce": "^3.6.0",
     "esbuild": "^0.25.0",
     "oxlint": "^1.93.0",

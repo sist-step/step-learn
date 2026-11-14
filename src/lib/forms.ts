@@ -293,7 +293,7 @@ function agentItemIssues(v: { opens_at?: string; closes_at?: string; user_limit?
     v.opens_at ?? '',
     v.closes_at ?? '',
     MAX_AGENT_PERIOD,
-    `使える期間は ${MAX_AGENT_PERIOD / 86_400} 日以内にしてください。`,
+    `使える期間は ${MAX_AGENT_PERIOD / 3600} 時間以内にしてください。`,
   )
   // 欄そのものがないときだけ足すのは、欄の値の誤りは user_limit のスキーマ（usd）が出すため
   if (v.user_limit === undefined) issues.push({ message: '1 人あたりの上限を入力してください。', path: ['user_limit'] })
