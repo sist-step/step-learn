@@ -67,7 +67,6 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `Table` | 表。`columns`（`{ label, class?, srOnly? }[]`。`false` を混ぜると出さない）を渡し、`children` に `<tr>` を並べる |
 | `Stats` / `Stat` | 数字のカードを並べる。`Stat` は `label` / `value`、`href` でリンクになり矢印が付く。`label` の先頭に `<span class="stat-icon"><Icon … /></span>` を置くとアイコンが付く。`<Stats compact>` で数字を横に並べた低いカードになる（例は管理 > ユーザー） |
 | `LinkCard` | アイコン付きの横長の行（外部リンク・ファイルなど）。`href` でリンクになる。`class="link-card-lg"` を渡すと、アイテム画面の主操作のパネルになる（スマホではボタンが全幅で折り返す） |
-| `Bento` / `Tile` | ベントーグリッド（4 列）とそのタイル。`span`（1〜4 列）/ `rows`（1〜2 段）、`href` でリンクになる。幅が狭いと 2 列に組み替わる。例はダッシュボード |
 
 ```tsx
 <Card heading="プロフィール" description="参加者一覧に表示されます。">…</Card>
@@ -111,7 +110,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `Markdown`（`markdown.tsx`） | Markdown を HTML にして `.prose` の見た目で出す（`source`）。`lib/markdown.ts` の変換を使うので生の HTML は通らない |
 | `Avatar` | 名前から色とイニシャルを作るアイコン |
 | `Progress` / `ProgressRing` | 進捗バー・リング（JS で更新できる `data-*` 付き） |
-| `CourseCard` | コースのカード（名前 → コード → 概要）。コース一覧とダッシュボードのマイコースで `.course-grid` に並べる。期間外のコースには `data-course-ended`、参加していないコースには `data-course-unenrolled` が付き、コース一覧の「進行中 / すべて」の絞り込みで隠れる（下の「マークアップ」） |
+| `CourseCard` | コースのカード（名前 → コード → 概要）。コース一覧で `.course-grid` に並べる（ダッシュボードのマイコースは、カードではなく線で区切った行の `routes/dashboard/views.tsx` の `CourseRow`）。期間外のコースには `data-course-ended`、参加していないコースには `data-course-unenrolled` が付き、コース一覧の「進行中 / すべて」の絞り込みで隠れる（下の「マークアップ」） |
 | `CourseIcon` | コースの頭文字のバッジ。コースアイコンが設定されていれば画像を出す。大きさと形は `class`（`course-mono` / `course-hero-mono` / `dot`）で決める |
 | `formatDate` | UNIX 秒を「2026年10月28日」形式で表示 |
 
@@ -120,6 +119,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | 部品 | 用途 |
 | --- | --- |
 | `Mascot` | ロゴ（シアンの輪・黒い枠・STEP の帯）を元にした SVG のキャラクター。`act` で動きのパターン（`MASCOT_ACTS`: `greet` あいさつ / `cheer` 応援 / `advise` 助言 / `idea` ひらめき / `ask` 質問 / `think` 考える / `warn` 注意 / `agree` うなずく / `share` すすめる / `rest` 休む）を選ぶと、表情・ポーズ・動き・視線がまとめて決まる。個別に渡した `mood`（`normal` / `happy` / `sad` / `surprised` / `thinking` / `sleepy`）/ `pose`（`idle` / `wave`（振り続ける）/ `greet`（表示したときに 3 回振って下ろす）/ `cheer` / `point` / `raise`（手を挙げる）/ `open`（両手を広げる）/ `type`（両手を前に出してキーを打つ）/ `hold`（両手で前に持つ）/ `sip`（右手のマグカップを口へ運ぶ））/ `motion`（`none` / `float` / `bounce` / `hop` / `wiggle` / `nod`（うなずく）/ `tilt`（首をかしげる）/ `shake`（首を振る）/ `walk`（よちよち歩く。足・腕・体を `--mascot-step` の間隔で揺らす）/ `swing`（座って足をぶらぶらさせる）、既定 `float`）/ `look`（`front` / `left` / `right` / `up` / `down`）は `act` より優先する。`prop`（`MASCOT_PROPS`: `none` / `laptop`（ノートパソコン。顔が画面の光で色づき、記号が浮かぶ）/ `book`（本。目が行を追う）/ `mug`（右手のマグカップ。湯気が立つ）/ `magnifier`（右手の虫めがね）/ `notes`（頭のまわりに音符）、既定 `none`）で小物を持たせる。`size`（幅 px、既定 120）/ `stand`（足元の STEP の台、既定 `true`）/ `say`（右に出す吹き出し）/ `label`（渡すと `role="img"` の代替テキストになり、なければ飾りとして隠す）。値の一覧は `MASCOT_MOODS` などの配列。ダッシュボードのヒント（`lib/tips.ts`）は 1 件ずつ言葉に合う `act` を持ち、ダッシュボードでは `pose="wave"` で手を振り続ける |
+| `MascotYard` | マスコットの遊び場。伝える情報のない空きに置く（ダッシュボードのマイコースの下）。色を付けた足場（床 `is-floor`・棚 `is-shelf`・箱 `is-box`）と `WalkingMascot` を含み、マスコットが足場の上を歩き、跳び移り、座って作業する。飾りなので `aria-hidden`。足場を足すときは、`mascot.css` に `.mascot-yard-block.is-<名前>` を足し、`client.ts` の `WALKER_GROUNDS` にも 1 つずつ足す（セレクターごとに、最初に見つかった 1 つだけが足場になる）。浮いた足場は、床を歩くマスコットの頭が当たらない高さ（床の上辺から 60px 以上）に置く |
 | `WalkingMascot` | コースページ（教材タブ）を歩き回る `Mascot`。通常モードと Moodle モードのすべてのコースフォーマット（トピック・折りたたみ型トピック・タイル）に置く。足場は `client.ts` の `WALKER_GROUNDS` に挙げた要素の上辺（ヒーロー画像 `.course-hero-cover` と、見えている最初のセクションのカード。タイル形式で全体のセクションがなければ最初のタイル）で、その上に乗って左右に歩き、ときどき屈んでから放物線を描いて別の足場へ跳び移る（上へ跳ぶときはたまに宙返りする。見えていない足場へは跳ばない）。最初に現れる足場もランダム。置き場所は `client.ts`（`initWalkers`）が描いたあとに決める。角の丸みの分だけ端を空け、戻るリンク・タブ・編集モードのスイッチ・「すべて開く／閉じる」など（`WALKER_WALLS`）は壁にして通り抜けない。歩く・走る・虫めがねで探しながら右へ歩くのあいだに、`WALKER_ACTIVITIES` から重み付きで選んだ動作（座ってパソコンでコーディング（終わると跳ねて喜ぶ）・本を読む・コーヒーを飲む・足をぶらぶらさせる・音符を出して踊る・眠る・考える・立ち止まる）をする。座ると（`data-sitting`）胴が上辺に乗り、足が足場の前に垂れる。壁にぶつかると驚き、マウスが近づくと手を振り、クリックでハートを出して跳ね、ドラッグでつまんで離すと近い足場（下の足場を優先）に落ちて着地する。レイアウトが変わったときも足場に乗り直す。ウインドウを縮めて立っていた場所が足場の端や壁に削られたときは、すり抜けずに同じ足場の上を押し出され（`data-state="pushed"`、押してきた側を `data-pushed`）、壁の側を起点に横へ潰れて壁へ体を傾け、驚いた顔で踏ん張る（縮めている間は毎フレーム測り直す）。押し出せる場所がなければ近い足場へ移る。動きを減らす設定では歩かずに立っているだけ |
 
 `Mascot` は全部の表情・腕を描いておき、ルート要素の `data-mood` / `data-pose` / `data-motion` / `data-look` で CSS が出し分ける。表示後に `client.ts` から `el.dataset.mood = 'happy'` と書き換えるだけで切り替わる（腕と視線はトランジションで動く）。`say` を渡すと吹き出しが開き、`client.ts`（`typeMascotSay`）が文字を 1 文字ずつ出す（`data-typing`）。打っているあいだは口が動き（`data-talking`）、句読点では間を置いて口を止め（`data-hush`）、「！」で言い終えると跳ねる。読み上げ用には全文を `sr-only` で置く。ほっぺ・左腕・右上の角は CSS で常に小さく揺れる。機械的に見えないよう、`client.ts`（`initMascots`）が `[data-mascot]` ごとにランダムな間隔で、まばたき（`data-blink`、ときどき 2 回）・視線（`data-glance`）・気まぐれな動作（`data-quirk`: `hop` / `lean-l` / `lean-r` / `squish` / `peek` / `tap`）・一瞬の表情（`data-mood` を驚き・笑顔・考え顔にして戻す）を付け外しする。気まぐれな動作は `.mascot-actor` で動かすので `data-motion` と重なる。これらは `transform` ではなく `translate` / `scale` / `rotate` で動かしているので、表情やポーズの `transform` と重なっても打ち消し合わない。色は `.mascot` の `--mascot-ink` / `--mascot-ring` / `--mascot-face` / `--mascot-eye` / `--mascot-cheek` で上書きできる。
@@ -222,15 +222,23 @@ CSS は 1 ファイルにまとめず、使う部品・画面の隣に置く。�
 
 - 入力欄とボタンの高さはトークン（`--control-h` / `--control-h-sm` / `--control-h-lg`）で揃えている。数値を直接書かない
 - 色・角丸・影は必ずトークン（`var(--surface)` `var(--border)` `var(--text-2)` `var(--muted)` `var(--primary)` `var(--radius)` `var(--shadow)` など）を使う。色コードを直接書かない
-- 文字の大きさは `--fs-xs`（12px）/ `--fs-sm` / `--fs-base` / `--fs-md` / `--fs-lg` / `--fs-xl` / `--fs-2xl` / `--fs-3xl`（ページの見出し）/ `--fs-display`（数字）から選ぶ。数値を直接書かない（例外は、iOS の拡大を避ける入力欄の 16px と、ロゴ・`kbd` のような部品固有の大きさ）
-- 白い面（カード・タイル・表など）は `border: 1px solid var(--card-border)` と `box-shadow: var(--shadow-card)` で背景から分ける。ホバーで持ち上げるのは `@media (hover: hover)` の中で `--border-strong` ＋ `--shadow` ＋ `translateY(-1px)`
+- 文字の大きさは `--fs-xs`（12px）/ `--fs-sm` / `--fs-base` / `--fs-md` / `--fs-lg` / `--fs-xl` / `--fs-2xl` / `--fs-3xl`（ページの見出し）/ `--fs-display`（数字と、ダッシュボードのヒーローの見出し）から選ぶ。数値を直接書かない（例外は、iOS の拡大を避ける入力欄の 16px と、ロゴ・`kbd` のような部品固有の大きさ）
+- 見た目は「色のにじむ背景の上に、半透明のガラスの面を置く」。背景の色は `layout.css` の `.content::before` が描き、右上はコースの色（`--c1`、コースの外ではブランドのシアン）になる
+- ページに直接置く面（カード・タイル・表・検索欄など）は `background: var(--glass)` ＋ `border: 1px solid var(--glass-border)` ＋ `box-shadow: var(--shadow-card)` にする。ホバーで持ち上げるのは `@media (hover: hover)` の中で `background: var(--glass-hover)` ＋ `--shadow` ＋ `translateY(-2px)`。`--glass` はグラデーションなので `background` にだけ使い、`color-mix()` には渡さない（薄くしたい面は `--glass-faint`）
+- カードには `backdrop-filter` を付けない（枚数だけぼかしを合成し直すことになり、スクロールが重くなる。背景はなめらかなグラデーションなので、半透明だけでガラスに見える）。ぼかし（`backdrop-filter: var(--glass-blur)`）は、本文の上に重なる面だけに付ける: ヘッダー（`--glass-chrome`）、広がったレール・ポップオーバー・日時のパネル・トースト・AI パネル（`--glass-raised`）、モーダル・確認ダイアログ（`--glass-modal`）。スマホ幅で下から出すシートは、下に固定した行で中身を隠すので不透明（`--surface-raised`）のまま
+- ヘッダー（`.topbar`）の中に置くポップオーバーは不透明にしてある（`view-transition-name` の付いた要素はぼかしの範囲を区切るので、ヘッダーの外へはみ出した部分がぼけない）。同じ理由で、`backdrop-filter` や `view-transition-name` の付いた要素の中に、その外へはみ出すガラスの面を置かない
+- アイテムを読む画面（`content.css` の `.reader` の中）の面は、影を `--shadow-rest`（輪郭だけ）にする。本文・前後のアイテム・目次がそれぞれ浮いて見えると、読む画面が落ち着かないため。持ち上げるのはホバーしたリンクだけ
+- カードの中に置く面（入力欄・行・小さな部品）は、これまでどおり不透明の `--surface` / `--surface-2` と `--card-border` を使う。長い本文を読む面（`.reader-sheet`）は透け方を抑えた `--glass-read`
+- 透明感を減らす設定・コントラストを上げる設定（`prefers-reduced-transparency` / `prefers-contrast`）では、`base.css` がガラスのトークンを不透明の面に置き換える。ガラスの面は必ずトークンで書く（`rgb(255 255 255 / 0.6)` のように直接書くと、この切り替えが効かない）
 - 状態色を文字に使うときは `--danger-text` / `--success-text` / `--warning-text` / `--info-text`（`--danger` などは背景や枠用。白地で文字にすると薄い）。塗りのボタンは `--danger-strong` / `--success-strong`
 - フォーカスは全体の `:focus-visible`（`--focus` の outline）に任せる。入力欄は `border-color: var(--focus)` と `box-shadow: var(--ring-field)`、角丸の小さな部品のリングは `var(--ring)`
 - トークンを足すときは `:root` と `:root[data-theme='dark']` の両方に定義する。ダークモードは OS の設定ではなく、利用者がヘッダーのユーザーメニューで選んだときだけ（端末ごとの設定の `theme` → `<html data-theme>`。サーバーは常にライトで描き、`renderer.tsx` の `<head>` の小さなスクリプトが描画前にダークへ切り替える）。ダーク用の上書きは `[data-theme='dark'] .foo` で書き、`prefers-color-scheme` は使わない。ダークモードで必ず見た目を確認する
 - 薄い色は `color-mix(in srgb, var(--primary) 12%, transparent)` で作る
 - コースの色は `tone-${color}` クラスと `--c1` / `--c2` を使う
 - 選択中のタブ・メニュー・セクション番号など「今いる場所」の色は `--c-ink`（文字）/ `--c-soft`（背景）を使う。コースの外ではブランドのシアン、`AppShell` に `tone={access.course.color}` を渡したコース配下の画面ではそのコースの色になる。主ボタンは `--primary`（ライトでは黒）のまま
-- `--primary` の塗りは主ボタンとスイッチのオンだけに使う。切り替え（`SegmentedControl` / Markdown エディターの `md-modes`）は `--track` ＋ `inset` の `--track-border` のトラックに、つまみ（`--thumb` ＋ `--shadow-sm` ＋ `inset` の `--card-border`）、現在地（`Tabs` / 目次 / レール）は `--c-soft` で示す
+- `--primary` の塗りは主ボタン（`--primary-fill` のグラデーション）とスイッチのオンだけに使う。切り替え（`SegmentedControl` / Markdown エディターの `md-modes`）は `--track` ＋ `inset` の `--track-border` のトラックに、つまみ（`--thumb` ＋ `--shadow-sm` ＋ `inset` の `--card-border`）、現在地（`Tabs` / 目次 / レール）は `--c-soft` で示す
+- ダッシュボード（`routes/dashboard/`）は、左に「あいさつ（コースを作れる人には右に「コースを作成」）→ マイコース（縦書きの見出しと、カードにせず線で区切った行。進み具合を数えているコースの学生には行の右に `Progress`）→ マスコットの遊び場（`MascotYard`）」、右に「カレンダー（進行中のコースの終了日）→ 管理の入口（管理者）→ 今日のヒント」を並べる。数字のタイルや大きなヒーローは置かない。組み替えは `@container`（AI パネルを開くと本文だけが狭くなるため、画面の幅では決めない）
+- アイテムを読む画面の目次（`.reader-outline`）はカードにせず、左の線だけで区切る
 - 見出しの段は「ページタイトル `--fs-3xl` → カード・セクションの見出し `--fs-lg` → 行のタイトル `--fs-md` → 本文 `--fs-base` → メタ `--fs-sm` / `--fs-xs`」の 5 段にする。間の大きさを新しく作らない
 - 操作部品（入力欄・チェック・スイッチ）の輪郭は `--field-border`、ほかの面の上に重なる面は `--surface-raised`（輪郭は `--overlay-border`）を使い、粗いポインター（`@media (max-width: 640px), (pointer: coarse)`）でのタップ領域は `--tap` 以上にする
 - `:hover` は `@media (hover: hover)` の中に書く（タッチ端末でタップ後にホバーの見た目が残らないように）。押下（`:active`）のフィードバックは `base.css` の `@media (hover: none)` にまとめる（背景は `--press`、カード類は `scale(0.985)`）。ボタンの押下は `button.css` にある
@@ -244,11 +252,14 @@ CSS は 1 ファイルにまとめず、使う部品・画面の隣に置く。�
 
 | 用途 | トークン |
 | --- | --- |
+| ガラス | `--glass`（ページに直接置くカードの面。左上が明るいグラデーション）/ `--glass-hover`（ホバー）/ `--glass-faint`（非表示のセクションなど、薄く見せる面）/ `--glass-read`（長い本文を読む面）/ `--glass-raised`（ぼかしを付けて重ねる面）/ `--glass-modal`（暗くした背景の上のモーダル）/ `--glass-chrome`（ヘッダー）/ `--glass-border`（ガラスの面の輪郭）/ `--glass-blur`（`backdrop-filter` の値）/ `--scrim`（モーダルの後ろを暗くする色） |
+| 背景の色 | `--aura-2` / `--aura-3`（左下・左上ににじむ色）/ `--aura-1-mix` / `--aura-2-mix` / `--aura-3-mix`（にじむ濃さ。濃くすると、背景に直接置いた `--muted` の文字が読みにくくなる） |
+| グラデーションの塗り | `--primary-fill` / `--primary-fill-hover`（主ボタン）/ `--progress-fill`（進捗バー） |
 | 面 | `--bg`（ページの背景）/ `--chrome`（トップバー・レール）/ `--surface`（カード・表）/ `--surface-2` / `--surface-3`（一段沈んだ面・ホバー）/ `--surface-raised`（ポップオーバー・モーダル・ダイアログ・トースト・スマホのドロワー。ダークでは影の代わりに `--surface` より明るくして高さを示す） |
 | 線 | `--border` / `--border-strong`（区切り線・ホバー時の枠）/ `--card-border`（白い面の輪郭）/ `--field-border`（入力欄・チェック・スイッチなど操作部品の輪郭。背景に対して 3:1 以上）/ `--overlay-border`（`--surface-raised` の面の輪郭）/ `--control-border`（枠だけのボタンの輪郭。ダークでは半透明の白）|
 | 操作部品の面 | `--control-bg`（枠だけのボタンの面。ライトは `--surface`、ダークは半透明の白でカードから浮かせる）/ `--track` / `--track-border`（Tabs・Segmented・`md-modes` のトラック。半透明なのでどの面の上でも一段沈んで見える）/ `--thumb`（Segmented・`md-modes` の選択中のつまみ）/ `--press`（タッチ端末での押下の背景）/ `--success-strong-hover` / `--danger-strong-hover`（`--success-strong` / `--danger-strong` の塗りのホバー・押下） |
 | 文字 | `--text` / `--text-2` / `--muted`（メタ情報）/ `--on-primary`（`--primary` の上）/ `--on-strong`（`--danger-strong` / `--success-strong` の塗りの上。両テーマとも白） |
-| 中立色の値 | ライト: `--bg #eceef0` `--chrome #f6f7f9` `--surface-2 #f5f6f8` `--surface-3 #e9ecef` `--border #e7e9ec` `--border-strong #d5d9de` `--text-2 #363a41` `--muted #60656d`。ダーク: `--bg #0a0b0d` `--chrome #141518` `--surface #16171a` `--surface-2 #1e1f23` `--surface-3 #2a2b30` `--border #26282c` `--border-strong #36383d` `--text #eceef1` `--text-2 #c3c6cc` `--muted #8e9299`（どちらもわずかに寒色に寄せてそろえている。灰色を足すときもこの温度に合わせる） |
+| 中立色の値 | ライト: `--bg #e9edf5` `--chrome #f6f7f9` `--surface-2 #f5f6f8` `--surface-3 #e9ecef` `--border #e7e9ec` `--border-strong #d5d9de` `--text-2 #363a41` `--muted #5a5f67`。ダーク: `--bg #0a0b0d` `--chrome #141518` `--surface #16171a` `--surface-2 #1e1f23` `--surface-3 #2a2b30` `--border #26282c` `--border-strong #36383d` `--text #eceef1` `--text-2 #c3c6cc` `--muted #8e9299`（どちらもわずかに寒色に寄せてそろえている。灰色を足すときもこの温度に合わせる） |
 | 寸法 | `--control-h` / `--control-h-sm`（スマホ幅では 40px）/ `--control-h-lg`、`--tap`（44px。粗いポインターでの最小タップ寸法）、`--radius-sm` / `--radius` / `--radius-lg` / `--radius-field`（入力欄の角丸。12px）、`--brand-mark`（ロゴの幅と高さ。`layout.css` がトップバーの左余白の計算に使う） |
 | コースの色 | `tone-*` が `--c1` / `--c2` / `--c-on`（塗りの上の文字。既定は白）/ `--c-deep`（白文字を載せても 4.5:1 になる塗り。黒文字のトーンでは `--c1`。頭文字のバッジ `.dot` やダッシュボードのタイルに使う）/ `--c-ink` / `--c-soft` を決める |
 

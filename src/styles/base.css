@@ -3,7 +3,7 @@
    ========================================================================== */
 
 :root {
-  --bg: #eceef0;
+  --bg: #e9edf5;
   --chrome: #f6f7f9;
   --surface: #ffffff;
   --surface-2: #f5f6f8;
@@ -14,6 +14,24 @@
   --field-border: #8e9399;
   --surface-raised: #ffffff;
   --overlay-border: rgb(0 0 0 / 0.08);
+  --glass: linear-gradient(135deg, rgb(255 255 255 / 0.84), rgb(255 255 255 / 0.56));
+  --glass-hover: rgb(255 255 255 / 0.88);
+  --glass-faint: rgb(255 255 255 / 0.32);
+  --glass-read: rgb(255 255 255 / 0.88);
+  --glass-raised: rgb(255 255 255 / 0.86);
+  --glass-modal: rgb(255 255 255 / 0.93);
+  --glass-chrome: rgb(233 237 245 / 0.8);
+  --glass-border: rgb(255 255 255 / 0.85);
+  --glass-blur: saturate(1.8) blur(22px);
+  --scrim: rgb(15 23 42 / 0.26);
+  --aura-2: #4f6bff;
+  --aura-3: #a855f7;
+  --aura-1-mix: 28%;
+  --aura-2-mix: 22%;
+  --aura-3-mix: 14%;
+  --primary-fill: linear-gradient(180deg, #33343a, #0a0a0a);
+  --primary-fill-hover: linear-gradient(180deg, #45464d, #1c1c1f);
+  --progress-fill: linear-gradient(90deg, var(--success), color-mix(in srgb, var(--success) 55%, var(--accent)));
   --control-border: var(--border-strong);
   --control-bg: var(--surface);
   --track: rgb(15 23 42 / 0.05);
@@ -22,9 +40,8 @@
   --press: color-mix(in srgb, var(--text) 8%, transparent);
   --text: #111111;
   --text-2: #363a41;
-  --muted: #60656d;
+  --muted: #5a5f67;
   --primary: #0a0a0a;
-  --primary-hover: #2b2b2b;
   --primary-soft: #dcfbfd;
   --primary-text: #00788a;
   --c-ink: var(--primary-text);
@@ -57,10 +74,11 @@
   --focus: #00788a;
   --ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--focus);
   --ring-field: 0 0 0 3px color-mix(in srgb, var(--focus) 20%, transparent);
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 12px -6px rgb(0 0 0 / 0.08);
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 6px 16px rgb(0 0 0 / 0.06);
-  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.05);
+  --shadow-sm: 0 1px 2px rgb(20 30 60 / 0.06);
+  --shadow-rest: 0 0 0 1px rgb(20 30 60 / 0.04), 0 1px 2px rgb(20 30 60 / 0.03);
+  --shadow-card: 0 0 0 1px rgb(20 30 60 / 0.03), 0 1px 2px rgb(20 30 60 / 0.04), 0 16px 36px -18px rgb(20 30 60 / 0.26);
+  --shadow: 0 0 0 1px rgb(20 30 60 / 0.04), 0 2px 4px rgb(20 30 60 / 0.05), 0 22px 44px -18px rgb(20 30 60 / 0.34);
+  --shadow-lg: 0 24px 56px -12px rgb(20 30 60 / 0.28), 0 2px 8px rgb(20 30 60 / 0.06);
   --radius-sm: 8px;
   --radius: 12px;
   --radius-lg: 24px;
@@ -107,6 +125,24 @@
   --field-border: #6b6f76;
   --surface-raised: #1f2024;
   --overlay-border: rgb(255 255 255 / 0.1);
+  --glass: linear-gradient(135deg, rgb(255 255 255 / 0.075), rgb(255 255 255 / 0.035));
+  --glass-hover: rgb(255 255 255 / 0.1);
+  --glass-faint: rgb(255 255 255 / 0.02);
+  --glass-read: rgb(22 23 26 / 0.86);
+  --glass-raised: rgb(32 33 38 / 0.8);
+  --glass-modal: rgb(30 31 36 / 0.92);
+  --glass-chrome: rgb(10 11 13 / 0.78);
+  --glass-border: rgb(255 255 255 / 0.09);
+  --glass-blur: saturate(1.6) blur(22px);
+  --scrim: rgb(0 0 0 / 0.5);
+  --aura-2: #3b5bff;
+  --aura-3: #9333ea;
+  --aura-1-mix: 24%;
+  --aura-2-mix: 22%;
+  --aura-3-mix: 14%;
+  --primary-fill: linear-gradient(135deg, #8cf9ff, #00d4f5);
+  --primary-fill-hover: linear-gradient(135deg, #b4fbff, #3fe2fa);
+  --progress-fill: linear-gradient(90deg, var(--success), color-mix(in srgb, var(--success) 55%, var(--accent)));
   --control-border: rgb(255 255 255 / 0.16);
   --control-bg: rgb(255 255 255 / 0.04);
   --track: rgb(255 255 255 / 0.05);
@@ -117,7 +153,6 @@
   --text-2: #c3c6cc;
   --muted: #8e9299;
   --primary: #00f0ff;
-  --primary-hover: #6af6ff;
   --primary-soft: rgb(0 240 255 / 0.12);
   --primary-text: #5cf3ff;
   --c-ink: var(--primary-text);
@@ -159,9 +194,28 @@
   --ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--focus);
   --ring-field: 0 0 0 3px color-mix(in srgb, var(--focus) 30%, transparent);
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
-  --shadow-card: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 1px 2px rgb(0 0 0 / 0.5);
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 16px rgb(0 0 0 / 0.25);
-  --shadow-lg: 0 12px 40px rgb(0 0 0 / 0.5);
+  --shadow-rest: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --shadow-card: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 14px 32px -18px rgb(0 0 0 / 0.7);
+  --shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 20px 40px -18px rgb(0 0 0 / 0.8);
+  --shadow-lg: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 24px 56px -12px rgb(0 0 0 / 0.7);
+}
+
+/* 透明感を減らす設定の利用者にガラスを出さないのは、下の色が透けると文字と面の境目が読み取りにくくなるため */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root, :root[data-theme='dark'] {
+    --glass: var(--surface);
+    --glass-hover: var(--surface-2);
+    --glass-faint: transparent;
+    --glass-read: var(--surface);
+    --glass-raised: var(--surface-raised);
+    --glass-modal: var(--surface-raised);
+    --glass-chrome: var(--bg);
+    --glass-border: var(--card-border);
+    --glass-blur: none;
+    --aura-1-mix: 0%;
+    --aura-2-mix: 0%;
+    --aura-3-mix: 0%;
+  }
 }
 
 /* コースカラー。--c-ink / --c-soft は「今いる場所」の色で、コースの外ではブランドの色になる */
@@ -319,7 +373,7 @@ kbd {
 }
 @media (hover: hover) {
   .brand:hover, .back-link:hover { text-decoration: none; }
-  .back-link:hover { background: var(--surface); color: var(--text); }
+  .back-link:hover { background: var(--glass-hover); color: var(--text); }
 }
 
 @media (max-width: 640px) {
@@ -340,12 +394,13 @@ kbd {
   padding: 24px;
   border: 1px solid var(--overlay-border);
   border-radius: var(--radius-lg);
-  background: var(--surface-raised);
+  background: var(--glass-modal);
+  backdrop-filter: var(--glass-blur);
   color: var(--text);
   box-shadow: var(--shadow-lg);
 }
 .dialog[open] { animation: rise 0.2s var(--ease); }
-.dialog::backdrop { background: rgb(0 0 0 / 0.45); backdrop-filter: blur(3px); animation: fade 0.2s; }
+.dialog::backdrop { background: var(--scrim); backdrop-filter: blur(8px); animation: fade 0.2s; }
 .dialog-msg { font-size: var(--fs-base); font-weight: 500; margin-bottom: 20px; line-height: 1.6; }
 .dialog-layer {
   position: absolute;
@@ -354,8 +409,8 @@ kbd {
   display: grid;
   place-items: center;
   padding: 16px;
-  background: rgb(0 0 0 / 0.45);
-  backdrop-filter: blur(3px);
+  background: var(--scrim);
+  backdrop-filter: blur(8px);
   animation: fade 0.2s;
 }
 .dialog-layer > .dialog { position: static; width: 100%; max-width: 360px; margin: 0; }
@@ -380,7 +435,7 @@ html[aria-busy='true'] body::before {
   left: 0;
   z-index: 200;
   height: 2px;
-  background: var(--accent);
+  background: linear-gradient(90deg, var(--aura-2), var(--accent));
   animation: nav-progress 8s cubic-bezier(0.1, 0.6, 0.2, 1) 0.15s both;
 }
 
@@ -397,8 +452,8 @@ html[aria-busy='true'] body::before {
 
 /* 押下を各部品の CSS に散らさないのは、タッチでの押し心地を 1 か所でそろえるため。素のクラス名で書かないのは、後から読まれるファイルの背景に詳細度で負けるため */
 @media (hover: none) {
-  :is(.icon-btn, .menu-item, .rail-link, .course-row, .outline-link, .back-link, .item-row, .settings-toc a, .tab):active { background: var(--press); }
-  :is(a.tile, .course-card, .pager-link, .stat-link, a.link-card):active { transform: scale(0.985); transition-duration: 0.08s; }
+  :is(.icon-btn, .menu-item, .rail-link, .dash-event, .outline-link, .back-link, .item-row, .settings-toc a, .tab):active { background: var(--press); }
+  :is(.dash-course, a.dash-stat, .course-card, .pager-link, .stat-link, a.link-card):active { transform: scale(0.985); transition-duration: 0.08s; }
 }
 
 @media (prefers-reduced-motion: reduce) {

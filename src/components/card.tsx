@@ -183,26 +183,3 @@ export const LinkCard = ({
     </div>
   )
 }
-
-export const Bento = ({ children }: { children: Child }) => {
-  useStyle('/src/components/card.css')
-  return <div class="bento">{children}</div>
-}
-
-export type TileProps = { span?: 1 | 2 | 3 | 4; rows?: 1 | 2; class?: string; children: Child } & (
-  ({ href: string } & JSX.IntrinsicElements['a']) | ({ href?: undefined } & JSX.IntrinsicElements['section'])
-)
-
-export const Tile = ({ span = 1, rows = 1, class: cls, children, ...rest }: TileProps) => {
-  useStyle('/src/components/card.css')
-  const className = cx('tile', `span-${span}`, rows > 1 && `rows-${rows}`, cls)
-  return rest.href !== undefined ? (
-    <a class={className} {...rest}>
-      {children}
-    </a>
-  ) : (
-    <section class={className} {...rest}>
-      {children}
-    </section>
-  )
-}

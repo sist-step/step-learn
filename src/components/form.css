@@ -224,15 +224,15 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
   gap: 8px;
   height: var(--control-h);
   padding: 0 14px 0 18px;
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--glass-border);
   border-radius: 999px;
   min-width: 0;
-  background: var(--surface);
+  background: var(--glass);
   color: var(--muted);
   box-shadow: var(--shadow-card);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-.search:focus-within { border-color: var(--focus); box-shadow: var(--ring-field); }
+.search:focus-within { border-color: var(--focus); background: var(--surface); box-shadow: var(--ring-field); }
 .search-input { flex: 1; width: 0; min-width: 0; height: 100%; padding: 0; border: 0; background: none; color: var(--text); text-overflow: ellipsis; }
 .search-input:focus, .search-input:focus-visible { outline: none; box-shadow: none; }
 .search-input::-webkit-search-cancel-button { cursor: pointer; }
@@ -279,7 +279,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
   padding: 16px;
   border: 1px solid var(--overlay-border);
   border-radius: var(--radius-lg);
-  background: var(--surface-raised);
+  background: var(--glass-raised);
+  backdrop-filter: var(--glass-blur);
   color: var(--text);
   box-shadow: var(--shadow-lg);
 }
@@ -335,7 +336,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
 .dt-done { margin-left: auto; }
 @media (hover: hover) {
   .dt-trigger:hover:not([aria-expanded='true']) { border-color: color-mix(in srgb, var(--text) 55%, var(--field-border)); }
-  .dt-day:hover:not([aria-pressed='true']), .dt-opt:hover:not([aria-selected='true']) { background: var(--surface-2); color: var(--text); }
+  .dt-day:hover:not([aria-pressed='true']), .dt-opt:hover:not([aria-selected='true']) { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
 }
 
 /* スマホで欄の下に出さないのは、指で押すには日付や時刻の一覧が小さく、キーボードのない画面では下から出すほうが親指が届くため */
@@ -351,11 +352,14 @@ input::placeholder, textarea::placeholder { color: var(--muted); }
   overflow-y: auto;
   border-width: 1px 1px 0;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  /* シートを半透明にしないのは、下に固定した「決定」の行が中身を隠せず、スクロールした項目が透けて重なるため */
+  background: var(--surface-raised);
+  backdrop-filter: none;
   overscroll-behavior: contain;
 }
 .dt-panel.is-sheet:popover-open { animation: dt-sheet-in 0.28s var(--ease); }
 @keyframes dt-sheet-in { from { translate: 0 100%; } }
-.dt-panel.is-sheet::backdrop { background: rgb(0 0 0 / 0.45); animation: fade 0.2s; }
+.dt-panel.is-sheet::backdrop { background: var(--scrim); backdrop-filter: blur(8px); animation: fade 0.2s; }
 .dt-panel.is-sheet::before { content: ''; display: block; width: 36px; height: 4px; margin: 0 auto 12px; border-radius: 999px; background: var(--border-strong); }
 .is-sheet .dt-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
 .is-sheet .dt-head-label { color: var(--muted); font-size: var(--fs-sm); font-weight: 600; }

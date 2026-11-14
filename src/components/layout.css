@@ -2,13 +2,29 @@
    アプリシェル
    ========================================================================== */
 
+/* isolation を付けるのは、.content::before の背景（z-index: -1）を .app の背景より手前に描くため */
 .app {
   min-height: 100dvh;
   padding-top: var(--topbar-h);
+  background: var(--bg);
+  isolation: isolate;
+}
+/* .app の background に fixed で描かないのは、コースの色（--c1）が .content にしか届かないのと、iOS では fixed の背景がページの高さまで引き伸ばされるため */
+.content::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
   background:
-    radial-gradient(50% 40% at 100% 0%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 70%) fixed,
-    radial-gradient(40% 35% at 0% 100%, color-mix(in srgb, var(--info) 6%, transparent), transparent 70%) fixed,
-    var(--bg);
+    radial-gradient(var(--aura-w, 60%) 55% at 100% 0%, color-mix(in srgb, var(--c1, var(--accent)) var(--aura-1-mix), transparent), transparent 72%),
+    radial-gradient(var(--aura-w, 50%) 50% at 0% 100%, color-mix(in srgb, var(--aura-2) var(--aura-2-mix), transparent), transparent 72%),
+    radial-gradient(var(--aura-w, 45%) 40% at 22% -8%, color-mix(in srgb, var(--aura-3) var(--aura-3-mix), transparent), transparent 70%),
+    radial-gradient(var(--aura-w, 40%) 45% at 100% 100%, color-mix(in srgb, var(--accent) calc(var(--aura-3-mix) * 0.7), transparent), transparent 70%);
+}
+/* 縦長の画面で幅を % のままにしないのは、色の広がりが細い柱になり、背景に縦の帯が見えるため */
+@media (max-width: 640px) {
+  .content::before { --aura-w: 110%; }
 }
 
 /* sticky にしないのは、Mac で上端を越えて引っ張ったときにヘッダーだけが下がり、fixed のレールと重なるため */
@@ -25,9 +41,11 @@
   gap: 16px;
   height: var(--topbar-h);
   padding: 0 24px;
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
-  backdrop-filter: saturate(1.6) blur(12px);
+  background: var(--glass-chrome);
+  backdrop-filter: var(--glass-blur);
 }
+/* ヘッダーの中のメニューをガラスにしないのは、view-transition-name の付いたヘッダーがぼかしの範囲を区切り、ヘッダーの外にはみ出した部分で下の画面がぼけずに透けるため */
+.topbar .popover-panel { background: var(--surface-raised); backdrop-filter: none; }
 .topbar-start { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .topbar-end { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; }
 :root:not([data-edit-mode]) .topbar-edit-mode { display: none; }
@@ -41,10 +59,11 @@
 .topbar-avatar:focus-visible { border-radius: 50%; }
 .nav-open-btn { display: none !important; }
 /* スクロール位置を JS で見ないのは、スクロールのたびにメインスレッドで処理が走るため */
+/* 最初からガラスを敷いたままにしないのは、スクロール前は背景のグラデーションの上にヘッダーの帯の境目が見えるため */
 @supports (animation-timeline: scroll()) {
-  .topbar { animation: topbar-edge linear both; animation-timeline: scroll(root); animation-range: 0 24px; }
+  .topbar { background: none; backdrop-filter: none; animation: topbar-stuck linear both; animation-timeline: scroll(root); animation-range: 0 40px; }
 }
-@keyframes topbar-edge { to { box-shadow: 0 1px 0 var(--border-strong); } }
+@keyframes topbar-stuck { to { background: var(--glass-chrome); backdrop-filter: var(--glass-blur); box-shadow: 0 1px 0 var(--overlay-border); } }
 
 .rail {
   position: fixed;
@@ -85,19 +104,33 @@
   transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 .rail-link > :first-child { justify-self: center; }
-.rail-link.active { background: var(--c-soft); color: var(--c-ink); }
+.rail-link.active { background: var(--c-soft); color: var(--c-ink); box-shadow: inset 0 0 0 1px var(--glass-border), var(--shadow-sm); }
 .rail-course.active { background: none; color: var(--text); }
 .rail-course.active .dot { box-shadow: 0 0 0 2px var(--current-ring), 0 0 0 4px var(--c1); }
 .rail-label { padding-right: 14px; font-weight: 500; opacity: 0; transition: opacity 0.15s; }
 @media (min-width: 901px) {
   .topbar { padding-left: calc((var(--rail-w) - var(--brand-mark)) / 2); }
-  .rail-nav, .rail-foot { max-width: calc(var(--rail-w-open) - var(--rail-w) + 48px); }
+  /* 左端に付けず浮かせるのは、ガラスの面を背景から切り離して、カードと同じ 1 枚の板に見せるため */
+  .rail {
+    --rail-dock: 58px;
+    top: calc(var(--topbar-h) + 4px);
+    bottom: 16px;
+    left: calc((var(--rail-w) - var(--rail-dock)) / 2);
+    width: var(--rail-dock);
+    padding: 4px;
+    border: 1px solid var(--glass-border);
+    border-radius: calc(var(--rail-dock) / 2);
+    background: var(--glass);
+    box-shadow: var(--shadow-card);
+  }
+  .rail-link { border-radius: 24px; }
+  .rail-nav, .rail-foot { max-width: calc(var(--rail-w-open) - 10px); }
+  .rail-nav + .rail-nav { border-top-color: var(--border); }
   /* 背景を引き継いでマスクで溶かさないのは、下のカードが途中で切れて壊れたように見えるため */
   .rail:has(:focus-visible) {
     width: var(--rail-w-open);
-    background: var(--chrome);
-    border-right: 1px solid var(--overlay-border);
-    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+    background: var(--glass-raised);
+    backdrop-filter: var(--glass-blur);
     box-shadow: var(--shadow-lg);
   }
   .rail:has(:focus-visible) .rail-label { opacity: 1; }
@@ -107,9 +140,8 @@
   .rail:hover,
   .rail.is-held {
     width: var(--rail-w-open);
-    background: var(--chrome);
-    border-right: 1px solid var(--overlay-border);
-    border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+    background: var(--glass-raised);
+    backdrop-filter: var(--glass-blur);
     box-shadow: var(--shadow-lg);
     transition-delay: 0.1s;
   }
@@ -132,7 +164,7 @@
 @media (min-width: 901px) {
   .app-immersive .topbar { padding-left: 16px; }
   .app-immersive .nav-open-btn { display: inline-grid !important; width: 40px; height: 40px; }
-  .app-immersive .rail { width: var(--rail-w-open); background: var(--chrome); border-right: 1px solid var(--overlay-border); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; transform: translateX(-100%); visibility: hidden; transition: transform 0.25s var(--ease), visibility 0s 0.25s; }
+  .app-immersive .rail { top: calc(var(--topbar-h) + 8px); left: 12px; width: var(--rail-w-open); background: var(--glass-raised); backdrop-filter: var(--glass-blur); transform: translateX(calc(-100% - 12px)); visibility: hidden; transition: transform 0.25s var(--ease), visibility 0s 0.25s; }
   .app-immersive .rail .rail-label { opacity: 1; }
   .nav-open .app-immersive .rail { transform: none; visibility: visible; box-shadow: var(--shadow-lg); transition: transform 0.25s var(--ease); }
   .nav-open .app-immersive .backdrop { display: block; position: fixed; inset: var(--topbar-h) 0 0; z-index: 30; background: rgb(0 0 0 / 0.25); animation: fade 0.2s; }
@@ -151,8 +183,9 @@
     align-items: stretch;
     gap: 16px;
     padding: 16px 12px 12px;
-    border-right: 1px solid var(--overlay-border);
-    background: var(--surface-raised);
+    border-right: 1px solid var(--glass-border);
+    background: var(--glass-raised);
+    backdrop-filter: var(--glass-blur);
     transform: translateX(-100%);
     transition: transform 0.25s var(--ease);
   }
@@ -171,8 +204,7 @@
     position: fixed;
     inset: 0;
     z-index: 30;
-    background: rgb(0 0 0 / 0.4);
-    backdrop-filter: blur(2px);
+    background: var(--scrim);
     animation: fade 0.2s;
   }
   .content { padding: 16px 16px 72px; }
@@ -190,7 +222,7 @@
 @media (hover: hover) {
   .topbar .topbar-edit-mode:hover { background: color-mix(in srgb, var(--primary-text) 18%, transparent); }
   .topbar-avatar:hover::after { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--border-strong); }
-  .rail-link:not(.active):hover { background: var(--surface); color: var(--text); text-decoration: none; }
+  .rail-link:not(.active):hover { background: var(--glass-hover); color: var(--text); text-decoration: none; }
 }
 @media (hover: hover) and (max-width: 900px) {
   .rail-link:not(.active):hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
