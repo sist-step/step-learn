@@ -152,6 +152,14 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `BundleEditPanel` | 編集画面の、配るファイルのアップロード（フォルダー・ファイルの選択とドラッグ＆ドロップ。`client.ts` がフォルダーの中の場所を `paths` として一緒に送る）と削除ボタン付きの木、その下の「データを同期する」の切り替え（`${base}/sync` へのフォーム）。保存のフォームの外に置く（通常モードの `ItemEditPage` と、Moodle モードの `ExtraKind` の `Panel`） |
 | `BundleTree` | 配るファイルのフォルダーの木（`files`、`deleteAction` を渡すと行ごとの削除ボタン） |
 
+### アクセス制限 — `src/components/restriction.tsx`
+
+| 部品 | 用途 |
+| --- | --- |
+| `RestrictionPage` | セクション・アイテムのアクセス制限の編集画面（通常モードと Moodle モード）。左に条件の編集、右に「現在の制限」（説明・「制限をなくす」・`side`）。`editable` でなければ編集の代わりに `notice` |
+| `RestrictionEditor` | 条件の編集（日付・アイテムの完了・評点・ユーザープロフィール・入れ子の制限セット、組み合わせの選択、満たさない学生への表示の目のアイコン）。行の追加は `<template data-rs-template>` を `client.ts` が複製し、送信と入力のたびに行から JSON を組み立てて `availability` に入れる。選べるものは `lib/restriction.ts` の `RestrictionChoices` |
+| `RestrictionNote` | 鍵のアイコン付きの制限の説明（複数行）。学生には満たしていない条件、教師にはすべての条件（`describeRestriction`）を出す |
+
 ### AI アシスタント — `src/components/ai-panel.tsx`
 
 | 部品 | 用途 |
@@ -179,7 +187,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 - 部品が出すクラスは `src/client.ts` も参照している（`btn-success` の切り替え、`data-toggle-password` など）。名前を変えるときは `client.ts` も検索する
 - 部品を足したら、この表にも追記する
 
-アイテムの編集画面（通常モードの `routes/content/views.tsx` と Moodle モードの `moodle-mode/views.tsx` の `ItemEditPage`）は、`AppShell` の `topbar` に `ItemBar` を渡し、その `children` に `components/course.tsx` の `ItemEditActions`（「編集中」・表示・保存（`ITEM_FORM` のフォームを送る）と、削除を入れた「その他の操作」）を置く。本文は `content.css` の `.item-editor` で、横幅いっぱい（最大 1920px）のグリッドの左の列にカード（`editor-main` / `editor-extra`）、右の列（`editor-side`）に設定のカードを置く。右の列はスクロールしても見えたまま止まり、画面より高ければその中だけスクロールする。幅 900px 以下では 1 列にして、設定を最後に回す。ファイルのアイテムの今のファイルと差し替えの欄は `ItemFileField`（幅があれば横に並べる）。Moodle モードのアクセス制限の画面は、従来の `.editor-head` / `.editor` のまま
+アイテムの編集画面（通常モードの `routes/content/views.tsx` と Moodle モードの `moodle-mode/views.tsx` の `ItemEditPage`）は、`AppShell` の `topbar` に `ItemBar` を渡し、その `children` に `components/course.tsx` の `ItemEditActions`（「編集中」・表示・保存（`ITEM_FORM` のフォームを送る）と、削除を入れた「その他の操作」）を置く。本文は `content.css` の `.item-editor` で、横幅いっぱい（最大 1920px）のグリッドの左の列にカード（`editor-main` / `editor-extra`）、右の列（`editor-side`）に設定のカードを置く。右の列はスクロールしても見えたまま止まり、画面より高ければその中だけスクロールする。幅 900px 以下では 1 列にして、設定を最後に回す。ファイルのアイテムの今のファイルと差し替えの欄は `ItemFileField`（幅があれば横に並べる）。アクセス制限の画面（`RestrictionPage`）は、従来の `.editor-head` / `.editor` のまま
 
 `src/components/layout.tsx` の `AppShell`（ログイン後。コース配下の画面では `tone` にコースの色を渡す。`topbar` に中身を渡すとヘッダーにその画面の見出しや操作を置き、レールを畳んで本文をヘッダーの下いっぱいに広げる。例は PDF のアイテム）/ `AuthShell`（ログイン前）で必ず包む。コース配下の画面は `components/course.tsx` の `CourseHeader` でタブを出す。
 

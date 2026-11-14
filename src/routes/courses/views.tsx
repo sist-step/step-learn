@@ -30,13 +30,16 @@ import { MarkdownEditor } from '../../components/markdown'
 import { WalkingMascot } from '../../components/mascot'
 import { MenuItem, Modal, Popover } from '../../components/overlay'
 import { Styles } from '../../components/style'
+import { RestrictionNote } from '../../components/restriction'
 import { Chip, CourseCard, EmptyState, PageHeader, TabPanel, shownByDefault, type CourseCardData } from '../../components/ui'
+import type { CourseAvailability } from '../../lib/availability'
 import { courseImageUrl, type CourseImageKind } from '../../lib/course-images'
 import type { CourseAccess } from '../../lib/courses'
 import { MAX_IMAGE_SIZE } from '../../lib/images'
 import { previewKind } from '../../lib/preview'
 import { formatBytes } from '../../lib/bytes'
 import { CODE_LANGUAGE_LABELS, type CodeLanguage } from '../../lib/code'
+import type { Availability } from '../../lib/restriction'
 import { COMPLETION_LABELS, ITEM_TYPE_LABELS, type Completion, type Item, type ItemType, type Section } from '../../lib/types'
 
 export type ItemLite = Pick<
@@ -152,6 +155,8 @@ const ItemRow = ({
   completion,
   isStudent,
   manage,
+  restriction,
+  note,
 }: {
   item: ItemLite
   courseId: number
@@ -160,8 +165,13 @@ const ItemRow = ({
   completion: Completion | null
   isStudent: boolean
   manage: boolean
+  /** 学生がアクセス制限でまだ開けないときの判定 */
+  restriction?: Availability
+  /** 教師に見せるアクセス制限の説明 */
+  note?: string
 }) => {
   const base = `/courses/${courseId}/items/${item.id}`
+  const locked = restriction?.open === false
   const tracked = completion && completion !== 'none'
   const external = item.type === 'link' && item.linkTarget !== 'embed'
   const opensToComplete = isStudent && completion === 'view' && external && !done
@@ -174,29 +184,48 @@ const ItemRow = ({
       : item.type === 'file'
         ? `${item.fileName ?? ''} · ${formatBytes(item.fileSize ?? 0)}`
         : ITEM_TYPE_LABELS[item.type]
+  const body = (
+    <>
+      <ItemIcon type={item.type} />
+      <span class="item-text">
+        <span class="item-title">{item.title}</span>
+        <span class="item-meta truncate">{meta}</span>
+        {restriction && !restriction.open && <RestrictionNote text={restriction.text} />}
+        {note && <RestrictionNote text={note} />}
+      </span>
+      {item.hidden ? <HiddenChip /> : null}
+      {manage && tracked && (
+        <Chip icon="check" class="edit-only">
+          {COMPLETION_LABELS[completion]}
+        </Chip>
+      )}
+      {sharing && !locked && <Chip tone="live">配信中</Chip>}
+      {!locked &&
+        (newTab || external ? (
+          <Icon name="external" size={14} class="item-ext" />
+        ) : (
+          <Icon name="chevronRight" size={16} class="item-ext" />
+        ))}
+    </>
+  )
   return (
-    <li class={cx('item-row', tracked && done && 'is-done', !!item.hidden && 'is-hidden edit-only')} data-item={item.id}>
-      <a
-        href={href}
-        class="item-link"
-        {...(newTab ? { target: '_blank', rel: 'noopener', 'data-no-prefetch': '' } : {})}
-        {...(item.type === 'link' ? linkOpenAttrs(item.url, item.linkTarget, base) : {})}
-        {...(opensToComplete ? { 'data-complete-on-open': `${base}/complete` } : {})}
-      >
-        <ItemIcon type={item.type} />
-        <span class="item-text">
-          <span class="item-title">{item.title}</span>
-          <span class="item-meta truncate">{meta}</span>
-        </span>
-        {item.hidden ? <HiddenChip /> : null}
-        {manage && tracked && (
-          <Chip icon="check" class="edit-only">
-            {COMPLETION_LABELS[completion]}
-          </Chip>
-        )}
-        {sharing && <Chip tone="live">配信中</Chip>}
-        {newTab || external ? <Icon name="external" size={14} class="item-ext" /> : <Icon name="chevronRight" size={16} class="item-ext" />}
-      </a>
+    <li
+      class={cx('item-row', tracked && done && 'is-done', !!item.hidden && 'is-hidden edit-only', locked && 'is-locked')}
+      data-item={item.id}
+    >
+      {locked ? (
+        <span class="item-link">{body}</span>
+      ) : (
+        <a
+          href={href}
+          class="item-link"
+          {...(newTab ? { target: '_blank', rel: 'noopener', 'data-no-prefetch': '' } : {})}
+          {...(item.type === 'link' ? linkOpenAttrs(item.url, item.linkTarget, base) : {})}
+          {...(opensToComplete ? { 'data-complete-on-open': `${base}/complete` } : {})}
+        >
+          {body}
+        </a>
+      )}
       {manage && (
         <div class="row-actions edit-only">
           <IconButton href={`${base}/edit`} icon="pencil" label="編集" />
@@ -223,6 +252,7 @@ const ItemRow = ({
             aria-pressed={done ? 'true' : 'false'}
             aria-label={done ? '未完了に戻す' : '完了にする'}
             title={done ? '完了済み' : '完了にする'}
+            disabled={locked}
           >
             <Icon name="check" size={14} />
           </button>
@@ -255,6 +285,9 @@ const RowMenu = ({ base, moveAction, hidden, confirm }: { base: string; moveActi
         {hidden ? '学生に表示する' : '学生に非表示にする'}
       </MenuItem>
     </form>
+    <MenuItem href={`${base}/restriction`} icon="lock">
+      アクセス制限
+    </MenuItem>
     <div class="menu-sep" role="separator" />
     <form method="post" action={`${base}/delete`} data-confirm={confirm}>
       <MenuItem type="submit" icon="trash" class="is-danger">
@@ -465,6 +498,7 @@ export const CoursePage = ({
   sharing,
   revision,
   codeLanguages,
+  availability,
 }: {
   access: CourseAccess
   sectionList: Section[]
@@ -475,6 +509,7 @@ export const CoursePage = ({
   revision: string
   /** コードのアイテムで選べる言語 */
   codeLanguages: readonly CodeLanguage[]
+  availability: CourseAvailability
 }) => {
   const id = access.course.id
   const manage = access.canManage
@@ -488,7 +523,9 @@ export const CoursePage = ({
   const tracking = !!access.course.completionEnabled
   const isTracked = (it: ItemLite) => tracking && it.completion !== 'none'
   const trackedItems = itemList.filter((it) => !it.hidden && sectionNumber.has(it.sectionId) && isTracked(it))
-  const ordered = visibleSections.flatMap((s) => (bySection.get(s.id) ?? []).filter((it) => !it.hidden))
+  const ordered = visibleSections
+    .flatMap((s) => (bySection.get(s.id) ?? []).filter((it) => !it.hidden))
+    .filter((it) => availability.items.get(it.id)?.open !== false)
   const doneCount = trackedItems.filter((it) => done.has(it.id)).length
   const nextItem = ordered.find((it) => isTracked(it) && !done.has(it.id)) ?? (trackedItems.length === 0 ? ordered[0] : undefined)
 
@@ -558,12 +595,17 @@ export const CoursePage = ({
         {sectionList.length > 0 && (
           <div class="sections">
             {sectionList.map((s) => {
-              const list = bySection.get(s.id) ?? []
+              const restriction = availability.sections.get(s.id)
+              if (restriction?.hidden) return null
+              const locked = restriction?.open === false
+              const note = availability.notes.get(`section:${s.id}`)
+              // 開けないセクションの中身を出さないのは、Moodle と同じく、条件を満たすまではセクションの名前と条件だけを見せるため
+              const list = locked ? [] : (bySection.get(s.id) ?? []).filter((it) => !availability.items.get(it.id)?.hidden)
               const shown = list.filter((it) => !it.hidden)
               const hiddenCount = list.length - shown.length
               const shownTracked = shown.filter(isTracked)
               const sectionDone = shownTracked.filter((it) => done.has(it.id)).length
-              const empty = !manage && shown.length === 0
+              const empty = !manage && !locked && shown.length === 0
               const emptyView = manage && shown.length === 0
               return (
                 <details
@@ -575,7 +617,7 @@ export const CoursePage = ({
                     <span class="section-num">{sectionNumber.get(s.id) ?? <Icon name="eyeSlash" size={14} />}</span>
                     <span class="section-title-wrap">
                       <span class="section-title">{s.title}</span>
-                      {!empty && (
+                      {!empty && !locked && (
                         <span class="muted small">
                           {emptyView && <span class="view-only">{hiddenCount > 0 ? `非表示 ${hiddenCount}` : 'アイテムなし'}</span>}
                           <span class={emptyView ? 'edit-only' : undefined}>{`${shown.length} アイテム`}</span>
@@ -586,6 +628,7 @@ export const CoursePage = ({
                     </span>
                     {empty && <Chip>準備中</Chip>}
                     {s.hidden ? <HiddenChip /> : null}
+                    {locked && <Chip icon="lock">まだ開けません</Chip>}
                     {isStudent && shownTracked.length > 0 && sectionDone === shownTracked.length && (
                       <Chip tone="success" icon="check">
                         完了
@@ -595,6 +638,8 @@ export const CoursePage = ({
                   </summary>
                   {manage && <SectionEditBar courseId={id} section={s} />}
                   {s.summary && <p class="section-summary">{s.summary}</p>}
+                  {restriction && locked && <RestrictionNote text={restriction.text} />}
+                  {note && <RestrictionNote text={note} />}
                   {list.length > 0 && (
                     <ul class="items">
                       {list.map((it) => (
@@ -606,6 +651,8 @@ export const CoursePage = ({
                           completion={tracking ? it.completion : null}
                           isStudent={isStudent}
                           manage={manage}
+                          restriction={availability.items.get(it.id)}
+                          note={availability.notes.get(`item:${it.id}`)}
                         />
                       ))}
                     </ul>

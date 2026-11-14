@@ -12,6 +12,8 @@ import {
   type CourseAccess,
 } from '../../lib/courses'
 import type { BundleView } from '../../components/bundle'
+import { RestrictionPage } from '../../components/restriction'
+import { canOpenItem, courseAvailability, restrictionChoices } from '../../lib/availability'
 import { bundleBase } from '../../lib/bundle'
 import { bundleKeysOf, bundleStore, bundleSyncStore } from '../../lib/bundle-items'
 import { syncStateOf } from '../../lib/bundle-sync'
@@ -48,8 +50,19 @@ import {
   storage,
   type StoredFile,
 } from '../../lib/storage'
+import {
+  MAX_RESTRICTION_JSON_LENGTH,
+  checkRestrictionChoices,
+  describeRestriction,
+  parseRestriction,
+  readRestrictionForm,
+  restrictionFormValue,
+  restrictionJson,
+  type RestrictionFormNode,
+  type RestrictionSet,
+} from '../../lib/restriction'
 import type { AppEnv, Completion } from '../../lib/types'
-import { ItemEditPage, ItemPage, TEXT_PREVIEW_MAX, editUrl, type ItemInput, type OutlineItem } from './views'
+import { ItemEditPage, ItemPage, TEXT_PREVIEW_MAX, editUrl, type ItemInput, type OutlineItem, type RestrictedOutline } from './views'
 
 async function manageAccess(c: Context<AppEnv>) {
   const id = intParam(c, 'id')
@@ -418,6 +431,96 @@ export async function removeItem(c: Context<AppEnv>) {
   return redirectWith(c, editUrl(access.course.id, item.sectionId), `「${item.title}」を削除しました。`, 'info')
 }
 
+// ---------------------------------------------------------------- アクセス制限
+
+type RestrictionSubject = { kind: 'section' | 'item'; id: number; sectionId: number; title: string; availability: string | null }
+
+function restrictionSubject(c: Context<AppEnv>, access: CourseAccess): RestrictionSubject | null {
+  const courseId = access.course.id
+  const iid = intParam(c, 'iid')
+  if (iid) {
+    const item = getItem(courseId, iid)
+    return item ? { kind: 'item', id: item.id, sectionId: item.sectionId, title: item.title, availability: item.availability } : null
+  }
+  const sid = intParam(c, 'sid')
+  const section = sid ? getSection(courseId, sid) : undefined
+  return section
+    ? { kind: 'section', id: section.id, sectionId: section.id, title: section.title, availability: section.availability }
+    : null
+}
+
+function restrictionPage(
+  c: Context<AppEnv>,
+  access: CourseAccess,
+  subject: RestrictionSubject,
+  value?: RestrictionFormNode | null,
+  errors?: FieldErrors,
+) {
+  const courseId = access.course.id
+  const choices = restrictionChoices(access.course, subject.kind === 'item' ? subject.id : undefined)
+  const saved = parseRestriction(subject.availability)
+  return c.render(
+    <RestrictionPage
+      tone={access.course.color}
+      crumbs={[
+        { href: '/courses', label: 'コース一覧' },
+        { href: `/courses/${courseId}`, label: access.course.title },
+      ]}
+      target={{
+        kind: subject.kind,
+        title: subject.title,
+        action: `/courses/${courseId}/${subject.kind === 'item' ? 'items' : 'sections'}/${subject.id}/restriction`,
+        back: editUrl(courseId, subject.sectionId),
+      }}
+      value={value === undefined ? restrictionFormValue(saved) : value}
+      choices={choices}
+      errors={errors}
+      note={saved && describeRestriction(saved, restrictionChoices(access.course))}
+    />,
+    { title: `アクセス制限 - ${subject.title}` },
+  )
+}
+
+export async function editRestriction(c: Context<AppEnv>) {
+  const access = await manageAccess(c)
+  const subject = access && restrictionSubject(c, access)
+  if (!access || !subject) return c.notFound()
+  return restrictionPage(c, access, subject)
+}
+
+export async function updateRestriction(c: Context<AppEnv>) {
+  const access = await manageAccess(c)
+  const subject = access && restrictionSubject(c, access)
+  if (!access || !subject) return c.notFound()
+  const form = await readForm(c)
+  let set: RestrictionSet | null = null
+  if (field(form, 'clear') !== '1') {
+    const result = validate('restriction', form)
+    const read = result.ok ? result.values.availability : readRestrictionForm(field(form, 'availability', MAX_RESTRICTION_JSON_LENGTH + 1))
+    const choices = restrictionChoices(access.course, subject.kind === 'item' ? subject.id : undefined)
+    const errors = result.ok
+      ? read.set
+        ? checkRestrictionChoices(read.set, choices, parseRestriction(subject.availability))
+        : {}
+      : result.errors
+    if (Object.keys(errors).length > 0) {
+      c.status(422)
+      return restrictionPage(c, access, subject, restrictionFormValue(read.set), errors)
+    }
+    set = read.set
+  }
+  const table = subject.kind === 'item' ? items : sections
+  db.update(table)
+    .set({ availability: restrictionJson(set) })
+    .where(and(eq(table.id, subject.id), eq(table.courseId, access.course.id)))
+    .run()
+  return redirectWith(
+    c,
+    editUrl(access.course.id, subject.sectionId),
+    `「${subject.title}」のアクセス制限を${set ? '保存しました' : 'なくしました'}。`,
+  )
+}
+
 // ---------------------------------------------------------------- 閲覧・完了
 
 async function readTextPreview(key: string) {
@@ -444,6 +547,8 @@ export async function showItem(c: Context<AppEnv>) {
   const manage = access.canManage
   const item = getItem(id, iid)
   if (!item || (!manage && !isVisibleItem(iid))) return c.notFound()
+  const availability = courseAvailability(c.var.user!, access)
+  if (availability.items.get(iid)?.open === false) return c.notFound()
   const sectionList = db
     .select({ id: sections.id, title: sections.title, hidden: sections.hidden })
     .from(sections)
@@ -467,6 +572,13 @@ export async function showItem(c: Context<AppEnv>) {
     .where(and(eq(items.courseId, id), manage ? undefined : visibleItem()))
     .orderBy(items.position, items.id)
     .all()
+  // 一覧に出さないものも outline から除かないのは、進捗をコースページと同じく制限に関係なく数えるため
+  const restricted: RestrictedOutline = {
+    locked: new Set(outline.filter((o) => availability.items.get(o.id)?.open === false).map((o) => o.id)),
+    hidden: new Set(outline.filter((o) => availability.items.get(o.id)?.hidden).map((o) => o.id)),
+    hiddenSections: new Set(sectionList.filter((s) => availability.sections.get(s.id)?.hidden).map((s) => s.id)),
+  }
+  const locked = restricted.locked
   const doneRows = db
     .select({ itemId: completions.itemId })
     .from(completions)
@@ -475,7 +587,7 @@ export async function showItem(c: Context<AppEnv>) {
   const done = new Set(doneRows.map((r) => r.itemId))
 
   // セクション順 → アイテム順でコース全体を並べ、前後のアイテムを求める
-  const ordered = sectionList.flatMap((s) => outline.filter((o) => o.sectionId === s.id))
+  const ordered = sectionList.flatMap((s) => outline.filter((o) => o.sectionId === s.id && !locked.has(o.id)))
   const idx = ordered.findIndex((o) => o.id === item.id)
   const prev = ordered[idx - 1]
   const next = ordered[idx + 1]
@@ -502,6 +614,7 @@ export async function showItem(c: Context<AppEnv>) {
       section={section}
       sections={sectionList}
       outline={outline}
+      restricted={restricted}
       done={done}
       prev={prev}
       next={next}
@@ -522,7 +635,13 @@ export async function toggleComplete(c: Context<AppEnv>) {
   const id = intParam(c, 'id')
   const iid = intParam(c, 'iid')
   const access = id && iid && (await getCourseAccess(c, id))
-  if (!access || access.role !== 'student' || !access.course.completionEnabled || !isVisibleItem(iid)) return c.notFound()
+  if (
+    !access ||
+    access.role !== 'student' ||
+    !access.course.completionEnabled ||
+    !canOpenItem(c.var.user!, access, iid, isVisibleItem(iid))
+  )
+    return c.notFound()
   const item = getItem(id, iid)
   const on = field(await readForm(c), 'on', 10)
   const manual = item?.completion === 'manual' && !on
@@ -553,7 +672,7 @@ export async function downloadFile(c: Context<AppEnv>) {
   const access = id && iid && (await getCourseAccess(c, id))
   if (!access) return c.notFound()
   const item = getItem(id, iid)
-  if (!item || item.type !== 'file' || !item.fileKey || (!access.canManage && !isVisibleItem(iid))) return c.notFound()
+  if (!item || item.type !== 'file' || !item.fileKey || !canOpenItem(c.var.user!, access, iid, isVisibleItem(iid))) return c.notFound()
 
   const type = item.fileType ?? 'application/octet-stream'
   const filename = item.fileName ?? 'file'

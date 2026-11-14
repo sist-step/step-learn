@@ -2,10 +2,11 @@ import type { CourseCardData } from '../components/ui'
 import { BUNDLE_MODULE } from '../lib/bundle'
 import type { CourseAccess } from '../lib/courses'
 import { isHttpUrl } from '../lib/forms'
+import { RESTRICTION_KINDS, parseRestriction, type RestrictionChoices, type RestrictionKind, type RestrictionSet } from '../lib/restriction'
 import { COURSE_COLORS, type Completion, type Course, type LinkTarget, type NavCourse } from '../lib/types'
 import { linkTargetOf, moodleDisplayOf, type MoodleDisplay } from '../moodle/display'
 import { toMarkdown, toPlainText } from '../moodle/html'
-import type { MoodleCourse, MoodleFormat, MoodleModule, MoodleRestriction, MoodleSection } from './client'
+import type { MoodleCourse, MoodleFormat, MoodleModule, MoodleRestriction, MoodleRestrictionOptions, MoodleSection } from './client'
 
 // Moodle のコースには色がないので、ID から決めて毎回同じ色にする
 export const courseColor = (id: number) => COURSE_COLORS[id % COURSE_COLORS.length]
@@ -141,31 +142,58 @@ export type MSection = {
   rule: Restriction | null
 }
 
-/** 教師に見せるアクセス制限。editable のときだけ from 以降の値がある */
-export type Restriction = {
-  text: string
-  editable: boolean
-  from: number | null
-  until: number | null
-  /** 完了が条件の活動。-1 は直前の活動 */
-  after: number[]
-  hideUnmet: boolean
-}
-
-/** 完了の条件にできる「直前の活動」 */
-export const PREVIOUS_ITEM = -1
+/** 教師に見せるアクセス制限。text は Moodle が作った説明、set は編集画面に渡す条件（読めなければ null） */
+export type Restriction = { text: string; set: RestrictionSet | null }
 
 // リンクを外すのは、Moodle が活動の名前を Moodle の画面へのリンクにしており、文字にすると URL が並んで条件が読みにくいため
 const restrictionText = (html: string) => toPlainText(html.replace(/<\/?a\b[^>]*>/gi, ''), 1)
 
-const toRestriction = (r: MoodleRestriction): Restriction => ({
-  text: restrictionText(r.info),
-  editable: r.editable,
-  from: r.from || null,
-  until: r.until || null,
-  after: r.after,
-  hideUnmet: r.hideunmet,
-})
+const toRestriction = (r: MoodleRestriction): Restriction => ({ text: restrictionText(r.info), set: parseRestriction(r.json) })
+
+const nameOf = (list: { id: number; name: string }[], id: unknown) => list.find((x) => x.id === id)?.name
+
+/**
+ * アクセス制限の編集で選べるもの。exclude は制限を付ける活動自身（自分の完了や評点は条件にできない）。
+ * グループとグルーピングを足せる種類に入れないのは、STEP Learn の通常モードにグループがなく、編集は Moodle の画面に任せるため
+ */
+export function restrictionChoicesOf(
+  { course, sections, items }: { course: MoodleCourse; sections: MSection[]; items: MItem[] },
+  options: MoodleRestrictionOptions,
+  exclude?: number,
+): RestrictionChoices {
+  const sectionTitles = new Map(sections.map((s) => [s.id, s.title]))
+  const tracked = course.completionenabled ? items.filter((it) => isTracked(it) && it.id !== exclude) : []
+  const enabled = new Set(options.plugins)
+  const unavailable: RestrictionChoices['unavailable'] = {}
+  for (const kind of RESTRICTION_KINDS)
+    if (!enabled.has(kind)) unavailable[kind] = '旧STEP Learn のサイトの設定で使えないようになっています。'
+  if (!unavailable.completion && !course.completionenabled) unavailable.completion = 'このコースでは完了ステータスを使っていません。'
+  else if (!unavailable.completion && tracked.length === 0) unavailable.completion = '完了の条件があるアイテムがありません。'
+  const grades = options.grades.filter((g) => !exclude || g.cmid !== exclude)
+  if (!unavailable.grade && grades.length === 0) unavailable.grade = '評点の項目がありません。'
+  return {
+    kinds: RESTRICTION_KINDS.filter((k): k is RestrictionKind => !unavailable[k]),
+    unavailable,
+    items: tracked.map((it) => ({ id: it.id, label: it.title, meta: sectionTitles.get(it.sectionId), passFail: true })),
+    previous: !!course.completionenabled,
+    grades: grades.map((g) => ({ id: g.id, label: g.name })),
+    profile: options.profilefields.map((f) => ({ value: f.field, label: f.name })),
+    other: (raw, not) => {
+      const belongs = not ? '所属していない' : '所属している'
+      if (raw.type === 'group') {
+        const name = nameOf(options.groups, raw.id)
+        return raw.id == null ? `いずれかのグループに${belongs}` : `グループ「${name ?? '（削除されたグループ）'}」に${belongs}`
+      }
+      if (raw.type === 'grouping') {
+        const name = nameOf(options.groupings, raw.id)
+        return raw.id == null
+          ? `活動のグルーピングのグループに${belongs}`
+          : `グルーピング「${name ?? '（削除されたグルーピング）'}」のグループに${belongs}`
+      }
+      return `そのほかの条件（${String(raw.type)}）`
+    },
+  }
+}
 
 /** 教師のときに、セクションとアイテムに制限を付ける */
 export function withRestrictions<T extends { sections: MSection[]; items: MItem[] }>(outline: T, list: MoodleRestriction[]): T {

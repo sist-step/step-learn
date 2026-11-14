@@ -6,6 +6,7 @@ import {
   createSection,
   downloadFile,
   editItem,
+  editRestriction,
   moveItem,
   moveSection,
   removeItem,
@@ -16,6 +17,7 @@ import {
   switchJudge,
   toggleComplete,
   updateItem,
+  updateRestriction,
   updateSection,
 } from './handlers'
 
@@ -27,12 +29,16 @@ app.post('/:id/sections/:sid', updateSection)
 app.post('/:id/sections/:sid/move', moveSection)
 app.post('/:id/sections/:sid/delete', removeSection)
 app.post('/:id/sections/:sid/visibility', setSectionHidden)
+app.get('/:id/sections/:sid/restriction', editRestriction)
+app.post('/:id/sections/:sid/restriction', updateRestriction)
 app.post('/:id/items', createItem)
 app.get('/:id/items/:iid/edit', editItem)
 app.post('/:id/items/:iid', updateItem)
 app.post('/:id/items/:iid/move', moveItem)
 app.post('/:id/items/:iid/delete', removeItem)
 app.post('/:id/items/:iid/visibility', setItemHidden)
+app.get('/:id/items/:iid/restriction', editRestriction)
+app.post('/:id/items/:iid/restriction', updateRestriction)
 app.post('/:id/items/:iid/judge', switchJudge)
 app.get('/:id/items/:iid', showItem)
 app.post('/:id/items/:iid/complete', toggleComplete)
