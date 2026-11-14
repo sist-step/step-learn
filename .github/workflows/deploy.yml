@@ -13,30 +13,19 @@ concurrency:
 
 jobs:
   deploy:
-    name: deploy (${{ matrix.environment }})
+    name: deploy (beta)
     # conclusion だけで判定しないのは、PR の CI 完了でも workflow_run が発火するため
     if: >-
       (github.event_name == 'workflow_run'
         && github.event.workflow_run.conclusion == 'success'
         && github.event.workflow_run.event == 'push')
       || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
-    strategy:
-      # 止めないのは、片方のサーバーの失敗でもう片方のデプロイまで取り消さないため
-      fail-fast: false
-      matrix:
-        include:
-          - environment: production
-            runner: production
-            project: step-learn
-          # プロジェクト名を分けるのは、2 つのランナーが同じホストにあっても、コンテナとボリュームを取り合わないため
-          - environment: beta
-            runner: beta
-            project: step-learn-beta
-    runs-on: [self-hosted, linux, '${{ matrix.runner }}']
-    environment: ${{ matrix.environment }}
+    runs-on: [self-hosted, linux, beta]
+    environment: beta
     timeout-minutes: 20
     env:
-      COMPOSE_PROJECT_NAME: ${{ matrix.project }}
+      # 既定の step-learn にしないのは、beta のデータが入っているボリューム step-learn-beta_data を使い続けるため
+      COMPOSE_PROJECT_NAME: step-learn-beta
       HOST_PORT: ${{ vars.DEPLOY_HOST_PORT || '3000' }}
       HOST_BIND: ${{ vars.DEPLOY_HOST_BIND || '127.0.0.1' }}
     steps:
