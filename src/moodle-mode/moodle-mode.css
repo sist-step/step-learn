@@ -75,16 +75,16 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: var(--surface);
-  border: 1px solid var(--card-border);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   overflow: clip;
   color: var(--text);
 }
-a.sec-tile { transition: border-color 0.15s, box-shadow 0.2s, transform 0.2s var(--ease); }
+a.sec-tile { transition: background 0.15s, border-color 0.15s, box-shadow 0.2s, transform 0.2s var(--ease); }
 @media (hover: hover) {
-  a.sec-tile:hover { border-color: var(--border-strong); box-shadow: var(--shadow); transform: translateY(-1px); text-decoration: none; }
+  a.sec-tile:hover { background: var(--glass-hover); box-shadow: var(--shadow); transform: translateY(-2px); text-decoration: none; }
   a.sec-tile:hover .sec-tile-title { color: var(--c-ink); }
 }
 .sec-tile-media {
@@ -119,7 +119,7 @@ a.sec-tile { transition: border-color 0.15s, box-shadow 0.2s, transform 0.2s var
 .sec-tile.is-done .sec-tile-pct { color: var(--success-text); }
 .sec-tile-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--track); }
 .sec-tile-progress > span { display: block; width: var(--w, 0); height: 100%; background: var(--success-strong); border-radius: 0 999px 999px 0; }
-.sec-tile.is-hidden { border-style: dashed; background: color-mix(in srgb, var(--surface) 60%, transparent); }
+.sec-tile.is-hidden { border: 1px dashed var(--border-strong); background: var(--glass-faint); box-shadow: none; }
 .sec-tile.is-hidden :is(.sec-tile-title, .sec-tile-media) { color: var(--muted); }
 .sec-tile.is-hidden .sec-tile-media { background: var(--surface-2); }
 .sec-tile:is(.is-locked, .is-empty) { box-shadow: none; background: transparent; border: 1px dashed var(--border-strong); }

@@ -13,7 +13,7 @@
 }
 .icon-btn::-webkit-details-marker { display: none; }
 @media (hover: hover) {
-  .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+  .icon-btn:hover { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
   .icon-btn.danger:hover { background: var(--danger-soft); color: var(--danger-text); }
 }
 @media (max-width: 640px), (pointer: coarse) {
@@ -44,7 +44,8 @@
 .btn[hidden] { display: none; }
 .btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: 0.6; cursor: default; }
-.btn-primary { --btn-bg: var(--primary); --btn-fg: var(--on-primary); --btn-border: transparent; box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.12), var(--shadow-sm); }
+/* --btn-bg に入れないのは、タッチ端末の押下で color-mix に渡すので、グラデーションだと背景ごと消えるため */
+.btn-primary { --btn-bg: var(--primary); --btn-fg: var(--on-primary); --btn-border: transparent; background: var(--primary-fill); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.22), 0 6px 16px -8px color-mix(in srgb, var(--primary) 70%, transparent), var(--shadow-sm); }
 .btn-success { --btn-bg: var(--success-strong); --btn-fg: var(--on-strong); --btn-border: transparent; }
 .btn-danger { --btn-bg: var(--danger-strong); --btn-fg: var(--on-strong); --btn-border: transparent; }
 .btn-danger-outline { --btn-fg: var(--danger-text); --btn-border: color-mix(in srgb, var(--danger) 40%, transparent); }
@@ -53,15 +54,15 @@
 .btn-lg { height: var(--control-h-lg); padding: 0 24px; font-size: var(--fs-md); }
 .btn-block { width: 100%; }
 @media (hover: hover) {
-  .btn:hover { text-decoration: none; background: var(--surface-2); }
-  .btn-primary:hover { background: var(--primary-hover); }
+  .btn:hover { text-decoration: none; background: color-mix(in srgb, var(--btn-bg) 92%, var(--text)); }
+  .btn-primary:hover { background: var(--primary-fill-hover); }
   .btn-success:hover { background: var(--success-strong-hover); }
   .btn-danger:hover { background: var(--danger-strong-hover); }
   .btn-danger-outline:hover { background: var(--danger-soft); }
 }
 @media (hover: none) {
   .btn:active { background: color-mix(in srgb, var(--btn-bg) 90%, var(--text)); }
-  .btn-primary:active { background: var(--primary-hover); }
+  .btn-primary:active { background: var(--primary-fill-hover); }
   .btn-success:active { background: var(--success-strong-hover); }
   .btn-danger:active { background: var(--danger-strong-hover); }
 }

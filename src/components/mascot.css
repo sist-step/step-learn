@@ -334,6 +334,43 @@
   to { opacity: 0; transform: translate(calc(var(--heart-x, -50%) + var(--heart-drift, 0px)), -40px) scale(0.9); }
 }
 
+/* ----- 遊び場（MascotYard）。足場の上辺を client.ts の WALKER_GROUNDS が読んで、WalkingMascot を歩かせる */
+.mascot-yard { position: relative; height: 236px; }
+.mascot-yard-block { position: absolute; border: 1px solid var(--glass-border); border-radius: 999px; box-shadow: var(--shadow-card); }
+/* 床を白いガラスの箱にしないのは、中身のない空のカードに見えるため。色を付けた細い板にして、足場だと分かるようにする */
+.mascot-yard-block.is-floor {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 26px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 24%, var(--surface)),
+    color-mix(in srgb, var(--aura-2) 18%, var(--surface)) 55%,
+    color-mix(in srgb, var(--aura-3) 20%, var(--surface))
+  );
+}
+/* 浮いた足場を床のすぐ上に置かないのは、床を歩くマスコットの頭が足場に当たって見えるため */
+.mascot-yard-block.is-shelf {
+  bottom: 112px;
+  left: 5%;
+  width: 36%;
+  height: 26px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 30%, var(--surface)), color-mix(in srgb, var(--accent) 12%, var(--surface)));
+}
+.mascot-yard-block.is-box {
+  right: 9%;
+  bottom: 104px;
+  width: min(136px, 40%);
+  height: 64px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--aura-3) 26%, var(--surface)), color-mix(in srgb, var(--aura-2) 16%, var(--surface)));
+}
+@media (max-width: 640px) {
+  .mascot-yard-block.is-shelf { left: 0; width: 46%; }
+  .mascot-yard-block.is-box { right: 0; }
+}
+
 /* ----- 吹き出し */
 /* min-width: 0 がないと、Safari は吹き出しを縮めずに 1 行で並べ、画面の外まではみ出す */
 .mascot-say {

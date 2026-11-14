@@ -17,10 +17,11 @@
   align-items: flex-start;
   gap: 12px;
   padding: 14px 12px 14px 16px;
-  border: 1px solid color-mix(in srgb, var(--toast-c) 20%, var(--overlay-border));
-  border-radius: 14px;
-  background: linear-gradient(100deg, color-mix(in srgb, var(--toast-c) 14%, var(--surface-raised)), var(--surface-raised) 55%);
-  box-shadow: 0 12px 32px -12px color-mix(in srgb, var(--toast-c) 35%, transparent), var(--shadow-sm);
+  border: 1px solid color-mix(in srgb, var(--toast-c) 22%, var(--glass-border));
+  border-radius: 18px;
+  background: linear-gradient(100deg, color-mix(in srgb, var(--toast-c) 16%, var(--glass-raised)), var(--glass-raised) 55%);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: 0 16px 36px -14px color-mix(in srgb, var(--toast-c) 40%, transparent), var(--shadow-sm);
   color: var(--text);
   animation: toast-in 0.3s var(--ease);
 }

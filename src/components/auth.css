@@ -39,7 +39,8 @@
 .auth-card > p { min-height: 2lh; margin: 6px 0 24px; word-break: auto-phrase; }
 .auth-card .alert { margin-bottom: 18px; }
 .auth-card form { gap: 16px; }
-.auth-card .tabs { margin: 0 0 24px; }
+/* ページのタブと同じガラスにしないのは、白いパネルの上では半透明の白が沈まず、トラックが見えなくなるため */
+.auth-card .tabs { margin: 0 0 24px; background: var(--track); box-shadow: inset 0 0 0 1px var(--track-border); }
 .auth-card h1 + .tabs { margin-top: 20px; }
 .auth-card .btn-block { margin-top: 8px; }
 .auth-card .tab-panel form { min-height: 223px; }
