@@ -6,6 +6,7 @@
   padding: 24px;
 }
 .card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.card-head:last-child { margin-bottom: 0; }
 .card-head-text { flex: 1; min-width: 0; }
 .card-head-actions { display: flex; gap: 8px; flex: none; }
 .card-head h2 { font-weight: 650; }

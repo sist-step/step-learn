@@ -11,6 +11,7 @@ import {
   findEmailVerification,
   findPasswordReset,
   hashPassword,
+  isUsernameTaken,
   needsRehash,
   resetPassword,
   verifyPassword,
@@ -20,16 +21,31 @@ import { db } from '../../lib/db'
 import { type FieldErrors, validate } from '../../lib/forms'
 import { clientIp, field, readForm, redirectWith, safeNext } from '../../lib/http'
 import { mailer } from '../../lib/mail'
+import {
+  type MicrosoftIdentity,
+  clearMicrosoftSignup,
+  exchangeMicrosoftCode,
+  findMicrosoftUser,
+  holdMicrosoftSignup,
+  linkMicrosoft,
+  readMicrosoftSignup,
+  startMicrosoftAuth,
+  takeMicrosoftFlow,
+} from '../../lib/microsoft'
+import { logAs } from '../../lib/operation-log'
 import { checkPassword } from '../../lib/password'
 import { rateLimiter } from '../../lib/rate-limit'
 import { users } from '../../lib/schema'
 import type { AppEnv } from '../../lib/types'
+import { checkUsername, normalizeUsername } from '../../lib/username'
 import {
   CompleteRegisterPage,
   ForgotPasswordPage,
   ForgotPasswordSentPage,
   InvalidLinkPage,
   LoginPage,
+  MicrosoftRegisterPage,
+  MicrosoftUnverifiedPage,
   RegisterPage,
   RegisterSentPage,
   ResetPasswordPage,
@@ -43,6 +59,8 @@ const registerByEmail = rateLimiter({ limit: 3, windowSec: 60 * 60 })
 const forgotByIp = rateLimiter({ limit: 100, windowSec: 60 * 60 })
 const forgotByEmail = rateLimiter({ limit: 3, windowSec: 60 * 60 })
 
+const MICROSOFT = !!config.microsoft
+
 const appOrigin = (c: Context) => config.appOrigin ?? new URL(c.req.url).origin
 
 function tooManyRequests(c: Context, retryAfter: number) {
@@ -53,7 +71,7 @@ function tooManyRequests(c: Context, retryAfter: number) {
 
 export function showLogin(c: Context<AppEnv>) {
   if (c.var.user) return c.redirect('/dashboard')
-  return c.render(<LoginPage next={c.req.query('next')} />, { title: 'ログイン' })
+  return c.render(<LoginPage microsoft={MICROSOFT} next={c.req.query('next')} />, { title: 'ログイン' })
 }
 
 export async function submitLogin(c: Context<AppEnv>) {
@@ -61,9 +79,12 @@ export async function submitLogin(c: Context<AppEnv>) {
   const result = validate('login', form)
   if (!result.ok) {
     c.status(422)
-    return c.render(<LoginPage login={field(form, 'login', 254)} next={field(form, 'next', 500)} errors={result.errors} />, {
-      title: 'ログイン',
-    })
+    return c.render(
+      <LoginPage microsoft={MICROSOFT} login={field(form, 'login', 254)} next={field(form, 'next', 500)} errors={result.errors} />,
+      {
+        title: 'ログイン',
+      },
+    )
   }
   const { login, password, next } = result.values
 
@@ -72,7 +93,9 @@ export async function submitLogin(c: Context<AppEnv>) {
   const account = login.toLowerCase()
   const wait = Math.max(loginFailuresByIp.retryAfter(ip), loginFailuresByAccount.retryAfter(account))
   if (wait) {
-    return c.render(<LoginPage login={login} next={next} errors={{ form: tooManyRequests(c, wait) }} />, { title: 'ログイン' })
+    return c.render(<LoginPage microsoft={MICROSOFT} login={login} next={next} errors={{ form: tooManyRequests(c, wait) }} />, {
+      title: 'ログイン',
+    })
   }
   // 照合に失敗してから数えないのは、照合を待つ間に届いた同時のリクエストが、どれも上限の判定を通ってしまうため
   loginFailuresByIp.hit(ip)
@@ -89,7 +112,12 @@ export async function submitLogin(c: Context<AppEnv>) {
     if (user) c.set('logUserId', user.id)
     c.status(401)
     return c.render(
-      <LoginPage login={login} next={next} errors={{ form: 'メールアドレス（ユーザー名）またはパスワードが正しくありません。' }} />,
+      <LoginPage
+        microsoft={MICROSOFT}
+        login={login}
+        next={next}
+        errors={{ form: 'メールアドレス（ユーザー名）またはパスワードが正しくありません。' }}
+      />,
       { title: 'ログイン' },
     )
   }
@@ -112,7 +140,7 @@ export async function submitLogin(c: Context<AppEnv>) {
 
 export function showRegister(c: Context<AppEnv>) {
   if (c.var.user) return c.redirect('/dashboard')
-  return c.render(<RegisterPage next={c.req.query('next')} />, { title: '新規登録' })
+  return c.render(<RegisterPage microsoft={MICROSOFT} next={c.req.query('next')} />, { title: '新規登録' })
 }
 
 export async function submitRegister(c: Context<AppEnv>) {
@@ -120,16 +148,21 @@ export async function submitRegister(c: Context<AppEnv>) {
   const result = validate('register', form)
   if (!result.ok) {
     c.status(422)
-    return c.render(<RegisterPage email={field(form, 'email', 254)} next={field(form, 'next', 500)} errors={result.errors} />, {
-      title: '新規登録',
-    })
+    return c.render(
+      <RegisterPage microsoft={MICROSOFT} email={field(form, 'email', 254)} next={field(form, 'next', 500)} errors={result.errors} />,
+      {
+        title: '新規登録',
+      },
+    )
   }
   const { email, next } = result.values
 
   const ip = clientIp(c)
   const wait = Math.max(registerByIp.retryAfter(ip), registerByEmail.retryAfter(email))
   if (wait) {
-    return c.render(<RegisterPage email={email} next={next} errors={{ form: tooManyRequests(c, wait) }} />, { title: '新規登録' })
+    return c.render(<RegisterPage microsoft={MICROSOFT} email={email} next={next} errors={{ form: tooManyRequests(c, wait) }} />, {
+      title: '新規登録',
+    })
   }
   registerByIp.hit(ip)
   registerByEmail.hit(email)
@@ -294,4 +327,131 @@ export async function submitResetPassword(c: Context<AppEnv>) {
 export async function logout(c: Context<AppEnv>) {
   await destroySession(c)
   return redirectWith(c, '/login', 'ログアウトしました。', 'info')
+}
+
+// ---------------------------------------------------------------- Microsoft アカウント
+
+const MICROSOFT_CANCELLED = 'access_denied'
+const MICROSOFT_FAILED = 'Microsoft アカウントでログインできませんでした。もう一度お試しください。'
+const MICROSOFT_RETRY = 'もう一度 Microsoft アカウントでログインしてください。'
+
+export async function startMicrosoft(c: Context<AppEnv>) {
+  const next = safeNext(field(await readForm(c), 'next', 500))
+  return c.redirect(await startMicrosoftAuth(c, { next }), 303)
+}
+
+export async function microsoftCallback(c: Context<AppEnv>) {
+  const flow = await takeMicrosoftFlow(c)
+  const linking = !!flow?.linkUserId
+  const back = linking ? '/account' : '/login'
+  const fail = (message: string, type: 'error' | 'info' = 'error') => {
+    logAs(c, linking ? 'account.microsoft.link.failed' : 'login.microsoft.failed')
+    return redirectWith(c, back, message, type)
+  }
+
+  const error = c.req.query('error')
+  if (error === MICROSOFT_CANCELLED) return fail(linking ? '連携を取り消しました。' : 'ログインを取り消しました。', 'info')
+  if (error) {
+    console.error('[microsoft] サインインに失敗しました', error, c.req.query('error_description'))
+    return fail(MICROSOFT_FAILED)
+  }
+  const code = c.req.query('code')
+  if (!flow || !code) return fail(MICROSOFT_RETRY)
+
+  let identity: MicrosoftIdentity
+  try {
+    identity = await exchangeMicrosoftCode(c, flow, code)
+  } catch (err) {
+    console.error('[microsoft] アカウントを確かめられませんでした', err)
+    return fail(MICROSOFT_FAILED)
+  }
+
+  if (flow.linkUserId) {
+    const user = c.var.user
+    if (!user || user.id !== flow.linkUserId) return fail('ログインし直してから、もう一度連携してください。')
+    const owner = findMicrosoftUser(identity.subject)
+    if (owner === user.id) return redirectWith(c, '/account', 'この Microsoft アカウントはすでに連携しています。', 'info')
+    if (owner) return fail('この Microsoft アカウントは、ほかのアカウントに連携されています。')
+    if (!linkMicrosoft(user.id, identity)) return fail('すでに別の Microsoft アカウントを連携しています。解除してから連携してください。')
+    logAs(c, 'account.microsoft.link')
+    return redirectWith(c, '/account', 'Microsoft アカウントを連携しました。')
+  }
+
+  const linked = findMicrosoftUser(identity.subject)
+  if (linked) return signIn(c, linked, flow.next)
+
+  const email = identity.verifiedEmail
+  if (!email) {
+    c.status(403)
+    return c.render(<MicrosoftUnverifiedPage email={identity.email} />, { title: 'ログイン' })
+  }
+  const existing = db.select({ id: users.id }).from(users).where(eq(users.email, email)).get()
+  if (existing) {
+    if (!linkMicrosoft(existing.id, identity))
+      return fail('このメールアドレスのアカウントには、別の Microsoft アカウントが連携されています。')
+    return signIn(c, existing.id, flow.next)
+  }
+
+  await holdMicrosoftSignup(c, { subject: identity.subject, email, name: identity.name, next: flow.next })
+  return c.redirect('/auth/microsoft/register', 303)
+}
+
+async function signIn(c: Context<AppEnv>, userId: number, next: string, message?: string) {
+  // 先に今のセッションを消すのは、別のアカウントでログインしたまま Microsoft アカウントでログインした場合に、そのセッションを残さないため
+  await destroySession(c)
+  await createSession(c, userId)
+  return message ? redirectWith(c, safeNext(next), message) : c.redirect(safeNext(next), 303)
+}
+
+function suggestUsername(email: string) {
+  const username = normalizeUsername(email.split('@')[0] ?? '')
+  return checkUsername(username) || isUsernameTaken(username) ? '' : username
+}
+
+export async function showMicrosoftRegister(c: Context<AppEnv>) {
+  if (c.var.user) return c.redirect('/dashboard')
+  const signup = await readMicrosoftSignup(c)
+  if (!signup) return redirectWith(c, '/login', MICROSOFT_RETRY, 'error')
+  return c.render(<MicrosoftRegisterPage email={signup.email} name={signup.name} username={suggestUsername(signup.email)} />, {
+    title: '新規登録',
+  })
+}
+
+export async function submitMicrosoftRegister(c: Context<AppEnv>) {
+  const signup = await readMicrosoftSignup(c)
+  if (!signup) return redirectWith(c, '/login', MICROSOFT_RETRY, 'error')
+  const { subject, email, next } = signup
+
+  const form = await readForm(c)
+  const result = validate('profile', form)
+  if (!result.ok) {
+    c.status(422)
+    return c.render(
+      <MicrosoftRegisterPage email={email} name={field(form, 'name', 60)} username={field(form, 'username', 100)} errors={result.errors} />,
+      { title: '新規登録' },
+    )
+  }
+  const { name, username } = result.values
+
+  // 確かめ直すのは、別のタブで同じ Microsoft アカウントの登録を先に終えていると、主キーの重複で登録が失敗するため
+  const linked = findMicrosoftUser(subject)
+  if (linked) {
+    clearMicrosoftSignup(c)
+    return signIn(c, linked, next)
+  }
+
+  const created = await createUser({ email, name, username, password: null, identity: { provider: 'microsoft', subject } })
+  if ('taken' in created) {
+    if (created.taken === 'email') {
+      clearMicrosoftSignup(c)
+      return redirectWith(c, '/login', `このメールアドレスはすでに登録されています。${MICROSOFT_RETRY}`, 'info')
+    }
+    c.status(422)
+    return c.render(<MicrosoftRegisterPage email={email} name={name} username={username} errors={{ username: USERNAME_TAKEN }} />, {
+      title: '新規登録',
+    })
+  }
+
+  clearMicrosoftSignup(c)
+  return signIn(c, created.id, next, `ようこそ、${name}さん！`)
 }
