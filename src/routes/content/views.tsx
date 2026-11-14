@@ -1,4 +1,4 @@
-import { AgentEditPanel, AgentOpen, AgentPeriodCard } from '../../components/agent'
+import { AGENT_BODY_HINT, AgentEditPanel, AgentInstructionsField, AgentOpen, AgentPeriodCard } from '../../components/agent'
 import { BundleEditPanel, BundleOpen, type BundleView } from '../../components/bundle'
 import {
   CodeBarActions,
@@ -59,6 +59,8 @@ export type ItemInput = {
   closesAt: string
   /** コーディングエージェントの 1 人あたりの上限（入力欄の値） */
   userLimit: string
+  /** コーディングエージェントの、教師が書く AI への指示 */
+  instructions: string
 }
 
 /** コードのアイテムの言語と、見ている学生の提出。goals は学生に見せるクリアの条件（制約のラベル） */
@@ -134,6 +136,7 @@ export const ItemEditPage = ({
     opensAt: unixToDateTimeInput(code?.opensAt ?? agent?.settings.opensAt ?? undefined),
     closesAt: unixToDateTimeInput(code?.closesAt ?? agent?.settings.closesAt ?? undefined),
     userLimit: agent ? String(agent.settings.userLimit) : '',
+    instructions: agent?.settings.instructions ?? '',
     ...values,
   }
   const section = sections.find((s) => s.id === item.sectionId)
@@ -179,10 +182,11 @@ export const ItemEditPage = ({
               name="body"
               value={v.body}
               error={errors.body}
-              hint={agent ? '学生に見せるほか、AI への指示としても渡します（課題の内容や、使ってほしい書き方など）。' : undefined}
+              hint={agent ? AGENT_BODY_HINT : undefined}
               rows={item.type === 'page' ? 18 : item.type === 'code' ? 10 : 5}
               split
             />
+            {agent && <AgentInstructionsField value={v.instructions} error={errors.instructions} />}
             {code && gradingEnabled && <CodeSuggest action={`${base}/code/suggest`} />}
           </Card>
           {code && <CodeStarterCard language={code.language} starter={v.starter} stdin={v.stdin} errors={errors} />}

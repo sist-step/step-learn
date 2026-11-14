@@ -6,7 +6,10 @@ import { agentItems, agentTokens, agentUsage, users } from './schema'
 
 const unix = (v: unknown) => (typeof v === 'number' ? v : null)
 
-/** extra_items の data（extra-kinds.tsx の agent の toData が作る）の、教師が決める使える期間と 1 人あたりの上限 */
+/** extra_items の data（extra-kinds.tsx の agent の toData が作る）の、教師が書く AI への指示 */
+const agentInstructionsOf = (data: Record<string, unknown>) => (typeof data.instructions === 'string' ? data.instructions : '')
+
+/** extra_items の data の、教師が決める使える期間と 1 人あたりの上限 */
 export const agentPeriodOf = (data: Record<string, unknown>) => ({
   opensAt: unix(data.opensAt),
   closesAt: unix(data.closesAt),
@@ -41,6 +44,7 @@ export function agentStore(key: string, data: Record<string, unknown>): AgentSto
         apiKeyHint: configured ? (row?.apiKeyHint ?? '') : '',
         ...agentPeriodOf(data),
         totalLimit: row?.totalLimit ?? AGENT_DEFAULT_LIMITS.totalLimit,
+        instructions: agentInstructionsOf(data),
       }
     },
     apiKey,
