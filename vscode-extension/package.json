@@ -2,7 +2,7 @@
   "name": "step-learn-for-vscode",
   "displayName": "STEP Learn for VSCode",
   "description": "STEP Learn で配られたプログラムのファイルを、ボタン 1 つで VS Code に用意して開きます。先生が指定したアイテムでは、保存した内容を変更履歴として STEP Learn に記録します。コーディングエージェントのアイテムでは、使える期間のあいだ AI がファイルを読み書きしてプログラムを書きます。",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publisher": "mint1535",
   "private": true,
   "license": "UNLICENSED",
