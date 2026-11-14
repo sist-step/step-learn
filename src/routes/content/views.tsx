@@ -1,4 +1,4 @@
-import { AgentEditPanel, AgentOpen, AgentPeriodCard, type AgentView } from '../../components/agent'
+import { AgentEditPanel, AgentOpen, AgentPeriodCard } from '../../components/agent'
 import { BundleEditPanel, BundleOpen, type BundleView } from '../../components/bundle'
 import {
   CodeBarActions,
@@ -34,7 +34,7 @@ import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
-import { agentBase } from '../../lib/agent'
+import { agentBase, type AgentView } from '../../lib/agent'
 import { bundleBase } from '../../lib/bundle'
 import type { CodeFiles, CodeLanguage, Judge } from '../../lib/code'
 import { unixToDateTimeInput } from '../../lib/course-period'
