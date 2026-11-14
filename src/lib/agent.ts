@@ -12,8 +12,8 @@ export const AGENT_MODEL_LABEL = 'Claude Haiku 5.5'
 /** アイテムの URL の下の、コーディングエージェントの操作の URL（/courses/:id/items/:iid/agent） */
 export const agentBase = (courseId: number, itemId: number) => `/courses/${courseId}/items/${itemId}/agent`
 
-/** 使える期間の長さの上限。日付の打ち間違いで、何年も使える状態になるのを防ぐ */
-export const MAX_AGENT_PERIOD = 366 * 24 * 60 * 60
+/** 使える期間の長さの上限 */
+export const MAX_AGENT_PERIOD = 6 * 60 * 60
 
 export const MAX_AGENT_LIMIT = 10_000
 
