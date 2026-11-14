@@ -1,5 +1,4 @@
 import { Hono } from 'hono'
-import { csrf } from 'hono/csrf'
 import { HTTPException } from 'hono/http-exception'
 import { secureHeaders } from 'hono/secure-headers'
 import { Button } from './components/button'
@@ -8,9 +7,8 @@ import { EmptyState } from './components/ui'
 import { session } from './lib/auth'
 import { AGENT_BODY_LIMIT } from './lib/agent'
 import { SYNC_BODY_LIMIT } from './lib/bundle-sync'
-import { config } from './lib/config'
 import { touchCourse } from './lib/courses'
-import { field, flashMiddleware, limitBody, readForm } from './lib/http'
+import { csrfGuard, field, flashMiddleware, limitBody, readForm } from './lib/http'
 import { operationLog, recordPrefetchedView } from './lib/operation-log'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE } from './lib/storage'
 import type { AppEnv } from './lib/types'
@@ -36,8 +34,7 @@ const guestBodyLimit = limitBody(64 * 1024)
 const userBodyLimit = limitBody(MAX_FILE_SIZE + 1024 * 1024, FILE_TOO_LARGE)
 
 app.use(secureHeaders())
-// フォーム POST の Origin を検証（SameSite=Lax Cookie と合わせた CSRF 対策）
-app.use(csrf(config.appOrigin ? { origin: config.appOrigin } : undefined))
+app.use(csrfGuard)
 app.use(flashMiddleware)
 app.use(session)
 const syncBodyLimit = limitBody(SYNC_BODY_LIMIT)

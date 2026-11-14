@@ -1,10 +1,20 @@
 import { getConnInfo } from '@hono/node-server/conninfo'
 import type { Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
+import { csrf } from 'hono/csrf'
 import { createMiddleware } from 'hono/factory'
 import { formatBytes } from './bytes'
 import { config } from './config'
 import type { AppEnv, Flash } from './types'
+
+const checkOrigin = csrf(config.appOrigin ? { origin: config.appOrigin } : undefined)
+
+/**
+ * フォーム POST の Origin を検証する（SameSite=Lax Cookie と合わせた CSRF 対策）。
+ * VS Code の拡張機能が呼ぶ API（/api/vscode/）を除くのは、Cookie ではなく Bearer のトークンや鍵で確かめるので CSRF の対象にならず、
+ * 本文のない POST（コーディングエージェントのトークンの取り消し）が Content-Type のないフォームの送信とみなされて拒まれるため
+ */
+export const csrfGuard = createMiddleware((c, next) => (c.req.path.startsWith('/api/vscode/') ? next() : checkOrigin(c, next)))
 
 const FLASH_COOKIE = 'flash'
 
