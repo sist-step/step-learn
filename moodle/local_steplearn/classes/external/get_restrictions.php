@@ -25,7 +25,7 @@ use local_steplearn\courses;
 use local_steplearn\restrictions;
 
 /**
- * 編集できるコースの、アクセス制限のあるセクションと活動。
+ * 編集できるコースの、アクセス制限のあるセクションと活動と、制限の編集で選べるもの。
  *
  * @package    local_steplearn
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -51,7 +51,11 @@ class get_restrictions extends external_api {
         $course = courses::require_manage($courseid);
         require_once($CFG->libdir . '/completionlib.php');
         if (empty($CFG->enableavailability)) {
-            return ['enabled' => false, 'restrictions' => []];
+            return [
+                'enabled' => false,
+                'restrictions' => [],
+                'options' => ['plugins' => [], 'grades' => [], 'profilefields' => [], 'groups' => [], 'groupings' => []],
+            ];
         }
 
         $modinfo = get_fast_modinfo($course);
@@ -68,7 +72,7 @@ class get_restrictions extends external_api {
                 $list[] = restrictions::export(0, (int) $cm->id, $cm->availability, $info);
             }
         }
-        return ['enabled' => true, 'restrictions' => $list];
+        return ['enabled' => true, 'restrictions' => $list, 'options' => restrictions::options($course)];
     }
 
     /**
@@ -78,6 +82,7 @@ class get_restrictions extends external_api {
         return new external_single_structure([
             'enabled' => new external_value(PARAM_BOOL, 'restrict access is enabled on the site'),
             'restrictions' => new external_multiple_structure(restrictions::structure()),
+            'options' => restrictions::options_structure(),
         ]);
     }
 }

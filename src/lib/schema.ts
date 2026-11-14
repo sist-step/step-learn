@@ -116,6 +116,8 @@ export const sections = sqliteTable(
     title: text('title').notNull(),
     summary: text('summary').notNull().default(''),
     hidden: integer('hidden').notNull().default(0),
+    /** アクセス制限。Moodle の availability と同じ形の JSON（lib/restriction.ts）。NULL は制限なし */
+    availability: text('availability'),
     position: integer('position').notNull().default(0),
   },
   (t) => [index('sections_course').on(t.courseId, t.position)],
@@ -143,6 +145,8 @@ export const items = sqliteTable(
     fileSize: integer('file_size'),
     fileType: text('file_type'),
     hidden: integer('hidden').notNull().default(0),
+    /** アクセス制限。Moodle の availability と同じ形の JSON（lib/restriction.ts）。NULL は制限なし */
+    availability: text('availability'),
     completion: text('completion', { enum: ['none', 'manual', 'view', 'play', 'clear'] })
       .notNull()
       .default('none'),
