@@ -1,12 +1,10 @@
 import { Hono, type Context } from 'hono'
-import { csrf } from 'hono/csrf'
 import { HTTPException } from 'hono/http-exception'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { createMiddleware } from 'hono/factory'
 import { secureHeaders } from 'hono/secure-headers'
 import { SYNC_BODY_LIMIT } from '../lib/bundle-sync'
-import { config } from '../lib/config'
-import { flashMiddleware, limitBody, wantsJson } from '../lib/http'
+import { csrfGuard, flashMiddleware, limitBody, wantsJson } from '../lib/http'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE } from '../lib/storage'
 import { renderer } from '../renderer'
 import { createAiAdminHandlers } from '../routes/admin/ai'
@@ -33,8 +31,8 @@ const userBodyLimit = limitBody(MAX_FILE_SIZE + 1024 * 1024, FILE_TOO_LARGE)
 // 最初に置くのは、CSRF の検証など前のミドルウェアで起きたエラーも、エラーの画面で描けるようにするため
 app.use(renderer)
 app.use(secureHeaders())
-// フォーム POST の Origin を検証（SameSite=Lax Cookie と合わせた CSRF 対策）。ログアウトの通知は JSON なので対象外になる
-app.use(csrf(config.appOrigin ? { origin: config.appOrigin } : undefined))
+// ログアウトの通知を除かなくてよいのは、JSON で届き、フォームの送信とはみなされないため
+app.use(csrfGuard)
 app.use(flashMiddleware)
 app.use(session)
 const syncBodyLimit = limitBody(SYNC_BODY_LIMIT)
