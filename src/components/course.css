@@ -151,3 +151,44 @@ div.course-hero-cover { background: linear-gradient(150deg, var(--c2), var(--c1)
 .completion-status { display: inline-flex; align-items: center; gap: 8px; min-height: var(--control-h-lg); padding: 0 20px; border: 1px dashed var(--border-strong); border-radius: 999px; color: var(--muted); font-size: var(--fs-base); font-weight: 500; }
 .completion-status.is-done { border: 1px solid var(--success); background: var(--success-soft); color: var(--success-text); }
 .completion-status.is-done .icon { animation: pop 0.35s var(--ease); }
+
+/* ===== 今日の回（セクションの名前の日付で決める） */
+@property --today-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+.today-badge { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px 0 8px; border-radius: 999px; font-size: var(--fs-xs); font-weight: 650; letter-spacing: 0.04em; white-space: nowrap; }
+.today-badge.is-today { background: linear-gradient(135deg, var(--c1, var(--accent)), var(--c2, var(--accent))); color: var(--c-on, var(--on-strong)); box-shadow: 0 2px 10px color-mix(in srgb, var(--c1, var(--accent)) 45%, transparent); }
+.today-badge.is-today::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.today-badge.is-recent { background: var(--surface); color: var(--c-ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c1, var(--accent)) 45%, transparent), var(--shadow-sm); }
+:is(.section-card, .sec-tile).is-today { border-color: transparent; box-shadow: 0 0 0 4px color-mix(in srgb, var(--c1, var(--accent)) 16%, transparent), 0 10px 30px -6px color-mix(in srgb, var(--c1, var(--accent)) 45%, transparent); }
+.section-card.is-today:target { box-shadow: var(--ring); }
+:is(.section-card, .sec-tile).is-recent { border-color: color-mix(in srgb, var(--c1, var(--accent)) 55%, transparent); }
+/* 枠を border-image にしないのは、border-radius が効かず角が四角く出るため */
+:is(.section-card, .sec-tile).is-today::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  padding: 2px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--today-angle), var(--c1, var(--accent)), var(--c2, var(--accent)), color-mix(in srgb, var(--c1, var(--accent)) 25%, transparent) 35%, color-mix(in srgb, var(--c1, var(--accent)) 25%, transparent) 65%, var(--c1, var(--accent)));
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+}
+:is(.section-card, .sec-tile).is-today::before { content: ''; position: absolute; inset: 0; z-index: 1; background: linear-gradient(105deg, transparent 35%, rgb(255 255 255 / 0.5) 50%, transparent 65%); opacity: 0; pointer-events: none; }
+[data-theme='dark'] :is(.section-card, .sec-tile).is-today::before { background: linear-gradient(105deg, transparent 35%, color-mix(in srgb, var(--c2, var(--accent)) 22%, transparent) 50%, transparent 65%); }
+.section-card.is-today .section-num { background: linear-gradient(135deg, var(--c1, var(--accent)), var(--c2, var(--accent))); color: var(--c-on, var(--on-strong)); }
+.section-card.is-today .section-title { color: var(--c-ink); }
+/* 光を見出しの高さに留めるのは、開いた長いカードでは斜めの光がアイテムの文字の上を長く横切って読みにくいため */
+.section-card.is-today::before { bottom: auto; height: 72px; }
+/* reduce のときに止めるのを全体の設定に任せないのは、繰り返すアニメーションが 0.01ms で回り続けて点滅するため */
+@media (prefers-reduced-motion: no-preference) {
+  :is(.section-card, .sec-tile).is-today { animation: today-glow 2.8s ease-in-out infinite; }
+  :is(.section-card, .sec-tile).is-today::after { animation: today-ring 6s linear infinite; }
+  :is(.section-card, .sec-tile).is-today::before { animation: today-shine 1.1s var(--ease) 0.4s; }
+  .today-badge.is-today::before { animation: today-dot 1.8s ease-out infinite; }
+  .section-card.is-today:target { animation: none; }
+}
+@keyframes today-ring { to { --today-angle: 360deg; } }
+@keyframes today-glow { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--c1, var(--accent)) 10%, transparent), 0 14px 36px -6px color-mix(in srgb, var(--c1, var(--accent)) 60%, transparent); } }
+@keyframes today-dot { from { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 60%, transparent); } to { box-shadow: 0 0 0 6px transparent; } }
+/* 終わったら透明に戻すのは、ポップオーバーを開いて overflow: visible になったカードの外に光が残って見えるため */
+@keyframes today-shine { from { opacity: 1; translate: -100% 0; } to { opacity: 1; translate: 100% 0; } }
