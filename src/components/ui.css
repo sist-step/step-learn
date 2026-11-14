@@ -30,7 +30,7 @@
   border-radius: 999px;
   font-size: var(--fs-xs);
   font-weight: 600;
-  background: var(--surface-3);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
   color: var(--text-2);
   white-space: nowrap;
 }
@@ -58,9 +58,9 @@
   align-items: center;
   text-align: center;
   padding: 48px 24px;
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  background: var(--surface);
+  background: var(--glass);
   box-shadow: var(--shadow-card);
 }
 .empty-page { border: 0; background: none; box-shadow: none; padding-top: 12vh; }
@@ -71,8 +71,9 @@
   height: 52px;
   margin-bottom: 14px;
   border-radius: 16px;
-  background: var(--c-soft);
+  background: linear-gradient(135deg, var(--c-soft), color-mix(in srgb, var(--c-soft) 55%, transparent));
   color: var(--c-ink);
+  box-shadow: inset 0 0 0 1px var(--glass-border), var(--shadow-sm);
 }
 .empty-page .empty-icon { width: 64px; height: 64px; border-radius: 20px; }
 .empty h3 { font-size: var(--fs-md); }
@@ -80,27 +81,12 @@
 .empty p { margin-top: 6px; max-width: 420px; }
 .empty-action { margin-top: 20px; }
 
-.course-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  box-shadow: inset 0 0 0 1px var(--card-border);
-  color: var(--text);
-  transition: background 0.15s;
-}
-.course-row-text { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.35; }
-.course-row > .icon { flex: none; }
-
 .progress { display: flex; align-items: center; gap: 10px; width: 100%; }
-.progress-track { flex: 1; height: 8px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.progress-track { flex: 1; height: 8px; border-radius: 99px; background: var(--track); box-shadow: inset 0 0 0 1px var(--track-border); overflow: hidden; }
 .progress-bar {
   height: 100%;
   border-radius: inherit;
-  background: var(--success);
+  background: var(--progress-fill);
   transition: width 0.5s var(--ease);
 }
 .progress-label { font-size: var(--fs-xs); font-weight: 600; color: var(--text-2); min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
@@ -112,7 +98,7 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: conic-gradient(var(--success) calc(var(--p) * 1%), var(--surface-3) 0);
+  background: conic-gradient(from 0deg, color-mix(in srgb, var(--success) 55%, var(--accent)), var(--success) calc(var(--p) * 1%), var(--track) 0);
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
   mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6px));
   transition: background 0.4s;
@@ -124,12 +110,12 @@
   display: flex;
   flex-direction: column;
   border-radius: var(--radius-lg);
-  background: var(--surface);
-  border: 1px solid var(--card-border);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
   box-shadow: var(--shadow-card);
   overflow: hidden;
   color: var(--text);
-  transition: border-color 0.15s, box-shadow 0.2s, transform 0.2s var(--ease);
+  transition: background 0.15s, box-shadow 0.2s, transform 0.2s var(--ease);
 }
 .course-cover {
   position: relative;
@@ -138,7 +124,9 @@
   justify-content: flex-end;
   aspect-ratio: 5 / 2;
   padding: 12px;
-  background: linear-gradient(150deg, var(--c2), var(--c1));
+  background:
+    radial-gradient(90% 120% at 0% 0%, color-mix(in srgb, var(--on-strong) 40%, transparent), transparent 55%),
+    linear-gradient(135deg, var(--c2), var(--c1) 55%, color-mix(in srgb, var(--c1) 78%, var(--on-accent)));
 }
 .course-mono {
   display: grid;
@@ -205,8 +193,8 @@ a.person { color: var(--text); }
   margin: 20px 0 24px;
   padding: 4px;
   border-radius: 999px;
-  background: var(--track);
-  box-shadow: inset 0 0 0 1px var(--track-border);
+  background: var(--glass);
+  box-shadow: inset 0 0 0 1px var(--glass-border), var(--shadow-card);
   overflow-x: auto;
   scrollbar-width: none;
   isolation: isolate;
@@ -236,6 +224,7 @@ a.person { color: var(--text); }
   z-index: -1;
   border-radius: inherit;
   background: var(--c-soft);
+  box-shadow: inset 0 0 0 1px var(--glass-border), var(--shadow-sm);
 }
 .tab.is-entering { animation: tab-text-in 0.25s var(--ease); }
 .tab.is-entering::before { animation: tab-slide 0.25s var(--ease); }
@@ -265,8 +254,7 @@ a.person { color: var(--text); }
 @keyframes tab-panel-in { from { opacity: 0; translate: var(--tab-slide) 0; } }
 
 @media (hover: hover) {
-  .course-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow); transform: translateY(-1px); text-decoration: none; }
-  .course-row:hover { text-decoration: none; background: var(--surface-3); }
+  .course-card:hover { background: var(--glass-hover); box-shadow: var(--shadow); transform: translateY(-2px); text-decoration: none; }
   a.person:hover { text-decoration: none; }
   a.person:hover .strong { color: var(--primary-text); }
   .crumbs a:hover { color: var(--text); }

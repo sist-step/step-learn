@@ -8,14 +8,14 @@
   gap: 12px;
   margin: 4px 0 16px;
   padding: 12px 0;
-  background: color-mix(in srgb, var(--bg) 85%, transparent);
-  backdrop-filter: blur(12px);
+  background: var(--glass-chrome);
+  backdrop-filter: var(--glass-blur);
 }
 /* 最初から背景を敷いたままにしないのは、止まる前は背景のグラデーションの上に四角い帯が浮いて見えるため */
 @supports (animation-timeline: scroll()) {
   .editor-head { background: none; backdrop-filter: none; animation: editor-head-stuck linear both; animation-timeline: scroll(root); animation-range: 0 48px; }
 }
-@keyframes editor-head-stuck { to { background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(12px); } }
+@keyframes editor-head-stuck { to { background: var(--glass-chrome); backdrop-filter: var(--glass-blur); } }
 .editor-head .item-icon { width: 40px; height: 40px; border-radius: 10px; flex: none; }
 .editor-head-text { display: flex; flex-direction: column; flex: 1; min-width: 0; line-height: 1.3; }
 .editor-head h1 { font-size: var(--fs-2xl); font-weight: 650; }
@@ -78,6 +78,9 @@
 
 /* ===== 閲覧 */
 
+/* ほかの画面のカードと同じ --shadow-card にしないのは、本文・前後のアイテム・目次がそれぞれ浮いて見え、読む画面が落ち着かないため */
+.reader :is(.link-card, .card, .empty) { box-shadow: var(--shadow-rest); }
+
 .reader { display: grid; grid-template-columns: minmax(0, 1fr) clamp(220px, 22vw, 280px); gap: 32px; align-items: start; margin-top: 12px; }
 .reader-main { min-width: 0; }
 .reader-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 0 24px; }
@@ -91,10 +94,11 @@
 .reader-main > .alert { margin-bottom: 20px; }
 .reader-sheet {
   padding: clamp(20px, 3vw, 40px);
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
+  /* ほかのカードと同じ --glass にしないのは、長い本文を読む面では背景の色が透けると文字が読みにくくなるため */
+  background: var(--glass-read);
+  box-shadow: var(--shadow-rest);
 }
 .reader-sheet .prose { max-width: 70ch; }
 
@@ -137,14 +141,14 @@
   align-items: center;
   column-gap: 12px;
   padding: 14px 14px 14px 18px;
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
-  background: var(--surface);
+  background: var(--glass);
   color: var(--text);
   font-weight: 600;
   min-width: 0;
-  box-shadow: var(--shadow-card);
-  transition: border-color 0.15s, box-shadow 0.2s, transform 0.2s var(--ease);
+  box-shadow: var(--shadow-rest);
+  transition: background 0.15s, box-shadow 0.2s, transform 0.2s var(--ease);
 }
 .pager-link:hover { text-decoration: none; }
 .pager-prev { grid-template-columns: auto minmax(0, 1fr); padding: 14px 18px 14px 14px; }
@@ -161,14 +165,14 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: var(--surface-2);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
   color: var(--muted);
   transition: translate 0.2s var(--ease);
 }
 .pager-next .pager-arrow { background: var(--c-soft); color: var(--c-ink); }
 .pager-next .pager-title { color: var(--c-ink); }
 @media (hover: hover) {
-  .pager-link:hover { border-color: var(--border-strong); box-shadow: var(--shadow); transform: translateY(-1px); }
+  .pager-link:hover { background: var(--glass-hover); box-shadow: var(--shadow-card); transform: translateY(-1px); }
   .pager-next:hover .pager-arrow { translate: 2px 0; }
   .pager-prev:hover .pager-arrow { translate: -2px 0; }
 }
@@ -178,13 +182,10 @@
   top: calc(var(--topbar-h) + 20px);
   max-height: calc(100dvh - var(--topbar-h) - 48px);
   overflow-y: auto;
-  padding: 14px;
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-card);
+  padding: 4px 0 4px 20px;
+  border-left: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
 }
-.outline-head { display: flex; flex-direction: column; gap: 2px; padding-bottom: 14px; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+.outline-head { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 14px; }
 .outline-head a { color: var(--text); }
 .outline-section + .outline-section { margin-top: 14px; }
 .outline-section.is-empty + .outline-section.is-empty { margin-top: 0; }
@@ -194,7 +195,7 @@
 .outline-section ul { list-style: none; margin: 0; padding: 0; }
 .outline-link { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 10px; color: var(--text-2); font-size: var(--fs-sm); }
 @media (hover: hover) {
-  .outline-link:hover { background: var(--surface-2); text-decoration: none; }
+  .outline-link:hover { background: var(--glass-hover); text-decoration: none; }
 }
 .outline-link.active { background: var(--c-soft); color: var(--c-ink); font-weight: 600; }
 .outline-title.is-hidden { display: flex; align-items: center; gap: 6px; }
@@ -217,7 +218,7 @@
 
 @media (max-width: 900px) {
   .reader { grid-template-columns: minmax(0, 1fr); gap: 28px; }
-  .reader-outline { position: static; max-height: none; }
+  .reader-outline { position: static; max-height: none; padding: 20px 0 0; border-top: 1px solid color-mix(in srgb, var(--text) 14%, transparent); border-left: 0; }
 }
 @media (max-width: 640px) {
   .reader-head h1 { font-size: var(--fs-2xl); }
