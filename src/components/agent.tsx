@@ -102,7 +102,7 @@ export const AgentOpen = ({ base, editHref, settings, state, usage, manage }: Ag
 
 type PeriodProps = { opensAt: string; closesAt: string; userLimit: string; errors: FieldErrors; idPrefix?: string }
 
-const PERIOD_DESCRIPTION = `学生は、この期間のあいだだけ VS Code で使えます。長さは ${MAX_AGENT_PERIOD / 86_400} 日までです。`
+const PERIOD_DESCRIPTION = `学生は、この期間のあいだだけ VS Code で使えます。長さは ${MAX_AGENT_PERIOD / 3600} 時間までです。`
 
 const PeriodInputs = ({ opensAt, closesAt, userLimit, errors, idPrefix = 'f' }: PeriodProps) => (
   <div class="stack">
@@ -153,11 +153,7 @@ export const AgentEditPanel = ({
             {settings.configured ? <Chip tone="success">有効</Chip> : <Chip>無効</Chip>}
           </span>
         }
-        description={
-          manage.isAdmin
-            ? 'このアイテムだけで使う Anthropic の API キーです。キーは暗号化して保存し、画面には出しません。キーを入れるまで、学生は使えません。'
-            : 'API キーと全体の上限は管理者が設定します。キーが入るまで、学生は使えません。'
-        }
+        description={manage.isAdmin ? undefined : 'API キーと全体の上限は管理者が設定します。キーが入るまで、学生は使えません。'}
       >
         {manage.isAdmin ? (
           <>
