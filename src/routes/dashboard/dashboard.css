@@ -1,30 +1,90 @@
-.tile-welcome { justify-content: center; }
-.tile-welcome h1 { font-size: var(--fs-3xl); font-weight: 650; letter-spacing: 0; }
-.tile-welcome .eyebrow { margin-bottom: 0; }
-.tile-mascot { margin-top: 4px; }
-.tile-mascot .mascot-say { max-width: 520px; }
-.tile-actions { display: flex; gap: 8px; margin-top: 6px; }
-.tile-stat { justify-content: space-between; }
-.tile-stat .ring { width: 56px; height: 56px; }
-.tile-stat .ring-value { font-size: var(--fs-display); }
-.tile-admin-title { font-size: var(--fs-xl); font-weight: 650; }
-.admin-links { display: grid; gap: 8px; margin-top: auto; }
-.admin-links .course-row > .icon { color: var(--muted); }
-.tile-compact { min-height: 0; align-self: start; }
-.tile-courses.tile-compact { gap: 8px; }
-.tile-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.tile-head h2 { display: flex; align-items: center; gap: 8px; font-size: var(--fs-lg); font-weight: 650; }
-.tile-link { display: inline-flex; align-items: center; gap: 2px; font-size: var(--fs-sm); font-weight: 600; color: var(--muted); }
+/* ===== レイアウト */
+/* 画面の幅（@media）で組み替えないのは、AI パネルを開くと本文だけが狭くなり、画面は広いまま 2 列に収まらなくなるため */
+.dash-frame { container: dash / inline-size; }
+.dash { --dash-hair: color-mix(in srgb, var(--text) 14%, transparent); display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 40px; align-items: start; }
+.dash-main { display: flex; flex-direction: column; gap: 28px; min-width: 0; container: dash-main / inline-size; }
+.dash-side { display: grid; gap: 24px; min-width: 0; }
+.dash-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 16px; }
+.dash-head h1 { font-size: var(--fs-3xl); font-weight: 650; letter-spacing: 0; }
+.dash-head p { margin-top: 2px; font-size: var(--fs-sm); }
+
+/* ===== マイコース */
+.dash-courses { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px; }
+.dash-vlabel { display: flex; align-items: center; gap: 10px; padding-top: 18px; writing-mode: vertical-rl; font-size: var(--fs-lg); font-weight: 650; letter-spacing: 0.14em; }
+.dash-vlabel .count { padding: 8px 1px; letter-spacing: 0; text-combine-upright: all; }
+.dash-rows { display: flex; flex-direction: column; min-width: 0; }
+.dash-row { display: flex; align-items: center; gap: 16px; min-width: 0; padding: 16px 12px; border-top: 1px solid var(--dash-hair); color: var(--text); transition: background 0.15s; }
+.dash-row:first-child { border-top-color: transparent; }
+.dash-row .dot { width: 44px; height: 44px; border-radius: 14px; font-size: var(--fs-sm); text-transform: uppercase; }
+.dash-row-text { display: flex; flex-direction: column; flex: 1; gap: 2px; min-width: 0; }
+.dash-row-title { overflow: hidden; font-size: var(--fs-xl); font-weight: 650; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.dash-row-sub { display: flex; gap: 12px; min-width: 0; color: var(--muted); font-size: var(--fs-sm); }
+.dash-row-sub > span:not(.truncate) { flex: none; }
+.dash-row-progress { flex: none; width: clamp(120px, 28%, 200px); }
+.dash-row-arrow { flex: none; color: var(--muted); transition: translate 0.2s var(--ease), color 0.15s; }
+.dash-rows-empty { padding: 18px 12px; }
+.dash-more { display: inline-flex; align-items: center; align-self: flex-start; gap: 2px; padding: 14px 12px; color: var(--muted); font-size: var(--fs-sm); font-weight: 600; }
+.dash-row + .dash-more, .dash-rows-empty + .dash-more { align-self: stretch; border-top: 1px solid var(--dash-hair); }
+
+/* ===== カレンダー */
+.dash-card { min-width: 0; padding: 18px; border: 1px solid var(--glass-border); border-radius: var(--radius-lg); background: var(--glass); box-shadow: var(--shadow-card); }
+.dash-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.dash-card-head h2 { font-size: var(--fs-md); font-weight: 650; font-variant-numeric: tabular-nums; }
+.dash-week, .dash-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.dash-week span { display: grid; place-items: center; height: 28px; color: var(--muted); font-size: var(--fs-xs); font-weight: 600; }
+.dash-week span:first-child, .dash-day.is-sun { color: var(--danger-text); }
+.dash-week span:last-child, .dash-day.is-sat { color: var(--info-text); }
+.dash-day {
+  position: relative;
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+.dash-day.is-outside { opacity: 0.38; }
+.dash-day.is-today { background: var(--text); color: var(--surface); font-weight: 650; }
+.dash-day-marks { position: absolute; right: 0; bottom: 3px; left: 0; display: flex; justify-content: center; gap: 2px; }
+.dash-day-marks i { width: 4px; height: 4px; border-radius: 50%; background: var(--c-deep, var(--c1)); }
+.dash-events { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 0; padding: 14px 0 0; border-top: 1px solid var(--border); list-style: none; }
+.dash-event { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 12px; border-radius: var(--radius); background: var(--c-soft); color: var(--text); transition: background 0.15s; }
+.dash-event-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.4; }
+.dash-event-text .small { color: var(--text-2); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.dash-events-empty { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+
+/* ===== 管理の入口と今日のヒント */
+.dash-ledger { display: flex; flex-direction: column; border-bottom: 1px solid var(--dash-hair); }
+.dash-ledger a { display: flex; align-items: center; gap: 8px; padding: 12px 4px; border-top: 1px solid var(--dash-hair); color: var(--text); font-weight: 500; }
+.dash-ledger strong { margin-left: auto; font-size: var(--fs-lg); font-weight: 650; font-variant-numeric: tabular-nums; }
+.dash-ledger .icon { color: var(--muted); }
+.dash-tip { padding: 0 4px; }
+.dash-tip h2 { margin-bottom: 6px; color: var(--muted); font-size: var(--fs-sm); font-weight: 600; }
+.dash-tip p { color: var(--text-2); line-height: 1.75; }
+
 @media (hover: hover) {
-  .tile-link:hover { color: var(--text); text-decoration: none; }
+  .dash-row:hover { border-radius: 16px; border-top-color: transparent; background: var(--glass-hover); text-decoration: none; }
+  .dash-row:hover + :is(.dash-row, .dash-more) { border-top-color: transparent; }
+  .dash-row:hover .dash-row-arrow { color: var(--text); translate: 3px 0; }
+  .dash-more:hover { color: var(--text); text-decoration: none; }
+  .dash-event:hover { background: color-mix(in srgb, var(--c1) 22%, var(--surface)); text-decoration: none; }
+  .dash-ledger a:hover { text-decoration: none; }
+  .dash-ledger a:hover .icon { color: var(--text); }
 }
-@media (max-width: 640px), (pointer: coarse) {
-  .tile-link { min-height: var(--tap); margin-block: -12px; padding-inline: 8px; margin-inline-end: -8px; }
+
+@container dash (max-width: 880px) {
+  .dash { grid-template-columns: minmax(0, 1fr); gap: 28px; }
 }
-.tile-courses { gap: 14px; }
-
-.tile-courses .empty { border: 0; box-shadow: none; padding: 24px 0; }
-
-@media (max-width: 640px) {
-  .tile-welcome h1 { font-size: var(--fs-2xl); }
+@container dash-main (max-width: 620px) {
+  .dash-head h1 { font-size: var(--fs-2xl); }
+  /* 狭い幅で縦書きのままにしないのは、見出しの列の分だけ、ただでさえ足りないコース名の幅が削られるため */
+  .dash-courses { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .dash-vlabel { padding-top: 0; writing-mode: horizontal-tb; letter-spacing: 0; }
+  .dash-vlabel .count { padding: 1px 8px; }
+  .dash-row { gap: 12px; padding-inline: 4px; }
+  .dash-row-title { font-size: var(--fs-lg); }
+  .dash-row-progress { width: 96px; }
 }

@@ -8,8 +8,9 @@
   width: min(360px, 80vw);
   padding: 16px;
   border: 1px solid var(--overlay-border);
-  border-radius: var(--radius);
-  background: var(--surface-raised);
+  border-radius: 16px;
+  background: var(--glass-raised);
+  backdrop-filter: var(--glass-blur);
   box-shadow: var(--shadow-lg);
   animation: rise 0.15s var(--ease);
 }
@@ -43,12 +44,14 @@
   padding: 24px;
   border: 1px solid var(--overlay-border);
   border-radius: var(--radius-lg);
-  background: var(--surface-raised);
+  /* メニューと同じ --glass-raised にしないのは、暗くした背景の上では半透明の白が灰色に濁って見えるため */
+  background: var(--glass-modal);
+  backdrop-filter: var(--glass-blur);
   color: var(--text);
   box-shadow: var(--shadow-lg);
 }
 .modal:popover-open { animation: rise 0.2s var(--ease); }
-.modal::backdrop { background: rgb(0 0 0 / 0.45); backdrop-filter: blur(3px); animation: fade 0.2s; }
+.modal::backdrop { background: var(--scrim); backdrop-filter: blur(8px); animation: fade 0.2s; }
 
 .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
 .modal-head h2 { font-size: var(--fs-lg); }
@@ -64,6 +67,9 @@
     padding: 20px 16px max(20px, env(safe-area-inset-bottom));
     border-width: 1px 0 0;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    /* シートを半透明にしないのは、下に固定した送信ボタンの行が中身を隠せず、スクロールした欄が透けて重なるため */
+    background: var(--surface-raised);
+    backdrop-filter: none;
     overscroll-behavior: contain;
   }
   .modal:popover-open { animation: sheet-in 0.28s var(--ease); }

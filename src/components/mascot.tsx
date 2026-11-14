@@ -227,3 +227,16 @@ export const WalkingMascot = () => {
     </div>
   )
 }
+
+/** マスコットの遊び場。伝える情報のない空きに置く。ガラスの足場（床・棚・箱）の上を `WalkingMascot` が歩き、跳び移る */
+export const MascotYard = () => {
+  useStyle('/src/components/mascot.css')
+  return (
+    <div class="mascot-yard" aria-hidden="true">
+      <span class="mascot-yard-block is-shelf" />
+      <span class="mascot-yard-block is-box" />
+      <span class="mascot-yard-block is-floor" />
+      <WalkingMascot />
+    </div>
+  )
+}

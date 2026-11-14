@@ -38,9 +38,9 @@
   transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
 .settings-toc a.is-danger { color: var(--danger-text); }
-.settings-toc a.active { background: var(--c-soft); color: var(--c-ink); font-weight: 600; }
+.settings-toc a.active { background: var(--c-soft); color: var(--c-ink); font-weight: 600; box-shadow: inset 0 0 0 1px var(--glass-border), var(--shadow-sm); }
 @media (hover: hover) {
-  .settings-toc a:hover { background: var(--surface); color: var(--text); text-decoration: none; }
+  .settings-toc a:hover { background: var(--glass-hover); color: var(--text); text-decoration: none; }
   .settings-toc a.active:hover { background: var(--c-soft); color: var(--c-ink); }
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -59,12 +59,12 @@
     padding: 8px 40px 8px 16px;
     overflow-x: auto;
     scrollbar-width: none;
-    background: color-mix(in srgb, var(--bg) 85%, transparent);
-    backdrop-filter: blur(12px);
+    background: var(--glass-chrome);
+    backdrop-filter: var(--glass-blur);
     mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
   }
   .settings-toc-title { display: none; }
-  .settings-toc a { flex: none; min-height: var(--tap); padding: 0 14px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--card-border); }
+  .settings-toc a { flex: none; min-height: var(--tap); padding: 0 14px; border-radius: 999px; background: var(--glass-hover); box-shadow: inset 0 0 0 1px var(--glass-border), var(--shadow-sm); }
   .settings-toc a.active { box-shadow: none; }
   html:has(.settings-toc) { scroll-padding-top: calc(var(--topbar-h) + 72px); }
 }
@@ -86,8 +86,8 @@
 .sections { display: flex; flex-direction: column; gap: 12px; }
 .section-card {
   position: relative;
-  background: var(--surface);
-  border: 1px solid var(--card-border);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   overflow: clip;
@@ -130,7 +130,7 @@
 .section-card > .row-actions { position: absolute; top: 17px; right: 52px; }
 :root[data-edit-mode] .section-card:has(> .row-actions) .section-caret { margin-left: 88px; }
 :root[data-edit-mode] .item-row:has(> .row-actions) .item-ext { display: none; }
-.section-card.is-hidden { border-style: dashed; background: color-mix(in srgb, var(--surface) 60%, transparent); }
+.section-card.is-hidden { border: 1px dashed var(--border-strong); background: var(--glass-faint); box-shadow: none; }
 .section-card.is-hidden .section-title, .item-row.is-hidden .item-title { color: var(--muted); }
 .item-row.is-hidden .item-icon { color: var(--muted); }
 .item-link .chip { flex: none; }
@@ -168,7 +168,7 @@
 @media (hover: hover) {
   .section-head:hover .section-title { color: var(--c-ink); }
   .row-actions .icon-btn:hover { color: var(--text); }
-  .item-row:hover { background: var(--surface-2); }
+  .item-row:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
   .item-link:hover { text-decoration: none; }
   .item-row:hover .item-title, .item-row:hover .item-ext { color: var(--c-ink); }
 }
