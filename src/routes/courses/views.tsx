@@ -6,6 +6,7 @@ import {
   CreateCourseButton,
   ItemIcon,
   LinkTargetField,
+  TodayBadge,
   linkOpenAttrs,
   nextActionLabel,
   type CourseFormErrors,
@@ -37,6 +38,7 @@ import { courseImageUrl, type CourseImageKind } from '../../lib/course-images'
 import type { CourseAccess } from '../../lib/courses'
 import { MAX_IMAGE_SIZE } from '../../lib/images'
 import { previewKind } from '../../lib/preview'
+import { findTodaySection } from '../../lib/section-date'
 import { formatBytes } from '../../lib/bytes'
 import { CODE_LANGUAGE_LABELS, type CodeLanguage } from '../../lib/code'
 import type { Availability } from '../../lib/restriction'
@@ -524,6 +526,7 @@ export const CoursePage = ({
   const visibleSections = sectionList.filter((s) => !s.hidden)
   // 学生にも同じ番号で見えるよう、表示しているセクションだけで数える
   const sectionNumber = new Map(visibleSections.map((s, i) => [s.id, String(i + 1).padStart(2, '0')]))
+  const today = findTodaySection(visibleSections.filter((s) => !availability.sections.get(s.id)?.hidden))
   const tracking = !!access.course.completionEnabled
   const isTracked = (it: ItemLite) => tracking && it.completion !== 'none'
   const trackedItems = itemList.filter((it) => !it.hidden && sectionNumber.has(it.sectionId) && isTracked(it))
@@ -599,6 +602,7 @@ export const CoursePage = ({
         {sectionList.length > 0 && (
           <div class="sections">
             {sectionList.map((s) => {
+              const when = s.id === today?.id ? today.when : undefined
               const restriction = availability.sections.get(s.id)
               if (restriction?.hidden) return null
               const locked = restriction?.open === false
@@ -613,7 +617,13 @@ export const CoursePage = ({
               const emptyView = manage && shown.length === 0
               return (
                 <details
-                  class={cx('section-card', !!s.hidden && 'is-hidden edit-only', empty && 'is-empty', emptyView && 'is-empty-view')}
+                  class={cx(
+                    'section-card',
+                    !!s.hidden && 'is-hidden edit-only',
+                    empty && 'is-empty',
+                    emptyView && 'is-empty-view',
+                    when && `is-${when}`,
+                  )}
                   id={`section-${s.id}`}
                   open
                 >
@@ -630,6 +640,7 @@ export const CoursePage = ({
                         </span>
                       )}
                     </span>
+                    {when && <TodayBadge when={when} />}
                     {empty && <Chip>準備中</Chip>}
                     {s.hidden ? <HiddenChip /> : null}
                     {locked && <Chip icon="lock">まだ開けません</Chip>}

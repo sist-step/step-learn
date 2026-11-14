@@ -3,6 +3,7 @@ import { formatBytes } from '../lib/bytes'
 import { courseImageUrl } from '../lib/course-images'
 import type { CourseAccess } from '../lib/courses'
 import { completionChoices } from '../lib/forms'
+import type { TodaySection } from '../lib/section-date'
 import { MAX_FILE_SIZE } from '../lib/storage'
 import {
   COMPLETION_LABELS,
@@ -35,6 +36,11 @@ import { Breadcrumbs, Chip, CourseIcon, ProgressRing, Tabs, courseInitials, type
 import { useStyle } from './style'
 
 type Tab = 'content' | 'participants' | 'settings'
+
+export const TodayBadge = ({ when }: { when: TodaySection['when'] }) => {
+  useStyle('/src/components/course.css')
+  return <span class={cx('today-badge', `is-${when}`)}>{when === 'today' ? '今日' : '前回'}</span>
+}
 
 export const nextActionLabel = (done: number) => (done > 0 ? '続きから' : '学習を始める')
 
