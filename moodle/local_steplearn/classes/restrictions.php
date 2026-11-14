@@ -16,83 +16,21 @@
 
 namespace local_steplearn;
 
-use availability_completion\condition as completion_condition;
-use availability_date\condition as date_condition;
+use availability_profile\condition as profile_condition;
 use core_availability\tree;
 use core_external\external_multiple_structure;
 use core_external\external_single_structure;
 use core_external\external_value;
 
 /**
- * アクセス制限のうち、STEP Learn の画面で扱える形（日付と活動の完了をすべて満たす）との変換。
+ * アクセス制限の JSON（course_modules / course_sections の availability）の受け渡しと確認。
  *
  * @package    local_steplearn
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class restrictions {
-    /**
-     * 制限の JSON を STEP Learn の画面で扱える形にする。扱えない条件を含むときは null。
-     *
-     * @param string|null $json course_modules / course_sections の availability
-     * @return array{from: int, until: int, after: int[], hideunmet: bool}|null
-     */
-    public static function parse(?string $json): ?array {
-        $result = ['from' => 0, 'until' => 0, 'after' => [], 'hideunmet' => false];
-        if ($json === null || $json === '') {
-            return $result;
-        }
-        $tree = json_decode($json);
-        if (!is_object($tree) || ($tree->op ?? '') !== tree::OP_AND || !is_array($tree->c ?? null)) {
-            return null;
-        }
-        $showc = array_map('boolval', is_array($tree->showc ?? null) ? $tree->showc : []);
-        // 条件ごとに表示を変えたものを扱わないのは、画面では制限全体で 1 つの表示の設定にしているため
-        if (count(array_unique($showc)) > 1) {
-            return null;
-        }
-        $result['hideunmet'] = $showc === [false];
-        foreach ($tree->c as $c) {
-            $type = $c->type ?? '';
-            $direction = $c->d ?? '';
-            if ($type === 'date' && $direction === date_condition::DIRECTION_FROM && !$result['from']) {
-                $result['from'] = (int) $c->t;
-            } else if ($type === 'date' && $direction === date_condition::DIRECTION_UNTIL && !$result['until']) {
-                $result['until'] = (int) $c->t;
-            } else if (
-                $type === 'completion'
-                && (int) ($c->e ?? -1) === COMPLETION_COMPLETE
-                && !in_array((int) $c->cm, $result['after'], true)
-            ) {
-                $result['after'][] = (int) $c->cm;
-            } else {
-                return null;
-            }
-        }
-        return $result;
-    }
-
-    /**
-     * STEP Learn の画面の値から制限の JSON を作る。条件がなければ null（制限なし）。
-     *
-     * @param int $from この日時から（0 は指定なし）
-     * @param int $until この日時まで（0 は指定なし）
-     * @param int[] $after 完了が条件の活動（-1 は直前の活動）
-     * @param bool $hideunmet 条件を満たしていない学生には活動ごと見せない
-     * @return string|null
-     */
-    public static function build(int $from, int $until, array $after, bool $hideunmet): ?string {
-        $conditions = [];
-        if ($from) {
-            $conditions[] = date_condition::get_json(date_condition::DIRECTION_FROM, $from);
-        }
-        if ($until) {
-            $conditions[] = date_condition::get_json(date_condition::DIRECTION_UNTIL, $until);
-        }
-        foreach ($after as $cmid) {
-            $conditions[] = completion_condition::get_json($cmid, COMPLETION_COMPLETE);
-        }
-        return $conditions ? json_encode(tree::get_root_json($conditions, tree::OP_AND, !$hideunmet)) : null;
-    }
+    /** @var int 受け付ける JSON の長さの上限 */
+    const MAX_JSON_LENGTH = 100000;
 
     /**
      * 教師向けの、すべての条件を書いた説明（HTML）。
@@ -114,13 +52,7 @@ class restrictions {
      * @return array
      */
     public static function export(int $sectionid, int $cmid, ?string $json, string $info): array {
-        $parsed = self::parse($json);
-        return [
-            'sectionid' => $sectionid,
-            'cmid' => $cmid,
-            'info' => $info,
-            'editable' => $parsed !== null,
-        ] + ($parsed ?? ['from' => 0, 'until' => 0, 'after' => [], 'hideunmet' => false]);
+        return ['sectionid' => $sectionid, 'cmid' => $cmid, 'info' => $info, 'json' => (string) $json];
     }
 
     /**
@@ -131,14 +63,149 @@ class restrictions {
             'sectionid' => new external_value(PARAM_INT, 'section id, or 0 for a course module'),
             'cmid' => new external_value(PARAM_INT, 'course module id, or 0 for a section'),
             'info' => new external_value(PARAM_RAW, 'all conditions as shown to teachers (HTML)'),
-            'editable' => new external_value(PARAM_BOOL, 'only date and activity completion conditions that must all be met'),
-            'from' => new external_value(PARAM_INT, 'available from (0 when not set or not editable)'),
-            'until' => new external_value(PARAM_INT, 'available until (0 when not set or not editable)'),
-            'after' => new external_multiple_structure(
-                new external_value(PARAM_INT, 'course module id, or -1 for the previous activity'),
-                'activities that must be marked complete'
-            ),
-            'hideunmet' => new external_value(PARAM_BOOL, 'hidden entirely from users who do not meet the conditions'),
+            'json' => new external_value(PARAM_RAW, 'the availability JSON'),
         ]);
+    }
+
+    /**
+     * 編集画面で選べるもの（有効な条件の種類・評点の項目・プロフィールの項目）と、編集しない条件の説明に使う名前。
+     *
+     * @param \stdClass $course
+     * @return array
+     */
+    public static function options(\stdClass $course): array {
+        global $CFG;
+        require_once($CFG->libdir . '/gradelib.php');
+        require_once($CFG->dirroot . '/course/lib.php');
+        $context = \context_course::instance($course->id);
+
+        $plugins = array_keys(\core_plugin_manager::instance()->get_enabled_plugins('availability') ?? []);
+
+        $grades = [];
+        foreach (\grade_item::fetch_all(['courseid' => $course->id]) ?: [] as $item) {
+            if (course_module_instance_pending_deletion($item->courseid, $item->itemmodule, $item->iteminstance)) {
+                continue;
+            }
+            $cmid = 0;
+            if ($item->itemtype === 'mod') {
+                $cm = get_coursemodule_from_instance($item->itemmodule, $item->iteminstance, $course->id);
+                $cmid = $cm ? (int) $cm->id : 0;
+            }
+            $grades[] = ['id' => (int) $item->id, 'name' => $item->get_name(true), 'cmid' => $cmid];
+        }
+
+        $fields = [];
+        foreach (profile_condition::get_standard_profile_fields() as $name => $label) {
+            $fields[] = ['field' => 'sf:' . $name, 'name' => (string) $label];
+        }
+        foreach (profile_condition::get_custom_profile_fields() as $field) {
+            $fields[] = ['field' => 'cf:' . $field->shortname, 'name' => format_string($field->name, true, ['context' => $context])];
+        }
+
+        $groups = [];
+        foreach (groups_get_all_groups($course->id) as $group) {
+            $groups[] = ['id' => (int) $group->id, 'name' => format_string($group->name, true, ['context' => $context])];
+        }
+        $groupings = [];
+        foreach (groups_get_all_groupings($course->id) as $grouping) {
+            $groupings[] = ['id' => (int) $grouping->id, 'name' => format_string($grouping->name, true, ['context' => $context])];
+        }
+
+        return ['plugins' => $plugins, 'grades' => $grades, 'profilefields' => $fields, 'groups' => $groups, 'groupings' => $groupings];
+    }
+
+    /**
+     * @return external_single_structure
+     */
+    public static function options_structure(): external_single_structure {
+        $named = fn(string $desc) => new external_multiple_structure(new external_single_structure([
+            'id' => new external_value(PARAM_INT, 'id'),
+            'name' => new external_value(PARAM_RAW, 'name'),
+        ]), $desc);
+        return new external_single_structure([
+            'plugins' => new external_multiple_structure(new external_value(PARAM_PLUGIN, 'plugin name'), 'enabled availability plugins'),
+            'grades' => new external_multiple_structure(new external_single_structure([
+                'id' => new external_value(PARAM_INT, 'grade item id'),
+                'name' => new external_value(PARAM_RAW, 'grade item name'),
+                'cmid' => new external_value(PARAM_INT, 'course module id of the activity, or 0'),
+            ]), 'grade items of the course'),
+            'profilefields' => new external_multiple_structure(new external_single_structure([
+                'field' => new external_value(PARAM_RAW, 'sf:<standard field> or cf:<custom field shortname>'),
+                'name' => new external_value(PARAM_RAW, 'field name'),
+            ]), 'user profile fields'),
+            'groups' => $named('groups of the course'),
+            'groupings' => $named('groupings of the course'),
+        ]);
+    }
+
+    /**
+     * STEP Learn から送られた制限の JSON を確かめ、保存する値にする。空なら null（制限なし）。
+     *
+     * @param string $json
+     * @param \stdClass $course
+     * @param \course_modinfo $modinfo
+     * @param \cm_info|null $self 制限を付ける活動（セクションなら null）
+     * @return string|null
+     */
+    public static function validate(string $json, \stdClass $course, \course_modinfo $modinfo, ?\cm_info $self): ?string {
+        if ($json === '') {
+            return null;
+        }
+        $structure = strlen($json) <= self::MAX_JSON_LENGTH ? json_decode($json) : null;
+        if (!is_object($structure)) {
+            throw new \invalid_parameter_exception('availability');
+        }
+        // Moodle 自身の読み込みで形を確かめるのは、保存したあとに Moodle がコースの表示で読めなくなるのを防ぐため
+        try {
+            new tree($structure);
+        } catch (\coding_exception $e) {
+            throw new \invalid_parameter_exception('availability: ' . $e->getMessage());
+        }
+        $grades = array_column(self::options($course)['grades'], 'id');
+        $groups = array_map('intval', array_keys(groups_get_all_groups($course->id)));
+        $groupings = array_map('intval', array_keys(groups_get_all_groupings($course->id)));
+        $completion = new \completion_info($course);
+        $cms = $modinfo->get_cms();
+        self::check_references($structure, function (\stdClass $c) use ($grades, $groups, $groupings, $completion, $cms, $self): bool {
+            switch ($c->type) {
+                case 'completion':
+                    if (!$completion->is_enabled()) {
+                        return false;
+                    }
+                    if ($c->cm === -1) {
+                        return true;
+                    }
+                    $target = $cms[$c->cm] ?? null;
+                    return $target && !$target->deletioninprogress && $target->id !== $self?->id
+                        && $target->completion != COMPLETION_TRACKING_NONE;
+                case 'grade':
+                    return in_array($c->id, $grades, true);
+                case 'group':
+                    return !isset($c->id) || in_array($c->id, $groups, true);
+                case 'grouping':
+                    return !isset($c->id) || in_array($c->id, $groupings, true);
+                default:
+                    return true;
+            }
+        });
+        return json_encode($structure);
+    }
+
+    /**
+     * ほかのコースの活動や評点を条件に入れさせないため、条件ごとに参照先を確かめる。
+     *
+     * @param \stdClass $node
+     * @param callable $valid
+     */
+    private static function check_references(\stdClass $node, callable $valid): void {
+        if (isset($node->type)) {
+            if (!$valid($node)) {
+                throw new \invalid_parameter_exception('availability: ' . $node->type);
+            }
+            return;
+        }
+        foreach ($node->c as $child) {
+            self::check_references($child, $valid);
+        }
     }
 }

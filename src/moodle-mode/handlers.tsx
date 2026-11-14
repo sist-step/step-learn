@@ -1,29 +1,37 @@
 import crypto from 'node:crypto'
 import type { Context } from 'hono'
 import { deleteCookie, getSignedCookie, setSignedCookie } from 'hono/cookie'
+import { RestrictionPage } from '../components/restriction'
 import type { CourseCardData } from '../components/ui'
 import { config } from '../lib/config'
-import { dateTimeInputToUnix } from '../lib/course-period'
 import { firstError, isFile, validate, type FieldErrors } from '../lib/forms'
 import { field, intParam, readForm, redirectWith, safeNext, wantsJson, type Form } from '../lib/http'
 import { previewKind } from '../lib/preview'
+import {
+  MAX_RESTRICTION_JSON_LENGTH,
+  checkRestrictionChoices,
+  readRestrictionForm,
+  restrictionFormValue,
+  restrictionJson,
+  type RestrictionFormNode,
+  type RestrictionSet,
+} from '../lib/restriction'
 import { EXECUTABLE_NOT_ALLOWED, FILE_TOO_LARGE, MAX_FILE_SIZE, isExecutable } from '../lib/storage'
 import { CoursesPage } from '../routes/courses/views'
 import { DashboardPage } from '../routes/dashboard/views'
 import { ScreenPage } from '../routes/screen/views'
 import { createSession, destroyByMoodleSid, destroySession, type MoodleEnv } from './auth'
 import { forgetCourse, forgetProgress, forgetSections } from './cache'
-import { MoodleError, exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
+import { exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
 import { loadCourse, moodle, myCourses, otherCourses, outlineOf, progressOf, revisionOf, type LoadedCourse } from './data'
 import { findExtra, insertExtra, newExtraKey, updateExtraData } from './extra'
 import { addableExtraKinds, extraKindOf, type ExtraKind } from './extra-kinds'
 import {
   EXTRA_PATH,
-  PREVIOUS_ITEM,
   isInProgress,
   isOpenable,
-  isTracked,
   isUpcoming,
+  restrictionChoicesOf,
   sectionHref,
   toCard,
   type ExtraContent,
@@ -31,16 +39,7 @@ import {
   type MSection,
 } from './mapping'
 import { findScreenItem } from './screen-share'
-import {
-  CoursePage,
-  ItemEditPage,
-  ItemPage,
-  LoginPage,
-  RestrictionPage,
-  TEXT_PREVIEW_MAX,
-  type RestrictionTarget,
-  type RestrictionValues,
-} from './views'
+import { CoursePage, ItemEditPage, ItemPage, LoginPage, MoodleEditLink, RestrictionNotice, TEXT_PREVIEW_MAX } from './views'
 
 type C = Context<MoodleEnv>
 
@@ -561,13 +560,12 @@ export function openExtra(c: C) {
 
 type RestrictionSubject = { kind: 'section'; section: MSection } | { kind: 'item'; item: MItem }
 
-function restrictionTarget(loaded: LoadedCourse, subject: RestrictionSubject): RestrictionTarget {
+function restrictionTarget(loaded: LoadedCourse, subject: RestrictionSubject) {
   const base = `/courses/${loaded.course.id}`
   if (subject.kind === 'section') {
     const { section } = subject
     return {
-      kind: 'section',
-      id: section.id,
+      kind: 'section' as const,
       title: section.title,
       action: `${base}/sections/${section.id}/restriction`,
       back: editUrl(loaded, section.id),
@@ -577,8 +575,7 @@ function restrictionTarget(loaded: LoadedCourse, subject: RestrictionSubject): R
   }
   const { item } = subject
   return {
-    kind: 'item',
-    id: item.id,
+    kind: 'item' as const,
     title: item.title,
     action: `${base}/items/${item.id}/restriction`,
     back: editUrl(loaded, item.sectionId),
@@ -593,67 +590,63 @@ const findRestrictable = (loaded: LoadedCourse, c: C) => {
   return loaded.sections.find((s) => s.id === sid && s.number !== 0)
 }
 
-const restrictionPage = (c: C, loaded: LoadedCourse, subject: RestrictionSubject, values?: RestrictionValues, errors?: FieldErrors) => {
+const choicesFor = (loaded: LoadedCourse, subject: RestrictionSubject) =>
+  restrictionChoicesOf(loaded, loaded.restrictionOptions, subject.kind === 'item' ? subject.item.id : undefined)
+
+const restrictionPage = (
+  c: C,
+  loaded: LoadedCourse,
+  subject: RestrictionSubject,
+  value?: RestrictionFormNode | null,
+  errors?: FieldErrors,
+) => {
   const target = restrictionTarget(loaded, subject)
+  // 保存されている JSON を読めないときに編集させないのは、空の条件で上書きして Moodle の制限を消してしまうため
+  const editable = loaded.restrictable && (!target.rule || !!target.rule.set)
   return c.render(
     <RestrictionPage
-      access={loaded.access}
-      sections={loaded.sections}
-      items={loaded.items}
+      tone={loaded.access.course.color}
+      crumbs={[
+        { href: '/courses', label: 'コース一覧' },
+        { href: `/courses/${loaded.course.id}`, label: loaded.access.course.title },
+      ]}
       target={target}
-      restrictable={loaded.restrictable}
-      values={values}
+      value={value === undefined ? restrictionFormValue(target.rule?.set ?? null) : value}
+      choices={choicesFor(loaded, subject)}
       errors={errors}
+      note={target.rule?.text ?? null}
+      editable={editable}
+      notice={<RestrictionNotice restrictable={loaded.restrictable} />}
+      side={<MoodleEditLink href={target.moodleUrl} />}
     />,
     { title: `アクセス制限 - ${target.title}` },
   )
 }
 
-const afterIds = (form: Form) => [form['after[]'] ?? []].flat().map(Number)
-
 async function saveRestriction(c: C, loaded: LoadedCourse, subject: RestrictionSubject) {
   const target = restrictionTarget(loaded, subject)
-  if (!loaded.restrictable || (target.rule && !target.rule.editable)) return c.notFound()
+  const kept = target.rule?.set ?? null
+  if (!loaded.restrictable || (target.rule && !kept)) return c.notFound()
   const form = await readForm(c)
-  const clear = field(form, 'clear') === '1'
-  const result = validate('restriction', form)
-  const allowed = new Set(
-    loaded.items.filter((it) => isTracked(it) && it.id !== (subject.kind === 'item' ? subject.item.id : 0)).map((it) => it.id),
-  )
-  if (subject.kind === 'item') allowed.add(PREVIOUS_ITEM)
-  const after = loaded.course.completionenabled ? afterIds(form).filter((id) => allowed.has(id)) : []
-  if (!clear && !result.ok) {
-    c.status(422)
-    const values = {
-      from: field(form, 'from', 20),
-      until: field(form, 'until', 20),
-      after,
-      hideUnmet: field(form, 'hide_unmet') === '1' ? 1 : 0,
+  let set: RestrictionSet | null = null
+  if (field(form, 'clear') !== '1') {
+    const result = validate('restriction', form)
+    const read = result.ok ? result.values.availability : readRestrictionForm(field(form, 'availability', MAX_RESTRICTION_JSON_LENGTH + 1))
+    const errors = result.ok ? (read.set ? checkRestrictionChoices(read.set, choicesFor(loaded, subject), kept) : {}) : result.errors
+    if (Object.keys(errors).length > 0) {
+      c.status(422)
+      return restrictionPage(c, loaded, subject, restrictionFormValue(read.set), errors)
     }
-    return restrictionPage(c, loaded, subject, values, result.errors)
+    set = read.set
   }
-  const v = !clear && result.ok ? result.values : { from: '', until: '', hide_unmet: 0 }
-  try {
-    await moodle(c).setRestriction({
-      courseid: loaded.course.id,
-      sectionid: subject.kind === 'section' ? subject.section.id : 0,
-      cmid: subject.kind === 'item' ? subject.item.id : 0,
-      from: v.from ? dateTimeInputToUnix(v.from) : 0,
-      until: v.until ? dateTimeInputToUnix(v.until) : 0,
-      after: clear ? [] : after,
-      hideunmet: !!v.hide_unmet,
-    })
-  } catch (e) {
-    // 画面を開いたあとに、Moodle の画面で STEP Learn では扱えない条件が付けられたとき
-    if (e instanceof MoodleError && e.errorcode === 'restrictionnoteditable') {
-      forgetCourse(loaded.course.id)
-      return redirectWith(c, target.action, e.message, 'error')
-    }
-    throw e
-  }
+  await moodle(c).setRestriction({
+    courseid: loaded.course.id,
+    sectionid: subject.kind === 'section' ? subject.section.id : 0,
+    cmid: subject.kind === 'item' ? subject.item.id : 0,
+    availability: restrictionJson(set) ?? '',
+  })
   forgetCourse(loaded.course.id)
-  const removed = clear || (!v.from && !v.until && after.length === 0)
-  return redirectWith(c, target.back, `「${target.title}」のアクセス制限を${removed ? 'なくしました' : '保存しました'}。`)
+  return redirectWith(c, target.back, `「${target.title}」のアクセス制限を${set ? '保存しました' : 'なくしました'}。`)
 }
 
 export async function editSectionRestriction(c: C) {

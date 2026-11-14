@@ -78,7 +78,7 @@ $functions = [
     ],
     'local_steplearn_set_restriction' => [
         'classname' => 'local_steplearn\external\set_restriction',
-        'description' => 'Replace the access restriction of a section or an activity with date and completion conditions.',
+        'description' => 'Replace the access restriction of a section or an activity.',
         'type' => 'write',
         'capabilities' => 'moodle/course:manageactivities',
     ],

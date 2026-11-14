@@ -1,3 +1,4 @@
+import { canOpenItem } from '../../lib/availability'
 import { bundleStore, bundleSyncStore, getBundleItem } from '../../lib/bundle-items'
 import { getCourseAccess, isVisibleItem } from '../../lib/courses'
 import { intParam } from '../../lib/http'
@@ -16,7 +17,7 @@ export const backend: BundleBackend = {
     const access = courseId && itemId && (await getCourseAccess(c, courseId))
     if (!access) return null
     const item = getBundleItem(itemId)
-    if (!item || item.courseId !== courseId || (!access.canManage && !isVisibleItem(itemId))) return null
+    if (!item || item.courseId !== courseId || !canOpenItem(c.var.user!, access, itemId, isVisibleItem(itemId))) return null
     return {
       access,
       itemId,
