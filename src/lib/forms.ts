@@ -118,6 +118,8 @@ const profile = z.object({ name: text('氏名', 60, { required: true }), usernam
 
 const password = z.object({ current: text('現在のパスワード', 200, { required: true }), password: newPassword() })
 
+const setPassword = z.object({ password: newPassword() })
+
 const date = (label: string) =>
   z.pipe(trimmed(), z.string().check(rule((s: string) => (!s || isDateInput(s) ? null : `${label}が正しくありません。`))))
 
@@ -369,6 +371,7 @@ export const FORMS = {
   resetPassword,
   profile,
   password,
+  setPassword,
   course,
   section,
   restriction,

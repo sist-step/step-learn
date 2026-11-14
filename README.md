@@ -10,6 +10,10 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
   - 新規登録はメールアドレスの確認が必要です（届いたリンクから氏名・ユーザー名・パスワードを設定）
   - ログインはメールアドレスとユーザー名のどちらでもできます。ユーザー名の導入前に登録したユーザーは、アカウント画面で設定します
   - パスワードを忘れた場合は、ログイン画面からメールのリンク（有効期限 1 時間）で設定し直せます。設定するとすべての端末でログアウトされます
+  - `MICROSOFT_CLIENT_ID` を設定すると、ログイン画面と新規登録画面から Microsoft アカウント（組織のアカウントと個人のアカウント）でもログインできます（通常モードだけ。下の「Microsoft アカウントでのログイン」）
+    - 同じメールアドレスのアカウントがあれば、そのアカウントに連携してログインします。なければ氏名とユーザー名を入力して登録します（パスワードは設定せず、あとからアカウント画面で設定できます）
+    - Microsoft がドメインの持ち主を確かめていないメールアドレス（組織の管理者が自由に設定できるもの）は、ほかの人のアカウントの乗っ取りに使えるため、照合にも登録にも使いません。その場合は、メールアドレスで登録してからアカウント画面で連携します
+    - アカウント画面で、ログイン中のアカウントに Microsoft アカウントを連携・解除できます。連携できるのは 1 人 1 つまでで、パスワードを設定していないアカウントは解除できません
   - 管理者は CLI（`npm run user:create`）で作成します。Web からの登録はすべて学生になります
   - Moodle のコースバックアップから、コース・参加者を CLI（`npm run moodle:import`）で取り込めます
   - ロールは 管理者 / 教師 / 学生。コースを作成できるのは管理者だけです
@@ -56,8 +60,8 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
     | 種類 | 記録するもの | 保存期間 |
     | --- | --- | --- |
     | 閲覧 | コース・アイテム・画面共有を開いた、ファイル・zip を開いた、教師が学生の提出・変更履歴を見た | 90 日 |
-    | 操作 | ログイン（失敗も）・ログアウト、教材の追加・編集・並べ替え・表示の切り替え、コースの設定、完了の切り替え、コードの提出・採点、AI への依頼など | 365 日 |
-    | 重要な操作 | 削除（コース・セクション・アイテム）、コースの作成、参加者の追加・除外・ロールの変更、ユーザーのロールの変更、新規登録、パスワード・プロフィールの変更、AI の上限の変更 | 消さない |
+    | 操作 | ログイン（失敗も。Microsoft アカウントでのログインも）・ログアウト、教材の追加・編集・並べ替え・表示の切り替え、コースの設定、完了の切り替え、コードの提出・採点、AI への依頼など | 365 日 |
+    | 重要な操作 | 削除（コース・セクション・アイテム）、コースの作成、参加者の追加・除外・ロールの変更、ユーザーのロールの変更、新規登録、パスワード・プロフィールの変更、Microsoft アカウントの連携・解除、AI の上限の変更 | 消さない |
 
   - 何を変えたかの中身（本文や入力した値）は残さない。削除したものは、削除した時点の名前を残す
   - 画面を開いた記録は、ホバーしたときの先読みや開いている画面の自動更新を数えず、実際に開いたときだけ残す。コードの自動保存と実行は数が多いので残さない
@@ -73,7 +77,7 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
 | DB | `better-sqlite3`（WAL モード）＋ Drizzle ORM。DB サーバーは要らない。テーブル定義は `src/lib/schema.ts` で、マイグレーションは drizzle-kit で生成する。クエリも Drizzle のクエリビルダーで書き、結果に型が付く |
 | コスト | 必要なのは Node.js が動くサーバー 1 台だけ。R2 を使う場合、ダウンロードは署名付き URL で R2 から直接配信されるので、サーバーの帯域を使わない（R2 は転送料無料） |
 | 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）・`nodemailer`（確認メールの SMTP 送信）・`better-sqlite3`・`drizzle-orm`・`socket.io`（画面共有の中継）・`zod`（入力の検証。同じ規則をブラウザでも使うので、ブラウザ側は軽量版の `zod/mini`）・`@anthropic-ai/sdk`（Claude の呼び出し）・`yauzl`（ファイル自動配布でアップロードされた zip の展開）だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる。ブラウザ側のライブラリは入力の検証の `zod/mini` と、Markdown エディターの CodeMirror、コードのエディターの Emmet（HTML の略記の展開）と Prettier（コードの整形）、ログイン画面の 3D アニメーションの three.js、PDF ビューアーの pdf.js だけ。CodeMirror はエディターのある画面でだけ（HTML / CSS / JavaScript / Python の文法と Emmet は、コードのアイテムとその編集画面でだけ）、Prettier は整形したときだけ、three.js はログイン前の画面でだけ、pdf.js は PDF のアイテムをビューアーで開いたときだけ読み込む |
-| セキュリティ | PBKDF2（60 万回、ログイン時に旧設定のハッシュを再計算）、推測されやすいパスワードの拒否、ログイン失敗と確認メール・再設定メール送信のレート制限、登録画面と再設定画面からメールアドレスの登録有無がわからない設計、セッション Cookie は HMAC-SHA256 で署名しトークンは SHA-256 で保存、CSRF 対策は Origin 検証と SameSite=Lax、ファイルは権限を確認したうえで配信（PDF と画像以外は添付として返す） |
+| セキュリティ | PBKDF2（60 万回、ログイン時に旧設定のハッシュを再計算）、推測されやすいパスワードの拒否、ログイン失敗と確認メール・再設定メール送信のレート制限、登録画面と再設定画面からメールアドレスの登録有無がわからない設計、セッション Cookie は HMAC-SHA256 で署名しトークンは SHA-256 で保存、Microsoft アカウントでのログインは認可コードフロー（PKCE・state・nonce）で確かめ、持ち主を確認済みのメールアドレスだけを既存のアカウントとの照合に使う、CSRF 対策は Origin 検証と SameSite=Lax、ファイルは権限を確認したうえで配信（PDF と画像以外は添付として返す） |
 
 ## 開発
 
@@ -119,6 +123,7 @@ npm start            # = node dist/server/index.js
 - `OPENROUTER_API_KEY`：[OpenRouter](https://openrouter.ai/) 経由のモデルに使う API キー。AI エージェントに送られた発言が STEP Learn の作業と関係あるかの判定（Span-01 Lite、判定できなかったときは Span-02）に使い、未設定なら判定を省きます。DeepSeek V4.1 Flash は予備で、Claude を使えないときと、Anthropic の今月の使用量が月の上限の 60% を超えたときだけ、会話で選べるようになり、コードのアイテムの採点もこちらに切り替わります（`src/lib/ai-models.ts` の `AI_RESERVE_MODELS`）。Jev は一時的に止めています（`AI_PAUSED_MODELS`）
 - `CLAUDE_API_KEY`：Claude（Claude Haiku 5.5・Claude Sonnet 5.5）に使う [Anthropic](https://platform.claude.com/) の API キー。未設定ならこれらのモデルは使えません。AI エージェントの会話とコードのアイテムの採点はふだん Claude Haiku 5.5 を使い、AI のパネルで「難しい依頼」を選んで送った発言だけ Claude Sonnet 5.5（考える深さ high）が答えます（`AI_HARD_TASK_MODELS`）。学生が提出したコードと問題文・採点基準が Anthropic の API（DeepSeek に切り替わったあとは OpenRouter）に送られます
 - 使うモデルは `src/lib/ai-models.ts` に並べたものだけです。月の上限（USD）は提供元ごとに管理 > AI で設定します（保存するまでは OpenRouter が $3、Anthropic が $15）。コードのアイテムの採点にかかった額も採点に使ったモデルの提供元の使用量に数え、月の上限に達している間は、提出しても自動では採点しません
+- `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` / `MICROSOFT_TENANT`：Microsoft アカウントでのログインに使う Microsoft Entra ID のアプリ（下の「Microsoft アカウントでのログイン」）。`MICROSOFT_CLIENT_ID` を設定する場合は `MICROSOFT_CLIENT_SECRET` も必須です。`MICROSOFT_TENANT` は既定で `common`（組織と個人のどちらのアカウントでも可）で、`organizations`（組織のアカウントだけ）・`consumers`（個人のアカウントだけ）・テナント ID（その組織だけ）も選べます。Moodle モードでは使いません
 - `AI_EMAIL_DOMAIN`：AI エージェントを使えるメールアドレスのドメイン（`@` より後ろの完全一致）。未設定なら `sist.ac.jp`
 - `SANDBOX_URL`：学生が書いたコードを実行する sandbox のコンテナ（下の「コードを実行する sandbox」）の接続先。未設定ならコードの実行は使えません。Docker Compose で動かす場合は自動で設定されます
 - `TRUST_PROXY`：リバースプロキシの後ろで動かす場合は `1` にしてください。`X-Forwarded-For` からクライアントの IP を取ってレート制限に使います（未設定だと全員がプロキシの IP として扱われます）
@@ -126,6 +131,19 @@ npm start            # = node dist/server/index.js
 - 配信中の状態と、コードの採点の順番待ちはプロセスのメモリに持つため、複数のプロセスやサーバーに分散させないでください。採点の途中で再起動すると、その提出は「採点できませんでした」になり、教師が採点し直せます
 - 実行時に必要なのは `dist/`・`migrations/`・`migrations-moodle/`（Moodle モードのとき）・`.env` と、`better-sqlite3` を入れた `node_modules` です（`npm ci --omit=dev` で入ります）。起動したディレクトリを基準に読み込みます
 - SQLite・セッション署名鍵・（ローカル保存時の）教材ファイルは、起動したディレクトリの `data/` に保存されます（変更はできません）。**このディレクトリをバックアップ対象にしてください**
+
+### Microsoft アカウントでのログイン
+
+[Microsoft Entra 管理センター](https://entra.microsoft.com/) の「アプリの登録」で、次のようにアプリを登録します。
+
+1. 「新規登録」で、サポートされているアカウントの種類を「任意の組織ディレクトリ内のアカウントと個人用 Microsoft アカウント」にする（`MICROSOFT_TENANT` で絞るなら、それに合わせる）
+2. リダイレクト URI に「Web」で `<APP_ORIGIN>/auth/microsoft/callback`（例 `https://lms.example.com/auth/microsoft/callback`）を登録する。手元の開発では `http://localhost:<ポート>/auth/microsoft/callback` も足す
+3. 「証明書とシークレット」でクライアントシークレットを作り、値を `MICROSOFT_CLIENT_SECRET` に、概要の「アプリケーション (クライアント) ID」を `MICROSOFT_CLIENT_ID` に設定する。シークレットには期限があるので、切れる前に作り直してください
+4. 「トークン構成」で、ID トークンに省略可能な要求 `email` と `xms_edov` を追加する。`xms_edov` がないと、組織のアカウントのメールアドレスを確かめられず、既存のアカウントとの照合と新規登録ができません（アカウント画面からの連携はできます）
+
+- 戻り先の URL は `APP_ORIGIN`（なければ要求の URL）から作ります。リバースプロキシの後ろでは `APP_ORIGIN` を設定してください
+- サインイン画面では毎回アカウントを選ばせます（教室の共用の端末で、前の人のアカウントでログインしないように）
+- Microsoft アカウントとの結び付きは、メールアドレスではなく Microsoft のテナント ID とオブジェクト ID で覚えるので、あとから Microsoft 側のメールアドレスが変わってもログインできます
 
 ### ユーザーを CLI で作成する
 
@@ -310,8 +328,8 @@ CI はチェックだけを行い、デプロイはしません。Actions の画
 
 1. Docker（Compose v2.24 以上）を入れ、ラベル `self-hosted` / `linux` と、上の表のラベル（`production` か `beta`）を付けたランナーを登録する（ランナーのユーザーが `docker` を実行できること）
 2. GitHub の Environment（`production` / `beta`）に設定値を登録する。デプロイのたびに、ここから `.env` をランナーの一時ディレクトリに書き出してコンテナに渡し、終わったら消します
-   - Secrets：`SESSION_SECRET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `SMTP_PASS` / `MOODLE_EXCHANGE_TOKEN` / `MOODLE_BACKCHANNEL_SECRET` / `OPENROUTER_API_KEY` / `CLAUDE_API_KEY`
-   - Variables：`APP_ORIGIN` / `TRUST_PROXY` / `R2_ACCOUNT_ID` / `R2_BUCKET` / `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `MAIL_FROM` / `MOODLE_URL` / `AI_EMAIL_DOMAIN`
+   - Secrets：`SESSION_SECRET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `SMTP_PASS` / `MOODLE_EXCHANGE_TOKEN` / `MOODLE_BACKCHANNEL_SECRET` / `OPENROUTER_API_KEY` / `CLAUDE_API_KEY` / `MICROSOFT_CLIENT_SECRET`
+   - Variables：`APP_ORIGIN` / `TRUST_PROXY` / `R2_ACCOUNT_ID` / `R2_BUCKET` / `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `MAIL_FROM` / `MOODLE_URL` / `AI_EMAIL_DOMAIN` / `MICROSOFT_CLIENT_ID` / `MICROSOFT_TENANT`
    - 使わない項目は登録しなくてかまいません。値に `'` と改行は使えません
    - Moodle モードで動かすサーバーの Environment にだけ `MOODLE_URL` などを登録します
 3. ホスト側のポートを変える場合は変数 `DEPLOY_HOST_PORT` を、公開するアドレスを変える場合は変数 `DEPLOY_HOST_BIND` を、それぞれの Environment に設定する（両方のサーバーで同じ値ならリポジトリに設定してもかまいません）。2 つのランナーが同じホストにある場合は、`DEPLOY_HOST_PORT` を別々にしてください

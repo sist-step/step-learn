@@ -22,7 +22,30 @@ const AuthTabs = ({ current, next }: { current: 'login' | 'register'; next: stri
   )
 }
 
-export const LoginPage = ({ login = '', next = '', errors = {} }: { login?: string; next?: string; errors?: FieldErrors }) => (
+const MicrosoftSignIn = ({ next, label }: { next: string; label: string }) => (
+  <div class="auth-alt">
+    <p class="auth-or">または</p>
+    {/* 再読み込みなしの遷移にしないのは、Microsoft のサインイン画面へ移るので、fetch ではリダイレクト先を読めないため */}
+    <form method="post" action="/auth/microsoft" data-reload>
+      <input type="hidden" name="next" value={next} />
+      <Button type="submit" size="lg" block>
+        {label}
+      </Button>
+    </form>
+  </div>
+)
+
+export const LoginPage = ({
+  login = '',
+  next = '',
+  errors = {},
+  microsoft = false,
+}: {
+  login?: string
+  next?: string
+  errors?: FieldErrors
+  microsoft?: boolean
+}) => (
   <AuthShell>
     <div class="auth-card">
       <h1>おかえりなさい</h1>
@@ -53,6 +76,7 @@ export const LoginPage = ({ login = '', next = '', errors = {} }: { login?: stri
             ログイン
           </Button>
         </form>
+        {microsoft && <MicrosoftSignIn next={next} label="Microsoft アカウントでログイン" />}
         <p class="auth-switch">
           <a href="/password/forgot">パスワードを忘れた場合</a>
         </p>
@@ -61,7 +85,17 @@ export const LoginPage = ({ login = '', next = '', errors = {} }: { login?: stri
   </AuthShell>
 )
 
-export const RegisterPage = ({ email = '', next = '', errors = {} }: { email?: string; next?: string; errors?: FieldErrors }) => (
+export const RegisterPage = ({
+  email = '',
+  next = '',
+  errors = {},
+  microsoft = false,
+}: {
+  email?: string
+  next?: string
+  errors?: FieldErrors
+  microsoft?: boolean
+}) => (
   <AuthShell>
     <div class="auth-card">
       <h1>アカウントを作成</h1>
@@ -84,6 +118,7 @@ export const RegisterPage = ({ email = '', next = '', errors = {} }: { email?: s
             確認メールを送る
           </Button>
         </form>
+        {microsoft && <MicrosoftSignIn next={next} label="Microsoft アカウントで登録" />}
       </TabPanel>
     </div>
   </AuthShell>
@@ -228,6 +263,66 @@ export const ResetPasswordPage = ({ token, email, errors = {} }: { token: string
           パスワードを設定する
         </Button>
       </form>
+    </div>
+  </AuthShell>
+)
+
+export const MicrosoftRegisterPage = ({
+  email,
+  name,
+  username,
+  errors = {},
+}: {
+  email: string
+  name: string
+  username: string
+  errors?: FieldErrors
+}) => (
+  <AuthShell>
+    <div class="auth-card">
+      <h1>登録を完了する</h1>
+      <p class="muted">Microsoft アカウント（{email}）で登録します。氏名とユーザー名を設定してください。</p>
+      <FormError message={errors.form} />
+      <form method="post" action="/auth/microsoft/register" class="stack" data-loading-form {...validateWith('profile')}>
+        <TextField label="氏名" name="name" value={name} error={errors.name} autocomplete="name" autofocus={!name} />
+        <TextField
+          label="ユーザー名"
+          name="username"
+          value={username}
+          error={errors.username}
+          hint={USERNAME_HINT}
+          autocomplete="off"
+          autocapitalize="none"
+          spellcheck={false}
+          autofocus={!!name}
+        />
+        <Button type="submit" variant="primary" size="lg" block>
+          登録してはじめる
+        </Button>
+      </form>
+      <p class="auth-switch">
+        <a href="/login">ログインに戻る</a>
+      </p>
+    </div>
+  </AuthShell>
+)
+
+export const MicrosoftUnverifiedPage = ({ email }: { email: string }) => (
+  <AuthShell>
+    <div class="auth-card">
+      <h1>メールアドレスを確認できません</h1>
+      <p class="muted">
+        Microsoft アカウント{email ? `（${email}）` : ''}
+        のメールアドレスは、Microsoft
+        で持ち主が確認されていないため、ログインに使えません。メールアドレスで新規登録してから、アカウント画面で Microsoft
+        アカウントを連携してください。
+      </p>
+      <Button href="/register" variant="primary" size="lg" block>
+        新規登録へ
+      </Button>
+      <p class="auth-switch">
+        <a href="/login">ログインに戻る</a>
+      </p>
     </div>
   </AuthShell>
 )
