@@ -8,9 +8,10 @@ import {
   AGENT_MODEL,
   AGENT_MODEL_LABEL,
   AGENT_STATE_MESSAGES,
-  AGENT_TOOLS,
   agentState,
+  agentSummaryMessages,
   agentSystemPrompt,
+  agentToolsFor,
   isAgentOpen,
   isAgentPlatform,
   parseAgentMessages,
@@ -129,13 +130,13 @@ export function agentRoutes(h: ReturnType<typeof createAgentHandlers>) {
 
 // ---------------------------------------------------------------- 拡張機能から
 
-const MESSAGES_PATH = '/api/vscode/agent/messages'
+const CONVERSATION_PATHS = ['/api/vscode/agent/messages', '/api/vscode/agent/summarize']
 
 /** 拡張機能が会話を送る要求かを確かめる関数。ログインのセッションがなくても、トークンで本人と確かめられるので、本文の上限を上げてよい */
 export const agentRequestCheck =
   ({ findToken }: Pick<AgentBackend, 'findToken'>) =>
   (c: Context) =>
-    c.req.method === 'POST' && c.req.path === MESSAGES_PATH && !!findToken(bearer(c))
+    c.req.method === 'POST' && CONVERSATION_PATHS.includes(c.req.path) && !!findToken(bearer(c))
 
 const TOKEN_INVALID = 'トークンが使えなくなりました。STEP Learn のアイテムの画面から、もう一度 VS Code で開いてください。'
 
@@ -203,7 +204,8 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
     return c.body(null, 204)
   })
 
-  app.post('/messages', async (c) => {
+  /** 会話を受け取り、AI を呼べるところまで確かめる。呼べなければ、返す応答。呼び終えたら release を呼ぶ */
+  async function accept(c: C) {
     const target = await tokenTarget(c)
     if (!target) return c.json({ error: TOKEN_INVALID }, 401)
     const { userId, item } = target
@@ -223,6 +225,13 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
     if (running.has(runKey)) return c.json({ error: 'ほかのウィンドウで AI が応答を作っています。終わってからお試しください。' }, 409)
     const controller = new AbortController()
     running.set(runKey, controller)
+    return { userId, item, store, settings, apiKey, record, messages, controller, release: () => running.delete(runKey) }
+  }
+
+  app.post('/messages', async (c) => {
+    const accepted = await accept(c)
+    if (accepted instanceof Response) return accepted
+    const { userId, item, store, settings, apiKey, record, messages, controller, release } = accepted
 
     const system = agentSystemPrompt({
       course: item.course,
@@ -242,7 +251,7 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
           {
             model: AGENT_MODEL,
             messages: [{ role: 'system', content: system }, ...messages],
-            tools: AGENT_TOOLS,
+            tools: agentToolsFor(record.tools),
             maxTokens: AGENT_MAX_TOKENS,
             onText: (text) => emit({ type: 'text', text }),
             signal: controller.signal,
@@ -260,9 +269,32 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
         emit({ type: 'error', message: e instanceof AiError ? `${e.message}。` : 'AI の応答を受け取れませんでした。' })
         if (!(e instanceof AiError)) console.error('[agent]', e instanceof Error ? e.message : typeof e)
       } finally {
-        running.delete(runKey)
+        release()
       }
     })
+  })
+
+  /** 長くなった会話を要約する。拡張機能は、会話を要約に置き換えて続ける */
+  app.post('/summarize', async (c) => {
+    const accepted = await accept(c)
+    if (accepted instanceof Response) return accepted
+    const { userId, store, settings, apiKey, messages, controller, release } = accepted
+    c.req.raw.signal.addEventListener('abort', () => controller.abort())
+    try {
+      const reply = await completeAnthropic(
+        { model: AGENT_MODEL, messages: agentSummaryMessages(messages), signal: controller.signal },
+        apiKey,
+      )
+      store.record(userId, reply.usage)
+      const summary = reply.text.trim()
+      if (reply.stop !== 'end' || !summary) return c.json({ error: '会話を要約できませんでした。' }, 502)
+      return c.json({ summary, usage: usagePercent(store.used(userId), settings.userLimit) })
+    } catch (e) {
+      if (!(e instanceof AiError)) console.error('[agent]', e instanceof Error ? e.message : typeof e)
+      return c.json({ error: e instanceof AiError ? `${e.message}。` : '会話を要約できませんでした。' }, 502)
+    } finally {
+      release()
+    }
   })
 
   return app

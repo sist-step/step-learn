@@ -212,8 +212,9 @@ async function openFromLink(context: vscode.ExtensionContext, uri: vscode.Uri) {
 
 export function activate(context: vscode.ExtensionContext) {
   void startSessions(context)
-  agent = new AgentController(context)
-  agent.start()
+  const controller = new AgentController(context)
+  agent = controller
+  controller.start()
   context.subscriptions.push(
     vscode.window.registerUriHandler({ handleUri: (uri) => openFromLink(context, uri) }),
     vscode.workspace.onDidChangeWorkspaceFolders(() => void startSessions(context)),
@@ -233,6 +234,9 @@ export function activate(context: vscode.ExtensionContext) {
       void vscode.window.showInformationMessage('ファイルを受け取ってよいサーバーの記録を消しました。次に開くときに、もう一度確認します。')
     }),
   )
+  // ふだんは何も返さないのは、ほかの拡張機能からコーディングエージェントを操作できないようにするため。
+  // テストとして起動したとき（--extensionTestsPath）だけ、本物の VS Code の中で動きを確かめられるように渡す
+  return context.extensionMode === vscode.ExtensionMode.Test ? { agent: controller } : undefined
 }
 
 export async function deactivate() {

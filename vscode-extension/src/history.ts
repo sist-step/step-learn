@@ -40,6 +40,9 @@ const EXCLUDED_SEGMENTS = new Set([
 
 export const isExcluded = (p: string) => p.split('/').some((s) => EXCLUDED_SEGMENTS.has(s))
 
+/** vscode.workspace.findFiles に渡す、EXCLUDED_SEGMENTS の場所を除く glob */
+export const EXCLUDED_GLOB = `**/{${[...EXCLUDED_SEGMENTS].join(',')}}/**`
+
 /** folder の中のファイルの場所を、/ 区切りの相対パスにする。folder の外なら null */
 export function relativePath(folder: string, file: string) {
   const rel = path.relative(folder, file)
