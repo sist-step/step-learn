@@ -6,8 +6,9 @@ import {
   usagePercent,
   type AgentSettings,
   type AgentState,
+  type AgentManageView,
+  type AgentView,
 } from '../lib/agent'
-import type { AgentUserUsage } from '../lib/agent-items'
 import { VSCODE_EXTENSION_NAME, VSCODE_MARKETPLACE_URL } from '../lib/bundle'
 import type { FieldErrors } from '../lib/forms'
 import { Button } from './button'
@@ -16,12 +17,6 @@ import { DateTimeField, TextField, validateWith } from './form'
 import { Icon } from './icons'
 import { useStyle } from './style'
 import { Alert, Chip, EmptyState, Progress, formatDateTime } from './ui'
-
-/** 教師と管理者にだけ渡す、アイテム全体の使用量 */
-export type AgentManageView = { spent: number; users: AgentUserUsage[]; tokens: number; isAdmin: boolean }
-
-/** アイテムの画面と編集画面に出す、コーディングエージェントの設定と、見ている人の状態 */
-export type AgentView = { settings: AgentSettings; state: AgentState; usage: number; manage?: AgentManageView }
 
 const formatUsd = (usd: number) => `$${usd.toFixed(usd > 0 && usd < 0.1 ? 4 : 2)}`
 
@@ -105,35 +100,40 @@ export const AgentOpen = ({ base, editHref, settings, state, usage, manage }: Ag
   )
 }
 
+type PeriodProps = { opensAt: string; closesAt: string; userLimit: string; errors: FieldErrors; idPrefix?: string }
+
+const PERIOD_DESCRIPTION = `学生は、この期間のあいだだけ VS Code で使えます。長さは ${MAX_AGENT_PERIOD / 86_400} 日までです。`
+
+const PeriodInputs = ({ opensAt, closesAt, userLimit, errors, idPrefix = 'f' }: PeriodProps) => (
+  <div class="stack">
+    <DateTimeField label="開始日時" name="opens_at" id={`${idPrefix}-opens_at`} value={opensAt} error={errors.opens_at} />
+    <DateTimeField label="終了日時" name="closes_at" id={`${idPrefix}-closes_at`} value={closesAt} error={errors.closes_at} />
+    <TextField
+      label="1 人あたりの上限（USD）"
+      name="user_limit"
+      id={`${idPrefix}-user_limit`}
+      inputmode="decimal"
+      value={userLimit}
+      error={errors.user_limit}
+      hint="このアイテムで 1 人が使える額です。学生には額ではなく、使った割合だけを見せます。"
+    />
+  </div>
+)
+
 /** 編集画面の右の列に置く、使える期間と 1 人あたりの上限のカード（保存のフォームの中） */
-export const AgentPeriodCard = ({
-  opensAt,
-  closesAt,
-  userLimit,
-  errors,
-}: {
-  opensAt: string
-  closesAt: string
-  userLimit: string
-  errors: FieldErrors
-}) => (
-  <Card
-    heading="使える期間と上限"
-    description={`学生は、この期間のあいだだけ VS Code で使えます。長さは ${MAX_AGENT_PERIOD / 86_400} 日までです。`}
-  >
-    <div class="stack">
-      <DateTimeField label="開始日時" name="opens_at" value={opensAt} error={errors.opens_at} />
-      <DateTimeField label="終了日時" name="closes_at" value={closesAt} error={errors.closes_at} />
-      <TextField
-        label="1 人あたりの上限（USD）"
-        name="user_limit"
-        inputmode="decimal"
-        value={userLimit}
-        error={errors.user_limit}
-        hint="このアイテムで 1 人が使える額です。学生には額ではなく、使った割合だけを見せます。"
-      />
-    </div>
+export const AgentPeriodCard = (props: PeriodProps) => (
+  <Card heading="使える期間と上限" description={PERIOD_DESCRIPTION}>
+    <PeriodInputs {...props} />
   </Card>
+)
+
+/** Moodle モードの入力欄の、使える期間と 1 人あたりの上限の欄 */
+export const AgentPeriodFields = (props: PeriodProps) => (
+  <fieldset class="field">
+    <legend>使える期間と上限</legend>
+    <p class="field-hint">{PERIOD_DESCRIPTION}</p>
+    <PeriodInputs {...props} />
+  </fieldset>
 )
 
 /** 編集画面の、保存のフォームの外に置く欄（API キーとアイテム全体の上限、利用状況） */

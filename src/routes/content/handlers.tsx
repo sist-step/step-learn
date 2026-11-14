@@ -11,11 +11,10 @@ import {
   visibleItem,
   type CourseAccess,
 } from '../../lib/courses'
-import type { AgentView } from '../../components/agent'
 import type { BundleView } from '../../components/bundle'
 import { RestrictionPage } from '../../components/restriction'
-import { agentState, usagePercent } from '../../lib/agent'
-import { agentSettings, agentSpent, agentTokenCount, agentUsageByUser, agentUsed, saveAgentPeriod } from '../../lib/agent-items'
+import { agentViewOf } from '../../lib/agent'
+import { agentStore, saveAgentPeriod } from '../../lib/agent-items'
 import { canOpenItem, courseAvailability, restrictionChoices } from '../../lib/availability'
 import { bundleBase } from '../../lib/bundle'
 import { bundleKeysOf, bundleStore, bundleSyncStore } from '../../lib/bundle-items'
@@ -82,20 +81,8 @@ function bundleView(c: Context<AppEnv>, access: CourseAccess, itemId: number): B
   }
 }
 
-async function agentView(c: Context<AppEnv>, access: CourseAccess, itemId: number): Promise<AgentView> {
-  const settings = agentSettings(itemId)
-  const userId = c.var.user!.id
-  const used = agentUsed(itemId, userId)
-  const spent = agentSpent(itemId)
-  return {
-    settings,
-    state: agentState(settings, { used, spent }, Math.floor(Date.now() / 1000)),
-    usage: usagePercent(used, settings.userLimit),
-    manage: access.canManage
-      ? { spent, users: agentUsageByUser(itemId), tokens: await agentTokenCount(itemId), isAdmin: c.var.user!.role === 'admin' }
-      : undefined,
-  }
-}
+const agentView = (c: Context<AppEnv>, access: CourseAccess, itemId: number) =>
+  agentViewOf(agentStore(itemId), c.var.user!.id, access.canManage ? { isAdmin: c.var.user!.role === 'admin' } : undefined)
 
 const getItem = (courseId: number, itemId: number) =>
   db
@@ -317,7 +304,7 @@ export async function editItem(c: Context<AppEnv>) {
       item={item}
       code={getCodeItem(iid)}
       bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
-      agent={item.type === 'agent' ? await agentView(c, access, iid) : undefined}
+      agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
       gradingEnabled={gradingEnabled}
       judge={judgeSwitchable ? currentJudge() : undefined}
       sections={listSections(access.course.id)}
@@ -366,7 +353,7 @@ export async function updateItem(c: Context<AppEnv>) {
         item={item}
         code={code}
         bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
-        agent={item.type === 'agent' ? await agentView(c, access, iid) : undefined}
+        agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
         gradingEnabled={gradingEnabled}
         judge={judgeSwitchable ? currentJudge() : undefined}
         sections={listSections(courseId)}
@@ -655,7 +642,7 @@ export async function showItem(c: Context<AppEnv>) {
       textPreview={textPreview}
       code={code}
       bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
-      agent={item.type === 'agent' ? await agentView(c, access, iid) : undefined}
+      agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
       revision={revision}
     />,
     { title: item.title },
