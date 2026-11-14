@@ -1,5 +1,5 @@
-// 画面の部品（components/agent.tsx）も読み込むので、DB や Node の API を使うモジュールを import しない
-import type { AiMessage, AiTool, AiToolCall, AnthropicModel } from './ai-models'
+// 画面の部品（components/agent.tsx）と Moodle モードも読み込むので、DB や Node の API を使うモジュールを import しない
+import type { AiMessage, AiTool, AiToolCall, AiUsage, AnthropicModel } from './ai-models'
 
 /** コーディングエージェントのアイテムの種類の名前（items.type） */
 export const AGENT_KIND = 'agent'
@@ -45,6 +45,61 @@ export type AgentSettings = {
   closesAt: number | null
   userLimit: number
   totalLimit: number
+}
+
+/** 教師や管理者がまだ決めていないときの上限（USD） */
+export const AGENT_DEFAULT_LIMITS = { userLimit: 0.5, totalLimit: 10 }
+
+export type AgentUserUsage = { id: number | null; name: string; username: string | null; cost: number; calls: number; lastAt: number }
+
+/** アイテム 1 つの設定・使用量・トークン。通常モードは lib/agent-items.ts、Moodle モードは moodle-mode/agent-store.ts */
+export type AgentStore = {
+  settings: () => AgentSettings
+  /** API キー。入っていないか、読み出せなければ null */
+  apiKey: () => string | null
+  /** 管理者が入れる API キーと、アイテム全体の上限。apiKey を渡さなければ、キーはそのままにする */
+  saveKey: (set: { apiKey?: string; totalLimit: number }) => void
+  clearKey: () => void
+  used: (userId: number) => number
+  spent: () => number
+  record: (userId: number, usage: AiUsage) => void
+  /** 編集画面に出す、利用者ごとの使った額。多い順 */
+  usageByUser: () => AgentUserUsage[]
+  tokenCount: () => number
+  /** 拡張機能に渡すトークンを作る。1 人が持てる数を超えたら、古いものから使えなくする */
+  issueToken: (userId: number) => string
+}
+
+/** 管理画面に出す、コーディングエージェントのアイテム。itemId は URL の :iid（Moodle モードは活動の cmid） */
+export type AgentItemRow = {
+  courseId: number
+  courseTitle: string
+  itemId: number
+  title: string
+  configured: boolean
+  opensAt: number | null
+  closesAt: number | null
+  totalLimit: number
+  spent: number
+}
+
+/** 教師と管理者にだけ渡す、アイテム全体の使用量 */
+export type AgentManageView = { spent: number; users: AgentUserUsage[]; tokens: number; isAdmin: boolean }
+
+/** アイテムの画面と編集画面に出す、コーディングエージェントの設定と、見ている人の状態 */
+export type AgentView = { settings: AgentSettings; state: AgentState; usage: number; manage?: AgentManageView }
+
+/** manager は、見ている人がコースを編集できるときだけ渡す */
+export function agentViewOf(store: AgentStore, userId: number, manager?: { isAdmin: boolean }): AgentView {
+  const settings = store.settings()
+  const used = store.used(userId)
+  const spent = store.spent()
+  return {
+    settings,
+    state: agentState(settings, { used, spent }, Math.floor(Date.now() / 1000)),
+    usage: usagePercent(used, settings.userLimit),
+    manage: manager && { spent, users: store.usageByUser(), tokens: store.tokenCount(), isAdmin: manager.isAdmin },
+  }
 }
 
 /** used は本人の、spent はアイテム全体の、これまでに使った額（USD） */

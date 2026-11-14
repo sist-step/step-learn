@@ -30,7 +30,7 @@ import {
   type AiLimitedModel,
   type AiProvider,
 } from '../../lib/ai-models'
-import type { AgentItemRow } from '../../lib/agent-items'
+import type { AgentItemRow } from '../../lib/agent'
 import type { AiOverview, AiUserUsage } from '../../lib/ai-ledger'
 import type { FieldErrors } from '../../lib/forms'
 import { LOG_KINDS, LOG_KIND_LABELS, LOG_RETENTION_DAYS, ROLE_LABELS, type LogKind, type Role } from '../../lib/types'
@@ -49,28 +49,32 @@ const ROLE_OPTIONS = (['student', 'teacher', 'admin'] as Role[]).map((r) => ({ v
 
 const ROLE_ICONS: Record<Role, IconName> = { admin: 'shield', teacher: 'book', student: 'users' }
 
+// ユーザー・コース・操作ログを除くのは、ユーザーとコースは Moodle にあり、Moodle モードの操作は Moodle のログに残るため
+const MOODLE_TABS = TABS.filter((t) => t.tab === 'ai' || t.tab === 'agents')
+
 /** moodleAdminUrl は Moodle モードのときの Moodle のサイト管理の URL。ユーザーとコースのタブを出さず、Moodle の画面への移動を置く */
-const AdminShell = ({ tab, moodleAdminUrl, children }: { tab: Tab; moodleAdminUrl?: string; children: Child }) =>
-  moodleAdminUrl ? (
-    <AppShell>
+const AdminShell = ({ tab, moodleAdminUrl, children }: { tab: Tab; moodleAdminUrl?: string; children: Child }) => (
+  <AppShell>
+    {moodleAdminUrl ? (
       <PageHeader
         title="管理"
-        description="AI の利用を管理します。ユーザーとコースは旧STEP Learn のサイト管理で管理します。"
+        description="AI とコーディングエージェントの利用を管理します。ユーザーとコースは旧STEP Learn のサイト管理で管理します。"
         actions={
           <Button href={moodleAdminUrl} variant="ghost" icon="external" target="_blank" rel="noopener" data-no-prefetch>
             旧STEP Learnのサイト管理
           </Button>
         }
       />
-      {children}
-    </AppShell>
-  ) : (
-    <AppShell>
+    ) : (
       <PageHeader title="管理" description="ユーザー・コース・AI の利用と操作ログをまとめて管理します。" />
-      <Tabs label="管理メニュー" items={TABS.map((t) => ({ href: t.href, label: t.label, active: tab === t.tab }))} />
-      <TabPanel>{children}</TabPanel>
-    </AppShell>
-  )
+    )}
+    <Tabs
+      label="管理メニュー"
+      items={(moodleAdminUrl ? MOODLE_TABS : TABS).map((t) => ({ href: t.href, label: t.label, active: tab === t.tab }))}
+    />
+    <TabPanel>{children}</TabPanel>
+  </AppShell>
+)
 
 // ---------------------------------------------------------------- ユーザー
 
@@ -232,8 +236,8 @@ export const CoursesPage = ({ q, list }: { q: string; list: CourseRow[] }) => (
 
 // ---------------------------------------------------------------- コーディングエージェント
 
-export const AgentsPage = ({ list }: { list: AgentItemRow[] }) => (
-  <AdminShell tab="agents">
+export const AgentsPage = ({ list, moodleAdminUrl }: { list: AgentItemRow[]; moodleAdminUrl?: string }) => (
+  <AdminShell tab="agents" moodleAdminUrl={moodleAdminUrl}>
     <p class="muted small">
       教師が追加したコーディングエージェントのアイテムです。アイテムの編集画面で API キーを入れると、学生が VS Code で使えるようになります。
     </p>
