@@ -13,8 +13,8 @@ import {
 } from '../../lib/courses'
 import type { BundleView } from '../../components/bundle'
 import { RestrictionPage } from '../../components/restriction'
-import { agentViewOf } from '../../lib/agent'
-import { agentStore, saveAgentPeriod } from '../../lib/agent-items'
+import { MAX_AGENT_INSTRUCTIONS, agentViewOf } from '../../lib/agent'
+import { agentStore, saveAgentOptions } from '../../lib/agent-items'
 import { canOpenItem, courseAvailability, restrictionChoices } from '../../lib/availability'
 import { bundleBase } from '../../lib/bundle'
 import { bundleKeysOf, bundleStore, bundleSyncStore } from '../../lib/bundle-items'
@@ -214,6 +214,7 @@ function readItemInput(form: Form): ItemInput {
     opensAt: field(form, 'opens_at', 16),
     closesAt: field(form, 'closes_at', 16),
     userLimit: field(form, 'user_limit', 20),
+    instructions: field(form, 'instructions', MAX_AGENT_INSTRUCTIONS * 2),
   }
 }
 
@@ -390,10 +391,11 @@ export async function updateItem(c: Context<AppEnv>) {
     })
   }
   if (item.type === 'agent')
-    saveAgentPeriod(iid, {
+    saveAgentOptions(iid, {
       opensAt: dateTimeInputToUnix(input.opens_at ?? ''),
       closesAt: dateTimeInputToUnix(input.closes_at ?? ''),
       userLimit: input.user_limit ?? 0,
+      instructions: input.instructions ?? '',
     })
   if (stored && item.fileKey) inBackground(deleteKeys([item.fileKey]))
   return redirectWith(c, `/courses/${courseId}/items/${iid}/edit`, '保存しました。')

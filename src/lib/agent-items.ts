@@ -22,8 +22,9 @@ const upsert = (itemId: number, set: Partial<typeof agentItems.$inferInsert>) =>
     .onConflictDoUpdate({ target: agentItems.itemId, set })
     .run()
 
-/** 教師が編集画面で決める、使える期間と 1 人あたりの上限 */
-export const saveAgentPeriod = (itemId: number, set: { opensAt: number; closesAt: number; userLimit: number }) => upsert(itemId, set)
+/** 教師が編集画面で決める、使える期間・1 人あたりの上限・AI への指示 */
+export const saveAgentOptions = (itemId: number, set: { opensAt: number; closesAt: number; userLimit: number; instructions: string }) =>
+  upsert(itemId, set)
 
 const costSum = sql<number>`coalesce(sum(${agentUsage.cost}), 0)`
 
@@ -47,6 +48,7 @@ export function agentStore(itemId: number): AgentStore {
         closesAt: row?.closesAt ?? null,
         userLimit: row?.userLimit ?? AGENT_DEFAULT_LIMITS.userLimit,
         totalLimit: row?.totalLimit ?? AGENT_DEFAULT_LIMITS.totalLimit,
+        instructions: row?.instructions ?? '',
       }
     },
     apiKey,
