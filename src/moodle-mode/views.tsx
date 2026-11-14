@@ -13,25 +13,25 @@ import {
 import { Button, IconButton } from '../components/button'
 import { Card, LinkCard } from '../components/card'
 import { cx } from '../components/cx'
-import { DateTimeField, FileField, SegmentedControl, SelectField, TextAreaField, TextField, validateWith } from '../components/form'
+import { FileField, SegmentedControl, SelectField, TextAreaField, TextField, validateWith } from '../components/form'
 import { Icon, type IconName } from '../components/icons'
 import { AppShell, AuthShell } from '../components/layout'
 import { Markdown } from '../components/markdown'
 import { WalkingMascot } from '../components/mascot'
 import { MenuItem, Modal, Popover } from '../components/overlay'
 import { PdfBar, PdfStage } from '../components/pdf'
+import { RestrictionNote } from '../components/restriction'
 import { Styles, useStyle } from '../components/style'
 import { Alert, Breadcrumbs, Chip, EmptyState, TabPanel } from '../components/ui'
 import type { CourseAccess } from '../lib/courses'
 import type { FieldErrors } from '../lib/forms'
-import { unixToDateTimeInput } from '../lib/course-period'
 import { previewKind } from '../lib/preview'
 import { formatBytes } from '../lib/bytes'
 import { MAX_FILE_SIZE } from '../lib/storage'
 import { MOODLE_DISPLAY_LABELS, isExactDisplay } from '../moodle/display'
 import { extraKindOf, type ExtraKind, type ExtraKindEntry } from './extra-kinds'
-import type { CourseLayout, ItemCompletion, MItem, MSection, Restriction, TilesLayout, TopcollLayout } from './mapping'
-import { PREVIOUS_ITEM, isOpenable, isTracked, sectionHref } from './mapping'
+import type { CourseLayout, ItemCompletion, MItem, MSection, TilesLayout, TopcollLayout } from './mapping'
+import { isOpenable, isTracked, sectionHref } from './mapping'
 import { TileArt } from './tile-art'
 
 // ---------------------------------------------------------------- ログイン
@@ -112,17 +112,6 @@ const completesOnOpen = (it: MItem) =>
 
 const HiddenChip = () => <Chip icon="eyeSlash">学生に非表示</Chip>
 
-/** 教師に見せるアクセス制限。条件を満たした学生には Moodle が制限を返さないので、学生には locked のときの restriction を出す */
-const RestrictionNote = ({ rule, class: cls }: { rule: Restriction; class?: string }) => {
-  useStyle('/src/moodle-mode/moodle-mode.css')
-  return (
-    <span class={cx('section-restriction muted small', cls)}>
-      <Icon name="lock" size={14} />
-      <span>{rule.text || 'アクセス制限あり'}</span>
-    </span>
-  )
-}
-
 const RowMenu = ({ base, hidden, confirm, restriction }: { base: string; hidden: boolean; confirm: string; restriction: string }) => (
   <Popover class="row-menu" panelClass="row-menu-panel" trigger={<IconButton as="summary" icon="ellipsis" label="その他の操作" />}>
     <form method="post" action={`${base}/move`}>
@@ -197,7 +186,7 @@ const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId:
       <li class={cx('item-row item-label', item.hidden && 'is-hidden edit-only')} data-item={item.id}>
         <div class="item-text">
           {item.body ? <Markdown source={item.body} /> : <span class="muted">{item.title}</span>}
-          {manage && item.rule && <RestrictionNote rule={item.rule} class="item-restriction" />}
+          {manage && item.rule && <RestrictionNote text={item.rule.text} />}
         </div>
         {item.hidden && <HiddenChip />}
         {actions}
@@ -222,7 +211,7 @@ const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId:
       <span class="item-text">
         <span class="item-title">{item.title}</span>
         <span class="item-meta truncate">{meta}</span>
-        {manage && item.rule && <RestrictionNote rule={item.rule} class="item-restriction" />}
+        {manage && item.rule && <RestrictionNote text={item.rule.text} />}
       </span>
       {item.hidden && <HiddenChip />}
       {manage && tracked && (
@@ -290,7 +279,7 @@ const SubsectionRow = ({
           <span class="item-text">
             <span class="item-title">{item.title}</span>
             <span class="item-meta truncate">{item.locked ? item.restriction || 'まだ開けません' : `${shown} アイテム`}</span>
-            {manage && item.rule && <RestrictionNote rule={item.rule} class="item-restriction" />}
+            {manage && item.rule && <RestrictionNote text={item.rule.text} />}
           </span>
           {item.hidden && <HiddenChip />}
         </span>
@@ -595,12 +584,7 @@ const SectionCard = ({
         <span class="section-num">{o.sectionNumber.get(s.id) ?? <Icon name={s.number === 0 ? 'home' : 'eyeSlash'} size={14} />}</span>
         <span class="section-title-wrap">
           <span class="section-title">{s.title}</span>
-          {locked && (
-            <span class="section-restriction muted small">
-              <Icon name="lock" size={14} />
-              <span>{s.restriction || 'まだ開けません'}</span>
-            </span>
-          )}
+          {locked && <RestrictionNote text={s.restriction || 'まだ開けません'} />}
           {!empty && !locked && (
             <span class="muted small">
               {emptyView && <span class="view-only">{hiddenCount > 0 ? `非表示 ${hiddenCount}` : 'アイテムなし'}</span>}
@@ -609,7 +593,7 @@ const SectionCard = ({
               {hiddenCount > 0 && <span class="edit-only">{` · 非表示 ${hiddenCount}`}</span>}
             </span>
           )}
-          {manage && s.rule && <RestrictionNote rule={s.rule} />}
+          {manage && s.rule && <RestrictionNote text={s.rule.text} />}
           {summaryInHead && s.summary && <span class="section-head-summary">{s.summary}</span>}
         </span>
         {current && <Chip tone="accent">現在のセクション</Chip>}
@@ -855,7 +839,7 @@ export const CoursePage = ({
 
   return (
     <AppShell editable={manage} tone={access.course.color}>
-      <Styles use={['/src/routes/courses/courses.css', '/src/moodle-mode/moodle-mode.css']} />
+      <Styles use={['/src/routes/courses/courses.css', '/src/components/restriction.css', '/src/moodle-mode/moodle-mode.css']} />
       <CourseHeader
         access={access}
         tab="content"
@@ -1342,208 +1326,21 @@ export const ItemEditPage = ({
   )
 }
 
-export type RestrictionValues = { from: string; until: string; after: number[]; hideUnmet: number }
+// ---------------------------------------------------------------- アクセス制限
 
-/** アクセス制限を編集するセクションかアイテム */
-export type RestrictionTarget = {
-  kind: 'section' | 'item'
-  id: number
-  title: string
-  /** フォームの送信先 */
-  action: string
-  /** 保存したあとと、戻るボタンの移動先 */
-  back: string
-  /** Moodle の設定画面 */
-  moodleUrl: string
-  rule: Restriction | null
-}
-
-const RestrictionAfterField = ({
-  target,
-  sections,
-  items,
-  checked,
-}: {
-  target: RestrictionTarget
-  sections: MSection[]
-  items: MItem[]
-  checked: number[]
-}) => {
-  const sectionLabels = new Map(sectionOptions(sections).map((o) => [Number(o.value), o.label]))
-  const choices = [
-    ...(target.kind === 'item'
-      ? [{ id: PREVIOUS_ITEM, title: '直前のアイテム', meta: 'このアイテムより前にある、完了の条件があるアイテム' }]
-      : []),
-    ...items
-      .filter((it) => isTracked(it) && !(target.kind === 'item' && it.id === target.id))
-      .map((it) => ({ id: it.id, title: it.title, meta: sectionLabels.get(it.sectionId) ?? '' })),
-  ]
-  return (
-    <fieldset class="field">
-      <legend>完了が必要なアイテム（任意）</legend>
-      {choices.length > 0 ? (
-        <ul class="restriction-choices">
-          {choices.map((ch) => (
-            <li>
-              <label class="restriction-choice">
-                <input type="checkbox" name="after[]" value={String(ch.id)} checked={checked.includes(ch.id)} />
-                <span class="restriction-choice-text">
-                  <span class="truncate">{ch.title}</span>
-                  {ch.meta && <span class="muted small truncate">{ch.meta}</span>}
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p class="muted small">完了の条件があるアイテムがありません。</p>
-      )}
-    </fieldset>
+/** アクセス制限を編集できないときの説明（RestrictionPage の notice） */
+export const RestrictionNotice = ({ restrictable }: { restrictable: boolean }) =>
+  restrictable ? (
+    <Alert tone="info">この制限は STEP Learn で読み取れない形で保存されています。旧STEP Learn の画面で編集してください。</Alert>
+  ) : (
+    <Alert tone="warning">旧STEP Learn のサイトの設定で、アクセス制限が使えないようになっています。</Alert>
   )
-}
 
-export const RestrictionPage = ({
-  access,
-  sections,
-  items,
-  target,
-  restrictable,
-  values,
-  errors = {},
-}: {
-  access: CourseAccess
-  sections: MSection[]
-  items: MItem[]
-  target: RestrictionTarget
-  restrictable: boolean
-  values?: RestrictionValues
-  errors?: FieldErrors
-}) => {
-  useStyle('/src/components/course.css', '/src/moodle-mode/moodle-mode.css')
-  const courseId = access.course.id
-  const { rule } = target
-  const editable = restrictable && (!rule || rule.editable)
-  const v: RestrictionValues = values ?? {
-    from: unixToDateTimeInput(rule?.from),
-    until: unixToDateTimeInput(rule?.until),
-    after: rule?.after ?? [],
-    hideUnmet: rule?.hideUnmet ? 1 : 0,
-  }
-  const kindLabel = target.kind === 'section' ? 'セクション' : 'アイテム'
-  return (
-    <AppShell tone={access.course.color}>
-      <Styles use={['/src/routes/content/content.css']} />
-      <Breadcrumbs
-        items={[
-          { href: '/courses', label: 'コース一覧' },
-          { href: `/courses/${courseId}`, label: access.course.title },
-          { href: target.back, label: target.title },
-          { label: 'アクセス制限' },
-        ]}
-      />
-      <header class="editor-head">
-        <span class="item-icon kind-moodle">
-          <Icon name="lock" size={20} />
-        </span>
-        <div class="editor-head-text">
-          <span class="eyebrow">{kindLabel}のアクセス制限</span>
-          <h1 class="truncate">{target.title}</h1>
-        </div>
-        <div class="editor-head-actions">
-          <Button href={target.back} variant="ghost" icon="chevronLeft" aria-label="戻る">
-            <span class="hide-sm">戻る</span>
-          </Button>
-          {editable && (
-            <Button type="submit" form="restriction-form" variant="primary" icon="check" title="保存（⌘S / Ctrl+S）" data-save-shortcut>
-              保存
-            </Button>
-          )}
-        </div>
-      </header>
-
-      <div class="editor">
-        {editable ? (
-          <Card
-            as="form"
-            id="restriction-form"
-            method="post"
-            action={target.action}
-            class="editor-main stack"
-            heading="開ける条件"
-            description="すべての条件を満たした学生だけが開けます。何も指定しなければ、制限なしになります。教師はいつでも開けます。"
-            data-loading-form
-            {...validateWith('restriction')}
-          >
-            <div class="grid-2">
-              <DateTimeField
-                label="開始日時（任意）"
-                name="from"
-                optional
-                value={v.from}
-                error={errors.from}
-                hint="この日時から開けるようになります"
-              />
-              <DateTimeField
-                label="終了日時（任意）"
-                name="until"
-                optional
-                value={v.until}
-                error={errors.until}
-                hint="この日時になると開けなくなります"
-              />
-            </div>
-            {access.course.completionEnabled ? (
-              <RestrictionAfterField target={target} sections={sections} items={items} checked={v.after} />
-            ) : (
-              <p class="muted small">このコースでは完了ステータスを使っていないため、アイテムの完了は条件にできません。</p>
-            )}
-            <fieldset class="field">
-              <legend>条件を満たしていない学生への表示</legend>
-              <SegmentedControl
-                name="hide_unmet"
-                label="条件を満たしていない学生への表示"
-                options={[
-                  { value: '0', label: '条件を見せる', icon: 'lock' },
-                  { value: '1', label: '表示しない', icon: 'eyeSlash' },
-                ]}
-                value={String(v.hideUnmet)}
-              />
-            </fieldset>
-            {rule && (
-              <div class="form-actions">
-                <Button type="submit" name="clear" value="1" variant="ghost" icon="lockOpen">
-                  制限をなくす
-                </Button>
-              </div>
-            )}
-          </Card>
-        ) : (
-          <div class="editor-main stack">
-            {restrictable ? (
-              <Alert tone="info">
-                この{kindLabel}には、STEP Learn では編集できない条件（グループ・評点・「いずれか」の組み合わせなど）が含まれています。旧STEP
-                Learn の画面で編集してください。
-              </Alert>
-            ) : (
-              <Alert tone="warning">旧STEP Learn のサイトの設定で、アクセス制限が使えないようになっています。</Alert>
-            )}
-          </div>
-        )}
-
-        <aside class="editor-side">
-          <Card heading="現在の制限">
-            <div class="stack">
-              {rule ? <RestrictionNote rule={rule} /> : <p class="muted small">制限はありません。</p>}
-              <Button href={target.moodleUrl} size="sm" iconEnd="external" target="_blank" rel="noopener" data-no-prefetch>
-                旧STEP Learn で編集
-              </Button>
-            </div>
-          </Card>
-        </aside>
-      </div>
-    </AppShell>
-  )
-}
+export const MoodleEditLink = ({ href }: { href: string }) => (
+  <Button href={href} size="sm" iconEnd="external" target="_blank" rel="noopener" data-no-prefetch>
+    旧STEP Learn で編集
+  </Button>
+)
 
 // ---------------------------------------------------------------- エラー
 

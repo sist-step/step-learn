@@ -13,6 +13,7 @@ import {
 import { dateInputToUnix, dateTimeInputToUnix, isDateInput, isDateTimeInput } from './course-period'
 import { checkPassword } from './password'
 import { isMediaFile } from './preview'
+import { readRestrictionForm } from './restriction'
 import { COMPLETIONS, COURSE_COLORS, LINK_TARGETS, type Completion, type ItemType } from './types'
 import { checkUsername, normalizeUsername } from './username'
 
@@ -140,11 +141,11 @@ const course = z
 const dateTime = (label: string) =>
   z.pipe(trimmed(), z.string().check(rule((s: string) => (!s || isDateTimeInput(s) ? null : `${label}が正しくありません。`))))
 
-// 完了の条件（after[]）をここで確かめないのは、選べる活動がコースの中身で決まり、ハンドラで選択肢と照らし合わせるため
-const restriction = z.object({ from: dateTime('開始日時'), until: dateTime('終了日時'), hide_unmet: flag() }).check(
+// 選んだアイテムや項目が今も選べるかをここで確かめないのは、選べるものがコースの中身で決まり、ハンドラで選択肢と照らし合わせるため
+// 行ごとのエラーを外側の object で出すのは、availability の中で出すと path の先頭が availability になり、行の入力欄に出せないため
+const restriction = z.object({ availability: z.transform((v: unknown) => readRestrictionForm(typeof v === 'string' ? v : '')) }).check(
   z.superRefine((v, ctx) => {
-    if (isDateTimeInput(v.from) && isDateTimeInput(v.until) && dateTimeInputToUnix(v.until) <= dateTimeInputToUnix(v.from))
-      ctx.issues.push({ code: 'custom', message: '終了日時は開始日時より後にしてください。', input: v, path: ['until'] })
+    for (const issue of v.availability.issues) ctx.issues.push({ code: 'custom', message: issue.message, input: v, path: [issue.key] })
   }),
 )
 

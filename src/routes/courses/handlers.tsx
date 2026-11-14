@@ -3,6 +3,7 @@ import type { Context } from 'hono'
 import type { CourseFormValues } from '../../components/course'
 import type { CourseCardData } from '../../components/ui'
 import { canCreateCourse } from '../../lib/auth'
+import { courseAvailability } from '../../lib/availability'
 import { courseRevision, getCourseAccess, memberCount, trackedDoneCount, trackedItemCount, visibleItem } from '../../lib/courses'
 import { courseImagePrefix, type CourseImageKind } from '../../lib/course-images'
 import { dateInputToUnix, isInPeriod, isUpcoming, unixToDateInput } from '../../lib/course-period'
@@ -151,6 +152,7 @@ export async function show(c: Context<AppEnv>) {
       sharing={sharing}
       revision={revision}
       codeLanguages={availableCodeLanguages}
+      availability={courseAvailability(user, access)}
     />,
     {
       title: access.course.title,

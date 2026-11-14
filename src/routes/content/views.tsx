@@ -67,6 +67,11 @@ export type OutlineItem = Pick<
 
 export type OutlineSection = Pick<Section, 'id' | 'title' | 'hidden'>
 
+/** 学生がアクセス制限でまだ開けないアイテムと、目次にも出さないアイテム・セクション */
+export type RestrictedOutline = { locked: Set<number>; hidden: Set<number>; hiddenSections: Set<number> }
+
+const NO_RESTRICTION: RestrictedOutline = { locked: new Set(), hidden: new Set(), hiddenSections: new Set() }
+
 export const TEXT_PREVIEW_MAX = 200 * 1024
 
 export const editUrl = (courseId: number, sectionId?: number) => `/courses/${courseId}${sectionId ? `#section-${sectionId}` : ''}`
@@ -227,6 +232,7 @@ export const ItemPage = ({
   section,
   sections,
   outline,
+  restricted = NO_RESTRICTION,
   done,
   prev,
   next,
@@ -241,6 +247,7 @@ export const ItemPage = ({
   section?: OutlineSection
   sections: OutlineSection[]
   outline: OutlineItem[]
+  restricted?: RestrictedOutline
   done: Set<number>
   prev?: OutlineItem
   next?: OutlineItem
@@ -274,10 +281,12 @@ export const ItemPage = ({
     o.type === 'screen' || (o.type === 'file' && previewKind(o.fileType ?? '', o.fileName ?? '') === 'pdf')
   const hiddenSections = new Set(sections.filter((s) => s.hidden).map((s) => s.id))
   const isHidden = (o: OutlineItem) => !!o.hidden || hiddenSections.has(o.sectionId)
-  const siblings = outline.filter((o) => o.sectionId === item.sectionId)
+  const listed = outline.filter((o) => !restricted.hidden.has(o.id))
+  const siblings = listed.filter((o) => o.sectionId === item.sectionId)
   const position = siblings.findIndex((o) => o.id === item.id) + 1
   const outlineSections = sections
-    .map((s) => ({ section: s, items: outline.filter((o) => o.sectionId === s.id) }))
+    .filter((s) => !restricted.hiddenSections.has(s.id))
+    .map((s) => ({ section: s, items: listed.filter((o) => o.sectionId === s.id) }))
     .filter((s) => access.canManage || s.items.length > 0)
 
   const pdf = preview === 'pdf'
@@ -345,7 +354,9 @@ export const ItemPage = ({
 
   return (
     <AppShell tone={access.course.color} topbar={pdfBar ?? codeBar}>
-      <Styles use={['/src/routes/content/content.css']} />
+      <Styles
+        use={['/src/routes/content/content.css', ...(restricted.locked.size > 0 ? (['/src/components/restriction.css'] as const) : [])]}
+      />
       {pdf ? (
         <PdfStage src={previewUrl} title={item.fileName ?? 'プレビュー'} />
       ) : code ? (
@@ -539,25 +550,32 @@ export const ItemPage = ({
                   <ul>
                     {items.map((o) => (
                       <li>
-                        <a
-                          href={o.type === 'screen' ? `${navHref(o)}/screen` : navHref(o)}
-                          class={cx('outline-link', o.id === item.id && 'active', isHidden(o) && 'is-hidden')}
-                          data-item={o.id}
-                          {...(opensNewTab(o) ? { target: '_blank', rel: 'noopener', 'data-no-prefetch': '' } : {})}
-                          {...(o.type === 'link' ? linkOpenAttrs(o.url, o.linkTarget, navHref(o)) : {})}
-                          aria-current={o.id === item.id ? 'page' : undefined}
-                          {...(o.type === 'link' && o.linkTarget !== 'embed' ? onOpen(o) : {})}
-                        >
-                          {isTracked(o) ? (
-                            <span class={cx('outline-dot', done.has(o.id) && 'done')} data-outline-dot={o.id}>
-                              {done.has(o.id) && <Icon name="check" size={10} />}
-                            </span>
-                          ) : (
-                            <Icon name={ITEM_ICONS[o.type]} size={14} class="outline-kind" />
-                          )}
-                          <span class="truncate">{o.title}</span>
-                          {!!o.hidden && <Icon name="eyeSlash" size={12} class="outline-hidden" />}
-                        </a>
+                        {restricted.locked.has(o.id) ? (
+                          <span class="outline-link is-locked" data-item={o.id}>
+                            <Icon name="lock" size={14} class="outline-kind" />
+                            <span class="truncate">{o.title}</span>
+                          </span>
+                        ) : (
+                          <a
+                            href={o.type === 'screen' ? `${navHref(o)}/screen` : navHref(o)}
+                            class={cx('outline-link', o.id === item.id && 'active', isHidden(o) && 'is-hidden')}
+                            data-item={o.id}
+                            {...(opensNewTab(o) ? { target: '_blank', rel: 'noopener', 'data-no-prefetch': '' } : {})}
+                            {...(o.type === 'link' ? linkOpenAttrs(o.url, o.linkTarget, navHref(o)) : {})}
+                            aria-current={o.id === item.id ? 'page' : undefined}
+                            {...(o.type === 'link' && o.linkTarget !== 'embed' ? onOpen(o) : {})}
+                          >
+                            {isTracked(o) ? (
+                              <span class={cx('outline-dot', done.has(o.id) && 'done')} data-outline-dot={o.id}>
+                                {done.has(o.id) && <Icon name="check" size={10} />}
+                              </span>
+                            ) : (
+                              <Icon name={ITEM_ICONS[o.type]} size={14} class="outline-kind" />
+                            )}
+                            <span class="truncate">{o.title}</span>
+                            {!!o.hidden && <Icon name="eyeSlash" size={12} class="outline-hidden" />}
+                          </a>
+                        )}
                       </li>
                     ))}
                   </ul>

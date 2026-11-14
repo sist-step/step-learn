@@ -211,18 +211,27 @@ export type MoodleSection = {
   modules: MoodleModule[]
 }
 
-/** 教師に見せるアクセス制限。editable は STEP Learn の画面で扱える（日付と活動の完了をすべて満たす）形 */
+/** 教師に見せるアクセス制限 */
 export type MoodleRestriction = {
   sectionid: number
   cmid: number
   /** すべての条件を書いた説明（HTML） */
   info: string
-  editable: boolean
-  from: number
-  until: number
-  /** 完了が条件の活動。-1 は直前の活動 */
-  after: number[]
-  hideunmet: boolean
+  /** Moodle の availability の JSON */
+  json: string
+}
+
+type Named = { id: number; name: string }
+
+/** アクセス制限の編集で選べるもの。plugins は有効な条件の種類（availability_* の名前） */
+export type MoodleRestrictionOptions = {
+  plugins: string[]
+  /** 評点の項目。cmid はその活動（活動の評点でなければ 0） */
+  grades: (Named & { cmid: number })[]
+  /** field は `sf:<標準の項目>` か `cf:<独自の項目の短縮名>` */
+  profilefields: { field: string; name: string }[]
+  groups: Named[]
+  groupings: Named[]
 }
 
 /** 活動を作る・変えるときに、どの種類でも送る値。cmid が 0 なら sectionid のセクションに作る */
@@ -261,16 +270,16 @@ export const api = (token: string) => ({
   updateSection: (courseid: number, sectionid: number, name: string, summary: string) =>
     call<null>(token, 'local_steplearn_update_section', { courseid, sectionid, name, summary }),
   restrictions: (courseid: number) =>
-    call<{ enabled: boolean; restrictions: MoodleRestriction[] }>(token, 'local_steplearn_get_restrictions', { courseid }),
-  setRestriction: (p: {
-    courseid: number
-    sectionid: number
-    cmid: number
-    from: number
-    until: number
-    after: number[]
-    hideunmet: boolean
-  }) => call<null>(token, 'local_steplearn_set_restriction', p),
+    call<{ enabled: boolean; restrictions: MoodleRestriction[]; options: MoodleRestrictionOptions }>(
+      token,
+      'local_steplearn_get_restrictions',
+      {
+        courseid,
+      },
+    ),
+  /** availability が空なら制限をなくす */
+  setRestriction: (p: { courseid: number; sectionid: number; cmid: number; availability: string }) =>
+    call<null>(token, 'local_steplearn_set_restriction', p),
   setSectionsCollapsed: (courseid: number, sectionids: number[], collapsed: boolean) =>
     call<null>(token, 'local_steplearn_set_sections_collapsed', { courseid, sectionids, collapsed }),
   checkSession: (sidhash: string) => call<{ active: boolean }>(token, 'local_steplearn_check_session', { sidhash }),

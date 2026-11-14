@@ -1,0 +1,59 @@
+/* ===== アクセス制限: 一覧での表示 */
+.restriction-note { display: flex; align-items: flex-start; gap: 4px; }
+.restriction-note > .icon { flex: none; margin-top: 2px; }
+.restriction-note > span { white-space: pre-line; }
+.item-text > .restriction-note { margin-top: 2px; }
+.section-card > .restriction-note { margin: 12px 20px; }
+
+.item-row.is-locked .item-title, .item-row.is-locked .item-icon { color: var(--muted); }
+.item-row.is-locked .item-link { cursor: default; }
+@media (hover: hover) {
+  .item-row.is-locked:hover { background: none; }
+  .item-row.is-locked:hover .item-title { color: var(--muted); }
+  .outline-link.is-locked:hover { background: none; color: var(--muted); }
+}
+.outline-link.is-locked { color: var(--muted); cursor: default; }
+
+/* ===== アクセス制限: 編集画面 */
+.kind-restriction { --kind: var(--c1, var(--accent)); }
+
+/* ===== アクセス制限: 条件の編集（components/restriction.tsx の RestrictionEditor） */
+.rs-set { display: flex; flex-direction: column; gap: 12px; }
+.rs-set:not(.rs-root) { flex: 1; min-width: 0; padding: 12px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--surface-2); }
+.rs-set-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--fs-sm); color: var(--text-2); }
+.rs-set-head > select { width: auto; }
+.rs-set:not(.rs-root) > .rs-set-head > .rs-remove { margin-left: auto; }
+.rs-root > .rs-set-head > .rs-eye { margin-left: auto; }
+.rs-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.rs-set:has(> .rs-list > li) > .rs-empty { display: none; }
+.rs-empty { margin: 0; }
+
+.rs-node { display: flex; align-items: flex-start; gap: 6px; }
+.rs-node > .rs-eye { flex: none; margin-top: 8px; }
+.rs-set:not(.rs-root) > .rs-list > .rs-node > .rs-eye,
+.rs-root[data-rs-each='false'] > .rs-list > .rs-node > .rs-eye,
+.rs-root[data-rs-each='true'] > .rs-set-head > .rs-eye { display: none; }
+.rs-eye[aria-pressed='true'] .rs-eye-shown, .rs-eye[aria-pressed='false'] .rs-eye-hidden { display: none; }
+.rs-eye[aria-pressed='true'] { color: var(--warning-text); }
+
+.rs-cond { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--surface); }
+.rs-set:not(.rs-root) .rs-cond { background: var(--surface); }
+.rs-cond-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rs-kind { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); font-weight: 600; color: var(--text); }
+.rs-kind > .icon { color: var(--muted); }
+.rs-fields { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 12px; }
+.rs-fields > .field { margin: 0; min-width: 0; }
+.rs-fields > .field > label { font-size: var(--fs-xs); }
+.rs-fields > .dt-field { flex: 1 1 240px; }
+.rs-grow { flex: 1 1 220px; }
+.rs-num { flex: 0 1 140px; }
+.rs-other { margin: 0; font-size: var(--fs-sm); color: var(--text-2); }
+.rs-add { display: flex; flex-wrap: wrap; gap: 6px; }
+
+@media (max-width: 640px) {
+  .rs-fields { flex-direction: column; align-items: stretch; }
+  .rs-fields > .field, .rs-num, .rs-grow { flex: none; width: 100%; }
+  .rs-set:not(.rs-root) { padding: 8px; }
+  .rs-node { gap: 2px; }
+  .rs-cond { padding: 8px 10px 10px; }
+}

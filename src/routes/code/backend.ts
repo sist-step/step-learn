@@ -1,4 +1,5 @@
 import { and, eq } from 'drizzle-orm'
+import { canOpenItem } from '../../lib/availability'
 import { grader } from '../../lib/code-grading'
 import { codeStore, getCodeItem } from '../../lib/code-items'
 import { getCourseAccess, isVisibleItem } from '../../lib/courses'
@@ -22,7 +23,7 @@ export const backend: CodeBackend = {
       .where(and(eq(items.id, itemId), eq(items.courseId, courseId), eq(items.type, 'code')))
       .get()
     const code = item && getCodeItem(itemId)
-    if (!code || (!access.canManage && !isVisibleItem(itemId))) return null
+    if (!code || !canOpenItem(c.var.user!, access, itemId, isVisibleItem(itemId))) return null
     const period = { opensAt: code.opensAt, closesAt: code.closesAt }
     return { access, itemId, settings: { ...item, ...code }, period, store: codeStore(courseId, itemId) }
   },

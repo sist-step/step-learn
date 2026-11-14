@@ -1,7 +1,7 @@
 import type { Context } from 'hono'
 import type { MoodleEnv } from './auth'
 import { cached, contentsKey, courseKey, coursesKey, otherCoursesKey, restrictionsKey } from './cache'
-import { api, isTokenError, type MoodleFormat } from './client'
+import { api, isTokenError, type MoodleFormat, type MoodleRestrictionOptions } from './client'
 import { removeRetired, withExtras } from './extra'
 import { isOpenable, isTracked, toAccess, toLayout, toOutline, withRestrictions } from './mapping'
 
@@ -20,7 +20,8 @@ export async function otherCourses(c: Context<MoodleEnv>) {
   }
 }
 
-const NO_RESTRICTIONS = { enabled: false, restrictions: [] }
+const NO_OPTIONS: MoodleRestrictionOptions = { plugins: [], grades: [], profilefields: [], groups: [], groupings: [] }
+const NO_RESTRICTIONS = { enabled: false, restrictions: [], options: NO_OPTIONS }
 
 /** Moodle に問い合わせる利用者。Hono を通らない要求（画面共有の接続）でも使えるよう、Context から分けている */
 export type Viewer = { token: string; userId: number }
@@ -59,7 +60,15 @@ export async function loadCourseAs({ token, userId }: Viewer, courseId: number, 
   const { retired, ...shown } = withExtras(courseId, withRestrictions(outline, restrictions.restrictions))
   // 学生が開いたときに消さないのは、Moodle の活動を消せるのが教師だけなため。学生には一覧から外すだけにする
   if (retired.length && course.canmanage) await removeRetired(moodle, courseId, retired)
-  return { course, access, layout: toLayout(course.format), restrictable: restrictions.enabled, ...shown }
+  return {
+    course,
+    access,
+    layout: toLayout(course.format),
+    restrictable: restrictions.enabled,
+    // 既定値を用意するのは、プラグインを更新する前の Moodle が options を返さないため
+    restrictionOptions: restrictions.options ?? NO_OPTIONS,
+    ...shown,
+  }
 }
 
 export type LoadedCourse = Awaited<ReturnType<typeof loadCourseAs>>

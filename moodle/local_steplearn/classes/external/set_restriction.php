@@ -19,13 +19,12 @@ namespace local_steplearn\external;
 use core_courseformat\formatactions;
 use core_external\external_api;
 use core_external\external_function_parameters;
-use core_external\external_multiple_structure;
 use core_external\external_value;
 use local_steplearn\courses;
 use local_steplearn\restrictions;
 
 /**
- * セクションか活動のアクセス制限を、日付と活動の完了の条件で置き換える。
+ * セクションか活動のアクセス制限を置き換える。
  *
  * @package    local_steplearn
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -39,20 +38,7 @@ class set_restriction extends external_api {
             'courseid' => new external_value(PARAM_INT, 'course id'),
             'sectionid' => new external_value(PARAM_INT, 'section id, or 0 to restrict a course module'),
             'cmid' => new external_value(PARAM_INT, 'course module id, or 0 to restrict a section'),
-            'from' => new external_value(PARAM_INT, 'available from, or 0'),
-            'until' => new external_value(PARAM_INT, 'available until, or 0'),
-            'after' => new external_multiple_structure(
-                new external_value(PARAM_INT, 'course module id, or -1 for the previous activity'),
-                'activities that must be marked complete',
-                VALUE_DEFAULT,
-                []
-            ),
-            'hideunmet' => new external_value(
-                PARAM_BOOL,
-                'hide entirely from users who do not meet the conditions',
-                VALUE_DEFAULT,
-                false
-            ),
+            'availability' => new external_value(PARAM_RAW, 'the availability JSON, or an empty string to remove the restriction'),
         ]);
     }
 
@@ -60,25 +46,14 @@ class set_restriction extends external_api {
      * @param int $courseid
      * @param int $sectionid
      * @param int $cmid
-     * @param int $from
-     * @param int $until
-     * @param int[] $after
-     * @param bool $hideunmet
+     * @param string $availability
      * @return null
      */
-    public static function execute(
-        int $courseid,
-        int $sectionid,
-        int $cmid,
-        int $from,
-        int $until,
-        array $after = [],
-        bool $hideunmet = false
-    ) {
+    public static function execute(int $courseid, int $sectionid, int $cmid, string $availability) {
         global $CFG, $DB;
         $params = self::validate_parameters(
             self::execute_parameters(),
-            compact('courseid', 'sectionid', 'cmid', 'from', 'until', 'after', 'hideunmet')
+            compact('courseid', 'sectionid', 'cmid', 'availability')
         );
         self::validate_context(\context_system::instance());
         $course = courses::require_manage($params['courseid']);
@@ -100,29 +75,7 @@ class set_restriction extends external_api {
             $cm ? 'moodle/course:manageactivities' : 'moodle/course:update',
             $cm ? \context_module::instance($cm->id) : \context_course::instance($course->id)
         );
-        // Moodle の画面で付けた、STEP Learn の画面で扱えない条件を黙って消さないため
-        if (restrictions::parse($cm ? $cm->availability : $section->availability) === null) {
-            throw new \moodle_exception('restrictionnoteditable', 'local_steplearn');
-        }
-
-        $after = array_values(array_unique($params['after']));
-        $completion = new \completion_info($course);
-        foreach ($after as $id) {
-            $target = $cms[$id] ?? null;
-            $valid = $id === -1
-                ? (bool) $cm
-                : $target && !$target->deletioninprogress && $target->id !== $cm?->id
-                    && $target->completion != COMPLETION_TRACKING_NONE;
-            if (!$valid || !$completion->is_enabled()) {
-                throw new \invalid_parameter_exception('after');
-            }
-        }
-        $from = $params['from'];
-        $until = $params['until'];
-        if ($from < 0 || $until < 0 || ($from && $until && $until <= $from)) {
-            throw new \invalid_parameter_exception('from or until');
-        }
-        $json = restrictions::build($from, $until, $after, $params['hideunmet']);
+        $json = restrictions::validate($params['availability'], $course, $modinfo, $cm);
 
         if ($section) {
             formatactions::section($course)->update($section, ['availability' => $json]);
