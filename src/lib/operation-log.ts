@@ -92,6 +92,10 @@ const RULES: Rule[] = [
   post('/courses/:id/items/:iid/bundle/launch', 'bundle.launch', 'VS Code で開いた', 'change', 'item'),
   post('/courses/:id/items/:iid/bundle/sync', 'bundle.sync', 'データの同期を切り替え', 'change', 'item'),
 
+  post('/courses/:id/items/:iid/agent/launch', 'agent.launch', 'コーディングエージェントを VS Code で開いた', 'change', 'item'),
+  post('/courses/:id/items/:iid/agent/key', 'agent.key', 'コーディングエージェントの API キー・全体の上限を保存', 'important', 'item'),
+  post('/courses/:id/items/:iid/agent/key/delete', 'agent.key.delete', 'コーディングエージェントの API キーを削除', 'important', 'item'),
+
   post('/ai/chat', 'ai.send', 'AI に依頼', 'change'),
   post('/ai/chat/confirm', 'ai.confirm', 'AI の確認カードに回答', 'change'),
 

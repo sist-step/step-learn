@@ -1,5 +1,6 @@
 import { and, count, desc, eq, inArray, lt, or } from 'drizzle-orm'
 import type { Context } from 'hono'
+import { listAgentItems } from '../../lib/agent-items'
 import { aiLedger, usageByUser } from '../../lib/ai-usage'
 import { teacherNames } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
@@ -8,7 +9,7 @@ import { actionLabel } from '../../lib/operation-log'
 import { courses, enrollments, items, operationLogs, users } from '../../lib/schema'
 import { LOG_KINDS, ROLE_LABELS, type AppEnv, type LogKind, type Role } from '../../lib/types'
 import { createAiAdminHandlers } from './ai'
-import { CoursesPage, LogsPage, UsersPage, type CourseRow, type LogRow, type UserRow } from './views'
+import { AgentsPage, CoursesPage, LogsPage, UsersPage, type CourseRow, type LogRow, type UserRow } from './views'
 
 // ---------------------------------------------------------------- ユーザー
 
@@ -145,3 +146,9 @@ export async function listLogs(c: Context<AppEnv>) {
 // ---------------------------------------------------------------- AI
 
 export const { show: showAi, update: updateAi } = createAiAdminHandlers({ ledger: aiLedger, usageByUser })
+
+// ---------------------------------------------------------------- コーディングエージェント
+
+export function listAgents(c: Context<AppEnv>) {
+  return c.render(<AgentsPage list={listAgentItems()} />, { title: 'コーディングエージェント - 管理' })
+}

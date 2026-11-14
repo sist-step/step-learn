@@ -1,0 +1,12 @@
+/* ===== コーディングエージェント（components/agent.tsx） */
+.agent-open { margin-bottom: 24px; }
+.agent-open > .link-card { margin-bottom: 0; }
+.agent-help p { margin: 0; }
+.agent-help a { display: inline-flex; align-items: center; gap: 2px; }
+.agent-period { margin: 0; font-variant-numeric: tabular-nums; }
+.agent-heading { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.agent-key-delete { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+@media (max-width: 640px) {
+  .agent-open .link-card-lg > form { flex-basis: 100%; }
+  .agent-open .link-card-lg > form > .btn { width: 100%; }
+}

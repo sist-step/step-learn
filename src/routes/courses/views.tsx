@@ -306,6 +306,7 @@ const ITEM_TYPE_DESCRIPTIONS: Record<ItemType, string> = {
   screen: '授業中に画面を配信する',
   code: 'コードを書いて提出する',
   bundle: 'プログラムのファイルを VS Code で開けるように配る',
+  agent: 'VS Code で AI にコードを書いてもらう',
 }
 
 const AddItemButton = ({ sectionId }: { sectionId: number }) => (
@@ -314,7 +315,7 @@ const AddItemButton = ({ sectionId }: { sectionId: number }) => (
   </button>
 )
 
-const ITEM_TYPES = ['page', 'link', 'file', 'screen', 'code', 'bundle'] as const
+const ITEM_TYPES = ['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent'] as const
 
 const KindOptionBody = ({ type }: { type: ItemType }) => (
   <>
@@ -394,6 +395,9 @@ const AddItemModal = ({
         )}
         <p class="when-code muted small">問題文・最初のコード・採点基準は、追加したあとの編集画面で設定します。</p>
         <p class="when-bundle muted small">配るファイルは、追加したあとの編集画面でアップロードします。</p>
+        <p class="when-agent muted small">
+          使える期間と上限は、追加したあとの編集画面で設定します。学生が使えるようになるのは、管理者が API キーを入れてからです。
+        </p>
         <MarkdownEditor
           label={
             <>

@@ -122,6 +122,7 @@ div.course-hero-cover { background: linear-gradient(150deg, var(--c2), var(--c1)
 .kind-screen { --kind: var(--success); }
 .kind-code { --kind: var(--accent); }
 .kind-bundle { --kind: color-mix(in srgb, var(--info) 60%, var(--danger)); }
+.kind-agent { --kind: color-mix(in srgb, var(--accent) 55%, var(--success)); }
 
 /* ===== アイテムを画面いっぱいに出すときのヘッダーの帯（ItemBar） */
 .item-bar { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding-left: 12px; }

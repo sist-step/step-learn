@@ -195,6 +195,8 @@ function itemDetail(item: Item) {
         files_truncated: files.length > MAX_LISTED_FILES,
       }
     }
+    case 'agent':
+      return { description: item.body.slice(0, MAX_BODY_LENGTH) }
   }
 }
 
@@ -452,6 +454,7 @@ const BODY_LABELS: Record<Item['type'], string> = {
   file: '説明',
   screen: '説明',
   bundle: '説明',
+  agent: '説明',
 }
 
 const codeOf = (itemId: number) => db.select().from(codeItems).where(eq(codeItems.itemId, itemId)).get()

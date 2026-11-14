@@ -6,7 +6,19 @@ import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Block, Card, Stat, Stats, Table } from '../../components/card'
 import { Styles } from '../../components/style'
-import { Alert, Avatar, Chip, EmptyState, PageHeader, Person, TabPanel, Tabs, formatDate, userMeta } from '../../components/ui'
+import {
+  Alert,
+  Avatar,
+  Chip,
+  EmptyState,
+  PageHeader,
+  Person,
+  TabPanel,
+  Tabs,
+  formatDate,
+  formatDateTime,
+  userMeta,
+} from '../../components/ui'
 import {
   AI_LIMITED_MODEL_QUOTA_LABELS,
   AI_MODEL_LABELS,
@@ -18,16 +30,18 @@ import {
   type AiLimitedModel,
   type AiProvider,
 } from '../../lib/ai-models'
+import type { AgentItemRow } from '../../lib/agent-items'
 import type { AiOverview, AiUserUsage } from '../../lib/ai-ledger'
 import type { FieldErrors } from '../../lib/forms'
 import { LOG_KINDS, LOG_KIND_LABELS, LOG_RETENTION_DAYS, ROLE_LABELS, type LogKind, type Role } from '../../lib/types'
 
-type Tab = 'users' | 'courses' | 'ai' | 'logs'
+type Tab = 'users' | 'courses' | 'ai' | 'agents' | 'logs'
 
 const TABS: { tab: Tab; href: string; label: string }[] = [
   { tab: 'users', href: '/admin', label: 'ユーザー' },
   { tab: 'courses', href: '/admin/courses', label: 'コース' },
   { tab: 'ai', href: '/admin/ai', label: 'AI' },
+  { tab: 'agents', href: '/admin/agents', label: 'コーディングエージェント' },
   { tab: 'logs', href: '/admin/logs', label: '操作ログ' },
 ]
 
@@ -207,6 +221,61 @@ export const CoursesPage = ({ q, list }: { q: string; list: CourseRow[] }) => (
               <div class="row-actions">
                 <IconButton href={`/courses/${course.id}/participants`} icon="users" label={`${course.title} の参加者`} title="参加者" />
                 <IconButton href={`/courses/${course.id}/settings`} icon="sliders" label={`${course.title} の設定`} title="設定" />
+              </div>
+            </td>
+          </tr>
+        ))}
+      </Table>
+    )}
+  </AdminShell>
+)
+
+// ---------------------------------------------------------------- コーディングエージェント
+
+export const AgentsPage = ({ list }: { list: AgentItemRow[] }) => (
+  <AdminShell tab="agents">
+    <p class="muted small">
+      教師が追加したコーディングエージェントのアイテムです。アイテムの編集画面で API キーを入れると、学生が VS Code で使えるようになります。
+    </p>
+    {list.length === 0 ? (
+      <EmptyState
+        icon="cpuChip"
+        title="まだアイテムがありません"
+        text="教師がコースに「コーディングエージェント」のアイテムを追加すると、ここに並びます。"
+      />
+    ) : (
+      <Table
+        columns={[
+          { label: 'アイテム' },
+          { label: '状態' },
+          { label: '使える期間', class: 'hide-sm' },
+          { label: '使った額', class: 'hide-sm num' },
+          { label: '操作', srOnly: true },
+        ]}
+      >
+        {list.map((row) => (
+          <tr>
+            <td>
+              <span class="strong">{row.title}</span>
+              <span class="muted small wrap"> {row.courseTitle}</span>
+            </td>
+            <td>{row.configured ? <Chip tone="success">有効</Chip> : <Chip>キー未設定</Chip>}</td>
+            <td class="hide-sm muted">
+              {row.opensAt !== null && row.closesAt !== null
+                ? `${formatDateTime(row.opensAt)} 〜 ${formatDateTime(row.closesAt)}`
+                : '未設定'}
+            </td>
+            <td class="hide-sm muted num">
+              {formatUsd(row.spent)} / {formatUsd(row.totalLimit)}
+            </td>
+            <td>
+              <div class="row-actions">
+                <IconButton
+                  href={`/courses/${row.courseId}/items/${row.itemId}/edit`}
+                  icon="pencil"
+                  label={`「${row.title}」の API キーを設定`}
+                  title="API キーを設定"
+                />
               </div>
             </td>
           </tr>
