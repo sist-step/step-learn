@@ -23,7 +23,7 @@ const agentItemOf = (loaded: LoadedCourse, match: (it: MItem) => boolean) =>
 const targetOf = (loaded: LoadedCourse, item: MItem): AgentTarget => ({
   course: loaded.access.course.title,
   title: item.title,
-  instructions: text(item.extra!.data.body),
+  description: text(item.extra!.data.body),
   store: agentStore(item.extraKey!, item.extra!.data),
 })
 

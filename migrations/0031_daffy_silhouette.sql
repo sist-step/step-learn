@@ -1,0 +1,1 @@
+ALTER TABLE `agent_items` ADD `instructions` text DEFAULT '' NOT NULL;

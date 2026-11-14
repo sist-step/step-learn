@@ -1,6 +1,6 @@
 import type { FC } from 'hono/jsx'
 import { useRequestContext } from 'hono/jsx-renderer'
-import { AgentEditPanel, AgentOpen, AgentPeriodFields } from '../components/agent'
+import { AGENT_BODY_HINT, AgentEditPanel, AgentInstructionsField, AgentOpen, AgentPeriodFields } from '../components/agent'
 import { BundleEditPanel, BundleOpen, type BundleView } from '../components/bundle'
 import { Button } from '../components/button'
 import { LinkCard } from '../components/card'
@@ -281,10 +281,11 @@ const AgentFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
         id={`${idPrefix}-body`}
         value={str(values.body)}
         error={errors.body}
-        hint="学生に見せるほか、AI への指示としても渡します（課題の内容や、使ってほしい書き方など）。"
+        hint={AGENT_BODY_HINT}
         rows={5}
         split
       />
+      <AgentInstructionsField value={str(values.instructions)} error={errors.instructions} id={`${idPrefix}-instructions`} />
       <AgentPeriodFields
         opensAt={periodInputOf(values, 'opens_at', 'opensAt')}
         closesAt={periodInputOf(values, 'closes_at', 'closesAt')}
@@ -315,6 +316,7 @@ const agent: ExtraKind = {
     return {
       title: str(values.title),
       body: str(values.body),
+      instructions: str(values.instructions),
       opensAt: edited ? unixOf(str(values.opens_at)) : null,
       closesAt: edited ? unixOf(str(values.closes_at)) : null,
       userLimit: typeof values.user_limit === 'number' ? values.user_limit : agentPeriodOf({}).userLimit,
