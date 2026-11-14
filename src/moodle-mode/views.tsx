@@ -8,6 +8,7 @@ import {
   ItemIcon,
   LinkEmbed,
   LinkTargetField,
+  TodayBadge,
   linkOpenAttrs,
 } from '../components/course'
 import { Button, IconButton } from '../components/button'
@@ -27,6 +28,7 @@ import type { CourseAccess } from '../lib/courses'
 import type { FieldErrors } from '../lib/forms'
 import { previewKind } from '../lib/preview'
 import { formatBytes } from '../lib/bytes'
+import { findTodaySection, type TodaySection } from '../lib/section-date'
 import { MAX_FILE_SIZE } from '../lib/storage'
 import { MOODLE_DISPLAY_LABELS, isExactDisplay } from '../moodle/display'
 import { extraKindOf, type ExtraKind, type ExtraKindEntry } from './extra-kinds'
@@ -536,6 +538,7 @@ type CardOptions = {
   /** 同時に 1 つだけ開くセクションの組（details の name） */
   group?: string
   current?: boolean
+  today?: TodaySection['when']
   summaryInHead?: boolean
   subtiles?: boolean
   /** タイルの下に開いたセクションの閉じるボタン */
@@ -563,7 +566,7 @@ const SectionCard = ({
   const locked = !manage && s.locked
   const empty = !manage && !locked && shown.length === 0
   const emptyView = manage && shown.length === 0
-  const { open = true, fixed = false, group, current = false, summaryInHead = false, subtiles = false, closable = false } = options
+  const { open = true, fixed = false, group, current = false, today, summaryInHead = false, subtiles = false, closable = false } = options
   return (
     <details
       class={cx(
@@ -574,6 +577,7 @@ const SectionCard = ({
         emptyView && 'is-empty-view',
         fixed && 'is-fixed',
         current && 'is-current',
+        today && `is-${today}`,
       )}
       id={`section-${s.id}`}
       open={open}
@@ -596,6 +600,7 @@ const SectionCard = ({
           {manage && s.rule && <RestrictionNote text={s.rule.text} />}
           {summaryInHead && s.summary && <span class="section-head-summary">{s.summary}</span>}
         </span>
+        {today && <TodayBadge when={today} />}
         {current && <Chip tone="accent">現在のセクション</Chip>}
         {empty && <Chip>準備中</Chip>}
         {s.hidden && <HiddenChip />}
@@ -627,13 +632,18 @@ const SectionCard = ({
 
 type SectionsProps = { o: CourseOutline; courseId: number; isStudent: boolean; manage: boolean }
 
-const ListSections = ({ o, ...rest }: SectionsProps) => (
-  <div class="sections">
-    {o.topSections.map((s) => (
-      <SectionCard s={s} o={o} {...rest} />
-    ))}
-  </div>
-)
+const datedSections = (sections: MSection[]) => sections.filter((s) => s.number !== 0 && !s.hidden)
+
+const ListSections = ({ o, ...rest }: SectionsProps) => {
+  const today = findTodaySection(datedSections(o.topSections))
+  return (
+    <div class="sections">
+      {o.topSections.map((s) => (
+        <SectionCard s={s} o={o} {...rest} options={{ today: s.id === today?.id ? today.when : undefined }} />
+      ))}
+    </div>
+  )
+}
 
 const TopcollSections = ({ o, layout, ...rest }: SectionsProps & { layout: TopcollLayout }) => {
   const general = o.topSections.find((s) => s.number === 0)
@@ -644,6 +654,7 @@ const TopcollSections = ({ o, layout, ...rest }: SectionsProps & { layout: Topco
   const firstOpen = layout.oneSection ? (toggles.find((s) => s.id === layout.current) ?? toggles.find((s) => !collapsed.has(s.id))) : null
   const isOpen = (s: MSection) => (layout.oneSection ? s.id === firstOpen?.id : !collapsed.has(s.id))
   const shownCount = toggles.filter((s) => !s.hidden).length
+  const today = findTodaySection(datedSections(toggles))
   return (
     <div class="stack">
       {general && <SectionCard s={general} o={o} {...rest} options={{ fixed: true }} />}
@@ -670,6 +681,7 @@ const TopcollSections = ({ o, layout, ...rest }: SectionsProps & { layout: Topco
               open: isOpen(s),
               group: layout.oneSection ? `topcoll-${rest.courseId}` : undefined,
               current: s.id === layout.current,
+              today: s.id === today?.id ? today.when : undefined,
               summaryInHead: layout.summaryWhenCollapsed,
             }}
           />
@@ -689,6 +701,7 @@ const TileCard = ({
   isStudent,
   open,
   index,
+  today,
 }: {
   s: MSection
   o: CourseOutline
@@ -697,6 +710,7 @@ const TileCard = ({
   isStudent: boolean
   open: boolean
   index: number
+  today?: TodaySection['when']
 }) => {
   const tile = layout.tiles.get(s.id)
   const { shown, tracked, done } = o.statsOf(s.id)
@@ -714,7 +728,10 @@ const TileCard = ({
         ) : (
           <TileArt index={index} seed={s.id} />
         )}
-        <span class="sec-tile-num">{o.sectionNumber.get(s.id) ?? <Icon name="eyeSlash" size={12} />}</span>
+        <span class="sec-tile-tags">
+          <span class="sec-tile-num">{o.sectionNumber.get(s.id) ?? <Icon name="eyeSlash" size={12} />}</span>
+          {today && <TodayBadge when={today} />}
+        </span>
         {locked ? (
           <span class="sec-tile-badge is-locked">
             <Icon name="lock" size={14} />
@@ -759,11 +776,17 @@ const TileCard = ({
   return (
     <li class={cx('sec-tile-cell', s.hidden && 'edit-only')} id={`tile-${s.id}`}>
       {locked || empty ? (
-        <span class={cx('sec-tile', locked && 'is-locked', empty && 'is-empty')}>{body}</span>
+        <span
+          class={cx('sec-tile', locked && 'is-locked', empty && 'is-empty', today && `is-${today}`)}
+          aria-current={today === 'today' ? 'date' : undefined}
+        >
+          {body}
+        </span>
       ) : (
         <a
           href={tileHref(courseId, s)}
-          class={cx('sec-tile', s.hidden && 'is-hidden', isStudent && complete && 'is-done')}
+          class={cx('sec-tile', s.hidden && 'is-hidden', isStudent && complete && 'is-done', today && `is-${today}`)}
+          aria-current={today === 'today' ? 'date' : undefined}
           data-tile={s.id}
           data-no-prefetch
           aria-expanded={String(open)}
@@ -781,6 +804,7 @@ const TilesSections = ({ o, layout, openSection, ...rest }: SectionsProps & { la
   const general = o.topSections.find((s) => s.number === 0)
   const tiles = o.topSections.filter((s) => s.number !== 0)
   const openable = (s: MSection) => !rest.isStudent || (!s.locked && o.statsOf(s.id).shown.length > 0)
+  const today = findTodaySection(datedSections(tiles))
   return (
     <div class="stack">
       {general && <SectionCard s={general} o={o} {...rest} options={{ fixed: true, subtiles: layout.subtilesZero }} />}
@@ -789,7 +813,16 @@ const TilesSections = ({ o, layout, openSection, ...rest }: SectionsProps & { la
           {tiles.flatMap((s, index) => {
             const open = s.id === openSection && openable(s)
             const tile = (
-              <TileCard s={s} o={o} layout={layout} courseId={rest.courseId} isStudent={rest.isStudent} open={open} index={index} />
+              <TileCard
+                s={s}
+                o={o}
+                layout={layout}
+                courseId={rest.courseId}
+                isStudent={rest.isStudent}
+                open={open}
+                index={index}
+                today={s.id === today?.id ? today.when : undefined}
+              />
             )
             if (!openable(s)) return [tile]
             return [
