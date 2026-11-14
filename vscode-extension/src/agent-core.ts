@@ -350,14 +350,70 @@ export const withLineNumbers = (lines: string[], first: number) => {
   return lines.map((l, i) => `${String(first + i).padStart(width)}| ${l}`).join('\n')
 }
 
-/** old を new に置き換えた中身。見つからないか、replaceAll でないのに複数あれば ToolError */
+/** old を new に置き換えた中身と、置き換えた後の中身での new の位置。見つからないか、replaceAll でないのに複数あれば ToolError */
 export function replaceText(content: string, oldText: string, newText: string, replaceAll: boolean) {
   if (!oldText) throw new ToolError('old_text が空です。')
-  const count = content.split(oldText).length - 1
+  const parts = content.split(oldText)
+  const count = parts.length - 1
   if (count === 0) throw new ToolError('old_text がファイルの中に見つかりませんでした。read_file で今の中身を確かめてください。')
   if (count > 1 && !replaceAll)
     throw new ToolError(`old_text が ${count} か所あります。前後の行も含めて 1 か所に絞るか、replace_all を true にしてください。`)
-  return { content: replaceAll ? content.split(oldText).join(newText) : content.replace(oldText, () => newText), count }
+  const starts: number[] = []
+  let at = 0
+  for (const part of parts.slice(0, -1)) {
+    at += part.length
+    starts.push(at)
+    at += newText.length
+  }
+  return { content: parts.join(newText), count, starts }
+}
+
+/** 置き換えた箇所の前後に付ける行の数 */
+const EDIT_CONTEXT_LINES = 3
+/** 1 つのまとまりに付ける行の上限。超えたら頭と末尾だけを付ける */
+const MAX_EDIT_BLOCK_LINES = 30
+/** 置き換えた箇所の中身を付ける上限（行番号を含む文字数）。replace_all で多くの箇所を置き換えても、結果が長くなりすぎないようにする */
+const MAX_EDIT_EXCERPT = 4000
+
+/** starts（昇順）から length 文字ずつを置き換えた中身の、その箇所と前後の行（行番号付き）。近い箇所は 1 つのまとまりにする */
+export function editExcerpt(content: string, starts: number[], length: number) {
+  let line = 1
+  let at = 0
+  const lineOf = (index: number) => {
+    for (; at < index; at++) if (content.charCodeAt(at) === 10) line++
+    return line
+  }
+  const lines = content.split('\n')
+  const blocks: { from: number; to: number }[] = []
+  for (const start of starts) {
+    const first = lineOf(start)
+    const last = length ? lineOf(start + length - 1) : first
+    const from = Math.max(1, first - EDIT_CONTEXT_LINES)
+    const to = Math.min(lines.length, last + EDIT_CONTEXT_LINES)
+    const prev = blocks.at(-1)
+    if (prev && from <= prev.to + 1) prev.to = to
+    else blocks.push({ from, to })
+  }
+
+  const shown: string[] = []
+  let size = 0
+  for (const { from, to } of blocks) {
+    const half = MAX_EDIT_BLOCK_LINES / 2
+    const text =
+      to - from + 1 > MAX_EDIT_BLOCK_LINES
+        ? [
+            withLineNumbers(lines.slice(from - 1, from - 1 + half), from),
+            `…（${to - from + 1 - MAX_EDIT_BLOCK_LINES} 行を省きました）…`,
+            withLineNumbers(lines.slice(to - half, to), to - half + 1),
+          ].join('\n')
+        : withLineNumbers(lines.slice(from - 1, to), from)
+    if (shown.length > 0 && size + text.length > MAX_EDIT_EXCERPT) break
+    shown.push(truncateMiddle(text, MAX_EDIT_EXCERPT))
+    size += text.length
+  }
+  const rest = blocks.length - shown.length
+  const more = rest ? `\n…（ほかに ${rest} か所。要るときは read_file で読んでください）` : ''
+  return shown.join('\n…\n') + more
 }
 
 const lineCount = (s: string) => (s ? s.split('\n').length : 0)
@@ -576,12 +632,16 @@ export function createToolRunner(root: string, host: ToolHost) {
     const oldText = stringArg(args, 'old_text')
     const newText = stringArg(args, 'new_text')
     const before = await readText(target, rel)
-    const { content, count } = replaceText(before, oldText, newText, args.replace_all === true)
+    const { content, count, starts } = replaceText(before, oldText, newText, args.replace_all === true)
     await host.write(target, content)
     const added = lineCount(newText) * count
     const removed = lineCount(oldText) * count
     return {
-      content: `「${rel}」の ${count} か所を置き換えました。`,
+      content: [
+        `「${rel}」の ${count} か所を置き換えました。置き換えた後の、その箇所と前後の中身（行番号付き）:`,
+        editExcerpt(content, starts, newText.length),
+        '（今のファイルの中身なので、確かめるために read_file で読み直さなくてかまいません）',
+      ].join('\n'),
       isError: false,
       summary: `「${rel}」を書き換えました（+${added} −${removed}）`,
       file: rel,
