@@ -15,6 +15,7 @@ import { Button } from './button'
 import { Card, LinkCard, Table } from './card'
 import { DateTimeField, TextField, validateWith } from './form'
 import { Icon } from './icons'
+import { MarkdownEditor } from './markdown'
 import { useStyle } from './style'
 import { Alert, Chip, EmptyState, Progress, formatDateTime } from './ui'
 
@@ -99,6 +100,29 @@ export const AgentOpen = ({ base, editHref, settings, state, usage, manage }: Ag
     </div>
   )
 }
+
+/** 説明の欄に添える、AI にも渡ることの案内 */
+export const AGENT_BODY_HINT = '学生に見せるほか、AI にも渡します（課題の内容など）。学生に見せない指示は、下の「AI への指示」に書きます。'
+
+const INSTRUCTIONS_PLACEHOLDER = [
+  '- 答えのコードをそのまま書かず、まずヒントを出す',
+  '- Python の標準ライブラリだけを使う',
+  '- 変数名は英語、コメントは日本語で書く',
+].join('\n')
+
+/** 編集画面の、教師が書く AI への指示の欄（保存のフォームの中）。説明の欄の下に置く */
+export const AgentInstructionsField = ({ value, error, id = 'f-instructions' }: { value: string; error?: string; id?: string }) => (
+  <MarkdownEditor
+    label="AI への指示（任意）"
+    name="instructions"
+    id={id}
+    value={value}
+    error={error}
+    placeholder={INSTRUCTIONS_PLACEHOLDER}
+    hint="このアイテムの AI が、どの依頼でも守る決まりを書きます（答え方、使ってよい書き方、してはいけないことなど）。学生には表示しません。"
+    rows={8}
+  />
+)
 
 type PeriodProps = { opensAt: string; closesAt: string; userLimit: string; errors: FieldErrors; idPrefix?: string }
 

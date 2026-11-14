@@ -19,7 +19,7 @@ async function openableItem(
   if (!item) return null
   const granted = access ?? (await getCourseAccessFor(user, item.courseId))
   if (!granted || granted.course.id !== item.courseId || !canOpenItem(user, granted, itemId, isVisibleItem(itemId))) return null
-  return { courseId: item.courseId, course: granted.course.title, title: item.title, instructions: item.body, store: agentStore(itemId) }
+  return { courseId: item.courseId, course: granted.course.title, title: item.title, description: item.body, store: agentStore(itemId) }
 }
 
 /** 通常モード: 設定と使用量を step-learn.db に置き、権限をコースの参加者とアイテムのアクセス制限から確かめる */

@@ -1,6 +1,6 @@
 // サーバーの handlers と client.ts の両方が読み込むので、DB や Node の API を使うモジュールを import しない
 import * as z from 'zod/mini'
-import { MAX_AGENT_LIMIT, MAX_AGENT_PERIOD } from './agent'
+import { MAX_AGENT_INSTRUCTIONS, MAX_AGENT_LIMIT, MAX_AGENT_PERIOD } from './agent'
 import {
   CODE_LANGUAGES,
   MAX_CODE_LENGTH,
@@ -276,6 +276,7 @@ const itemEdit = z
     opens_at: z.optional(dateTime('開始日時')),
     closes_at: z.optional(dateTime('終了日時')),
     user_limit: z.optional(usd('1 人あたりの上限', MAX_AGENT_LIMIT)),
+    instructions: z.optional(text('AI への指示', MAX_AGENT_INSTRUCTIONS)),
     url: z.optional(z.pipe(text('URL', 2000), z.string().check(rule((s: string) => (isHttpUrl(s) ? null : URL_INVALID))))),
   })
   .check(
@@ -361,6 +362,7 @@ const extraAgent = z
     opens_at: z.optional(dateTime('開始日時')),
     closes_at: z.optional(dateTime('終了日時')),
     user_limit: z.optional(usd('1 人あたりの上限', MAX_AGENT_LIMIT)),
+    instructions: text('AI への指示', MAX_AGENT_INSTRUCTIONS),
   })
   .check(
     z.superRefine((v, ctx) => {

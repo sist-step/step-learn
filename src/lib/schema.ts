@@ -344,6 +344,9 @@ export const agentItems = sqliteTable('agent_items', {
   /** 1 人あたりと、アイテム全体で使える額（USD） */
   userLimit: real('user_limit').notNull().default(0.5),
   totalLimit: real('total_limit').notNull().default(10),
+  // items.body に入れないのは、body は学生に見せる説明で、AI だけに渡す指示と分けるため
+  /** 教師が書く AI への指示。システムプロンプトに足す */
+  instructions: text('instructions').notNull().default(''),
 })
 
 /** 拡張機能に渡した、コーディングエージェントを使うためのトークン。中身ではなく SHA-256 のハッシュを置く */

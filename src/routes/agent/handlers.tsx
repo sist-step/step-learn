@@ -30,8 +30,8 @@ import type { AppEnv } from '../../lib/types'
 
 type C = Context<AppEnv>
 
-/** 利用者が今開けるアイテム。instructions はアイテムの説明で、AI への指示として渡す */
-export type AgentTarget = { course: string; title: string; instructions: string; store: AgentStore }
+/** 利用者が今開けるアイテム。description は学生にも見せているアイテムの説明で、AI にも渡す */
+export type AgentTarget = { course: string; title: string; description: string; store: AgentStore }
 
 export type AgentContext = AgentTarget & {
   courseId: number
@@ -236,7 +236,8 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
     const system = agentSystemPrompt({
       course: item.course,
       title: item.title,
-      instructions: item.instructions,
+      description: item.description,
+      instructions: settings.instructions,
       platform: isAgentPlatform(record.platform) ? record.platform : null,
     })
     c.header('Content-Type', 'application/x-ndjson; charset=utf-8')

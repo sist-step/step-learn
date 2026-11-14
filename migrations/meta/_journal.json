@@ -218,6 +218,13 @@
       "when": 1794640522301,
       "tag": "0030_item_type_agent",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1794676430661,
+      "tag": "0031_daffy_silhouette",
+      "breakpoints": true
     }
   ]
 }
