@@ -1,18 +1,19 @@
 import { Hono, type Context } from 'hono'
-import { csrf } from 'hono/csrf'
 import { HTTPException } from 'hono/http-exception'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { createMiddleware } from 'hono/factory'
 import { secureHeaders } from 'hono/secure-headers'
+import { AGENT_BODY_LIMIT } from '../lib/agent'
 import { SYNC_BODY_LIMIT } from '../lib/bundle-sync'
-import { config } from '../lib/config'
-import { flashMiddleware, limitBody, wantsJson } from '../lib/http'
+import { csrfGuard, flashMiddleware, limitBody, wantsJson } from '../lib/http'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE } from '../lib/storage'
 import { renderer } from '../renderer'
 import { createAiAdminHandlers } from '../routes/admin/ai'
+import { agentApi, agentRequestCheck, agentRoutes, createAgentHandlers } from '../routes/agent/handlers'
 import { aiRoutes, createAiHandlers } from '../routes/ai/handlers'
 import { bundleRoutes, createBundleHandlers, isSyncRequest, vscodeApi } from '../routes/bundle/handlers'
 import { codeRoutes, createCodeHandlers } from '../routes/code/handlers'
+import { agentBackend } from './agent'
 import { canUseMoodleAi, moodleAssistant } from './ai-assistant'
 import { aiLedger, usageByUser } from './ai-usage'
 import { bundleBackend } from './bundle'
@@ -33,12 +34,16 @@ const userBodyLimit = limitBody(MAX_FILE_SIZE + 1024 * 1024, FILE_TOO_LARGE)
 // 最初に置くのは、CSRF の検証など前のミドルウェアで起きたエラーも、エラーの画面で描けるようにするため
 app.use(renderer)
 app.use(secureHeaders())
-// フォーム POST の Origin を検証（SameSite=Lax Cookie と合わせた CSRF 対策）。ログアウトの通知は JSON なので対象外になる
-app.use(csrf(config.appOrigin ? { origin: config.appOrigin } : undefined))
+// ログアウトの通知を除かなくてよいのは、JSON で届き、フォームの送信とはみなされないため
+app.use(csrfGuard)
 app.use(flashMiddleware)
 app.use(session)
 const syncBodyLimit = limitBody(SYNC_BODY_LIMIT)
-app.use((c, next) => (c.var.user ? userBodyLimit : isSyncRequest(c) ? syncBodyLimit : guestBodyLimit)(c, next))
+const agentBodyLimit = limitBody(AGENT_BODY_LIMIT)
+const isAgentRequest = agentRequestCheck(agentBackend)
+app.use((c, next) =>
+  (isAgentRequest(c) ? agentBodyLimit : c.var.user ? userBodyLimit : isSyncRequest(c) ? syncBodyLimit : guestBodyLimit)(c, next),
+)
 
 const aiHandlers = createAiHandlers({ agent: moodleAssistant, canUse: (c) => canUseMoodleAi(c as Context<MoodleEnv>) })
 // AppShell の中で確かめないのは、教えているコースがあるかを Moodle に問い合わせるので、描画の前に待っておく必要があるため
@@ -61,6 +66,7 @@ app.post('/auth/moodle/start', h.startLogin)
 app.get('/auth/moodle/callback', h.finishLogin)
 app.post('/auth/moodle/backchannel-logout', h.backchannelLogout)
 app.post('/logout', h.logout)
+app.route('/api/vscode/agent', agentApi(agentBackend))
 app.route('/api/vscode', vscodeApi(bundleBackend))
 
 const auth = new Hono<MoodleEnv>()
@@ -76,6 +82,7 @@ const ai = createAiAdminHandlers({ ledger: aiLedger, usageByUser, moodleAdminUrl
 auth.get('/admin', adminOnly, (c) => c.redirect('/admin/ai'))
 auth.get('/admin/ai', adminOnly, ai.show)
 auth.post('/admin/ai', adminOnly, ai.update)
+auth.get('/admin/agents', adminOnly, h.listAgents)
 auth.get('/courses', h.listCourses)
 auth.get('/courses/:id', h.showCourse)
 auth.get('/courses/:id/revision', h.revision)
@@ -113,6 +120,7 @@ const code = createCodeHandlers(codeBackend)
 auth.get(`/courses/:id/items/:iid/${CODE_KIND}`, code.showPage)
 auth.route('/courses', codeRoutes(code))
 auth.route('/courses', bundleRoutes(createBundleHandlers(bundleBackend)))
+auth.route('/courses', agentRoutes(createAgentHandlers(agentBackend)))
 auth.get('/m/:key', h.openExtra)
 auth.route('/ai', aiRoutes(aiHandlers))
 app.route('/', auth)

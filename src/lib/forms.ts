@@ -352,6 +352,24 @@ const extraCode = z
     }),
   )
 
+/** Moodle モードのコーディングエージェントのアイテム。agent_set は、期間と上限の欄を出している画面（編集画面）から送られたときに 1 になる */
+const extraAgent = z
+  .object({
+    ...extraItemFields,
+    body: text('説明', 100_000),
+    agent_set: flag(),
+    opens_at: z.optional(dateTime('開始日時')),
+    closes_at: z.optional(dateTime('終了日時')),
+    user_limit: z.optional(usd('1 人あたりの上限', MAX_AGENT_LIMIT)),
+  })
+  .check(
+    z.superRefine((v, ctx) => {
+      // 追加のモーダルは期間と上限を送らないので、編集画面から送られたときだけ求める
+      if (v.agent_set !== 1) return
+      for (const issue of agentItemIssues(v)) ctx.issues.push({ code: 'custom', input: v, ...issue })
+    }),
+  )
+
 const image = z.object({ image: file('画像を選択してください。') })
 
 const percent = (label: string) =>
@@ -411,6 +429,7 @@ export const FORMS = {
   codeReview,
   extraItem,
   extraCode,
+  extraAgent,
   image,
   aiSettings,
   aiMessage,

@@ -1,13 +1,15 @@
 import type { FC } from 'hono/jsx'
 import { useRequestContext } from 'hono/jsx-renderer'
+import { AgentEditPanel, AgentOpen, AgentPeriodFields } from '../components/agent'
 import { BundleEditPanel, BundleOpen, type BundleView } from '../components/bundle'
 import { Button } from '../components/button'
 import { LinkCard } from '../components/card'
 import { CodeGradingFields, CodePeriodFields, CodeStarterFields, type ConstraintRow } from '../components/code'
 import { SelectField } from '../components/form'
 import type { IconName } from '../components/icons'
-import { MarkdownEditor } from '../components/markdown'
+import { Markdown, MarkdownEditor } from '../components/markdown'
 import { Chip } from '../components/ui'
+import { AGENT_KIND, agentBase, agentViewOf, type AgentView } from '../lib/agent'
 import {
   CODE_FILE_KEYS,
   CODE_LANGUAGES,
@@ -27,6 +29,7 @@ import { readConstraints, type FieldErrors, type FormName } from '../lib/forms'
 import { availableCodeLanguages } from '../lib/sandbox'
 import { isSharing } from '../lib/screen-share'
 import type { AppEnv } from '../lib/types'
+import { agentPeriodOf, agentStore } from './agent-store'
 import { bundleStore, bundleSyncStore } from './bundle-store'
 import type { Api, MoodleCourse, SaveActivity } from './client'
 import type { MItem } from './mapping'
@@ -262,7 +265,93 @@ const bundle: ExtraKind = {
   },
 }
 
-export const EXTRA_KINDS: Record<string, ExtraKind> = { screen, [CODE_KIND]: code, [BUNDLE_KIND]: bundle }
+/** 入力欄に入れる 1 人あたりの上限。保存済みの中身では数値、送られてきたままの値では入力欄の値 */
+const userLimitInputOf = (values: Record<string, unknown>) =>
+  typeof values.user_limit === 'string' ? values.user_limit : String(agentPeriodOf(values).userLimit)
+
+const AgentFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
+  // 保存済みの中身は toData が必ず userLimit を入れるので、どちらもないのは追加のモーダル。期間と上限は追加したあとの編集画面で設定する
+  if (typeof values.userLimit !== 'number' && values.agent_set === undefined) return null
+  return (
+    <>
+      <input type="hidden" name="agent_set" value="1" />
+      <MarkdownEditor
+        label="説明（任意）"
+        name="body"
+        id={`${idPrefix}-body`}
+        value={str(values.body)}
+        error={errors.body}
+        hint="学生に見せるほか、AI への指示としても渡します（課題の内容や、使ってほしい書き方など）。"
+        rows={5}
+        split
+      />
+      <AgentPeriodFields
+        opensAt={periodInputOf(values, 'opens_at', 'opensAt')}
+        closesAt={periodInputOf(values, 'closes_at', 'closesAt')}
+        userLimit={userLimitInputOf(values)}
+        errors={errors}
+        idPrefix={idPrefix}
+      />
+    </>
+  )
+}
+
+// 見ている人を引数で受け取らないのは、ほかの種類の View と Panel には要らず、種類の定義の形を変えずに済ませるため
+function useAgentView(item: MItem, access: CourseAccess): AgentView | null {
+  const user = useRequestContext<AppEnv>().var.user!
+  if (!item.extraKey || !item.extra) return null
+  const manager = access.canManage ? { isAdmin: user.role === 'admin' } : undefined
+  return agentViewOf(agentStore(item.extraKey, item.extra.data), user.id, manager)
+}
+
+const agent: ExtraKind = {
+  label: 'コーディングエージェント',
+  description: 'VS Code で AI にコードを書いてもらう',
+  icon: 'cpuChip',
+  form: 'extraAgent',
+  // タイトルも入れておくのは、Moodle に問い合わせなくても管理画面などで見分けられるようにするため
+  toData(values) {
+    const edited = values.agent_set === 1
+    return {
+      title: str(values.title),
+      body: str(values.body),
+      opensAt: edited ? unixOf(str(values.opens_at)) : null,
+      closesAt: edited ? unixOf(str(values.closes_at)) : null,
+      userLimit: typeof values.user_limit === 'number' ? values.user_limit : agentPeriodOf({}).userLimit,
+    }
+  },
+  Fields: AgentFields,
+  addNote: '説明・使える期間と上限は、追加したあとの編集画面で設定します。学生が使えるようになるのは、管理者が API キーを入れてからです。',
+  editAfterCreate: true,
+  View: ({ item, data, access }) => {
+    const view = useAgentView(item, access)
+    const body = str(data.body)
+    return (
+      <>
+        {view && (
+          <AgentOpen
+            base={agentBase(access.course.id, item.id)}
+            {...view}
+            editHref={access.canManage ? `/courses/${access.course.id}/items/${item.id}/edit` : undefined}
+          />
+        )}
+        {body && (
+          <div class="reader-sheet">
+            <Markdown source={body} />
+          </div>
+        )}
+      </>
+    )
+  },
+  Panel: ({ item, access }) => {
+    const view = useAgentView(item, access)
+    return view?.manage ? (
+      <AgentEditPanel base={agentBase(access.course.id, item.id)} settings={view.settings} manage={view.manage} class="editor-extra" />
+    ) : null
+  },
+}
+
+export const EXTRA_KINDS: Record<string, ExtraKind> = { screen, [CODE_KIND]: code, [BUNDLE_KIND]: bundle, [AGENT_KIND]: agent }
 
 export const extraKindOf = (type: string): ExtraKind | null => (Object.hasOwn(EXTRA_KINDS, type) ? EXTRA_KINDS[type] : null)
 

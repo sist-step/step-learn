@@ -17,9 +17,11 @@ import {
   type RestrictionSet,
 } from '../lib/restriction'
 import { EXECUTABLE_NOT_ALLOWED, FILE_TOO_LARGE, MAX_FILE_SIZE, isExecutable } from '../lib/storage'
+import { AgentsPage } from '../routes/admin/views'
 import { CoursesPage } from '../routes/courses/views'
 import { DashboardPage } from '../routes/dashboard/views'
 import { ScreenPage } from '../routes/screen/views'
+import { listAgentItems } from './agent'
 import { createSession, destroyByMoodleSid, destroySession, type MoodleEnv } from './auth'
 import { forgetCourse, forgetProgress, forgetSections } from './cache'
 import { exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
@@ -792,4 +794,12 @@ export async function downloadFile(c: C) {
     if (value) headers.set(name, value)
   }
   return new Response(res.body, { status: res.status, headers })
+}
+
+// ---------------------------------------------------------------- 管理
+
+/** 管理 > コーディングエージェント。サイト管理者のトークンで、アイテムのあるコースを Moodle から読む */
+export async function listAgents(c: C) {
+  const list = await listAgentItems({ token: c.var.token!, userId: c.var.user!.id })
+  return c.render(<AgentsPage list={list} moodleAdminUrl={moodleUrl('/admin/search.php')} />, { title: 'コーディングエージェント - 管理' })
 }

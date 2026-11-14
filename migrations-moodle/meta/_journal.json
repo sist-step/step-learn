@@ -64,6 +64,13 @@
       "when": 1794529094187,
       "tag": "0008_aromatic_black_tom",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794659912640,
+      "tag": "0009_slim_doctor_strange",
+      "breakpoints": true
     }
   ]
 }

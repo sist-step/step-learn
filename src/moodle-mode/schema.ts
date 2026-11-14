@@ -160,6 +160,57 @@ export const bundleSyncVersions = sqliteTable(
 )
 
 /**
+ * コーディングエージェントのアイテム（extra-kinds.tsx の agent）の、管理者が入れる API キーとアイテム全体の上限。完全移行では引き継がない。
+ * 使える期間と 1 人あたりの上限は、教師が編集画面で決めるので extra_items の data に置く
+ */
+export const agentItems = sqliteTable('agent_items', {
+  // extra_items の data に入れないのは、教師がアイテムを保存するたびに種類の toData が data を作り直し、キーが消えるため
+  key: text('key')
+    .primaryKey()
+    .references(() => extraItems.key, { onDelete: 'cascade' }),
+  /** Anthropic の API キーを AES-256-GCM で暗号化したもの（lib/agent-secret.ts）。NULL は未設定 */
+  apiKey: blob('api_key', { mode: 'buffer' }),
+  apiKeyHint: text('api_key_hint').notNull().default(''),
+  totalLimit: real('total_limit').notNull().default(10),
+})
+
+/** 拡張機能に渡した、コーディングエージェントを使うためのトークン。通常モードの agent_tokens と同じく、ハッシュを置く。完全移行では引き継がない */
+export const agentTokens = sqliteTable(
+  'agent_tokens',
+  {
+    id: integer('id').primaryKey(),
+    key: text('key')
+      .notNull()
+      .references(() => extraItems.key, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+    lastUsedAt: integer('last_used_at'),
+  },
+  (t) => [uniqueIndex('agent_tokens_hash').on(t.tokenHash), index('agent_tokens_key_user').on(t.key, t.userId)],
+)
+
+/** コーディングエージェントが AI を呼ぶたびの使用量。アイテムの API キーに請求される分で、ai_usage とは分ける。完全移行では引き継がない */
+export const agentUsage = sqliteTable(
+  'agent_usage',
+  {
+    id: integer('id').primaryKey(),
+    key: text('key')
+      .notNull()
+      .references(() => extraItems.key, { onDelete: 'cascade' }),
+    // cascade にしないのは、利用者を消すとアイテムの使用額が減り、全体の上限に余裕ができてしまうため
+    userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+    promptTokens: integer('prompt_tokens').notNull().default(0),
+    completionTokens: integer('completion_tokens').notNull().default(0),
+    cost: real('cost').notNull().default(0),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [index('agent_usage_key_user').on(t.key, t.userId)],
+)
+
+/**
  * AI の呼び出しごとの使用量。月の上限と週の枠の計算（lib/ai-ledger.ts）に使う。完全移行では引き継がない。
  * 通常モードの ai_usage（lib/schema.ts）と同じ形にしておく（ai-ledger.ts が両方のテーブルを同じ型で受け取る）
  */
