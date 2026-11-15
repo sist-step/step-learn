@@ -3,6 +3,7 @@ import type { AiUsageMeter } from '../lib/ai-agent'
 import type { AiCardState } from '../lib/ai-chat'
 import type { AiTouched } from '../lib/ai-tool-kit'
 import { formatBytes } from '../lib/bytes'
+import { formatClock } from '../lib/clock'
 import type { DiffLine } from '../lib/diff'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE } from '../lib/storage'
 import { Button, IconButton } from './button'
@@ -56,8 +57,8 @@ export type AiPanelProps = {
   models: readonly AiModelOption[]
   /** チャットの版（lib/ai-chat.ts の chatRevision） */
   revision: string
-  /** 音声入力を使えるときの、1 回に録れる長さ（秒）。使えなければ null */
-  voice: { maxSeconds: number } | null
+  /** 音声入力を使えるときの、1 回に録れる長さ（秒）と文字数。使えなければ null */
+  voice: { maxSeconds: number; maxChars: number } | null
   /**
    * hard は最後の発言で「難しい依頼」を選んでいたこと、replies は最後の応答のあとに出す、押して送れる続きの依頼、
    * context は会話の大きさ（lib/ai-agent.ts の contextPercent）
@@ -530,7 +531,9 @@ export const AiPanel = ({ models, revision, voice, chat }: AiPanelProps) => {
                 icon="microphone"
                 label="音声で入力"
                 class="ai-voice"
-                data-ai-voice={String(voice.maxSeconds)}
+                data-ai-voice
+                data-max-seconds={String(voice.maxSeconds)}
+                data-max-chars={String(voice.maxChars)}
                 aria-pressed="false"
                 hidden
                 disabled={!chat && usable.length === 0}
@@ -548,7 +551,13 @@ export const AiPanel = ({ models, revision, voice, chat }: AiPanelProps) => {
           {chat && <ContextMeter percent={chat.context} />}
           <p class="ai-note">
             <span class="ai-note-type">Shift + Enter で改行</span>
-            {voice && <span class="ai-note-voice">マイクを押して送信</span>}
+            {voice && (
+              <span class="ai-note-voice">
+                <span data-ai-voice-time>0:00</span> / {formatClock(voice.maxSeconds)}
+                <span aria-hidden="true">・</span>
+                <span data-ai-voice-chars>0</span> / {voice.maxChars} 文字
+              </span>
+            )}
           </p>
         </div>
       </form>
