@@ -8,7 +8,8 @@ import {
   ItemIcon,
   LinkEmbed,
   LinkTargetField,
-  TodayBadge,
+  LessonBadge,
+  LessonJump,
   linkOpenAttrs,
 } from '../components/course'
 import { Button, IconButton } from '../components/button'
@@ -28,7 +29,7 @@ import type { CourseAccess } from '../lib/courses'
 import type { FieldErrors } from '../lib/forms'
 import { previewKind } from '../lib/preview'
 import { formatBytes } from '../lib/bytes'
-import { findTodaySection, type TodaySection } from '../lib/section-date'
+import { findLessons, lessonWhen, type LessonWhen, type Lessons } from '../lib/section-date'
 import { MAX_FILE_SIZE } from '../lib/storage'
 import { MOODLE_DISPLAY_LABELS, isExactDisplay } from '../moodle/display'
 import { extraKindOf, type ExtraKind, type ExtraKindEntry } from './extra-kinds'
@@ -538,7 +539,7 @@ type CardOptions = {
   /** 同時に 1 つだけ開くセクションの組（details の name） */
   group?: string
   current?: boolean
-  today?: TodaySection['when']
+  today?: LessonWhen
   summaryInHead?: boolean
   subtiles?: boolean
   /** タイルの下に開いたセクションの閉じるボタン */
@@ -600,7 +601,7 @@ const SectionCard = ({
           {manage && s.rule && <RestrictionNote text={s.rule.text} />}
           {summaryInHead && s.summary && <span class="section-head-summary">{s.summary}</span>}
         </span>
-        {today && <TodayBadge when={today} />}
+        {today && <LessonBadge when={today} />}
         {current && <Chip tone="accent">現在のセクション</Chip>}
         {empty && <Chip>準備中</Chip>}
         {s.hidden && <HiddenChip />}
@@ -630,31 +631,35 @@ const SectionCard = ({
   )
 }
 
-type SectionsProps = { o: CourseOutline; courseId: number; isStudent: boolean; manage: boolean }
+type SectionsProps = { o: CourseOutline; courseId: number; isStudent: boolean; manage: boolean; lessons: Lessons }
 
 const datedSections = (sections: MSection[]) => sections.filter((s) => s.number !== 0 && !s.hidden)
 
-const ListSections = ({ o, ...rest }: SectionsProps) => {
-  const today = findTodaySection(datedSections(o.topSections))
-  return (
-    <div class="sections">
-      {o.topSections.map((s) => (
-        <SectionCard s={s} o={o} {...rest} options={{ today: s.id === today?.id ? today.when : undefined }} />
-      ))}
-    </div>
-  )
+const ListSections = ({ o, lessons, ...rest }: SectionsProps) => (
+  <div class="sections">
+    {o.topSections.map((s) => (
+      <SectionCard s={s} o={o} {...rest} options={{ today: lessonWhen(lessons, s.id) }} />
+    ))}
+  </div>
+)
+
+// 教師に Moodle の並べ方を使わないのは、「最新の週を先頭に」などでは未来のセクションが外れ、編集できなくなるため（Moodle でも編集中はそのまま並ぶ）
+const topcollToggles = (o: CourseOutline, layout: TopcollLayout, manage: boolean) => {
+  if (manage) return o.topSections.filter((s) => s.number !== 0)
+  const byId = new Map(o.topSections.map((s) => [s.id, s]))
+  return layout.order.flatMap((sid) => byId.get(sid) ?? [])
 }
 
-const TopcollSections = ({ o, layout, ...rest }: SectionsProps & { layout: TopcollLayout }) => {
+const lessonCandidates = (o: CourseOutline, layout: CourseLayout, manage: boolean) =>
+  datedSections(layout.kind === 'topcoll' ? topcollToggles(o, layout, manage) : o.topSections)
+
+const TopcollSections = ({ o, layout, lessons, ...rest }: SectionsProps & { layout: TopcollLayout }) => {
   const general = o.topSections.find((s) => s.number === 0)
-  const byId = new Map(o.topSections.map((s) => [s.id, s]))
-  // 教師に Moodle の並べ方を使わないのは、「最新の週を先頭に」などでは未来のセクションが外れ、編集できなくなるため（Moodle でも編集中はそのまま並ぶ）
-  const toggles = rest.manage ? o.topSections.filter((s) => s.number !== 0) : layout.order.flatMap((sid) => byId.get(sid) ?? [])
+  const toggles = topcollToggles(o, layout, rest.manage)
   const collapsed = new Set(layout.collapsed)
   const firstOpen = layout.oneSection ? (toggles.find((s) => s.id === layout.current) ?? toggles.find((s) => !collapsed.has(s.id))) : null
   const isOpen = (s: MSection) => (layout.oneSection ? s.id === firstOpen?.id : !collapsed.has(s.id))
   const shownCount = toggles.filter((s) => !s.hidden).length
-  const today = findTodaySection(datedSections(toggles))
   return (
     <div class="stack">
       {general && <SectionCard s={general} o={o} {...rest} options={{ fixed: true }} />}
@@ -681,7 +686,7 @@ const TopcollSections = ({ o, layout, ...rest }: SectionsProps & { layout: Topco
               open: isOpen(s),
               group: layout.oneSection ? `topcoll-${rest.courseId}` : undefined,
               current: s.id === layout.current,
-              today: s.id === today?.id ? today.when : undefined,
+              today: lessonWhen(lessons, s.id),
               summaryInHead: layout.summaryWhenCollapsed,
             }}
           />
@@ -710,7 +715,7 @@ const TileCard = ({
   isStudent: boolean
   open: boolean
   index: number
-  today?: TodaySection['when']
+  today?: LessonWhen
 }) => {
   const tile = layout.tiles.get(s.id)
   const { shown, tracked, done } = o.statsOf(s.id)
@@ -730,7 +735,7 @@ const TileCard = ({
         )}
         <span class="sec-tile-tags">
           <span class="sec-tile-num">{o.sectionNumber.get(s.id) ?? <Icon name="eyeSlash" size={12} />}</span>
-          {today && <TodayBadge when={today} />}
+          {today && <LessonBadge when={today} />}
         </span>
         {locked ? (
           <span class="sec-tile-badge is-locked">
@@ -800,11 +805,10 @@ const TileCard = ({
 }
 
 // 開いたセクションをタイルの直後に置くのは、grid-auto-flow: dense で同じ行の残りのタイルを前に詰め、パネルをその行のすぐ下に出すため（列数に合わせて差し込む位置を JS で計算しなくて済む）
-const TilesSections = ({ o, layout, openSection, ...rest }: SectionsProps & { layout: TilesLayout; openSection?: number }) => {
+const TilesSections = ({ o, layout, openSection, lessons, ...rest }: SectionsProps & { layout: TilesLayout; openSection?: number }) => {
   const general = o.topSections.find((s) => s.number === 0)
   const tiles = o.topSections.filter((s) => s.number !== 0)
   const openable = (s: MSection) => !rest.isStudent || (!s.locked && o.statsOf(s.id).shown.length > 0)
-  const today = findTodaySection(datedSections(tiles))
   return (
     <div class="stack">
       {general && <SectionCard s={general} o={o} {...rest} options={{ fixed: true, subtiles: layout.subtilesZero }} />}
@@ -821,7 +825,7 @@ const TilesSections = ({ o, layout, openSection, ...rest }: SectionsProps & { la
                 isStudent={rest.isStudent}
                 open={open}
                 index={index}
-                today={s.id === today?.id ? today.when : undefined}
+                today={lessonWhen(lessons, s.id)}
               />
             )
             if (!openable(s)) return [tile]
@@ -868,7 +872,8 @@ export const CoursePage = ({
   const shownItems = o.visibleSections.flatMap((s) => o.contentsOf(s.id).filter(o.isShown))
   const trackedItems = shownItems.filter(isTracked)
   const doneCount = trackedItems.filter((it) => it.done).length
-  const props = { o, courseId: id, isStudent, manage }
+  const lessons = findLessons(lessonCandidates(o, layout, manage))
+  const props = { o, courseId: id, isStudent, manage, lessons }
 
   return (
     <AppShell editable={manage} tone={access.course.color}>
@@ -913,6 +918,7 @@ export const CoursePage = ({
       </TabPanel>
       <CourseLiveSync courseId={id} revision={revision} />
       <WalkingMascot />
+      <LessonJump lessons={lessons} />
     </AppShell>
   )
 }
