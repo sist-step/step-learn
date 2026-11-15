@@ -334,7 +334,7 @@ const LookInputs = ({ look, legend }: { look: QuizLook; legend: string }) => (
       value={look}
     />
     <p class="field-hint">
-      ゲームは中学生向けの見た目です。動物のキャラクターが案内し、1 問ずつステージを進む形で出します。問題と採点は標準と同じです。
+      ゲームは中学生向けの見た目です。3D のダンジョンで、問題ごとの扉を正解して開けながら進みます。点数は、問題ごとの最初の答えで数えます。
     </p>
   </fieldset>
 )
