@@ -1,5 +1,13 @@
 import { and, count, desc, eq, inArray, max, sql } from 'drizzle-orm'
-import { AGENT_DEFAULT_LIMITS, MAX_AGENT_TOKENS, type AgentStore } from '../lib/agent'
+import {
+  AGENT_DEFAULT_LIMITS,
+  MAX_AGENT_TOKENS,
+  agentModelOf,
+  openRouterInfoOf,
+  type AgentModel,
+  type AgentProvider,
+  type AgentStore,
+} from '../lib/agent'
 import { agentTokenHash, apiKeyHintOf, newAgentToken, openApiKey, sealApiKey } from '../lib/agent-secret'
 import { db } from './db'
 import { agentItems, agentTokens, agentUsage, users } from './schema'
@@ -16,16 +24,36 @@ export const agentPeriodOf = (data: Record<string, unknown>) => ({
   userLimit: typeof data.userLimit === 'number' ? data.userLimit : AGENT_DEFAULT_LIMITS.userLimit,
 })
 
-const aadOf = (key: string) => `moodle-agent-item:${key}`
+/** extra_items の data の、教師が選んだモデル */
+export const agentModelOfData = (data: Record<string, unknown>) => agentModelOf(data.model, data.openrouterModel)
+
+/** extra_items の data に入れる、教師が選んだモデル */
+export const agentModelData = (model: AgentModel) => ({
+  model: model.id,
+  openrouterModel: model.provider === 'openrouter' ? openRouterInfoOf(model) : null,
+})
+
+// 提供元ごとに付加データを変えるのは、暗号化したキーを別の列へ書き写されても、別の提供元のキーとして開けないようにするため
+const aadOf = (key: string, provider: AgentProvider) =>
+  provider === 'anthropic' ? `moodle-agent-item:${key}` : `moodle-agent-item:${key}:openrouter`
+
+const KEY_COLUMNS = {
+  anthropic: { key: 'apiKey', hint: 'apiKeyHint' },
+  openrouter: { key: 'openrouterApiKey', hint: 'openrouterApiKeyHint' },
+} as const satisfies Record<AgentProvider, { key: keyof typeof agentItems.$inferSelect; hint: keyof typeof agentItems.$inferSelect }>
 
 const costSum = sql<number>`coalesce(sum(${agentUsage.cost}), 0)`
 
 /** Moodle モード（moodle-mode.db）の、アイテム 1 つの設定・使用量・トークン。key は extra_items の key、data はその中身 */
 export function agentStore(key: string, data: Record<string, unknown>): AgentStore {
   const keyRow = () => db.select().from(agentItems).where(eq(agentItems.key, key)).get()
-  const apiKey = () => {
-    const sealed = keyRow()?.apiKey
-    return sealed ? openApiKey(aadOf(key), sealed) : null
+  const openKey = (row: typeof agentItems.$inferSelect | undefined, provider: AgentProvider) => {
+    const sealed = row?.[KEY_COLUMNS[provider].key]
+    return sealed ? openApiKey(aadOf(key, provider), sealed) : null
+  }
+  const keyState = (row: typeof agentItems.$inferSelect | undefined, provider: AgentProvider) => {
+    const configured = openKey(row, provider) !== null
+    return { configured, hint: configured ? (row?.[KEY_COLUMNS[provider].hint] ?? '') : '' }
   }
   const saveRow = (set: Partial<typeof agentItems.$inferInsert>) =>
     void db
@@ -38,19 +66,35 @@ export function agentStore(key: string, data: Record<string, unknown>): AgentSto
   return {
     settings() {
       const row = keyRow()
-      const configured = !!row?.apiKey && openApiKey(aadOf(key), row.apiKey) !== null
+      const model = agentModelOfData(data)
+      const keys = { anthropic: keyState(row, 'anthropic'), openrouter: keyState(row, 'openrouter') }
       return {
-        configured,
-        apiKeyHint: configured ? (row?.apiKeyHint ?? '') : '',
+        configured: keys[model.provider].configured,
+        keys,
+        model,
         ...agentPeriodOf(data),
         totalLimit: row?.totalLimit ?? AGENT_DEFAULT_LIMITS.totalLimit,
         instructions: agentInstructionsOf(data),
       }
     },
-    apiKey,
-    saveKey: ({ apiKey, totalLimit }) =>
-      saveRow({ totalLimit, ...(apiKey && { apiKey: sealApiKey(aadOf(key), apiKey), apiKeyHint: apiKeyHintOf(apiKey) }) }),
-    clearKey: () => saveRow({ apiKey: null, apiKeyHint: '' }),
+    apiKey: (provider) => openKey(keyRow(), provider),
+    saveKey: ({ keys, totalLimit }) =>
+      saveRow({
+        totalLimit,
+        ...Object.fromEntries(
+          (Object.keys(KEY_COLUMNS) as AgentProvider[]).flatMap((provider) => {
+            const apiKey = keys[provider]
+            const columns = KEY_COLUMNS[provider]
+            return apiKey
+              ? [
+                  [columns.key, sealApiKey(aadOf(key, provider), apiKey)],
+                  [columns.hint, apiKeyHintOf(apiKey)],
+                ]
+              : []
+          }),
+        ),
+      }),
+    clearKey: (provider) => saveRow({ [KEY_COLUMNS[provider].key]: null, [KEY_COLUMNS[provider].hint]: '' }),
     used: (userId) =>
       db
         .select({ total: costSum })
@@ -133,11 +177,16 @@ export const touchAgentToken = (id: number) =>
 
 export const revokeAgentToken = (id: number) => void db.delete(agentTokens).where(eq(agentTokens.id, id)).run()
 
-/** 管理画面の一覧の、アイテムごとのキーの有無と使った額 */
+/** 管理画面の一覧の、アイテムごとの提供元ごとのキーの有無と使った額 */
 export function agentKeyStates(keys: string[]) {
-  if (!keys.length) return new Map<string, { configured: boolean; totalLimit: number; spent: number }>()
+  if (!keys.length) return new Map<string, { keys: Record<AgentProvider, boolean>; totalLimit: number; spent: number }>()
   const rows = db
-    .select({ key: agentItems.key, configured: sql<number>`${agentItems.apiKey} IS NOT NULL`, totalLimit: agentItems.totalLimit })
+    .select({
+      key: agentItems.key,
+      anthropic: sql<number>`${agentItems.apiKey} IS NOT NULL`,
+      openrouter: sql<number>`${agentItems.openrouterApiKey} IS NOT NULL`,
+      totalLimit: agentItems.totalLimit,
+    })
     .from(agentItems)
     .where(inArray(agentItems.key, keys))
     .all()
@@ -153,7 +202,7 @@ export function agentKeyStates(keys: string[]) {
     keys.map((k) => [
       k,
       {
-        configured: !!rowOf.get(k)?.configured,
+        keys: { anthropic: !!rowOf.get(k)?.anthropic, openrouter: !!rowOf.get(k)?.openrouter },
         totalLimit: rowOf.get(k)?.totalLimit ?? AGENT_DEFAULT_LIMITS.totalLimit,
         spent: spentOf.get(k) ?? 0,
       },

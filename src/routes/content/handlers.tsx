@@ -14,7 +14,8 @@ import {
 import type { BundleView } from '../../components/bundle'
 import { RestrictionPage } from '../../components/restriction'
 import { MAX_AGENT_INSTRUCTIONS, agentViewOf } from '../../lib/agent'
-import { agentStore, saveAgentOptions } from '../../lib/agent-items'
+import { agentStore, saveAgentOptions, savedAgentModel } from '../../lib/agent-items'
+import { agentOpenRouterModels, resolveAgentModel } from '../../lib/agent-model'
 import { canOpenItem, courseAvailability, restrictionChoices } from '../../lib/availability'
 import { bundleBase } from '../../lib/bundle'
 import { bundleKeysOf, bundleStore, bundleSyncStore } from '../../lib/bundle-items'
@@ -215,6 +216,7 @@ function readItemInput(form: Form): ItemInput {
     closesAt: field(form, 'closes_at', 16),
     userLimit: field(form, 'user_limit', 20),
     instructions: field(form, 'instructions', MAX_AGENT_INSTRUCTIONS * 2),
+    model: field(form, 'agent_model', 200),
   }
 }
 
@@ -307,6 +309,7 @@ export async function editItem(c: Context<AppEnv>) {
       code={getCodeItem(iid)}
       bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
       agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
+      agentModels={item.type === 'agent' ? await agentOpenRouterModels() : undefined}
       gradingEnabled={gradingEnabled}
       judge={judgeSwitchable ? currentJudge() : undefined}
       sections={listSections(access.course.id)}
@@ -335,13 +338,17 @@ export async function updateItem(c: Context<AppEnv>) {
   const savedFile = { type: file?.type ?? item.fileType ?? '', name: file?.name ?? item.fileName ?? '' }
   const uploadError = result.ok ? await checkUpload(file) : null
   const completionMessage = result.ok ? completionError(item.type, completion, item.type === 'file' ? savedFile : null) : null
+  const agentModel =
+    result.ok && item.type === 'agent' ? await resolveAgentModel(result.values.agent_model ?? '', savedAgentModel(iid)) : null
   const errors: FieldErrors | null = !result.ok
     ? result.errors
     : uploadError
       ? { file: uploadError }
       : completionMessage
         ? { completion: completionMessage }
-        : null
+        : agentModel && 'error' in agentModel
+          ? { agent_model: agentModel.error }
+          : null
   if (!result.ok || errors) {
     const values = {
       ...readItemInput(form),
@@ -357,6 +364,7 @@ export async function updateItem(c: Context<AppEnv>) {
         code={code}
         bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
         agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
+        agentModels={item.type === 'agent' ? await agentOpenRouterModels() : undefined}
         gradingEnabled={gradingEnabled}
         judge={judgeSwitchable ? currentJudge() : undefined}
         sections={listSections(courseId)}
@@ -392,8 +400,9 @@ export async function updateItem(c: Context<AppEnv>) {
       closesAt: dateTimeInputToUnix(input.closes_at ?? ''),
     })
   }
-  if (item.type === 'agent')
+  if (agentModel && 'model' in agentModel)
     saveAgentOptions(iid, {
+      model: agentModel.model,
       opensAt: dateTimeInputToUnix(input.opens_at ?? ''),
       closesAt: dateTimeInputToUnix(input.closes_at ?? ''),
       userLimit: input.user_limit ?? 0,

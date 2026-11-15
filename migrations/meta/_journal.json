@@ -232,6 +232,13 @@
       "when": 1794717692082,
       "tag": "0032_melted_thunderball",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1794727612436,
+      "tag": "0033_eminent_sersi",
+      "breakpoints": true
     }
   ]
 }
