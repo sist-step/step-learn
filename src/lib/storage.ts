@@ -46,6 +46,8 @@ export type ServeOptions = { filename: string; contentType: string; inline: bool
 
 interface Storage {
   put(key: string, file: File, contentType: string): Promise<void>
+  /** from のファイルを to の場所へ移す */
+  move(from: string, to: string): Promise<void>
   delete(keys: string[]): Promise<void>
   deletePrefix(prefix: string): Promise<void>
   /** ダウンロード用のレスポンス */
@@ -84,6 +86,12 @@ class LocalStorage implements Storage {
     const p = this.file(key)
     await fs.promises.mkdir(path.dirname(p), { recursive: true })
     await fs.promises.writeFile(p, Readable.fromWeb(file.stream() as import('node:stream/web').ReadableStream))
+  }
+
+  async move(from: string, to: string) {
+    const p = this.file(to)
+    await fs.promises.mkdir(path.dirname(p), { recursive: true })
+    await fs.promises.rename(this.file(from), p)
   }
 
   async delete(keys: string[]) {
@@ -137,12 +145,27 @@ export const storage: Storage = new LocalStorage(path.resolve(config.filesDir))
 
 const safeName = (name: string) => name.replace(/[\\/\p{Cc}]/gu, '_').slice(-120) || 'file'
 
-export async function putCourseFile(courseId: number, file: File): Promise<StoredFile> {
+const newKey = (prefix: string, name: string) => `${prefix}/${crypto.randomUUID()}/${name}`
+
+async function putFile(prefix: string, file: File): Promise<StoredFile> {
   const name = safeName(file.name)
-  const key = `courses/${courseId}/${crypto.randomUUID()}/${name}`
+  const key = newKey(prefix, name)
   const type = file.type || 'application/octet-stream'
   await storage.put(key, file, type)
   return { key, name, size: file.size, type }
+}
+
+export const putCourseFile = (courseId: number, file: File) => putFile(`courses/${courseId}`, file)
+
+// コースの下に置かないのは、受け取った時点では、どのコースで使うかが決まっていないため
+/** AI が受け取ったファイル（lib/ai-uploads.ts）を、コースで使うまで置いておく */
+export const putAiUpload = (userId: number, file: File) => putFile(`ai-uploads/${userId}`, file)
+
+/** 置いてあるファイルをコースのファイルにする。コースを消したときに一緒に消えるよう、コースの下へ移す */
+export async function moveToCourse(courseId: number, key: string, name: string) {
+  const to = newKey(`courses/${courseId}`, safeName(name))
+  await storage.move(key, to)
+  return to
 }
 
 export const deleteKeys = (keys: (string | null | undefined)[]) => storage.delete(keys.filter((k): k is string => !!k))

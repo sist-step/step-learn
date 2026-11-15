@@ -3,6 +3,7 @@ import crypto from 'node:crypto'
 import { and, desc, eq, lt } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { isAiModel, type AiMessage, type AiModel } from './ai'
+import type { AiFileKind } from './ai-file-kinds'
 import type { AiChange, AiTouched } from './ai-tool-kit'
 import { config } from './config'
 import type { aiChats as aiChatsTable } from './schema'
@@ -12,7 +13,10 @@ export const AI_CHAT_TTL = 5 * 86_400
 
 export type AiCardState = 'pending' | 'approved' | 'rejected' | 'failed'
 
-/** 確認カード。name と args は AI が呼んだツールと引数、note は実行した結果や取り消した理由 */
+/**
+ * 確認カード。name と args は AI が呼んだツールと引数、note は実行した結果や取り消した理由。
+ * request があるものはファイルを選んでもらうカード（lib/ai-agent.ts の REQUEST_FILE）で、kinds は受け取れる種類、received は受け取ったファイル
+ */
 export type AiCard = {
   name: string
   args: string
@@ -21,6 +25,8 @@ export type AiCard = {
   snapshot: unknown
   state: AiCardState
   note?: string
+  request?: { kinds: AiFileKind[] }
+  received?: { name: string; size: number }
 }
 
 /**

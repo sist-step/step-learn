@@ -5,6 +5,7 @@ import { createAiChatStore } from '../lib/ai-chat'
 import type { AiToolContext } from '../lib/ai-tool-kit'
 import { aiLedger } from './ai-usage'
 import { MOODLE_AI_TOOLS } from './ai-tools'
+import { moodleAiUploadStore } from './ai-uploads'
 import type { MoodleEnv } from './auth'
 import { loadCourse, myCourses } from './data'
 import { db } from './db'
@@ -38,11 +39,13 @@ export const moodleAssistant = createAiAgent({
   ledger: aiLedger,
   chats: createAiChatStore({ db, aiChats }),
   pageContext,
+  files: moodleAiUploadStore,
   abilities: [
     '利用者が管理しているコースの内容を読めます。教材は Moodle にあり、Moodle の活動（課題・小テストなど）は名前と種類だけが分かります。',
-    'セクションとアイテム（リンク・コード）の追加と並べ替えは、すぐに実行されます。追加したものは学生に非表示の状態で作られるので、そのことを伝えてください。',
-    '既存の内容の変更（update_section・update_item）と、学生への表示・非表示の切り替え（set_visibility）は、確認カードを出し、利用者が承認してから実行されます。変えられるアイテムはリンクとコードだけです。',
+    'セクションとアイテム（リンク・ファイル・コード）の追加と並べ替えは、すぐに実行されます。追加したものは学生に非表示の状態で作られるので、そのことを伝えてください。',
+    '既存の内容の変更（update_section・update_item）と、学生への表示・非表示の切り替え（set_visibility）は、確認カードを出し、利用者が承認してから実行されます。変えられるアイテムはリンク・ファイル・コードだけです。',
     '書き換えるときは、先に get_item などで今の内容を読み、変える欄だけを全文で渡してください。',
-    '削除、ファイルのアップロード、Moodle の活動の中身、アクセス制限、参加者、コースの設定は扱えません。頼まれたら、できないことを伝え、STEP Learn か Moodle の画面での手順を案内してください。',
+    'ファイルのアイテムを追加するときと、ファイルを差し替えるときは、request_file で利用者にファイルを選んでもらい、返ってきた file_id を create_item・update_item に渡してください。受け取る種類は用途に合わせて絞ってください（配る資料なら pdf だけ、など）。受け取ったファイルの中身は読めません。',
+    '削除、Moodle の活動の中身、アクセス制限、参加者、コースの設定は扱えません。頼まれたら、できないことを伝え、STEP Learn か Moodle の画面での手順を案内してください。',
   ],
 })
