@@ -11,6 +11,7 @@ import {
   LessonBadge,
   LessonJump,
   linkOpenAttrs,
+  OutlineToggle,
 } from '../components/course'
 import { Button, IconButton } from '../components/button'
 import { Card, LinkCard } from '../components/card'
@@ -70,6 +71,8 @@ const COMPLETION_LABELS: Record<ItemCompletion, string> = {
 const hostOf = (url: string) => URL.parse(url)?.host ?? url
 
 const kindOfItem = (it: MItem) => (it.extra ? extraKindOf(it.extra.type) : null)
+// kind だけで分けないのは、Moodle の活動（ページ・課題・小テストなど）がすべて moodle になり、まとめて閉じてしまうため
+const outlineKind = (it: MItem) => it.extra?.type ?? (it.kind === 'moodle' ? it.modname : it.kind)
 
 const ExtraIcon = ({ kind }: { kind: ExtraKind | null }) => {
   useStyle('/src/components/course.css', '/src/moodle-mode/moodle-mode.css')
@@ -1048,7 +1051,7 @@ export const ItemPage = ({
     <AppShell tone={access.course.color} topbar={pdfBar}>
       <Styles use={['/src/routes/content/content.css', '/src/moodle-mode/moodle-mode.css']} />
       {pdf ? <PdfStage src={previewUrl} title={item.fileName} /> : crumbs}
-      <div class="reader">
+      <div class="reader" data-outline-kind={outlineKind(item)}>
         <article class="reader-main" data-ai-watch={`item:${item.id}`}>
           {!pdf && head}
 
@@ -1186,6 +1189,7 @@ export const ItemPage = ({
                 <span data-progress-done>{tracked.filter((o) => o.done).length}</span> / {tracked.length} 完了
               </span>
             )}
+            <OutlineToggle />
           </div>
           {outlineSections.map(({ section: s, items }) => (
             <div class={cx('outline-section', items.length === 0 && 'is-empty')}>
