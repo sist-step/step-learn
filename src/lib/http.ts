@@ -3,8 +3,10 @@ import type { Context } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { csrf } from 'hono/csrf'
 import { createMiddleware } from 'hono/factory'
+import type * as z from 'zod/mini'
 import { formatBytes } from './bytes'
 import { config } from './config'
+import { validate, type FormName, type FormValues } from './forms'
 import type { AppEnv, Flash } from './types'
 
 const checkOrigin = csrf(config.appOrigin ? { origin: config.appOrigin } : undefined)
@@ -90,6 +92,19 @@ export async function readForm(c: Context): Promise<Form> {
   return (await c.req.parseBody()) as Form
 }
 
+/** 一覧の行のボタンのように、画面に出さない欄だけのフォームを読む。正しくなければ null（利用者には直せないので、呼ぶ側は c.notFound() にする） */
+export async function readFields<N extends FormName>(c: Context, name: N): Promise<FormValues<N> | null> {
+  const result = validate(name, await readForm(c))
+  return result.ok ? result.values : null
+}
+
+/** 拡張機能などが送る JSON の本文を読む。JSON でないときや形が違うときは null */
+export async function readJson<T extends z.ZodMiniType>(c: Context, schema: T): Promise<z.output<T> | null> {
+  const result = schema.safeParse(await c.req.json().catch(() => null))
+  return result.success ? result.data : null
+}
+
+/** 入力の誤りで描き直す画面に、送られたままの値を戻すときに使う。値を使って処理するときは lib/forms.ts のスキーマを通す */
 export function field(form: Form, key: string, max = 10_000) {
   const v = form[key]
   return typeof v === 'string' ? v.trim().slice(0, max) : ''

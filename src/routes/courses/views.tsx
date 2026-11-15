@@ -435,7 +435,7 @@ const AddItemModal = ({
         </div>
         {tracking && <CompletionField id="new-item-completion" />}
         <div class="form-actions">
-          <Button type="submit" name="then" value="view" class="unless-edit-next">
+          <Button type="submit" name="after" value="view" class="unless-edit-next">
             追加して表示
           </Button>
           <Button type="submit" variant="primary">

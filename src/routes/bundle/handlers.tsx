@@ -19,18 +19,19 @@ import {
 } from '../../lib/bundle'
 import {
   MAX_SYNC_FILE_SIZE,
+  SYNC_REQUEST,
   distributedText,
-  parseChanges,
   recordChanges,
   textOf,
   type BundleSyncStore,
   type SyncVersion,
 } from '../../lib/bundle-sync'
-import { claimLaunch, signGrant, signLaunch, signSync, verifyGrant, verifySync } from '../../lib/bundle-token'
+import { LAUNCH_CLAIM, claimLaunch, signGrant, signLaunch, signSync, verifyGrant, verifySync } from '../../lib/bundle-token'
 import { config } from '../../lib/config'
 import type { CourseAccess } from '../../lib/courses'
 import { diffLines } from '../../lib/diff'
-import { clientIp, field, intParam, readForm, redirectWith, wantsJson } from '../../lib/http'
+import { firstError, validate } from '../../lib/forms'
+import { clientIp, intParam, readFields, readJson, redirectWith, wantsJson } from '../../lib/http'
 import { rateLimiter } from '../../lib/rate-limit'
 import { deleteKeys, inBackground, isExecutable, storage } from '../../lib/storage'
 import type { AppEnv } from '../../lib/types'
@@ -60,8 +61,6 @@ export type BundleBackend = {
   editUrl: (courseId: number, itemId: number) => string
   itemUrl: (courseId: number, itemId: number) => string
 }
-
-const asList = <T,>(v: T | T[] | undefined) => (v === undefined ? [] : Array.isArray(v) ? v : [v])
 
 /** zip の中身がすべて 1 つのフォルダーに入っていれば、そのフォルダーを外した場所 */
 function withoutWrapper(paths: string[]) {
@@ -122,10 +121,10 @@ export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: B
 
   // 1 つずつ確かめるのは、どのファイルで止めたかを教師に伝えるため
   async function readUploads(c: C): Promise<Read<{ uploads: Upload[]; skipped: number }>> {
-    const body = await c.req.parseBody({ all: true })
-    const files = asList(body.files).filter((f): f is File => f instanceof File)
-    const paths = asList(body.paths).map((p) => (typeof p === 'string' ? p : ''))
-    const archives = asList(body.archives).filter((f): f is File => f instanceof File)
+    // readForm を使わないのは、同じ名前の欄が並ぶとき、最後の 1 つしか受け取れないため
+    const result = validate('bundleUpload', await c.req.parseBody({ all: true }))
+    if (!result.ok) return { ok: false, error: firstError(result.errors) }
+    const { files, paths, archives } = result.values
     if (!files.length && !archives.length) return { ok: false, error: 'アップロードするファイルを選択してください。' }
     const picked: Picked[] = files.map((file, i) => ({ name: paths[i] || file.name, file }))
     // すでに置いてあるファイルを足さないのは、このあとのファイルで置き換えられるかがまだわからないため（置いたあとの合計は upload で確かめる）
@@ -136,7 +135,7 @@ export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: B
       })
       .map((p) => p.file)
     // ブラウザが外した数も足すのは、node_modules などを送らずに済ませつつ、外した数をまとめて伝えるため
-    let skipped = typeof body.skipped === 'string' ? Math.min(Math.max(Math.trunc(Number(body.skipped)) || 0, 0), 1_000_000) : 0
+    let skipped = result.values.skipped
     for (const archive of archives) {
       const read = await unpack(archive, earlier)
       if (!read.ok) return read
@@ -195,10 +194,10 @@ export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: B
     const ctx = await manage(c)
     if (!ctx) return c.notFound()
     const { access, itemId, store } = ctx
-    const form = await readForm(c)
-    const path = field(form, 'path', 1000)
-    const folder = field(form, 'folder', 1000)
-    const all = field(form, 'all') === '1'
+    const fields = await readFields(c, 'bundleRemove')
+    if (!fields) return c.notFound()
+    const { path, folder } = fields
+    const all = fields.all === 1
     if (!path && !folder && !all) return c.notFound()
     const removed = store.remove((p) => all || (!!path && samePath(p, path)) || (!!folder && isInFolder(p, folder)))
     inBackground(deleteKeys(removed))
@@ -238,7 +237,7 @@ export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: B
   async function setSync(c: C) {
     const ctx = await manage(c)
     if (!ctx) return c.notFound()
-    const on = field(await readForm(c), 'sync', 1) === '1'
+    const on = (await readFields(c, 'bundleSync'))?.sync === 1
     ctx.sync.setEnabled(on)
     const message = on
       ? 'データの同期を有効にしました。学生が VS Code で保存した内容が、変更履歴として残ります。'
@@ -347,9 +346,7 @@ export function vscodeApi({ itemOf }: Pick<BundleBackend, 'itemOf'>) {
     const ip = clientIp(c)
     if (claimLimit.retryAfter(ip)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
     claimLimit.hit(ip)
-    const body: unknown = await c.req.json().catch(() => null)
-    const token = typeof body === 'object' && body !== null && 'token' in body && typeof body.token === 'string' ? body.token : ''
-    const claims = claimLaunch(token)
+    const claims = claimLaunch((await readJson(c, LAUNCH_CLAIM))?.token ?? '')
     const item = claims && (await itemOf(claims.ref, claims.userId))
     const user = claims && item?.sync.findUser(claims.userId)
     if (!claims || !item || !user)
@@ -379,7 +376,7 @@ export function vscodeApi({ itemOf }: Pick<BundleBackend, 'itemOf'>) {
     if (!target.sync.enabled()) return c.json({ enabled: false, recorded: 0, full: false })
     if (syncLimit.retryAfter(target.limitKey)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
     syncLimit.hit(target.limitKey)
-    const changes = parseChanges(await c.req.json().catch(() => null))
+    const changes = await readJson(c, SYNC_REQUEST)
     if (!changes) return c.json({ error: '送られた内容が正しくありません。' }, 400)
     const result = await recordChanges(target.sync, target.userId, changes, target.store.list(), readStored)
     return c.json({ enabled: true, ...result })
