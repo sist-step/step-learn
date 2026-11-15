@@ -40,6 +40,7 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルはサーバーのロ�
     - ファイルが要るとき（ファイルのアイテムの追加・ファイルの差し替え）は、AI が会話にファイルを選ぶカードを出し、受け取れる種類（PDF だけ、画像だけなど）も AI が用途に合わせて決める。受け取ったファイルはアイテムに使うまでサーバーに置き（Moodle モードは利用者の下書き領域）、使わないまま期限（通常モード 5 日・Moodle モード 3 日）を過ぎたら消す。AI はファイルの中身を読まない
     - 今ある内容の変更（セクション・アイテムのタイトルや本文、コードの採点基準など）と、学生への表示・非表示の切り替えは、変更前と変更後（本文は差分）を並べた確認カードを出し、「実行する」を押してから実行する。カードを出したあとに同じものが変えられていたら、上書きせずに止める
     - 削除・画面共有・参加者・コースの設定はしない
+    - STEP の活動のマニュアル（[STEP Docs](https://step-docs.siststep.workers.dev/)。STEP Learn の使い方・かけでじ・ドキュメントの書き方など）について聞くと、AI が意味で検索して読み、答えの最後に「実際のドキュメント」として、使ったページへのリンク（`https://step-docs.siststep.workers.dev/<docs からのパス。拡張子なし・小文字>/`）を付ける。パスワードなどは取り込むときに伏せ、AI は実際のドキュメントで確かめるよう案内する。検索語の埋め込みは OpenRouter の Qwen3 Embedding 8B で行い、使用量は OpenRouter の月の上限に数える（利用者の週の枠には数えない）。取り込み方は下の「STEP Docs を AI エージェントに取り込む」
     - チャットを始めるときにモデルを選び（API キーを設定した提供元のモデルだけ）、その会話の途中では変えない。チャットは 1 人に 1 つで、閉じるとその場で消え、開き直せない。閉じずに置いたチャットも最後の発言から 5 日で消える
     - 会話は、やり取りの続きに文脈を渡すためだけにサーバーへ保存する。`SESSION_SECRET` から導いた鍵で AES-256-GCM で暗号化し、管理者にも中身は見せない
     - 呼び出しのたびに使用量を記録し、提供元ごとの週の枠（管理 > AI の月の上限を日割りして、直近 4 週間に使った人数で割ったもの）を使い切ると、その週は使えない
@@ -131,7 +132,7 @@ npm start            # = node dist/server/index.js
 - `APP_ORIGIN`：nginx や Caddy などのリバースプロキシの後ろで動かす場合は、公開 URL（例 `https://lms.example.com`）を必ず設定してください
 - `SESSION_SECRET`：セッション Cookie の署名鍵（32 文字以上）。未設定なら `data/session-secret` を自動生成して使います。変更すると全員がログアウトされ、保存中の AI のチャットも読めなくなるので消えます
 - `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `MAIL_FROM`：確認メールの送信に使う SMTP サーバー。`SMTP_HOST` を設定する場合は `MAIL_FROM` と `APP_ORIGIN` も必須です
-- `OPENROUTER_API_KEY`：[OpenRouter](https://openrouter.ai/) 経由のモデルに使う API キー。AI エージェントに送られた発言が STEP Learn の作業と関係あるかの判定（Span-01 Lite、判定できなかったときは Span-02）に使い、未設定なら判定を省きます。DeepSeek V4.1 Flash は予備で、Claude を使えないときと、Anthropic の今月の使用量が月の上限の 60% を超えたときだけ、会話で選べるようになり、コードのアイテムの採点もこちらに切り替わります（`src/lib/ai-models.ts` の `AI_RESERVE_MODELS`）。Jev は一時的に止めています（`AI_PAUSED_MODELS`）
+- `OPENROUTER_API_KEY`：[OpenRouter](https://openrouter.ai/) 経由のモデルに使う API キー。AI エージェントに送られた発言が STEP Learn の作業と関係あるかの判定（Span-01 Lite、判定できなかったときは Span-02）と、STEP Docs の検索（Qwen3 Embedding 8B）に使い、未設定なら判定を省き、STEP Docs はページの一覧から AI が選んで読みます。DeepSeek V4.1 Flash は予備で、Claude を使えないときと、Anthropic の今月の使用量が月の上限の 60% を超えたときだけ、会話で選べるようになり、コードのアイテムの採点もこちらに切り替わります（`src/lib/ai-models.ts` の `AI_RESERVE_MODELS`）。Jev は一時的に止めています（`AI_PAUSED_MODELS`）
 - `CLAUDE_API_KEY`：Claude（Claude Haiku 5.5・Claude Sonnet 5.5）に使う [Anthropic](https://platform.claude.com/) の API キー。未設定ならこれらのモデルは使えません。AI エージェントの会話とコードのアイテムの採点はふだん Claude Haiku 5.5 を使い、AI のパネルで「難しい依頼」を選んで送った発言だけ Claude Sonnet 5.5（考える深さ high）が答えます（`AI_HARD_TASK_MODELS`）。学生が提出したコードと問題文・採点基準が Anthropic の API（DeepSeek に切り替わったあとは OpenRouter）に送られます
 - 使うモデルは `src/lib/ai-models.ts` に並べたものだけです。月の上限（USD）は提供元ごとに管理 > AI で設定します（保存するまでは OpenRouter が $3、Anthropic が $15）。コードのアイテムの採点にかかった額も採点に使ったモデルの提供元の使用量に数え、月の上限に達している間は、提出しても自動では採点しません
 - `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` / `MICROSOFT_TENANT`：Microsoft アカウントでのログインに使う Microsoft Entra ID のアプリ（下の「Microsoft アカウントでのログイン」）。`MICROSOFT_CLIENT_ID` を設定する場合は `MICROSOFT_CLIENT_SECRET` も必須です。`MICROSOFT_TENANT` は既定で `common`（組織と個人のどちらのアカウントでも可）で、`organizations`（組織のアカウントだけ）・`consumers`（個人のアカウントだけ）・テナント ID（その組織だけ）も選べます。Moodle モードでは使いません
@@ -155,6 +156,33 @@ npm start            # = node dist/server/index.js
 - 戻り先の URL は `APP_ORIGIN`（なければ要求の URL）から作ります。リバースプロキシの後ろでは `APP_ORIGIN` を設定してください
 - サインイン画面では毎回アカウントを選ばせます（教室の共用の端末で、前の人のアカウントでログインしないように）
 - Microsoft アカウントとの結び付きは、メールアドレスではなく Microsoft のテナント ID とオブジェクト ID で覚えるので、あとから Microsoft 側のメールアドレスが変わってもログインできます
+
+### STEP Docs を AI エージェントに取り込む
+
+STEP Docs の本文は、非公開のリポジトリ（[sist-step/step-docs](https://github.com/sist-step/step-docs)）の `src/content/docs` にあります。step-learn は公開リポジトリなので、本文も索引もこのリポジトリとイメージには入れません。
+
+1. step-docs の `main` の docs が変わると、step-docs のワークフロー（`.github/workflows/ai-index.yml`）が、beta のサーバーの self-hosted ランナーで動く
+2. ワークフローは step-docs の docs と、step-learn の `scripts/docs-index.ts` だけを checkout し、索引（本文を見出しごとに分けた断片と、そのベクトル）をサーバーの専用ディレクトリ（既定 `/srv/step-learn/ai-docs`）の `step-docs.json` に書く
+3. STEP Learn のコンテナは、`compose.yaml` でそのディレクトリを `/app/ai-docs` に読み取り専用でマウントして読む。ファイルが変わったら次の検索のときに読み直すので、再起動は要らない
+
+- 中身が変わっていない断片は前の索引のベクトルを使い回すので、API を呼ぶのは変わった部分だけです（全部を作り直しても 1 円にもなりません）
+- パスワードなどは、`PW: xxx` / `ID：xxx` のようにラベルを付けた値（パスワード・ID・ユーザー名など）と、その値が同じページのほかの場所に書かれた箇所、API キーの形の文字列、URL に含まれるパスワード、Google のフォーム・ドライブと Discord のリンクを `[非公開: 元のドキュメントを参照]` に置き換えてから索引に入れます。AI はそこを推測せず、実際のドキュメントを見るよう案内します。ラベルなしで文中にだけ書かれたものは見つけられないので、`--dry-run` で確かめてください
+- 画像は、docs サイトがログイン必須で表示できる URL がないため、`（画像: 説明）` に置き換えます
+- 索引がないあいだは、AI エージェントはドキュメントを読めないことを伝えます
+- `scripts/docs-index.ts` の索引の形を変えたら、step-docs の Actions から AI の索引のワークフローを手動で実行し直してください
+
+準備（最初に一度）:
+
+1. beta のサーバーで、ランナーのユーザーが書けて、コンテナ（`node` ユーザー）が読めるディレクトリを作る。例: `sudo mkdir -p /srv/step-learn/ai-docs && sudo chown <ランナーのユーザー> /srv/step-learn/ai-docs`
+2. step-docs のリポジトリに、同じサーバーの self-hosted ランナー（ラベル `self-hosted` / `linux` / `beta`）を登録する。step-learn のランナーはリポジトリごとの登録なので、step-docs からは使えません
+3. step-docs のリポジトリに Environment `beta` を作り、Secret `OPENROUTER_API_KEY` を登録する。ディレクトリを変えるときは、step-docs の変数 `AI_DOCS_DIR` と step-learn の変数 `DEPLOY_AI_DOCS_DIR` を同じ値にする
+
+手元で試すとき（開発サーバーは `ai-docs/` を読む。`ai-docs/` は Git の対象外）:
+
+```sh
+npm run docs:index -- --docs ../step-docs/src/content/docs --dry-run    # 取り込むページと伏せる箇所を確かめる（何も書き込まない）
+npm run docs:index -- --docs ../step-docs/src/content/docs --out ai-docs # .env の OPENROUTER_API_KEY で索引を作る
+```
 
 ### ユーザーを CLI で作成する
 
@@ -344,6 +372,7 @@ CI はチェックだけを行い、デプロイはしません。Actions の画
    - 使わない項目は登録しなくてかまいません。値に `'` と改行は使えません
    - Moodle モードで動かす場合は `MOODLE_URL` などを登録します
 3. ホスト側のポートを変える場合は変数 `DEPLOY_HOST_PORT` を、公開するアドレスを変える場合は変数 `DEPLOY_HOST_BIND` を、Environment かリポジトリに設定する
+   - AI エージェントが検索する STEP Docs の索引を置くディレクトリ（既定 `/srv/step-learn/ai-docs`）を変える場合は変数 `DEPLOY_AI_DOCS_DIR` を設定する（上の「STEP Docs を AI エージェントに取り込む」）
 4. 必要に応じて、Environment に承認者などの保護ルールを設定する
 
 ## ディレクトリ構成
@@ -351,6 +380,7 @@ CI はチェックだけを行い、デプロイはしません。Actions の画
 ```
 migrations/          drizzle-kit が生成するマイグレーション（起動時に未適用のものを自動で適用）
 migrations-moodle/   Moodle モードの DB（data/moodle-mode.db）のマイグレーション
+ai-docs/             開発サーバーが読む STEP Docs の索引（Git の対象外。本番はサーバーのディレクトリをマウントする）
 src/index.tsx        MOODLE_URL の有無で、通常モード（src/app.tsx）と Moodle モード（src/moodle-mode/app.tsx）を切り替える
 src/app.tsx          Hono アプリ本体（ミドルウェア、ルーティング）
 src/server.ts        本番用 Node.js エントリ（静的ファイル配信、起動）

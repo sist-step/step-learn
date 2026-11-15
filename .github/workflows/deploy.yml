@@ -28,6 +28,8 @@ jobs:
       COMPOSE_PROJECT_NAME: step-learn-beta
       HOST_PORT: ${{ vars.DEPLOY_HOST_PORT || '3000' }}
       HOST_BIND: ${{ vars.DEPLOY_HOST_BIND || '127.0.0.1' }}
+      # 既定の ./ai-docs にしないのは、ランナーの作業ディレクトリは実行のたびに作り直され、step-docs のワークフローが書いた索引が届かないため
+      AI_DOCS_HOST_DIR: ${{ vars.DEPLOY_AI_DOCS_DIR || '/srv/step-learn/ai-docs' }}
     steps:
       - uses: actions/checkout@v7
         with:
