@@ -38,6 +38,9 @@ import { db } from '../../lib/db'
 import { completionError, firstError, isFile, readConstraints, validate, type FieldErrors } from '../../lib/forms'
 import { field, fileField, intParam, readFields, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
 import { previewKind } from '../../lib/preview'
+import { DEFAULT_PASS_PERCENT, MAX_QUIZ_JSON_LENGTH, isQuizLook, readQuizForm } from '../../lib/quiz'
+import { getQuizSettings, quizStore, saveQuizSettings } from '../../lib/quiz-items'
+import { quizViewOf } from '../../lib/quiz-store'
 import { availableCodeLanguages, sandboxEnabled } from '../../lib/sandbox'
 import { codeItems, completions, items, sections } from '../../lib/schema'
 import { isSharing } from '../../lib/screen-share'
@@ -83,6 +86,14 @@ function bundleView(c: Context<AppEnv>, access: CourseAccess, itemId: number): B
 
 const agentView = (c: Context<AppEnv>, access: CourseAccess, itemId: number) =>
   agentViewOf(agentStore(itemId), c.var.user!.id, access.canManage ? { isAdmin: c.var.user!.role === 'admin' } : undefined)
+
+const quizView = (c: Context<AppEnv>, access: CourseAccess, itemId: number) =>
+  quizViewOf(quizStore(access.course.id, itemId), getQuizSettings(itemId), {
+    itemUrl: `/courses/${access.course.id}/items/${itemId}`,
+    userId: c.var.user!.id,
+    student: access.role === 'student',
+    retake: c.req.query('retake') === '1',
+  })
 
 const getItem = (courseId: number, itemId: number) =>
   db
@@ -193,6 +204,11 @@ const sourceField = (form: Form, key: string, max: number) => {
   return typeof v === 'string' ? v.slice(0, max) : ''
 }
 
+function quizLookField(form: Form) {
+  const look = field(form, 'look', 10)
+  return isQuizLook(look) ? look : 'plain'
+}
+
 function readItemInput(form: Form): ItemInput {
   return {
     title: field(form, 'title', 200),
@@ -216,6 +232,10 @@ function readItemInput(form: Form): ItemInput {
     closesAt: field(form, 'closes_at', 16),
     userLimit: field(form, 'user_limit', 20),
     instructions: field(form, 'instructions', MAX_AGENT_INSTRUCTIONS * 2),
+    questions: readQuizForm(sourceField(form, 'questions', MAX_QUIZ_JSON_LENGTH + 1)).rows,
+    passPercent: field(form, 'pass_percent', 5),
+    showAnswers: field(form, 'show_answers', 1) === '0' ? 0 : 1,
+    look: quizLookField(form),
     model: field(form, 'agent_model', 200),
   }
 }
@@ -292,6 +312,8 @@ export async function createItem(c: Context<AppEnv>) {
       `/courses/${courseId}/items/${created.id}/edit`,
       `「${input.title}」を追加しました。使える期間と上限を設定してください。`,
     )
+  if (type === 'quiz')
+    return redirectWith(c, `/courses/${courseId}/items/${created.id}/edit`, `「${input.title}」を追加しました。問題を作ってください。`)
   const next = placement.values.after === 'view' ? `/courses/${courseId}/items/${created.id}` : editUrl(courseId, sectionId)
   return redirectWith(c, next, `「${input.title}」を追加しました。`)
 }
@@ -309,6 +331,7 @@ export async function editItem(c: Context<AppEnv>) {
       code={getCodeItem(iid)}
       bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
       agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
+      quiz={item.type === 'quiz' ? getQuizSettings(iid) : undefined}
       agentModels={item.type === 'agent' ? await agentOpenRouterModels() : undefined}
       gradingEnabled={gradingEnabled}
       judge={judgeSwitchable ? currentJudge() : undefined}
@@ -364,6 +387,7 @@ export async function updateItem(c: Context<AppEnv>) {
         code={code}
         bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
         agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
+        quiz={item.type === 'quiz' ? getQuizSettings(iid) : undefined}
         agentModels={item.type === 'agent' ? await agentOpenRouterModels() : undefined}
         gradingEnabled={gradingEnabled}
         judge={judgeSwitchable ? currentJudge() : undefined}
@@ -407,6 +431,13 @@ export async function updateItem(c: Context<AppEnv>) {
       closesAt: dateTimeInputToUnix(input.closes_at ?? ''),
       userLimit: input.user_limit ?? 0,
       instructions: input.instructions ?? '',
+    })
+  if (item.type === 'quiz')
+    saveQuizSettings(iid, {
+      questions: input.questions.questions,
+      passPercent: input.pass_percent ?? DEFAULT_PASS_PERCENT,
+      showAnswers: input.show_answers,
+      look: input.look,
     })
   if (stored && item.fileKey) inBackground(deleteKeys([item.fileKey]))
   return redirectWith(c, `/courses/${courseId}/items/${iid}/edit`, '保存しました。')
@@ -658,6 +689,7 @@ export async function showItem(c: Context<AppEnv>) {
       code={code}
       bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
       agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
+      quiz={item.type === 'quiz' ? quizView(c, access, iid) : undefined}
       revision={revision}
     />,
     { title: item.title },

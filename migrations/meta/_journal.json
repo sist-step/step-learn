@@ -239,6 +239,34 @@
       "when": 1794727612436,
       "tag": "0033_eminent_sersi",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1794727700000,
+      "tag": "0034_quiz_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1794727800000,
+      "tag": "0035_item_type_quiz",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1794728051586,
+      "tag": "0036_quiz_look",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1794728061278,
+      "tag": "0037_quiz_look_check",
+      "breakpoints": true
     }
   ]
 }

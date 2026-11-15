@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { blob, check, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { CODE_LANGUAGES, GRADING_STATUSES, type CodeConstraint, type CodeFiles, type ConstraintResult } from './code'
+import { DEFAULT_PASS_PERCENT, QUIZ_LOOKS, type QuizAnswerRecord, type QuizQuestion } from './quiz'
 import type { RunResult } from './sandbox'
 import { LOG_KINDS } from './types'
 
@@ -153,7 +154,7 @@ export const items = sqliteTable(
     sectionId: integer('section_id')
       .notNull()
       .references(() => sections.id, { onDelete: 'cascade' }),
-    type: text('type', { enum: ['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent'] }).notNull(),
+    type: text('type', { enum: ['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz'] }).notNull(),
     title: text('title').notNull(),
     body: text('body').notNull().default(''),
     url: text('url').notNull().default(''),
@@ -167,7 +168,7 @@ export const items = sqliteTable(
     hidden: integer('hidden').notNull().default(0),
     /** アクセス制限。Moodle の availability と同じ形の JSON（lib/restriction.ts）。NULL は制限なし */
     availability: text('availability'),
-    completion: text('completion', { enum: ['none', 'manual', 'view', 'play', 'clear'] })
+    completion: text('completion', { enum: ['none', 'manual', 'view', 'play', 'clear', 'pass'] })
       .notNull()
       .default('none'),
     position: integer('position').notNull().default(0),
@@ -180,8 +181,8 @@ export const items = sqliteTable(
   (t) => [
     index('items_section').on(t.sectionId, t.position),
     index('items_course').on(t.courseId),
-    check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle', 'agent')`),
-    check('items_completion', sql`${t.completion} IN ('none', 'manual', 'view', 'play', 'clear')`),
+    check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz')`),
+    check('items_completion', sql`${t.completion} IN ('none', 'manual', 'view', 'play', 'clear', 'pass')`),
     check('items_link_target', sql`${t.linkTarget} IN ('new', 'same', 'embed')`),
   ],
 )
@@ -463,6 +464,46 @@ export const codeSubmissions = sqliteTable(
     index('code_submissions_user').on(t.userId),
     check('code_submissions_status', sql`${t.status} IN ('none', 'pending', 'graded', 'failed')`),
   ],
+)
+
+/** 小テストのアイテム（items.type が quiz）の設定。行がなければ、問題がまだない */
+export const quizItems = sqliteTable(
+  'quiz_items',
+  {
+    itemId: integer('item_id')
+      .primaryKey()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    // 問題ごとの行にしないのは、問題をまとめて読んでまとめて書き換えるだけで、問題をまたいだ検索をしないため
+    questions: text('questions', { mode: 'json' }).$type<QuizQuestion[]>().notNull().default([]),
+    /** 合格にする正解の割合（%） */
+    passPercent: integer('pass_percent').notNull().default(DEFAULT_PASS_PERCENT),
+    /** 採点のあとに、不正解だった問題の正解と解説も見せる */
+    showAnswers: integer('show_answers').notNull().default(1),
+    look: text('look', { enum: QUIZ_LOOKS }).notNull().default('plain'),
+  },
+  (t) => [check('quiz_items_look', sql`${t.look} IN ('plain', 'game')`)],
+)
+
+/** 小テストの受験。受け直しても前の受験は残す */
+export const quizAttempts = sqliteTable(
+  'quiz_attempts',
+  {
+    id: integer('id').primaryKey(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** 問題ごとの答えと正誤。受けたときの問題の順 */
+    answers: text('answers', { mode: 'json' }).$type<QuizAnswerRecord[]>().notNull(),
+    correct: integer('correct').notNull(),
+    total: integer('total').notNull(),
+    // 見るたびに求めないのは、あとから合格の割合を変えても、受けたときの合否を変えないため
+    passed: integer('passed').notNull().default(0),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [index('quiz_attempts_item_user').on(t.itemId, t.userId, t.id), index('quiz_attempts_user').on(t.userId)],
 )
 
 /** 操作ログ。種類ごとの保存期間を過ぎたものは消す（lib/operation-log.ts） */

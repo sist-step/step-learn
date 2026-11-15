@@ -43,6 +43,7 @@ const RULES: Rule[] = [
   get('/courses/:id/items/:iid/bundle/zip', 'bundle.zip', 'zip をダウンロードした', 'item'),
   get('/courses/:id/items/:iid/code/submissions/:uid', 'code.submission.view', '提出を見た', 'user'),
   get('/courses/:id/items/:iid/bundle/history/:uid', 'bundle.history.view', '変更履歴を見た', 'user'),
+  get('/courses/:id/items/:iid/quiz/results/:uid', 'quiz.result.view', '小テストの受験を見た', 'user'),
 
   post('/login', 'login', 'ログイン', 'change'),
   rule('GET', '/auth/microsoft/callback', 'login.microsoft', 'Microsoft アカウントでログイン', 'change'),
@@ -87,6 +88,7 @@ const RULES: Rule[] = [
   post('/courses/:id/items/:iid/code/submissions/:uid/review', 'code.review', '提出に点数・コメントを付けた', 'change', 'user'),
   post('/courses/:id/items/:iid/code/submissions/:uid/regrade', 'code.regrade', '提出を AI で採点し直した', 'change', 'user'),
 
+  post('/courses/:id/items/:iid/quiz/submit', 'quiz.submit', '小テストを受けた', 'change', 'item'),
   post('/courses/:id/items/:iid/bundle/files', 'bundle.upload', '配布するファイルをアップロード', 'change', 'item'),
   post('/courses/:id/items/:iid/bundle/files/delete', 'bundle.delete', '配布するファイルを削除', 'change', 'item'),
   post('/courses/:id/items/:iid/bundle/launch', 'bundle.launch', 'VS Code で開いた', 'change', 'item'),

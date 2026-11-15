@@ -15,6 +15,7 @@ import { CodeGradingFields, CodePeriodFields, CodeStarterFields, type Constraint
 import { SelectField } from '../components/form'
 import type { IconName } from '../components/icons'
 import { Markdown, MarkdownEditor } from '../components/markdown'
+import { QuizFields, QuizPanel } from '../components/quiz'
 import { Chip } from '../components/ui'
 import { AGENT_KIND, DEFAULT_AGENT_MODEL, agentBase, agentViewOf, type AgentModel, type AgentView } from '../lib/agent'
 import { agentOpenRouterModels, cachedAgentOpenRouterModels, resolveAgentModel } from '../lib/agent-model'
@@ -34,6 +35,17 @@ import { syncStateOf } from '../lib/bundle-sync'
 import { gradingEnabled } from '../lib/code-grader'
 import type { CourseAccess } from '../lib/courses'
 import { readConstraints, type FieldErrors, type FormName } from '../lib/forms'
+import {
+  DEFAULT_PASS_PERCENT,
+  QUIZ_KIND,
+  isQuizLook,
+  quizFormRows,
+  quizSettingsOf,
+  readQuizForm,
+  type QuizFormRow,
+  type QuizQuestion,
+} from '../lib/quiz'
+import { quizViewOf, type QuizView } from '../lib/quiz-store'
 import { availableCodeLanguages } from '../lib/sandbox'
 import { isSharing } from '../lib/screen-share'
 import type { AppEnv } from '../lib/types'
@@ -41,6 +53,7 @@ import { agentModelData, agentModelOfData, agentPeriodOf, agentStore } from './a
 import { bundleStore, bundleSyncStore } from './bundle-store'
 import type { Api, MoodleCourse, SaveActivity } from './client'
 import type { MItem } from './mapping'
+import { quizStore } from './quiz'
 
 export type ExtraData = Record<string, unknown>
 
@@ -391,7 +404,95 @@ const agent: ExtraKind = {
   },
 }
 
-export const EXTRA_KINDS: Record<string, ExtraKind> = { screen, [CODE_KIND]: code, [BUNDLE_KIND]: bundle, [AGENT_KIND]: agent }
+/** 入力欄に入れる問題。保存済みの中身では問題の一覧、送られてきたままの値では編集画面が組み立てた JSON */
+const quizRowsOf = (values: Record<string, unknown>): QuizFormRow[] =>
+  Array.isArray(values.questions) ? quizFormRows(values.questions as QuizQuestion[]) : readQuizForm(str(values.questions)).rows
+
+const QuizKindFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
+  // 保存済みの中身は toData が必ず questions を入れるので、どちらもないのは追加のモーダル。問題と採点は追加したあとの編集画面で設定する
+  if (!Array.isArray(values.questions) && values.quiz_set === undefined) return null
+  const saved = quizSettingsOf(values)
+  return (
+    <>
+      <input type="hidden" name="quiz_set" value="1" />
+      <MarkdownEditor
+        label="説明（任意）"
+        name="body"
+        id={`${idPrefix}-body`}
+        value={str(values.body)}
+        error={errors.body}
+        rows={5}
+        split
+      />
+      <QuizFields
+        rows={quizRowsOf(values)}
+        passPercent={typeof values.pass_percent === 'string' ? values.pass_percent : String(saved.passPercent)}
+        showAnswers={typeof values.show_answers === 'string' ? (values.show_answers === '0' ? 0 : 1) : saved.showAnswers}
+        look={saved.look}
+        errors={errors}
+        idPrefix={idPrefix}
+      />
+    </>
+  )
+}
+
+// 見ている人を引数で受け取らないのは、ほかの種類の View と Panel には要らず、種類の定義の形を変えずに済ませるため
+function useQuizView(item: MItem, access: CourseAccess): QuizView | null {
+  const c = useRequestContext<AppEnv>()
+  if (!item.extraKey || !item.extra) return null
+  return quizViewOf(quizStore(item.extraKey), quizSettingsOf(item.extra.data), {
+    itemUrl: `/courses/${access.course.id}/items/${item.id}`,
+    userId: c.var.user!.id,
+    student: access.role === 'student',
+    retake: c.req.query('retake') === '1',
+  })
+}
+
+// Moodle の小テストの活動を使わないのは、コードを読んで答える形式（並べ替え・実行の順番・字下げなど）が Moodle の小テストにないため
+const quiz: ExtraKind = {
+  label: '小テスト',
+  description: 'コードを読んで答える問題で理解を確かめる',
+  icon: 'clipboardCheck',
+  form: 'extraQuiz',
+  // 中身の読み取りは lib/quiz.ts の quizSettingsOf
+  toData(values) {
+    const edited = values.quiz_set === 1
+    const read = values.questions as ReturnType<typeof readQuizForm>
+    return {
+      title: str(values.title),
+      body: str(values.body),
+      questions: edited ? read.questions : [],
+      passPercent: edited && typeof values.pass_percent === 'number' ? values.pass_percent : DEFAULT_PASS_PERCENT,
+      showAnswers: edited && values.show_answers === 0 ? 0 : 1,
+      look: edited && isQuizLook(values.look) ? values.look : 'plain',
+    }
+  },
+  Fields: QuizKindFields,
+  addNote: '問題は、追加したあとの編集画面で作ります。',
+  editAfterCreate: true,
+  View: ({ item, data, access }) => {
+    const view = useQuizView(item, access)
+    const body = str(data.body)
+    return (
+      <>
+        {body && (
+          <div class="reader-sheet">
+            <Markdown source={body} />
+          </div>
+        )}
+        {view && <QuizPanel quiz={view} editHref={access.canManage ? `/courses/${access.course.id}/items/${item.id}/edit` : undefined} />}
+      </>
+    )
+  },
+}
+
+export const EXTRA_KINDS: Record<string, ExtraKind> = {
+  screen,
+  [CODE_KIND]: code,
+  [QUIZ_KIND]: quiz,
+  [BUNDLE_KIND]: bundle,
+  [AGENT_KIND]: agent,
+}
 
 export const extraKindOf = (type: string): ExtraKind | null => (Object.hasOwn(EXTRA_KINDS, type) ? EXTRA_KINDS[type] : null)
 
