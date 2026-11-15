@@ -18,7 +18,8 @@
     "db:check": "node scripts/check-migrations.ts",
     "db:check:moodle": "node scripts/check-migrations.ts --moodle",
     "worktree:setup": "node scripts/worktree.ts setup",
-    "dev:users": "node scripts/dev-users.ts"
+    "dev:users": "node scripts/dev-users.ts",
+    "docs:index": "node scripts/docs-index.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.7.0",
