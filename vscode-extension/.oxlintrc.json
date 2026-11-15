@@ -10,6 +10,17 @@
   "rules": {
     "no-unused-vars": ["error", { "ignoreRestSiblings": true }],
     "no-unused-expressions": ["error", { "allowTernary": true, "allowShortCircuit": true }],
-    "typescript/no-misused-spread": "off"
+    "typescript/no-misused-spread": "off",
+    "typescript/no-unsafe-argument": "error",
+    "typescript/no-unsafe-assignment": "error",
+    "typescript/no-unsafe-call": "error",
+    "typescript/no-unsafe-declaration-merging": "error",
+    "typescript/no-unsafe-enum-assignment": "error",
+    "typescript/no-unsafe-enum-comparison": "error",
+    "typescript/no-unsafe-function-type": "error",
+    "typescript/no-unsafe-member-access": "error",
+    "typescript/no-unsafe-return": "error",
+    "typescript/no-unsafe-type-assertion": "error",
+    "typescript/no-unsafe-unary-minus": "error"
   }
 }
