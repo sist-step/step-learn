@@ -1,9 +1,17 @@
 import { desc, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
-import { AGENT_KIND, type AgentItemRow } from '../lib/agent'
+import { AGENT_KIND, agentModelLabel, type AgentItemRow } from '../lib/agent'
 import { intParam } from '../lib/http'
 import type { AgentBackend, AgentTarget } from '../routes/agent/handlers'
-import { agentKeyStates, agentPeriodOf, agentStore, findAgentToken, revokeAgentToken, touchAgentToken } from './agent-store'
+import {
+  agentKeyStates,
+  agentModelOfData,
+  agentPeriodOf,
+  agentStore,
+  findAgentToken,
+  revokeAgentToken,
+  touchAgentToken,
+} from './agent-store'
 import { storedToken, type MoodleEnv } from './auth'
 import { isAccessDenied, isNotFound, isTokenError } from './client'
 import { loadCourse, loadCourseAs, outlineOf, type LoadedCourse, type Viewer } from './data'
@@ -88,8 +96,20 @@ export async function listAgentItems(viewer: Viewer): Promise<AgentItemRow[]> {
     const state = states.get(row.key)
     if (!loaded || !item || !state) return []
     const { opensAt, closesAt } = agentPeriodOf(row.data)
+    const model = agentModelOfData(row.data)
+    const { keys, ...usage } = state
     return [
-      { courseId: row.courseId, courseTitle: loaded.access.course.title, itemId: item.id, title: item.title, opensAt, closesAt, ...state },
+      {
+        courseId: row.courseId,
+        courseTitle: loaded.access.course.title,
+        itemId: item.id,
+        title: item.title,
+        opensAt,
+        closesAt,
+        configured: keys[model.provider],
+        model: agentModelLabel(model),
+        ...usage,
+      },
     ]
   })
   // 並べ替えをクエリに任せないのは、キーの有無が別のテーブルにあり、Moodle に残っているものだけに絞ってから並べるため

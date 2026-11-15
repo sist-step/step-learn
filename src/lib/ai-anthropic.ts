@@ -3,33 +3,31 @@ import {
   AI_STREAM_TIMEOUT,
   AI_TIMEOUT,
   AiError,
+  CLAUDE_PRICES,
   type AiMessage,
   type AiReply,
-  type AiRequest,
+  type AiRequestFor,
   type AiStop,
   type AiTool,
   type AiUsage,
-  type AnthropicModel,
+  type ClaudeModel,
+  type ClaudePrice,
 } from './ai-models'
 import { config } from './config'
-
-type Price = { input: number; output: number; cacheRead: number; cacheWrite: number }
 
 /** Haiku 5.5 は、入力がこのトークン数を超えると LONG_PROMPT_PRICES の料金になる */
 const LONG_PROMPT_TOKENS = 100_000
 
-// 応答に請求額が入らないので、1 トークンあたりの料金（USD）から計算する
-const PRICES: Record<AnthropicModel, Price> = {
-  'claude-haiku-5-5': { input: 0.1e-6, output: 0.5e-6, cacheRead: 0.01e-6, cacheWrite: 0.125e-6 },
-  'claude-sonnet-5-5': { input: 2e-6, output: 10e-6, cacheRead: 0.1e-6, cacheWrite: 2.5e-6 },
-}
-
-const LONG_PROMPT_PRICES: Partial<Record<AnthropicModel, Price>> = {
+const LONG_PROMPT_PRICES: Partial<Record<ClaudeModel, ClaudePrice>> = {
   'claude-haiku-5-5': { input: 0.5e-6, output: 2.5e-6, cacheRead: 0.05e-6, cacheWrite: 0.625e-6 },
 }
 
-// Sonnet を Haiku と同じ深さにしないのは、Sonnet に任せるのは難しい依頼だけで、そこで考える量を減らすと任せる意味が薄れるため
-const EFFORT: Record<AnthropicModel, 'medium' | 'high'> = { 'claude-haiku-5-5': 'medium', 'claude-sonnet-5-5': 'high' }
+// Sonnet と Opus を Haiku と同じ深さにしないのは、高いモデルに任せるのは難しい依頼や作業で、そこで考える量を減らすと任せる意味が薄れるため
+const EFFORT: Record<ClaudeModel, 'medium' | 'high'> = {
+  'claude-haiku-5-5': 'medium',
+  'claude-sonnet-5-5': 'high',
+  'claude-opus-5-5': 'high',
+}
 
 const STOPS: Partial<Record<string, AiStop>> = {
   tool_use: 'tools',
@@ -54,12 +52,20 @@ const parseJson = (raw: string): unknown => {
   }
 }
 
+// そのまま送らないのは、OpenRouter のモデルが付けた ID（functions.read_file:0 など）を Anthropic が弾き、途中でモデルを変えた会話を続けられなくなるため
+const toolUseId = (id: string) => id.replace(/[^\w-]/g, '_')
+
 function assistantContent(m: Extract<AiMessage, { role: 'assistant' }>): Anthropic.Beta.BetaContentBlockParam[] {
   // 本文とツール呼び出しから組み立て直さないのは、考えた内容のブロックを書き換えずに送り返さないと、続きの要求が弾かれるため
   if (Array.isArray(m.native)) return m.native as Anthropic.Beta.BetaContentBlockParam[]
   return [
     ...(m.content ? [{ type: 'text' as const, text: m.content }] : []),
-    ...(m.toolCalls ?? []).map((t) => ({ type: 'tool_use' as const, id: t.id, name: t.name, input: parseJson(t.arguments) ?? {} })),
+    ...(m.toolCalls ?? []).map((t) => ({
+      type: 'tool_use' as const,
+      id: toolUseId(t.id),
+      name: t.name,
+      input: parseJson(t.arguments) ?? {},
+    })),
   ]
 }
 
@@ -74,7 +80,7 @@ function toWire(all: AiMessage[]) {
     } else if (m.role === 'tool') {
       const result: Anthropic.Beta.BetaToolResultBlockParam = {
         type: 'tool_result',
-        tool_use_id: m.toolCallId,
+        tool_use_id: toolUseId(m.toolCallId),
         content: m.content,
         is_error: m.isError || undefined,
       }
@@ -99,12 +105,12 @@ const toWireTool = (t: AiTool, stream: boolean): Anthropic.Beta.BetaTool => ({
   eager_input_streaming: stream || undefined,
 })
 
-function toUsage(model: AnthropicModel, usage: Anthropic.Beta.BetaUsage): AiUsage {
+function toUsage(model: ClaudeModel, usage: Anthropic.Beta.BetaUsage): AiUsage {
   const cacheRead = usage.cache_read_input_tokens ?? 0
   const cacheWrite = usage.cache_creation_input_tokens ?? 0
   const promptTokens = usage.input_tokens + cacheRead + cacheWrite
   // 応答の model で料金を選ばないのは、Sonnet 5.5 が断られたときに代わりに応答する Claude Sonnet 5 も、キャッシュの読み取り以外は同じ料金のため
-  const price = (promptTokens > LONG_PROMPT_TOKENS ? LONG_PROMPT_PRICES[model] : undefined) ?? PRICES[model]
+  const price = (promptTokens > LONG_PROMPT_TOKENS ? LONG_PROMPT_PRICES[model] : undefined) ?? CLAUDE_PRICES[model]
   return {
     promptTokens,
     completionTokens: usage.output_tokens,
@@ -113,7 +119,7 @@ function toUsage(model: AnthropicModel, usage: Anthropic.Beta.BetaUsage): AiUsag
   }
 }
 
-function toAiError(model: AnthropicModel, e: unknown) {
+function toAiError(model: ClaudeModel, e: unknown) {
   if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) {
     console.error('[ai]', model, e.status, e.message)
     return new AiError('AI の API キーが使えません')
@@ -138,7 +144,7 @@ function toAiError(model: AnthropicModel, e: unknown) {
 
 // 止めたときの出力のトークン数を推測で数えるのは、出力のトークン数は言い終えたときにしか届かず、届いた数のままだと途中までに作った分が上限の計算から漏れるため。
 // 1 文字を 1 トークンとみなすのは、日本語の文章ではおおむねそうなり、英語やコードでは多めに数えて上限を超えにくくなるため
-function stoppedUsage(model: AnthropicModel, snapshot: Anthropic.Beta.BetaMessage | undefined): AiUsage {
+function stoppedUsage(model: ClaudeModel, snapshot: Anthropic.Beta.BetaMessage | undefined): AiUsage {
   if (!snapshot) return { promptTokens: 0, completionTokens: 0, cost: 0 }
   const written = snapshot.content.reduce(
     (n, b) => n + (b.type === 'text' ? b.text.length : b.type === 'thinking' ? b.thinking.length : JSON.stringify(b).length),
@@ -149,7 +155,7 @@ function stoppedUsage(model: AnthropicModel, snapshot: Anthropic.Beta.BetaMessag
 
 /** apiKey を渡すと、CLAUDE_API_KEY の代わりにそのキーで呼ぶ（コーディングエージェントのアイテムごとのキー） */
 export async function completeAnthropic(
-  { model, messages, maxTokens, tools, onText, signal }: AiRequest & { model: AnthropicModel },
+  { model, messages, maxTokens, tools, onText, signal }: AiRequestFor<ClaudeModel>,
   apiKey?: string,
 ): Promise<AiReply> {
   const api = apiKey ? new Anthropic({ apiKey, maxRetries: 1 }) : sharedClient()
@@ -200,7 +206,7 @@ export async function completeAnthropic(
 }
 
 /** API キーで model を呼べるか。invalid はキーが使えない、unreachable は Anthropic に届かなかった */
-export async function checkAnthropicKey(apiKey: string, model: AnthropicModel): Promise<'ok' | 'invalid' | 'unreachable'> {
+export async function checkAnthropicKey(apiKey: string, model: ClaudeModel): Promise<'ok' | 'invalid' | 'unreachable'> {
   try {
     await new Anthropic({ apiKey, maxRetries: 1, timeout: 15_000 }).models.retrieve(model)
     return 'ok'

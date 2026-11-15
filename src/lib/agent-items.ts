@@ -1,11 +1,29 @@
 import { and, count, desc, eq, inArray, max, sql } from 'drizzle-orm'
-import { AGENT_DEFAULT_LIMITS, AGENT_KIND, MAX_AGENT_TOKENS, type AgentItemRow, type AgentStore } from './agent'
+import {
+  AGENT_DEFAULT_LIMITS,
+  AGENT_KIND,
+  MAX_AGENT_TOKENS,
+  agentModelLabel,
+  agentModelOf,
+  openRouterInfoOf,
+  type AgentItemRow,
+  type AgentModel,
+  type AgentProvider,
+  type AgentStore,
+} from './agent'
 import { agentTokenHash, apiKeyHintOf, newAgentToken, openApiKey, sealApiKey } from './agent-secret'
 import { db } from './db'
 import { agentItems, agentTokens, agentUsage, courses, items, users } from './schema'
 import type { User } from './types'
 
-const aadOf = (itemId: number) => `agent-item:${itemId}`
+// 提供元ごとに付加データを変えるのは、暗号化したキーを別の列へ書き写されても、別の提供元のキーとして開けないようにするため
+const aadOf = (itemId: number, provider: AgentProvider) =>
+  provider === 'anthropic' ? `agent-item:${itemId}` : `agent-item:${itemId}:openrouter`
+
+const KEY_COLUMNS = {
+  anthropic: { key: 'apiKey', hint: 'apiKeyHint' },
+  openrouter: { key: 'openrouterApiKey', hint: 'openrouterApiKeyHint' },
+} as const satisfies Record<AgentProvider, { key: keyof typeof agentItems.$inferSelect; hint: keyof typeof agentItems.$inferSelect }>
 
 /** コーディングエージェントのアイテムなら、そのコースの ID・タイトル・説明 */
 export const getAgentItem = (itemId: number) =>
@@ -22,28 +40,51 @@ const upsert = (itemId: number, set: Partial<typeof agentItems.$inferInsert>) =>
     .onConflictDoUpdate({ target: agentItems.itemId, set })
     .run()
 
-/** 教師が編集画面で決める、使える期間・1 人あたりの上限・AI への指示 */
-export const saveAgentOptions = (itemId: number, set: { opensAt: number; closesAt: number; userLimit: number; instructions: string }) =>
-  upsert(itemId, set)
+/** 教師が編集画面で決める、モデル・使える期間・1 人あたりの上限・AI への指示 */
+export const saveAgentOptions = (
+  itemId: number,
+  { model, ...set }: { model: AgentModel; opensAt: number; closesAt: number; userLimit: number; instructions: string },
+) =>
+  upsert(itemId, {
+    ...set,
+    model: model.id,
+    openrouterModel: model.provider === 'openrouter' ? openRouterInfoOf(model) : null,
+  })
+
+/** 保存してあるモデル。編集画面で選び直さなかったときに、OpenRouter のモデルの情報を引き継ぐのに使う */
+export const savedAgentModel = (itemId: number) => {
+  const row = db
+    .select({ model: agentItems.model, openrouterModel: agentItems.openrouterModel })
+    .from(agentItems)
+    .where(eq(agentItems.itemId, itemId))
+    .get()
+  return row ? agentModelOf(row.model, row.openrouterModel) : null
+}
 
 const costSum = sql<number>`coalesce(sum(${agentUsage.cost}), 0)`
 
 /** 通常モード（step-learn.db）の、アイテム 1 つの設定・使用量・トークン */
 export function agentStore(itemId: number): AgentStore {
   const settingsRow = () => db.select().from(agentItems).where(eq(agentItems.itemId, itemId)).get()
-  const apiKey = () => {
-    const sealed = settingsRow()?.apiKey
-    return sealed ? openApiKey(aadOf(itemId), sealed) : null
+  const openKey = (row: typeof agentItems.$inferSelect | undefined, provider: AgentProvider) => {
+    const sealed = row?.[KEY_COLUMNS[provider].key]
+    return sealed ? openApiKey(aadOf(itemId, provider), sealed) : null
+  }
+  const keyState = (row: typeof agentItems.$inferSelect | undefined, provider: AgentProvider) => {
+    const configured = openKey(row, provider) !== null
+    return { configured, hint: configured ? (row?.[KEY_COLUMNS[provider].hint] ?? '') : '' }
   }
   const ofItem = eq(agentUsage.itemId, itemId)
 
   return {
     settings() {
       const row = settingsRow()
-      const configured = !!row?.apiKey && openApiKey(aadOf(itemId), row.apiKey) !== null
+      const model = agentModelOf(row?.model, row?.openrouterModel)
+      const keys = { anthropic: keyState(row, 'anthropic'), openrouter: keyState(row, 'openrouter') }
       return {
-        configured,
-        apiKeyHint: configured ? (row?.apiKeyHint ?? '') : '',
+        configured: keys[model.provider].configured,
+        keys,
+        model,
         opensAt: row?.opensAt ?? null,
         closesAt: row?.closesAt ?? null,
         userLimit: row?.userLimit ?? AGENT_DEFAULT_LIMITS.userLimit,
@@ -51,10 +92,24 @@ export function agentStore(itemId: number): AgentStore {
         instructions: row?.instructions ?? '',
       }
     },
-    apiKey,
-    saveKey: ({ apiKey, totalLimit }) =>
-      upsert(itemId, { totalLimit, ...(apiKey && { apiKey: sealApiKey(aadOf(itemId), apiKey), apiKeyHint: apiKeyHintOf(apiKey) }) }),
-    clearKey: () => upsert(itemId, { apiKey: null, apiKeyHint: '' }),
+    apiKey: (provider) => openKey(settingsRow(), provider),
+    saveKey: ({ keys, totalLimit }) =>
+      upsert(itemId, {
+        totalLimit,
+        ...Object.fromEntries(
+          (Object.keys(KEY_COLUMNS) as AgentProvider[]).flatMap((provider) => {
+            const key = keys[provider]
+            const { key: keyColumn, hint } = KEY_COLUMNS[provider]
+            return key
+              ? [
+                  [keyColumn, sealApiKey(aadOf(itemId, provider), key)],
+                  [hint, apiKeyHintOf(key)],
+                ]
+              : []
+          }),
+        ),
+      }),
+    clearKey: (provider) => upsert(itemId, { [KEY_COLUMNS[provider].key]: null, [KEY_COLUMNS[provider].hint]: '' }),
     used: (userId) =>
       db
         .select({ total: costSum })
@@ -148,13 +203,16 @@ export function listAgentItems(): AgentItemRow[] {
     .from(agentUsage)
     .groupBy(agentUsage.itemId)
     .as('spent')
-  return db
+  const rows = db
     .select({
       courseId: courses.id,
       courseTitle: courses.title,
       itemId: items.id,
       title: items.title,
-      configured: sql<number>`${agentItems.apiKey} IS NOT NULL`,
+      anthropicKey: sql<number>`${agentItems.apiKey} IS NOT NULL`,
+      openrouterKey: sql<number>`${agentItems.openrouterApiKey} IS NOT NULL`,
+      model: agentItems.model,
+      openrouterModel: agentItems.openrouterModel,
       opensAt: agentItems.opensAt,
       closesAt: agentItems.closesAt,
       totalLimit: sql<number>`coalesce(${agentItems.totalLimit}, ${AGENT_DEFAULT_LIMITS.totalLimit})`,
@@ -165,8 +223,14 @@ export function listAgentItems(): AgentItemRow[] {
     .leftJoin(agentItems, eq(agentItems.itemId, items.id))
     .leftJoin(spent, eq(spent.itemId, items.id))
     .where(eq(items.type, AGENT_KIND))
-    .orderBy(sql`${agentItems.apiKey} IS NOT NULL`, desc(items.id))
+    .orderBy(desc(items.id))
     .limit(500)
     .all()
-    .map((r) => ({ ...r, configured: !!r.configured }))
+    .map(({ anthropicKey, openrouterKey, model: id, openrouterModel, ...r }) => {
+      const model = agentModelOf(id, openrouterModel)
+      const configured = !!(model.provider === 'anthropic' ? anthropicKey : openrouterKey)
+      return { ...r, configured, model: agentModelLabel(model) }
+    })
+  // 並べ替えをクエリに任せないのは、キーが入っているかが選んでいるモデルの提供元で決まるため
+  return rows.sort((a, b) => Number(a.configured) - Number(b.configured))
 }

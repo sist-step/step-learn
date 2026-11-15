@@ -15,6 +15,43 @@ export type OpenRouterModel = (typeof OPENROUTER_MODELS)[number]
 export type AnthropicModel = (typeof ANTHROPIC_MODELS)[number]
 export type AiModel = (typeof AI_MODELS)[number]
 
+// ANTHROPIC_MODELS に入れないのは、Opus はコーディングエージェントで教師が選んだときだけ使い、AI アシスタントの選択肢や管理画面の一覧に出さないため
+/** lib/ai-anthropic.ts で呼べる Claude のモデル */
+export const CLAUDE_MODELS = [...ANTHROPIC_MODELS, 'claude-opus-5-5'] as const
+
+export type ClaudeModel = (typeof CLAUDE_MODELS)[number]
+
+export const CLAUDE_MODEL_LABELS: Record<ClaudeModel, string> = {
+  'claude-haiku-5-5': 'Claude Haiku 5.5',
+  'claude-sonnet-5-5': 'Claude Sonnet 5.5',
+  'claude-opus-5-5': 'Claude Opus 5.5',
+}
+
+/** 1 トークンあたりの料金（USD） */
+export type ClaudePrice = { input: number; output: number; cacheRead: number; cacheWrite: number }
+
+// 応答に請求額が入らないので、1 トークンあたりの料金から計算する
+export const CLAUDE_PRICES: Record<ClaudeModel, ClaudePrice> = {
+  'claude-haiku-5-5': { input: 0.1e-6, output: 0.5e-6, cacheRead: 0.01e-6, cacheWrite: 0.125e-6 },
+  'claude-sonnet-5-5': { input: 2e-6, output: 10e-6, cacheRead: 0.1e-6, cacheWrite: 2.5e-6 },
+  'claude-opus-5-5': { input: 4e-6, output: 20e-6, cacheRead: 0.2e-6, cacheWrite: 5e-6 },
+}
+
+/** Claude のモデルが 1 回に受け取れる入力と出力のトークン数の合計 */
+export const CLAUDE_CONTEXT_WINDOW = 1_000_000
+
+/** OpenRouter のモデル一覧（/api/v1/models）の 1 件。料金は 1 トークンあたりの USD */
+export type OpenRouterModelInfo = {
+  id: string
+  name: string
+  contextLength: number
+  /** 1 回の応答の出力トークン数の上限。決まっていなければ null */
+  maxOutput: number | null
+  prompt: number
+  completion: number
+  tools: boolean
+}
+
 export const isAiModel = (model: string): model is AiModel => (AI_MODELS as readonly string[]).includes(model)
 
 export const isAnthropicModel = (model: AiModel): model is AnthropicModel => (ANTHROPIC_MODELS as readonly string[]).includes(model)
@@ -37,9 +74,9 @@ export const AI_HARD_TASK_MODELS: Partial<Record<AiModel, AiModel>> = { 'claude-
  * ツールを呼ぶ前に書いた 1〜2 文より長い文章を、本文ではなく中身が空の考えた内容のブロックで返すモデル。
  * 回答のあとにツールを呼ばせると、回答が表示されずに消える
  */
-export const AI_HIDDEN_PRELUDE_MODELS: readonly AiModel[] = ['claude-sonnet-5-5']
+export const AI_HIDDEN_PRELUDE_MODELS: readonly ClaudeModel[] = ['claude-sonnet-5-5', 'claude-opus-5-5']
 
-export const hidesPrelude = (model: AiModel) => AI_HIDDEN_PRELUDE_MODELS.includes(model)
+export const hidesPrelude = (model: AiModel) => (AI_HIDDEN_PRELUDE_MODELS as readonly string[]).includes(model)
 
 // 提供元の枠だけにしないのは、難しい依頼だけを任せる高いモデルに提供元の週の枠を使い切られると、基本のモデルでも続けられなくなるため
 /** 提供元の週の枠とは別に、本人の週の枠を持つモデル。使った額は提供元の枠にも数える */
@@ -114,6 +151,9 @@ export type AiRequest = {
   signal?: AbortSignal
 }
 
+/** AiRequest のモデルを、提供元ごとの呼び出しで決まった型にしたもの */
+export type AiRequestFor<M extends string> = Omit<AiRequest, 'model'> & { model: M }
+
 /**
  * end: 言い終えた / tools: ツールの結果を待っている / length: maxTokens で打ち切られた / refusal: モデルが応答を断った /
  * stopped: AiRequest の signal で中断した。length のときの toolCalls は引数が途中で切れていることがあるので、実行しない。stopped のときは空
@@ -125,7 +165,10 @@ export type AiReply = {
   toolCalls: AiToolCall[]
   stop: AiStop
   usage: AiUsage
-  /** 提供元の形式のままの応答。Claude は考えた内容のブロックを書き換えずに送り返す必要があるので、会話を続けるときに使う */
+  /**
+   * 提供元の形式のままの応答。考えた内容を書き換えずに送り返す必要があるので、会話を続けるときに使う。
+   * Claude は応答の content の配列、OpenRouter は作ったモデルと reasoning_details（lib/ai-openrouter.ts の OpenRouterNative）
+   */
   native?: unknown
 }
 

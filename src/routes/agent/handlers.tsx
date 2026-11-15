@@ -3,11 +3,12 @@
 import { Hono, type Context } from 'hono'
 import { stream } from 'hono/streaming'
 import {
-  AGENT_CONTEXT_LIMIT,
-  AGENT_MAX_TOKENS,
-  AGENT_MODEL,
-  AGENT_MODEL_LABEL,
+  AGENT_PROVIDER_LABELS,
+  AGENT_PROVIDERS,
   AGENT_STATE_MESSAGES,
+  agentContextLimit,
+  agentMaxTokens,
+  agentModelLabel,
   agentState,
   agentSummaryMessages,
   agentSystemPrompt,
@@ -16,10 +17,13 @@ import {
   isAgentPlatform,
   parseAgentMessages,
   usagePercent,
+  type AgentModel,
+  type AgentProvider,
   type AgentStore,
 } from '../../lib/agent'
-import { AiError } from '../../lib/ai-models'
+import { AiError, type AiReply, type AiRequestFor } from '../../lib/ai-models'
 import { checkAnthropicKey, completeAnthropic } from '../../lib/ai-anthropic'
+import { checkOpenRouterKey, completeOpenRouterWith } from '../../lib/ai-openrouter'
 import { VSCODE_EXTENSION_ID } from '../../lib/bundle'
 import { claimLaunch, signLaunch } from '../../lib/bundle-token'
 import { config } from '../../lib/config'
@@ -59,6 +63,24 @@ const nowSec = () => Math.floor(Date.now() / 1000)
 
 const bearer = (c: Context) => c.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
 
+/** アイテムで選んでいるモデルを、その提供元のキーで呼ぶ */
+const completeAgent = (model: AgentModel, apiKey: string, request: Omit<AiRequestFor<string>, 'model'>): Promise<AiReply> =>
+  model.provider === 'anthropic'
+    ? completeAnthropic({ ...request, model: model.id }, apiKey)
+    : completeOpenRouterWith({ ...request, model: model.id }, apiKey, model)
+
+/** 管理者が入れた API キーを、提供元に確かめる。使えなければ、画面に出す文言 */
+async function keyProblem(provider: AgentProvider, apiKey: string, model: AgentModel) {
+  const label = AGENT_PROVIDER_LABELS[provider]
+  const check =
+    provider === 'anthropic'
+      ? await checkAnthropicKey(apiKey, model.provider === 'anthropic' ? model.id : 'claude-haiku-5-5')
+      : await checkOpenRouterKey(apiKey)
+  if (check === 'invalid') return `${label} の API キーが使えません。キーを確かめてください。`
+  if (check === 'unreachable') return `${label} に接続できず、キーを確かめられませんでした。しばらくしてからお試しください。`
+  return null
+}
+
 const stateOf = (store: AgentStore, userId: number) => {
   const settings = store.settings()
   const used = store.used(userId)
@@ -92,27 +114,39 @@ export function createAgentHandlers({ resolve }: Pick<AgentBackend, 'resolve'>) 
     const back = editUrl(item.courseId, item.itemId)
     const result = validate('agentKey', await readForm(c))
     if (!result.ok) return redirectWith(c, back, firstError(result.errors), 'error')
-    const { api_key: apiKey, total_limit: totalLimit } = result.values
-    if (!apiKey && !item.store.settings().configured) return redirectWith(c, back, 'API キーを入力してください。', 'error')
-    if (apiKey) {
-      const check = await checkAnthropicKey(apiKey, AGENT_MODEL)
-      if (check === 'invalid')
-        return redirectWith(c, back, `この API キーでは ${AGENT_MODEL_LABEL} を使えません。キーを確かめてください。`, 'error')
-      if (check === 'unreachable')
-        return redirectWith(c, back, 'Anthropic に接続できず、キーを確かめられませんでした。しばらくしてからお試しください。', 'error')
+    const { api_key: anthropic, openrouter_api_key: openrouter, total_limit: totalLimit } = result.values
+    const before = item.store.settings()
+    const { model } = before
+    const keys = { anthropic, openrouter }
+    const entered = AGENT_PROVIDERS.filter((provider) => keys[provider])
+    if (!entered.length && !before.configured)
+      return redirectWith(c, back, `${AGENT_PROVIDER_LABELS[model.provider]} の API キーを入力してください。`, 'error')
+    for (const provider of entered) {
+      const problem = await keyProblem(provider, keys[provider], model)
+      if (problem) return redirectWith(c, back, problem, 'error')
     }
-    item.store.saveKey({ apiKey: apiKey || undefined, totalLimit })
-    return redirectWith(c, back, apiKey ? `「${item.title}」を有効にしました。` : '全体の上限を保存しました。')
+    item.store.saveKey({ keys: Object.fromEntries(entered.map((p) => [p, keys[p]])), totalLimit })
+    if (!item.store.settings().configured)
+      return redirectWith(
+        c,
+        back,
+        `API キーを保存しました。使うモデル（${agentModelLabel(model)}）には、${AGENT_PROVIDER_LABELS[model.provider]} の API キーが要ります。`,
+        'info',
+      )
+    return redirectWith(c, back, before.configured ? '保存しました。' : `「${item.title}」を有効にしました。`)
   }
 
   async function removeKey(c: C) {
     const item = await adminItem(c)
     if (!item) return c.notFound()
-    item.store.clearKey()
+    const provider = (await readForm(c)).provider
+    if (provider !== 'anthropic' && provider !== 'openrouter') return c.notFound()
+    item.store.clearKey(provider)
+    const stopped = item.store.settings().model.provider === provider ? '学生は使えなくなります。' : ''
     return redirectWith(
       c,
       editUrl(item.courseId, item.itemId),
-      `「${item.title}」の API キーを削除しました。学生は使えなくなります。`,
+      `「${item.title}」の ${AGENT_PROVIDER_LABELS[provider]} の API キーを削除しました。${stopped}`,
       'info',
     )
   }
@@ -190,11 +224,11 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
       message: AGENT_STATE_MESSAGES[state],
       course: target.item.course,
       title: target.item.title,
-      model: AGENT_MODEL_LABEL,
+      model: agentModelLabel(settings.model),
       opensAt: settings.opensAt,
       closesAt: settings.closesAt,
       usage: usagePercent(used, settings.userLimit),
-      contextLimit: AGENT_CONTEXT_LIMIT,
+      contextLimit: agentContextLimit(settings.model),
     })
   })
 
@@ -219,7 +253,7 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
     if (!messages) return c.json({ error: '送られた会話が正しくありません。新しいチャットを始めてください。' }, 400)
     const { store } = item
     const { settings, state } = stateOf(store, userId)
-    const apiKey = state === 'ok' ? store.apiKey() : null
+    const apiKey = state === 'ok' ? store.apiKey(settings.model.provider) : null
     if (!apiKey) return c.json({ error: AGENT_STATE_MESSAGES[state], state }, 403)
     const runKey = `${target.ref}:${userId}`
     if (running.has(runKey)) return c.json({ error: 'ほかのウィンドウで AI が応答を作っています。終わってからお試しください。' }, 409)
@@ -248,17 +282,13 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
       const emit = (event: Record<string, unknown>) => void s.write(`${JSON.stringify(event)}\n`)
       s.onAbort(() => controller.abort())
       try {
-        const reply = await completeAnthropic(
-          {
-            model: AGENT_MODEL,
-            messages: [{ role: 'system', content: system }, ...messages],
-            tools: agentToolsFor(record.tools),
-            maxTokens: AGENT_MAX_TOKENS,
-            onText: (text) => emit({ type: 'text', text }),
-            signal: controller.signal,
-          },
-          apiKey,
-        )
+        const reply = await completeAgent(settings.model, apiKey, {
+          messages: [{ role: 'system', content: system }, ...messages],
+          tools: agentToolsFor(record.tools),
+          maxTokens: agentMaxTokens(settings.model),
+          onText: (text) => emit({ type: 'text', text }),
+          signal: controller.signal,
+        })
         store.record(userId, reply.usage)
         emit({
           type: 'done',
@@ -282,10 +312,7 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
     const { userId, store, settings, apiKey, messages, controller, release } = accepted
     c.req.raw.signal.addEventListener('abort', () => controller.abort())
     try {
-      const reply = await completeAnthropic(
-        { model: AGENT_MODEL, messages: agentSummaryMessages(messages), signal: controller.signal },
-        apiKey,
-      )
+      const reply = await completeAgent(settings.model, apiKey, { messages: agentSummaryMessages(messages), signal: controller.signal })
       store.record(userId, reply.usage)
       const summary = reply.text.trim()
       if (reply.stop !== 'end' || !summary) return c.json({ error: '会話を要約できませんでした。' }, 502)

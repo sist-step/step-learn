@@ -1306,7 +1306,9 @@ export const ItemEditPage = ({
           <input type="hidden" name="type" value={item.extra?.type ?? item.kind} />
           <Card class="editor-main stack">
             <TextField label="タイトル" name="title" value={v.title} error={errors.title} class="editor-title" />
-            {extraKind && <extraKind.Fields values={extraValues ?? item.extra?.data ?? {}} errors={errors} idPrefix="f" />}
+            {extraKind && (
+              <extraKind.Fields values={extraValues ?? item.extra?.data ?? {}} saved={item.extra?.data} errors={errors} idPrefix="f" />
+            )}
             {item.kind === 'link' && (
               <div class="editor-link">
                 <TextField label="URL" name="url" type="url" value={v.url} error={errors.url} placeholder="https://" />

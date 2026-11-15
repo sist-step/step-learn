@@ -1,13 +1,126 @@
 // 画面の部品（components/agent.tsx）と Moodle モードも読み込むので、DB や Node の API を使うモジュールを import しない
-import type { AiMessage, AiTool, AiToolCall, AiUsage, AnthropicModel } from './ai-models'
+import {
+  CLAUDE_CONTEXT_WINDOW,
+  CLAUDE_MODEL_LABELS,
+  CLAUDE_PRICES,
+  type AiMessage,
+  type AiTool,
+  type AiToolCall,
+  type AiUsage,
+  type ClaudeModel,
+  type OpenRouterModelInfo,
+} from './ai-models'
 
 /** コーディングエージェントのアイテムの種類の名前（items.type） */
 export const AGENT_KIND = 'agent'
 
-// 選べるようにしないのは、上限の額をアイテムごとに決めるときに、どのモデルで使われるかが変わると見積もれなくなるため
-export const AGENT_MODEL: AnthropicModel = 'claude-haiku-5-5'
+/** 教師が選べる Claude のモデル。安い順 */
+export const AGENT_CLAUDE_MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'] as const satisfies readonly ClaudeModel[]
 
-export const AGENT_MODEL_LABEL = 'Claude Haiku 5.5'
+export type AgentClaudeModel = (typeof AGENT_CLAUDE_MODELS)[number]
+
+export const isAgentClaudeModel = (s: unknown): s is AgentClaudeModel =>
+  typeof s === 'string' && (AGENT_CLAUDE_MODELS as readonly string[]).includes(s)
+
+/** API キーの請求先 */
+export const AGENT_PROVIDERS = ['anthropic', 'openrouter'] as const
+
+export type AgentProvider = (typeof AGENT_PROVIDERS)[number]
+
+export const AGENT_PROVIDER_LABELS: Record<AgentProvider, string> = { anthropic: 'Anthropic', openrouter: 'OpenRouter' }
+
+/** アイテムで使うモデル。OpenRouter のモデルは、教師が選んだときのモデル一覧の情報（料金・コンテキストの長さ）を持つ */
+export type AgentModel = { provider: 'anthropic'; id: AgentClaudeModel } | ({ provider: 'openrouter' } & OpenRouterModelInfo)
+
+export const DEFAULT_AGENT_MODEL: AgentModel = { provider: 'anthropic', id: 'claude-haiku-5-5' }
+
+/** 1 回の応答の出力トークンの上限。ファイルを丸ごと書き出すツールの引数も、この中に収める */
+export const AGENT_MAX_TOKENS = 32_000
+
+/** 選べる OpenRouter のモデルのコンテキストの長さの下限。システムプロンプトとツールの定義に 5K トークンほど使い、残りで作業させる */
+export const MIN_AGENT_CONTEXT = 64_000
+
+// 100K にしないのは、Haiku 5.5 は 1 回の入力が 100K トークンを超えると料金が 5 倍になり、超える前に会話を短くするため
+const HAIKU_CONTEXT_LIMIT = 80_000
+
+export const agentModelLabel = (m: AgentModel) => (m.provider === 'anthropic' ? CLAUDE_MODEL_LABELS[m.id] : m.name)
+
+/** 1 回の応答の出力トークンの上限。会話の長さの上限を食いつぶさないよう、コンテキストの短いモデルでは小さくする */
+export const agentMaxTokens = (m: AgentModel) =>
+  m.provider === 'anthropic'
+    ? AGENT_MAX_TOKENS
+    : Math.min(AGENT_MAX_TOKENS, m.maxOutput ?? AGENT_MAX_TOKENS, Math.floor(m.contextLength / 4))
+
+const contextWindowOf = (m: AgentModel) => (m.provider === 'anthropic' ? CLAUDE_CONTEXT_WINDOW : m.contextLength)
+
+// コンテキストの長さちょうどにしないのは、要約するかは前の応答の時点のトークン数で決め、
+// そのあとに読んだファイルやコマンドの結果（1 件 10 万文字まで）と次の応答の分が足されてから送られるため
+/** 会話がこの入力トークン数に達したら、拡張機能が会話を要約に置き換える（0.3.0 までの拡張機能は、新しいチャットを始めるよう促す） */
+export function agentContextLimit(m: AgentModel) {
+  if (m.provider === 'anthropic' && m.id === 'claude-haiku-5-5') return HAIKU_CONTEXT_LIMIT
+  return Math.floor(((contextWindowOf(m) - agentMaxTokens(m)) * 0.9) / 1000) * 1000
+}
+
+/** 1 トークンあたりの料金（USD）を、100 万トークンあたりで書いたもの */
+function priceText(perToken: number) {
+  // 丸めてから桁を決めるのは、0.1e-6 * 1e6 が 0.09999… になり、$0.100 と出てしまうため
+  const usd = Math.round(perToken * 1e12) / 1e6
+  if (usd === 0) return '無料'
+  return `$${usd >= 10 ? usd.toFixed(0) : usd >= 0.1 ? usd.toFixed(2) : usd.toFixed(3)} / 100 万トークン`
+}
+
+const tokensText = (n: number) => (n >= 1_000_000 ? `${Math.round(n / 100_000) / 10}M` : `${Math.round(n / 1000)}K`)
+
+const pricesOf = (m: AgentModel) =>
+  m.provider === 'anthropic' ? { prompt: CLAUDE_PRICES[m.id].input, completion: CLAUDE_PRICES[m.id].output } : m
+
+/** 編集画面でモデルにカーソルを重ねたときに出す、短い説明。[項目, 値] の並び */
+export function agentModelFacts(m: AgentModel): [string, string][] {
+  const prices = pricesOf(m)
+  return [
+    ['提供元', AGENT_PROVIDER_LABELS[m.provider]],
+    ['入力', priceText(prices.prompt)],
+    ['出力', priceText(prices.completion)],
+    ['コンテキスト', `${tokensText(contextWindowOf(m))}（${tokensText(agentContextLimit(m))} で会話を要約）`],
+    ['1 回の出力', `${tokensText(agentMaxTokens(m))} まで`],
+  ]
+}
+
+/** コーディングエージェントに使える OpenRouter のモデルか。ツールを呼べないモデルや、会話の短いモデルは使えない */
+export const isAgentOpenRouterModel = (m: OpenRouterModelInfo) => m.tools && m.contextLength >= MIN_AGENT_CONTEXT
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+
+const nonNegative = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null)
+
+/** 保存した OpenRouter のモデルの情報（JSON から読んだもの）。正しくなければ null */
+export function parseOpenRouterModel(v: unknown): OpenRouterModelInfo | null {
+  if (!isRecord(v)) return null
+  const { id, name, contextLength, maxOutput } = v
+  const prompt = nonNegative(v.prompt)
+  const completion = nonNegative(v.completion)
+  if (typeof id !== 'string' || !id || typeof name !== 'string' || typeof contextLength !== 'number' || contextLength <= 0) return null
+  if (prompt === null || completion === null) return null
+  return { id, name, contextLength, maxOutput: typeof maxOutput === 'number' ? maxOutput : null, prompt, completion, tools: true }
+}
+
+/** 保存する OpenRouter のモデルの情報 */
+export const openRouterInfoOf = (m: Extract<AgentModel, { provider: 'openrouter' }>): OpenRouterModelInfo => ({
+  id: m.id,
+  name: m.name,
+  contextLength: m.contextLength,
+  maxOutput: m.maxOutput,
+  prompt: m.prompt,
+  completion: m.completion,
+  tools: m.tools,
+})
+
+/** 保存したモデルの ID と OpenRouter のモデルの情報から、使うモデル。読めなければ既定のモデル */
+export function agentModelOf(model: unknown, openrouter: unknown): AgentModel {
+  if (isAgentClaudeModel(model)) return { provider: 'anthropic', id: model }
+  const info = parseOpenRouterModel(openrouter)
+  return info && info.id === model ? { provider: 'openrouter', ...info } : DEFAULT_AGENT_MODEL
+}
 
 /** アイテムの URL の下の、コーディングエージェントの操作の URL（/courses/:id/items/:iid/agent） */
 export const agentBase = (courseId: number, itemId: number) => `/courses/${courseId}/items/${itemId}/agent`
@@ -23,15 +136,11 @@ export const MAX_AGENT_INSTRUCTIONS = 8000
 /** 1 人がアイテム 1 つで持てるトークンの数。学校と家の PC のように、いくつかの PC で使えるようにする */
 export const MAX_AGENT_TOKENS = 5
 
-// 100K にしないのは、Haiku 5.5 は 1 回の入力が 100K トークンを超えると料金が 5 倍になり、超える前に会話を短くするため
-/** 会話がこの入力トークン数に達したら、拡張機能が会話を要約に置き換える（0.3.0 までの拡張機能は、新しいチャットを始めるよう促す） */
-export const AGENT_CONTEXT_LIMIT = 80_000
-
-/** 拡張機能が会話を送る要求の本文の上限。読んだファイルの中身やコマンドの出力も、会話に入れて毎回送り直す */
-export const AGENT_BODY_LIMIT = 8 * 1024 * 1024
-
-/** 1 回の応答の出力トークンの上限。ファイルを丸ごと書き出すツールの引数も、この中に収める */
-export const AGENT_MAX_TOKENS = 32_000
+/**
+ * 拡張機能が会話を送る要求の本文の上限。読んだファイルの中身やコマンドの出力も、会話に入れて毎回送り直す。
+ * コンテキストの長いモデルで要約する手前（90 万トークンほど）まで続けた会話が収まる大きさにする
+ */
+export const AGENT_BODY_LIMIT = 16 * 1024 * 1024
 
 /**
  * closed: 非表示やアクセス制限で、本人がアイテムを開けない / off: 管理者が API キーを入れていない / unset: 使える期間が決まっていない / before: 始まる前 / after: 終わった /
@@ -39,11 +148,14 @@ export const AGENT_MAX_TOKENS = 32_000
  */
 export type AgentState = 'closed' | 'off' | 'unset' | 'before' | 'after' | 'total' | 'limit' | 'ok'
 
+/** 提供元ごとの API キー。hint は入れたキーの末尾（キーがなければ空） */
+export type AgentKeyState = { configured: boolean; hint: string }
+
 export type AgentSettings = {
-  /** API キーが入っていて、読み出せる */
+  /** 選んでいるモデルの提供元の API キーが入っていて、読み出せる */
   configured: boolean
-  /** 入れたキーの末尾。キーがなければ空 */
-  apiKeyHint: string
+  keys: Record<AgentProvider, AgentKeyState>
+  model: AgentModel
   opensAt: number | null
   closesAt: number | null
   userLimit: number
@@ -60,11 +172,11 @@ export type AgentUserUsage = { id: number | null; name: string; username: string
 /** アイテム 1 つの設定・使用量・トークン。通常モードは lib/agent-items.ts、Moodle モードは moodle-mode/agent-store.ts */
 export type AgentStore = {
   settings: () => AgentSettings
-  /** API キー。入っていないか、読み出せなければ null */
-  apiKey: () => string | null
-  /** 管理者が入れる API キーと、アイテム全体の上限。apiKey を渡さなければ、キーはそのままにする */
-  saveKey: (set: { apiKey?: string; totalLimit: number }) => void
-  clearKey: () => void
+  /** 提供元の API キー。入っていないか、読み出せなければ null */
+  apiKey: (provider: AgentProvider) => string | null
+  /** 管理者が入れる API キーと、アイテム全体の上限。keys に入れなかった提供元のキーは、そのままにする */
+  saveKey: (set: { keys: Partial<Record<AgentProvider, string>>; totalLimit: number }) => void
+  clearKey: (provider: AgentProvider) => void
   used: (userId: number) => number
   spent: () => number
   record: (userId: number, usage: AiUsage) => void
@@ -82,6 +194,8 @@ export type AgentItemRow = {
   itemId: number
   title: string
   configured: boolean
+  /** 選んでいるモデルの名前 */
+  model: string
   opensAt: number | null
   closesAt: number | null
   totalLimit: number
@@ -352,10 +466,8 @@ export function agentSummaryMessages(messages: AiMessage[]): AiMessage[] {
 // 会話の中身を厳しく決めすぎないのは、Anthropic の応答の形が増えても、拡張機能から送り返されたものを弾かないようにするため
 const NATIVE_BLOCK_TYPES = new Set(['text', 'thinking', 'redacted_thinking', 'tool_use'])
 
-export const MAX_AGENT_MESSAGES = 600
+export const MAX_AGENT_MESSAGES = 2000
 const MAX_TEXT = 200_000
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 const str = (v: unknown, max = MAX_TEXT) => (typeof v === 'string' && v.length <= max ? v : null)
 
@@ -367,7 +479,17 @@ function parseToolCall(v: unknown): AiToolCall | null {
   return id && name && args !== null ? { id, name, arguments: args } : null
 }
 
+/** OpenRouter の応答の native（lib/ai-openrouter.ts）。考えた内容を、作ったモデルに送り返す */
+function parseOpenRouterNative(v: Record<string, unknown>) {
+  const details = v.reasoningDetails
+  if (typeof v.openrouter !== 'string' || !Array.isArray(details) || details.length > 200) return undefined
+  return details.every((d) => isRecord(d) && typeof d.type === 'string')
+    ? { openrouter: v.openrouter, reasoningDetails: details }
+    : undefined
+}
+
 function parseNative(v: unknown) {
+  if (isRecord(v)) return parseOpenRouterNative(v)
   if (!Array.isArray(v) || v.length > 200) return undefined
   return v.every((b) => isRecord(b) && typeof b.type === 'string' && NATIVE_BLOCK_TYPES.has(b.type)) ? v : undefined
 }
