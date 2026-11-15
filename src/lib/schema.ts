@@ -244,6 +244,26 @@ export const aiChats = sqliteTable(
   (t) => [index('ai_chats_user').on(t.userId), index('ai_chats_updated').on(t.updatedAt)],
 )
 
+/**
+ * AI が request_file で受け取ったファイル（lib/ai-uploads.ts）。アイテムに使うと、ファイルをコースの下へ移して行を消す。
+ * 使われないまま AI_CHAT_TTL を過ぎたものは、ファイルごと消す
+ */
+export const aiUploads = sqliteTable(
+  'ai_uploads',
+  {
+    id: integer('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    fileKey: text('file_key').notNull(),
+    fileName: text('file_name').notNull(),
+    fileSize: integer('file_size').notNull(),
+    fileType: text('file_type').notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [index('ai_uploads_user').on(t.userId), index('ai_uploads_created').on(t.createdAt)],
+)
+
 /** 管理画面で変える、アプリ全体の設定（端末ごとの設定は lib/settings.ts） */
 export const appSettings = sqliteTable('app_settings', {
   key: text('key').primaryKey(),

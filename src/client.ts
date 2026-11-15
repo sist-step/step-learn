@@ -1404,16 +1404,17 @@ document.addEventListener('change', (e) => {
   if (title && !title.value) title.value = input.files[0].name.replace(/\.[^.]+$/, '')
 })
 
-// --- 選んだ画像をプレビューに出す（上限を超えていたら送信前に選択を取り消し、保存済みの画像に戻す）
+// --- 上限（data-max-size）を超えたファイルは送信前に選択を取り消す。選んだ画像はプレビューに出す（取り消したら保存済みの画像に戻す）
 document.addEventListener('change', (e) => {
   const input = e.target as HTMLInputElement
-  if (!input.matches('[data-image-input]')) return
+  if (input.type !== 'file' || !input.dataset.maxSize) return
   let file = input.files?.[0]
   if (file && file.size > Number(input.dataset.maxSize)) {
     input.value = ''
     file = undefined
     toast(input.dataset.tooLarge ?? '', 'error')
   }
+  if (!input.matches('[data-image-input]')) return
   const preview = input.closest('[data-file-drop]')?.querySelector<HTMLImageElement>('[data-image-preview]')
   if (!preview) return
   if (preview.src.startsWith('blob:')) URL.revokeObjectURL(preview.src)
@@ -2956,6 +2957,12 @@ async function sendAiMessage(retried = false, model = aiPanel()?.dataset.model) 
 async function decideAiCard(form: HTMLFormElement, submitter: HTMLElement | null) {
   const call = new FormData(form).get('call')
   const decision = submitter instanceof HTMLButtonElement ? submitter.value : ''
+  const fileInput = form.matches('[data-ai-file]') ? form.querySelector<HTMLInputElement>('input[type=file]') : null
+  const file = fileInput?.files?.[0]
+  if (fileInput && decision === 'approve' && !file) {
+    toast('送るファイルを選んでください。', 'error')
+    return fileInput.focus()
+  }
   if (await refreshAiIfOutdated()) {
     const next = $$<HTMLFormElement>('[data-ai-confirm]', aiPanel() ?? document).find((f) => new FormData(f).get('call') === call)
     // 取り直したパネルでカードが確認を待っていなければ送らないのは、ほかのタブで決めたカードを決め直さないため
@@ -2964,10 +2971,14 @@ async function decideAiCard(form: HTMLFormElement, submitter: HTMLElement | null
     submitter = $$<HTMLButtonElement>('button[name=decision]', next).find((b) => b.value === decision) ?? null
   }
   const data = new FormData(form, submitter)
+  // 選んだファイルを添え直すのは、パネルを取り直すと、新しいカードのファイルの選択は空になっているため
+  if (file && decision === 'approve') data.set('file', file)
   $$<HTMLButtonElement>('button', form).forEach((btn) => (btn.disabled = true))
   $$('[data-ai-replies]', aiPanel() ?? document).forEach((el) => el.remove())
-  await streamAi(form.action, data)
+  const outcome = await streamAi(form.action, data)
   await refreshAiPanel()
+  // 取り直したパネルだけにしないのは、受け取れなかったファイルのカードは選ぶ前に戻り、断った理由まで消えるため
+  if (outcome.retracted) for (const message of outcome.errors) noteAiProblem(message)
 }
 
 document.addEventListener('submit', (e) => {

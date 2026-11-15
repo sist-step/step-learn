@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import * as z from 'zod/mini'
 import { config } from './config'
 
 // SESSION_SECRET をそのまま鍵にしないのは、Cookie の署名とこの鍵を使い回さないため
@@ -47,6 +48,9 @@ export const signLaunch = (claims: Omit<LaunchClaims, 'kind' | 'nonce' | 'exp'>)
 
 // メモリに持つのは、使い終わった鍵を覚えておくのが有効期間の数分だけでよく、再起動で忘れても期限切れで使えなくなるため
 const usedNonces = new Map<string, number>()
+
+/** VS Code の拡張機能が、リンクの鍵を引き換えるときに送る本文 */
+export const LAUNCH_CLAIM = z.object({ token: z.string() })
 
 /** リンクの鍵を 1 回だけ使えるように確かめる。使い済み・期限切れ・改ざんされた鍵なら null */
 export function claimLaunch(token: string): LaunchClaims | null {
