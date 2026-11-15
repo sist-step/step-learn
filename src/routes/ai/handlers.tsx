@@ -10,7 +10,7 @@ import type { AiChange, AiTouched } from '../../lib/ai-tool-kit'
 import { formatBytes } from '../../lib/bytes'
 import { diffHunks, diffLines } from '../../lib/diff'
 import { firstError, validate } from '../../lib/forms'
-import { field, fileField, readForm, sameOriginReferer, wantsJson } from '../../lib/http'
+import { readFields, readForm, sameOriginReferer, wantsJson } from '../../lib/http'
 import { EXECUTABLE_NOT_ALLOWED, FILE_TOO_LARGE, MAX_FILE_SIZE, isExecutable } from '../../lib/storage'
 import type { AppEnv, User } from '../../lib/types'
 
@@ -189,15 +189,15 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
   async function decide(c: Context<AppEnv>) {
     const user = c.var.user!
     if (!(await canUse(c))) return c.notFound()
-    const form = await readForm(c)
-    const callId = field(form, 'call', 200)
-    const approve = field(form, 'decision', 10) === 'approve'
-    const page = field(form, 'page', 500)
-    const file = approve ? fileField(form, 'file') : null
+    const fields = await readFields(c, 'aiDecision')
+    if (!fields) return c.notFound()
+    const { call: callId, page } = fields
+    const approve = fields.decision === 'approve'
+    const file = approve ? fields.file : null
     const problem = file && (await uploadProblem(file))
     return streamEvents(c, async (emit) => {
       const chat = chats.currentChat(user.id)
-      if (!chat || String(chat.id) !== field(form, 'chat', 20)) {
+      if (!chat || String(chat.id) !== fields.chat) {
         emit({ type: 'error', message: 'このチャットは閉じられています。' })
         return emit({ type: 'closed' })
       }
@@ -219,7 +219,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
   async function close(c: Context<AppEnv>) {
     const user = c.var.user!
     if (!(await canUse(c))) return c.notFound()
-    const chatId = field(await readForm(c), 'chat', 20)
+    const chatId = (await readFields(c, 'aiChat'))?.chat ?? ''
     // 開いていたチャットでなければ閉じないのは、ほかのタブで始めた、まだ見ていないチャットを消さないため
     if (String(chats.currentChat(user.id)?.id ?? '') === chatId) chats.closeChat(user.id)
     if (wantsJson(c)) return c.json({ ok: true })

@@ -8,7 +8,7 @@ import { session } from './lib/auth'
 import { AGENT_BODY_LIMIT } from './lib/agent'
 import { SYNC_BODY_LIMIT } from './lib/bundle-sync'
 import { touchCourse } from './lib/courses'
-import { csrfGuard, field, flashMiddleware, limitBody, readForm } from './lib/http'
+import { csrfGuard, flashMiddleware, limitBody, readFields } from './lib/http'
 import { operationLog, recordPrefetchedView } from './lib/operation-log'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE } from './lib/storage'
 import type { AppEnv } from './lib/types'
@@ -61,7 +61,8 @@ app.post('/courses/:id/*', async (c, next) => {
 
 app.use(operationLog)
 app.post('/views', async (c) => {
-  recordPrefetchedView(c, field(await readForm(c), 'path', 500))
+  const fields = await readFields(c, 'viewed')
+  if (fields) recordPrefetchedView(c, fields.path)
   return c.body(null, 204)
 })
 
