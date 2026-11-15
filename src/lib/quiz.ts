@@ -38,7 +38,7 @@ export const QUIZ_DEFAULT_PROMPTS: Record<QuizKind, string> = {
   table: 'このコードを実行したとき、繰り返しの各回が終わった時点での変数の値を書いてください。',
 }
 
-/** 学生に出す画面の見た目。game は中学生向けで、動物のキャラクターが案内し、1 問ずつ進む。問題と採点は plain と同じ */
+/** 学生に出す画面の見た目。game は中学生向けで、3D のダンジョンの扉を 1 問ずつ正解して開けながら進み、点数は問題ごとの最初の答えで数える */
 export const QUIZ_LOOKS = ['plain', 'game'] as const
 
 export type QuizLook = (typeof QUIZ_LOOKS)[number]
