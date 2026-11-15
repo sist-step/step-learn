@@ -2,11 +2,20 @@
 import { Hono, type Context } from 'hono'
 import { stream } from 'hono/streaming'
 import { AiPanel, type AiCardChange, type AiChatEntry, type AiPanelProps } from '../../components/ai-panel'
-import { AI_CHAT_MODELS, AI_MODEL_LABELS, aiProvider, isAiModel, isProviderEnabled, type AiModel } from '../../lib/ai'
+import { AI_CHAT_MODELS, AI_MODEL_LABELS, AiError, aiProvider, isAiModel, isProviderEnabled, type AiModel } from '../../lib/ai'
 import { contextPercent, quotaProblem, SUGGEST_REPLIES, type AiAgent, type AiAgentEvent } from '../../lib/ai-agent'
 import { chatRevision, type AiCard, type AiChatContent } from '../../lib/ai-chat'
 import { fileKindsAccept, fileKindsLabel } from '../../lib/ai-file-kinds'
 import type { AiChange, AiTouched } from '../../lib/ai-tool-kit'
+import {
+  isVoiceTooLong,
+  MAX_VOICE_BYTES,
+  MAX_VOICE_CHARS,
+  MAX_VOICE_SECONDS,
+  transcribe,
+  VOICE_MODEL,
+  voiceFormat,
+} from '../../lib/ai-voice'
 import { formatBytes } from '../../lib/bytes'
 import { diffHunks, diffLines } from '../../lib/diff'
 import { firstError, validate } from '../../lib/forms'
@@ -85,6 +94,9 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
   const { chats, ledger } = agent
   const usable = (model: AiModel) => isProviderEnabled(aiProvider(model)) && ledger.isModelAvailable(model)
   const enabledModels = () => AI_CHAT_MODELS.filter(usable)
+  /** 音声入力を今使えない理由。使用量は本人の OpenRouter の週の枠に数える */
+  const voiceProblem = (user: User) =>
+    isProviderEnabled('openrouter') ? quotaProblem(ledger.getQuota(user.id, VOICE_MODEL)) : '今は音声入力を使えません。'
 
   const modelOption = (user: User, model: AiModel) => {
     const hard = agent.hardTaskModel(model)
@@ -103,6 +115,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     return {
       models: enabledModels().map((m) => modelOption(user, m)),
       revision: chatRevision(chat),
+      voice: voiceProblem(user) ? null : { maxSeconds: MAX_VOICE_SECONDS, maxChars: MAX_VOICE_CHARS },
       chat: chat && {
         id: chat.id,
         model: modelOption(user, chat.model),
@@ -216,6 +229,28 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     return c.redirect(sameOriginReferer(c, '/dashboard'), 303)
   }
 
+  /** 録音中の音声を文字にする。client.ts は録り始めから今までの音声を何度も送り、返った文字を入力欄に薄く出す */
+  async function voice(c: Context<AppEnv>) {
+    const user = c.var.user!
+    if (!(await canUse(c))) return c.notFound()
+    const fields = await readFields(c, 'aiVoice')
+    const format = fields && voiceFormat(fields.audio.type)
+    if (!fields || !format) return c.json({ error: 'この形式の音声は受け取れません。' }, 400)
+    if (fields.audio.size > MAX_VOICE_BYTES) return c.json({ error: '音声が長すぎます。' }, 400)
+    const problem = voiceProblem(user)
+    if (problem) return c.json({ error: problem }, 429)
+    try {
+      const { text, seconds, usage } = await transcribe(fields.audio, format, c.req.raw.signal)
+      ledger.recordUsage(user.id, VOICE_MODEL, usage)
+      // 録音の長さを client.ts だけに任せないのは、画面を通さずに送られた長い音声も、1 回の上限で断るため
+      if (isVoiceTooLong(seconds)) return c.json({ error: `音声入力は 1 回 ${MAX_VOICE_SECONDS} 秒までです。` }, 400)
+      return c.json({ text: text.slice(0, MAX_VOICE_CHARS) })
+    } catch (e) {
+      if (e instanceof AiError) return c.json({ error: e.message }, 502)
+      throw e
+    }
+  }
+
   async function close(c: Context<AppEnv>) {
     const user = c.var.user!
     if (!(await canUse(c))) return c.notFound()
@@ -226,7 +261,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     return c.redirect(sameOriginReferer(c, '/dashboard'), 303)
   }
 
-  return { renderPanel, show, state, send, decide, stop, close }
+  return { renderPanel, show, state, send, decide, stop, voice, close }
 }
 
 export type AiHandlers = ReturnType<typeof createAiHandlers>
@@ -239,5 +274,6 @@ export function aiRoutes(h: AiHandlers) {
   app.post('/chat/confirm', h.decide)
   app.post('/chat/stop', h.stop)
   app.post('/chat/close', h.close)
+  app.post('/voice', h.voice)
   return app
 }
