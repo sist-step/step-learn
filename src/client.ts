@@ -141,6 +141,27 @@ document.addEventListener('click', (e) => {
   setSetting('editMode', on)
 })
 
+// --- 目次の開閉（端末ごと・アイテムの種類ごと。最初の描画前に当てるのは lib/settings.ts の BOOT_SCRIPT）
+const outlineKind = () => document.querySelector<HTMLElement>('.reader[data-outline-kind]')?.dataset.outlineKind
+function applyOutline() {
+  const kind = outlineKind()
+  const closed = !!kind && getSetting('outlineHidden').includes(kind)
+  const label = closed ? '目次を表示' : '目次を隠す'
+  document.documentElement.toggleAttribute('data-outline-closed', closed)
+  $$('[data-outline-toggle]').forEach((el) => {
+    el.setAttribute('aria-expanded', String(!closed))
+    el.setAttribute('aria-label', label)
+    el.setAttribute('title', label)
+  })
+}
+document.addEventListener('click', (e) => {
+  const kind = outlineKind()
+  if (!kind || !(e.target as Element).closest('[data-outline-toggle]')) return
+  const close = !document.documentElement.hasAttribute('data-outline-closed')
+  updateSetting('outlineHidden', (kinds) => [...kinds.filter((k) => k !== kind), ...(close ? [kind] : [])])
+  applyOutline()
+})
+
 // --- トースト
 function toast(message: string, type: 'success' | 'error' | 'info' = 'success') {
   const host = document.querySelector('.toasts')
@@ -3822,6 +3843,7 @@ function initContent() {
   completeOnView()
   restoreCollapsed()
   applyEditMode(getSetting('editMode'))
+  applyOutline()
   applyCourseFilter()
   updateToc()
   initMarkdownEditors()

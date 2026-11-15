@@ -22,6 +22,7 @@ import check from 'heroicons/24/outline/check.svg?raw'
 import checkCircle from 'heroicons/24/outline/check-circle.svg?raw'
 import assistant from 'heroicons/24/outline/chat-bubble-oval-left-ellipsis.svg?raw'
 import chevronDoubleLeft from 'heroicons/24/outline/chevron-double-left.svg?raw'
+import chevronDoubleRight from 'heroicons/24/outline/chevron-double-right.svg?raw'
 import chevronDown from 'heroicons/24/outline/chevron-down.svg?raw'
 import chevronLeft from 'heroicons/24/outline/chevron-left.svg?raw'
 import chevronRight from 'heroicons/24/outline/chevron-right.svg?raw'
@@ -84,6 +85,7 @@ const svgs = {
   logout,
   menu,
   chevronDoubleLeft,
+  chevronDoubleRight,
   x,
   check,
   checkCircle,
