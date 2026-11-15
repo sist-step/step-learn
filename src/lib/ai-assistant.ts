@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { createAiAgent } from './ai-agent'
 import { createAiChatStore } from './ai-chat'
+import { DOCS_ABILITIES, docsTools } from './ai-docs'
 import { AI_TOOLS } from './ai-tools'
 import { aiUploadStore } from './ai-uploads'
 import { aiLedger } from './ai-usage'
@@ -28,7 +29,7 @@ async function pageContext(c: AiToolContext, page: string) {
 
 /** 通常モード（step-learn.db）の AI アシスタント */
 export const assistant = createAiAgent({
-  tools: AI_TOOLS,
+  tools: [...AI_TOOLS, ...docsTools(aiLedger)],
   ledger: aiLedger,
   chats: createAiChatStore({ db, aiChats }),
   pageContext,
@@ -40,5 +41,6 @@ export const assistant = createAiAgent({
     '書き換えるときは、先に get_item などで今の内容を読み、変える欄だけを全文で渡してください。',
     'ファイルのアイテムを追加するときと、ファイルを差し替えるときは、request_file で利用者にファイルを選んでもらい、返ってきた file_id を create_item・update_item に渡してください。受け取る種類は用途に合わせて絞ってください（配る資料なら pdf だけ、など）。受け取ったファイルの中身は読めません。',
     '削除、画面共有、参加者、コースの設定は扱えません。頼まれたら、できないことを伝え、画面での手順を案内してください。',
+    ...DOCS_ABILITIES,
   ],
 })

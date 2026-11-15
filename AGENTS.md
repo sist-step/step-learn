@@ -13,6 +13,7 @@ npm run build      # dist/ を生成。CLI（user:create）もこれで作られ
 npm run db:generate  # schema.ts からマイグレーションを生成
 npm run db:check     # マイグレーションの整合性を確認（CI と同じ）
 npm run dev:users    # 開発用のユーザー admin / teacher / student を作る（パスワードはユーザー名と同じ）
+npm run docs:index -- --docs ../step-docs/src/content/docs --out ai-docs  # AI エージェントが検索する STEP Docs の索引を手元に作る（本番は step-docs のワークフローが作る）
 ```
 
 テストフレームワークはない。完了の基準は `typecheck`・`lint`・`format:check`・`build` が通り、変更した画面を実際に動かして確かめたこと。

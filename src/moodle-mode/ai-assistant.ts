@@ -2,6 +2,7 @@ import type { Context } from 'hono'
 import { AI_PROVIDERS, hasAiEmail, isProviderEnabled } from '../lib/ai'
 import { createAiAgent } from '../lib/ai-agent'
 import { createAiChatStore } from '../lib/ai-chat'
+import { DOCS_ABILITIES, docsTools } from '../lib/ai-docs'
 import type { AiToolContext } from '../lib/ai-tool-kit'
 import { aiLedger } from './ai-usage'
 import { MOODLE_AI_TOOLS } from './ai-tools'
@@ -35,7 +36,7 @@ async function pageContext(c: AiToolContext, page: string) {
 
 /** Moodle モード（moodle-mode.db に会話と使用量、教材は Moodle）の AI アシスタント */
 export const moodleAssistant = createAiAgent({
-  tools: MOODLE_AI_TOOLS,
+  tools: [...MOODLE_AI_TOOLS, ...docsTools(aiLedger)],
   ledger: aiLedger,
   chats: createAiChatStore({ db, aiChats }),
   pageContext,
@@ -47,5 +48,6 @@ export const moodleAssistant = createAiAgent({
     '書き換えるときは、先に get_item などで今の内容を読み、変える欄だけを全文で渡してください。',
     'ファイルのアイテムを追加するときと、ファイルを差し替えるときは、request_file で利用者にファイルを選んでもらい、返ってきた file_id を create_item・update_item に渡してください。受け取る種類は用途に合わせて絞ってください（配る資料なら pdf だけ、など）。受け取ったファイルの中身は読めません。',
     '削除、Moodle の活動の中身、アクセス制限、参加者、コースの設定は扱えません。頼まれたら、できないことを伝え、STEP Learn か Moodle の画面での手順を案内してください。',
+    ...DOCS_ABILITIES,
   ],
 })

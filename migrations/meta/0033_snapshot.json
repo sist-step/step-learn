@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b8e2bb1d-e9bc-4176-8cd8-97dbb21c4fb7",
+  "id": "4190d635-a22b-46b5-88d2-3b190992dc15",
   "prevId": "90be90ea-2902-464b-b9ec-01519280d5b3",
   "tables": {
     "agent_items": {
@@ -28,6 +28,36 @@
           "notNull": true,
           "autoincrement": false,
           "default": "''"
+        },
+        "openrouter_api_key": {
+          "name": "openrouter_api_key",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "openrouter_api_key_hint": {
+          "name": "openrouter_api_key_hint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'claude-haiku-5-5'"
+        },
+        "openrouter_model": {
+          "name": "openrouter_model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "opens_at": {
           "name": "opens_at",
@@ -1896,173 +1926,6 @@
           "tableTo": "users",
           "columnsFrom": [
             "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "quiz_attempts": {
-      "name": "quiz_attempts",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "item_id": {
-          "name": "item_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "answers": {
-          "name": "answers",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "correct": {
-          "name": "correct",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "total": {
-          "name": "total",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "passed": {
-          "name": "passed",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        }
-      },
-      "indexes": {
-        "quiz_attempts_item_user": {
-          "name": "quiz_attempts_item_user",
-          "columns": [
-            "item_id",
-            "user_id",
-            "id"
-          ],
-          "isUnique": false
-        },
-        "quiz_attempts_user": {
-          "name": "quiz_attempts_user",
-          "columns": [
-            "user_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "quiz_attempts_item_id_items_id_fk": {
-          "name": "quiz_attempts_item_id_items_id_fk",
-          "tableFrom": "quiz_attempts",
-          "tableTo": "items",
-          "columnsFrom": [
-            "item_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "quiz_attempts_user_id_users_id_fk": {
-          "name": "quiz_attempts_user_id_users_id_fk",
-          "tableFrom": "quiz_attempts",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "quiz_items": {
-      "name": "quiz_items",
-      "columns": {
-        "item_id": {
-          "name": "item_id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "questions": {
-          "name": "questions",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
-        },
-        "pass_percent": {
-          "name": "pass_percent",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 80
-        },
-        "show_answers": {
-          "name": "show_answers",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "quiz_items_item_id_items_id_fk": {
-          "name": "quiz_items_item_id_items_id_fk",
-          "tableFrom": "quiz_items",
-          "tableTo": "items",
-          "columnsFrom": [
-            "item_id"
           ],
           "columnsTo": [
             "id"

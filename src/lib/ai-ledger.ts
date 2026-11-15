@@ -8,6 +8,7 @@ import {
   AI_RESERVE_THRESHOLD,
   AI_RETIRED_PROVIDER_MODELS,
   OPENROUTER_DECISION_MODELS,
+  OPENROUTER_EMBEDDING_MODELS,
   aiProvider,
   isLimitedModel,
   isModelPaused,
@@ -16,6 +17,7 @@ import {
   type AiLimitedModel,
   type AiModel,
   type DecisionModel,
+  type EmbeddingModel,
   type AiProvider,
   type AiUsage,
 } from './ai'
@@ -81,7 +83,7 @@ export function createAiLedger<S extends Record<string, unknown>>({
     inArray(aiUsage.model, [
       ...AI_PROVIDER_MODELS[provider],
       ...AI_RETIRED_PROVIDER_MODELS[provider],
-      ...(provider === 'openrouter' ? OPENROUTER_DECISION_MODELS : []),
+      ...(provider === 'openrouter' ? [...OPENROUTER_DECISION_MODELS, ...OPENROUTER_EMBEDDING_MODELS] : []),
     ])
 
   /** 月の上限（USD）。0 なら、その提供元のモデルは使えない */
@@ -119,8 +121,8 @@ export function createAiLedger<S extends Record<string, unknown>>({
     })
   }
 
-  /** userId が null のものは、特定の利用者に数えない使用量（コードのアイテムの採点） */
-  function recordUsage(userId: number | null, model: AiModel | DecisionModel, usage: AiUsage) {
+  /** userId が null のものは、特定の利用者に数えない使用量（コードのアイテムの採点・判定・ドキュメントの検索） */
+  function recordUsage(userId: number | null, model: AiModel | DecisionModel | EmbeddingModel, usage: AiUsage) {
     db.insert(aiUsage)
       .values({ userId, model, ...usage })
       .run()

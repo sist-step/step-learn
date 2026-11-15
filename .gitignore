@@ -51,3 +51,5 @@ lerna-debug.log*
 
 # Claude Code の worktree（scripts/worktree.ts が作る）
 .claude/worktrees/
+# STEP Docs の索引（非公開。scripts/docs-index.ts で作る）
+ai-docs/

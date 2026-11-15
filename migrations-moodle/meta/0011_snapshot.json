@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "188aa5c4-8c52-4106-9ee3-cb47406ec1a6",
+  "id": "952e18e2-a9ae-4551-a2b6-7aa010e90594",
   "prevId": "00608b4e-2660-487e-a4c7-f6e3803083a1",
   "tables": {
     "agent_items": {
@@ -23,6 +23,21 @@
         },
         "api_key_hint": {
           "name": "api_key_hint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "openrouter_api_key": {
+          "name": "openrouter_api_key",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "openrouter_api_key_hint": {
+          "name": "openrouter_api_key_hint",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -1062,111 +1077,6 @@
         }
       },
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "quiz_attempts": {
-      "name": "quiz_attempts",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "answers": {
-          "name": "answers",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "correct": {
-          "name": "correct",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "total": {
-          "name": "total",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "passed": {
-          "name": "passed",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        }
-      },
-      "indexes": {
-        "quiz_attempts_key_user": {
-          "name": "quiz_attempts_key_user",
-          "columns": [
-            "key",
-            "user_id",
-            "id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "quiz_attempts_key_extra_items_key_fk": {
-          "name": "quiz_attempts_key_extra_items_key_fk",
-          "tableFrom": "quiz_attempts",
-          "tableTo": "extra_items",
-          "columnsFrom": [
-            "key"
-          ],
-          "columnsTo": [
-            "key"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "quiz_attempts_user_id_users_id_fk": {
-          "name": "quiz_attempts_user_id_users_id_fk",
-          "tableFrom": "quiz_attempts",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}

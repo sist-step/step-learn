@@ -2,8 +2,10 @@ import type { Child } from 'hono/jsx'
 import type { LogAs } from './operation-log'
 import type { codeItems, courses, items, quizItems, sections } from './schema'
 
-export type Role = 'admin' | 'teacher' | 'student'
-export type CourseRole = 'teacher' | 'student'
+export const ROLES = ['admin', 'teacher', 'student'] as const
+export type Role = (typeof ROLES)[number]
+export const COURSE_ROLES = ['teacher', 'student'] as const
+export type CourseRole = (typeof COURSE_ROLES)[number]
 
 export type User = {
   id: number

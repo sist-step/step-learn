@@ -1,6 +1,13 @@
 import type { FC } from 'hono/jsx'
 import { useRequestContext } from 'hono/jsx-renderer'
-import { AGENT_BODY_HINT, AgentEditPanel, AgentInstructionsField, AgentOpen, AgentPeriodFields } from '../components/agent'
+import {
+  AGENT_BODY_HINT,
+  AgentEditPanel,
+  AgentInstructionsField,
+  AgentModelFields,
+  AgentOpen,
+  AgentPeriodFields,
+} from '../components/agent'
 import { BundleEditPanel, BundleOpen, type BundleView } from '../components/bundle'
 import { Button } from '../components/button'
 import { LinkCard } from '../components/card'
@@ -10,7 +17,8 @@ import type { IconName } from '../components/icons'
 import { Markdown, MarkdownEditor } from '../components/markdown'
 import { QuizFields, QuizPanel } from '../components/quiz'
 import { Chip } from '../components/ui'
-import { AGENT_KIND, agentBase, agentViewOf, type AgentView } from '../lib/agent'
+import { AGENT_KIND, DEFAULT_AGENT_MODEL, agentBase, agentViewOf, type AgentModel, type AgentView } from '../lib/agent'
+import { agentOpenRouterModels, cachedAgentOpenRouterModels, resolveAgentModel } from '../lib/agent-model'
 import {
   CODE_FILE_KEYS,
   CODE_LANGUAGES,
@@ -41,7 +49,7 @@ import { quizViewOf, type QuizView } from '../lib/quiz-store'
 import { availableCodeLanguages } from '../lib/sandbox'
 import { isSharing } from '../lib/screen-share'
 import type { AppEnv } from '../lib/types'
-import { agentPeriodOf, agentStore } from './agent-store'
+import { agentModelData, agentModelOfData, agentPeriodOf, agentStore } from './agent-store'
 import { bundleStore, bundleSyncStore } from './bundle-store'
 import type { Api, MoodleCourse, SaveActivity } from './client'
 import type { MItem } from './mapping'
@@ -63,8 +71,18 @@ export type ExtraKind = {
   form: FormName
   /** 検証を通った値から、保存する中身を作る */
   toData: (values: Record<string, unknown>) => ExtraData
-  /** 追加・編集の画面の、種類ごとの入力欄。values は保存済みの中身か、検証で弾かれたときに送られてきたままの値 */
-  Fields: FC<{ values: Record<string, unknown>; errors: FieldErrors; idPrefix: string }>
+  /**
+   * 追加・編集の画面の、種類ごとの入力欄。values は保存済みの中身か、検証で弾かれたときに送られてきたままの値。
+   * saved は保存済みの中身（追加の画面では渡さない）
+   */
+  Fields: FC<{ values: Record<string, unknown>; errors: FieldErrors; idPrefix: string; saved?: ExtraData }>
+  /**
+   * 検証を通った値を、保存する前に外部に問い合わせて確かめる（toData は同期なので、ここで済ませる）。
+   * 返した values を toData に渡す。current は保存済みの中身（追加のときは渡さない）
+   */
+  prepare?: (values: Record<string, unknown>, current?: ExtraData) => Promise<{ values: Record<string, unknown> } | { errors: FieldErrors }>
+  /** 編集画面を描く前に読み込んでおくもの（Fields は同期で描くので、外部から取るものは先に取ってキャッシュに置く） */
+  preload?: () => Promise<unknown>
   /** アイテムの画面の本体 */
   View: FC<{ item: MItem; data: ExtraData; access: CourseAccess }>
   /** 編集画面の、保存のフォームの外に置く欄（ファイルのアップロードのように、別の送信先を持つもの） */
@@ -282,7 +300,11 @@ const bundle: ExtraKind = {
 const userLimitInputOf = (values: Record<string, unknown>) =>
   typeof values.user_limit === 'string' ? values.user_limit : String(agentPeriodOf(values).userLimit)
 
-const AgentFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
+/** 入力欄で選んでいるモデルの ID。送られてきたままの値では agent_model、保存済みの中身では model */
+const agentModelInputOf = (values: Record<string, unknown>) =>
+  typeof values.agent_model === 'string' ? values.agent_model : agentModelOfData(values).id
+
+const AgentFields: ExtraKind['Fields'] = ({ values, errors, idPrefix, saved }) => {
   // 保存済みの中身は toData が必ず userLimit を入れるので、どちらもないのは追加のモーダル。期間と上限は追加したあとの編集画面で設定する
   if (typeof values.userLimit !== 'number' && values.agent_set === undefined) return null
   return (
@@ -299,6 +321,13 @@ const AgentFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
         split
       />
       <AgentInstructionsField value={str(values.instructions)} error={errors.instructions} id={`${idPrefix}-instructions`} />
+      <AgentModelFields
+        value={agentModelInputOf(values)}
+        saved={agentModelOfData(saved ?? values)}
+        models={cachedAgentOpenRouterModels()}
+        error={errors.agent_model}
+        idPrefix={idPrefix}
+      />
       <AgentPeriodFields
         opensAt={periodInputOf(values, 'opens_at', 'opensAt')}
         closesAt={periodInputOf(values, 'closes_at', 'closesAt')}
@@ -324,12 +353,21 @@ const agent: ExtraKind = {
   icon: 'cpuChip',
   form: 'extraAgent',
   // タイトルも入れておくのは、Moodle に問い合わせなくても管理画面などで見分けられるようにするため
+  // 外部に問い合わせるのは編集画面から送られたときだけにするのは、追加のモーダルはモデルを送らず、既定のモデルで作るため
+  async prepare(values, current) {
+    if (values.agent_set !== 1) return { values }
+    const resolved = await resolveAgentModel(str(values.agent_model), current ? agentModelOfData(current) : null)
+    return 'error' in resolved ? { errors: { agent_model: resolved.error } } : { values: { ...values, resolved_model: resolved.model } }
+  },
+  preload: agentOpenRouterModels,
   toData(values) {
     const edited = values.agent_set === 1
+    const model = (values.resolved_model as AgentModel | undefined) ?? DEFAULT_AGENT_MODEL
     return {
       title: str(values.title),
       body: str(values.body),
       instructions: str(values.instructions),
+      ...agentModelData(model),
       opensAt: edited ? unixOf(str(values.opens_at)) : null,
       closesAt: edited ? unixOf(str(values.closes_at)) : null,
       userLimit: typeof values.user_limit === 'number' ? values.user_limit : agentPeriodOf({}).userLimit,
