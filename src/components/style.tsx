@@ -22,6 +22,7 @@ export const STYLESHEETS = [
   '/src/components/bundle.css',
   '/src/components/agent.css',
   '/src/components/quiz.css',
+  '/src/components/quiz-game.css',
   '/src/components/restriction.css',
   '/src/components/ai-panel.css',
   '/src/components/auth.css',

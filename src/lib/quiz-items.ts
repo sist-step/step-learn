@@ -7,7 +7,12 @@ import { completions, courses, enrollments, items, quizAttempts, quizItems, user
 /** 設定の行がまだないアイテム（追加したばかり）は、問題のない既定の設定を返す */
 export const getQuizSettings = (itemId: number): QuizSettings =>
   db
-    .select({ questions: quizItems.questions, passPercent: quizItems.passPercent, showAnswers: quizItems.showAnswers })
+    .select({
+      questions: quizItems.questions,
+      passPercent: quizItems.passPercent,
+      showAnswers: quizItems.showAnswers,
+      look: quizItems.look,
+    })
     .from(quizItems)
     .where(eq(quizItems.itemId, itemId))
     .get() ?? DEFAULT_QUIZ_SETTINGS

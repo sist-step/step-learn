@@ -534,13 +534,19 @@ document.addEventListener(
     const form = e.target as HTMLFormElement
     if (!form.matches('[data-quiz-form]')) return
     const questions = $$<HTMLElement>('[data-quiz-q]', form)
-    const missing = questions.filter((q) => !quizAnswered(q))
+    const game = form.matches('[data-quiz-game]')
+    // ゲームの見た目では、一度も開いていないステージも止める。並べ替えと字下げは最初から答えが入っていて、見ないまま採点へ進めてしまうため
+    const missing = questions.filter((q) => !quizAnswered(q) || (game && !q.hasAttribute('data-done')))
     questions.forEach((q) => q.classList.toggle('is-missing', missing.includes(q)))
     if (missing.length === 0) return
     // 送信の処理（再読み込みなしの遷移）より先に止めるため、捕捉の段階で伝わるのを止める
     e.preventDefault()
     e.stopImmediatePropagation()
     toast(`まだ答えていない問題が ${missing.length} 問あります。`, 'error')
+    if (game) {
+      $$<HTMLElement>('[data-qg-to]', form).forEach((node, i) => node.classList.toggle('is-missing', missing.includes(questions[i])))
+      qgShow(form, questions.indexOf(missing[0]))
+    }
     missing[0].scrollIntoView({ block: 'center', behavior: 'smooth' })
     missing[0].querySelector<HTMLElement>('input:not([type="hidden"]), textarea, button')?.focus({ preventScroll: true })
   },
@@ -548,6 +554,151 @@ document.addEventListener(
 )
 
 document.addEventListener('input', (e) => (e.target as Element).closest('[data-quiz-q].is-missing')?.classList.remove('is-missing'))
+
+// --- 小テストのゲームの見た目（components/quiz.tsx の GameTake）: 1 問ずつのステージを、道のりと下のボタンで行き来する
+function qgShow(game: HTMLElement, to: number) {
+  const stages = $$<HTMLElement>('[data-qg-stage]', game)
+  const at = Math.min(stages.length - 1, Math.max(0, to))
+  const from = stages.findIndex((stage) => !stage.hidden)
+  if (at === from) return
+  // 並べ替えと字下げは触らなくても答えが入っているので、見てから離れたときにも「答えた」にする
+  if (stages[from]) qgSettle(stages[from])
+  game.dataset.qgDir = at < from ? '-1' : '1'
+  stages.forEach((stage, i) => (stage.hidden = i !== at))
+  const nodes = $$<HTMLElement>('[data-qg-to]', game)
+  nodes.forEach((node, i) => (i === at ? node.setAttribute('aria-current', 'step') : node.removeAttribute('aria-current')))
+  const track = nodes[at]?.closest<HTMLElement>('.qg-track')
+  // scrollIntoView を使わないのは、道のりが画面の外にあるときに、ページまで縦に動いてしまうため
+  if (track) track.scrollTo({ left: nodes[at].offsetLeft - (track.clientWidth - nodes[at].offsetWidth) / 2, behavior: 'smooth' })
+  const [prev, next] = ['-1', '1'].map((d) => game.querySelector<HTMLButtonElement>(`[data-qg-go="${d}"]`))
+  const submit = game.querySelector<HTMLButtonElement>('[data-qg-submit]')
+  const goal = stages[at].hasAttribute('data-qg-goal')
+  const focused = document.activeElement
+  if (prev) prev.disabled = at === 0
+  if (next) next.hidden = goal
+  const now = game.querySelector('[data-qg-now]')
+  if (now) now.textContent = goal ? 'ゴール' : String(at + 1)
+  const of = game.querySelector<HTMLElement>('[data-qg-of]')
+  if (of) of.hidden = goal
+  // 押したボタンが消えたり押せなくなったりするとフォーカスを失うので、同じ向きに進める次のボタンへ移す
+  if (focused === next && goal) (submit ?? prev)?.focus()
+  else if (focused === prev && at === 0) next?.focus()
+  if (game.getBoundingClientRect().top < 0) game.closest('.quiz-game')?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+}
+
+document.addEventListener('click', (e) => {
+  const target = e.target as Element
+  const game = target.closest<HTMLElement>('[data-quiz-game]')
+  if (!game) return
+  const go = target.closest<HTMLElement>('[data-qg-go]')
+  const to = target.closest<HTMLElement>('[data-qg-to]')
+  const stages = $$<HTMLElement>('[data-qg-stage]', game)
+  const at = stages.findIndex((stage) => !stage.hidden)
+  if (go) qgShow(game, at + Number(go.dataset.qgGo))
+  else if (to) qgShow(game, Number(to.dataset.qgTo))
+  else if (target.closest('[data-qg-answer]') && stages[at]) void qgCheck(game, stages[at])
+  else if (target.closest('[data-qg-explain-close]')) qgExplain(game, null)
+})
+
+/** ステージの答えの欄の、送る値（フォームの外のプレビューでも集められるように、FormData を使わずに読む） */
+const qgEntries = (stage: HTMLElement) =>
+  $$<HTMLInputElement | HTMLTextAreaElement>('input[name], textarea[name]', stage)
+    .filter((el) => !el.disabled && el.name.startsWith('a.') && !(/^(radio|checkbox)$/.test(el.type) && !(el as HTMLInputElement).checked))
+    .map((el): [string, string] => [el.name, el.value])
+
+/**
+ * 3D のゲームの「こたえる」（扉のレバー）: サーバーで答えを確かめ、正解ならステージに扉を開ける印（data-qg-passed）を付ける（src/quiz-world.ts が見て扉を開く）。
+ * まちがえたら、最初の答えを first[] としてフォームに残し、ゴールの採点に使う。まちがえたあとに正解したら、解説を出す
+ */
+async function qgCheck(game: HTMLElement, stage: HTMLElement) {
+  qgSettle(stage)
+  if (!stage.hasAttribute('data-done')) {
+    stage.classList.add('is-missing')
+    toast('まだ答えが入っていないよ。答えてから「こたえる！」を押してね。', 'error')
+    return
+  }
+  const url = game.dataset.qgCheck
+  const id = stage.dataset.quizId
+  if (!url || !id || stage.hasAttribute('data-qg-passed') || stage.hasAttribute('data-qg-checking')) return
+  const entries = qgEntries(stage)
+  const body = new FormData()
+  body.set('q', id)
+  for (const [name, value] of entries) body.append(name, value)
+  stage.setAttribute('data-qg-checking', '')
+  let result: { correct: boolean; explanation?: string }
+  try {
+    const res = await fetch(url, { method: 'POST', body, headers: { accept: 'application/json' } })
+    if (!res.ok) throw new Error(String(res.status))
+    result = (await res.json()) as typeof result
+  } catch {
+    toast('答えを確かめられませんでした。通信を確かめて、もう一度ためしてね。', 'error')
+    return
+  } finally {
+    stage.removeAttribute('data-qg-checking')
+  }
+  if (result.correct) {
+    stage.setAttribute('data-qg-passed', '')
+    if (stage.hasAttribute('data-qg-missed') && result.explanation) qgExplain(game, result.explanation)
+    return
+  }
+  if (!stage.hasAttribute('data-qg-missed')) {
+    stage.setAttribute('data-qg-missed', '')
+    if (game instanceof HTMLFormElement)
+      stage.append(
+        Object.assign(document.createElement('input'), { type: 'hidden', name: 'first[]', value: JSON.stringify({ id, fields: entries }) }),
+      )
+  }
+  // 3D のゲームは、扉の前で動物とレバーの動きで知らせる（preventDefault する）。ノートだけで答えているときはトーストで知らせる
+  if (stage.dispatchEvent(new CustomEvent('qg:wrong', { bubbles: true, cancelable: true })))
+    toast('ざんねん、ちがうみたい。もう一度考えてみよう。', 'error')
+}
+
+/** 解説を開く（text が null なら閉じる）。開いている間は src/quiz-world.ts がマウスを放す */
+function qgExplain(game: HTMLElement, text: string | null) {
+  const box = game.querySelector<HTMLElement>('[data-qg-explain]')
+  if (!box) return
+  const label = box.querySelector('[data-qg-explain-text]')
+  if (label && text !== null) label.textContent = text
+  box.hidden = text === null
+  game.toggleAttribute('data-qg-explaining', text !== null)
+  if (text !== null) box.querySelector<HTMLElement>('[data-qg-explain-close]')?.focus()
+}
+
+/** ステージに答えが入っていれば「答えた」にして、道のりに星を付け、答えたステージの数を出し直す */
+function qgSettle(stage: HTMLElement) {
+  const game = stage.closest<HTMLElement>('[data-quiz-game]')
+  if (!game || !stage.dataset.quizQ) return
+  const done = quizAnswered(stage)
+  stage.toggleAttribute('data-done', done)
+  const node = game.querySelector<HTMLElement>(`[data-qg-to="${$$<HTMLElement>('[data-qg-stage]', game).indexOf(stage)}"]`)
+  node?.toggleAttribute('data-done', done)
+  if (done) node?.classList.remove('is-missing')
+  const count = String($$('[data-qg-stage][data-done]', game).length)
+  for (const el of $$('[data-qg-done]', game)) el.textContent = count
+}
+
+function qgMark(e: Event) {
+  const target = e.target as Element
+  const stage = target.closest<HTMLElement>('[data-qg-stage]')
+  // 並べ替えと字下げは最初から答えが入っているので、問題文を押しただけでは「答えた」にしない
+  if (stage && (e.type !== 'click' || target.closest('button, label, input, [data-quiz-line]'))) qgSettle(stage)
+}
+document.addEventListener('click', qgMark)
+document.addEventListener('input', qgMark)
+
+document.addEventListener('keydown', (e) => {
+  const game = (e.target as Element).closest<HTMLElement>('[data-qg-explaining]')
+  if (e.key === 'Escape' && game) qgExplain(game, null)
+})
+
+// Enter で送信させないのは、途中のステージの表を埋めている最中に、採点へ進んでしまうため
+document.addEventListener('keydown', (e) => {
+  const cell = e.target as Element
+  if (e.key !== 'Enter' || e.isComposing || !cell.matches('[data-quiz-game] input.quiz-cell')) return
+  e.preventDefault()
+  const cells = $$<HTMLInputElement>('input.quiz-cell', cell.closest<HTMLElement>('[data-qg-stage]')!)
+  cells[cells.indexOf(cell as HTMLInputElement) + 1]?.focus()
+})
 
 // --- 入力の検証（components/form.tsx の validateWith を付けたフォーム）
 function formInput(form: HTMLFormElement) {
@@ -1956,6 +2107,19 @@ function initAuthArt() {
   authArt ??= import('./auth-art')
   // 失敗してもトーストを出さないのは、飾りが出ないだけで操作には困らないため
   authArt.then(({ showAuthArt }) => showAuthArt(host)).catch(() => {})
+}
+
+// --- 小テストのゲームの見た目の 3D の世界（components/quiz.tsx の GameTake / GameResult）
+// ここに直接 import しないのは、three.js が大きく、小テストのない画面でも毎回読み込むことになるため
+let quizWorld: Promise<typeof import('./quiz-world')> | null = null
+function initQuizWorlds() {
+  void quizWorld?.then(({ releaseDetachedQuizWorlds }) => releaseDetachedQuizWorlds())
+  const hosts = $$<HTMLElement>('[data-qg-world]:not([data-ready])')
+  // 動きを減らす設定で読み込まないのは、3D を描かずに 2D の表示を残すので、three.js を取りに行くだけ無駄になるため
+  if (!hosts.length || matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  quizWorld ??= import('./quiz-world')
+  // 失敗してもトーストを出さないのは、2D の道のりが残っていて、解答には困らないため
+  quizWorld.then(({ mountQuizWorld }) => hosts.forEach(mountQuizWorld)).catch(() => hosts.forEach((host) => (host.dataset.flat = '')))
 }
 
 // --- PDF ビューアー（components/pdf.tsx の PdfStage）
@@ -3955,6 +4119,7 @@ function initContent() {
   initCodeEditors()
   applyPdfMode()
   initPdfViewers()
+  initQuizWorlds()
   initMascots()
   initWalkers()
   initRestrictionEditors()

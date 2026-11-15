@@ -211,6 +211,7 @@ function itemDetail(item: Item) {
         questions: quiz.questions,
         pass_percent: quiz.passPercent,
         show_answers: quiz.showAnswers === 1,
+        look: quiz.look,
       }
     }
   }

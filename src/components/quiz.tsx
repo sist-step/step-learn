@@ -7,14 +7,17 @@ import {
   QUIZ_KINDS,
   QUIZ_KIND_DESCRIPTIONS,
   QUIZ_KIND_LABELS,
+  QUIZ_LOOK_LABELS,
   answerField,
   codeLines,
   indentedCode,
   isSameCell,
   lineAt,
   parseSteps,
+  quizStars,
   type QuizFormRow,
   type QuizKind,
+  type QuizLook,
   type QuizReviewItem,
   type QuizScore,
   type QuizTakeQuestion,
@@ -26,6 +29,7 @@ import { cx } from './cx'
 import { FieldError, FormField, Input, SegmentedControl, TextField, Textarea } from './form'
 import { Icon, type IconName } from './icons'
 import { Mascot } from './mascot'
+import { QUIZ_ANIMALS, QuizAnimal } from './quiz-animal'
 import { useStyle } from './style'
 import { Alert, Chip, EmptyState, formatDateTime } from './ui'
 
@@ -317,11 +321,36 @@ export const QuizGradingCard = (props: GradingProps) => (
   </Card>
 )
 
+const LookInputs = ({ look, legend }: { look: QuizLook; legend: string }) => (
+  <fieldset class="field">
+    <legend>{legend}</legend>
+    <SegmentedControl
+      name="look"
+      label={legend}
+      options={[
+        { value: 'plain', label: QUIZ_LOOK_LABELS.plain, icon: 'clipboardCheck' },
+        { value: 'game', label: QUIZ_LOOK_LABELS.game, icon: 'star' },
+      ]}
+      value={look}
+    />
+    <p class="field-hint">
+      ゲームは中学生向けの見た目です。動物のキャラクターが案内し、1 問ずつステージを進む形で出します。問題と採点は標準と同じです。
+    </p>
+  </fieldset>
+)
+
+/** 通常モードの編集画面の右の列に置く「見た目」のカード */
+export const QuizLookCard = ({ look }: { look: QuizLook }) => (
+  <Card heading="見た目">
+    <LookInputs look={look} legend="学生に出す画面" />
+  </Card>
+)
+
 /**
- * Moodle モードの種類ごとの入力欄（extra-kinds.tsx）で使う「問題」と「採点」の欄。
+ * Moodle モードの種類ごとの入力欄（extra-kinds.tsx）で使う「問題」「採点」「見た目」の欄。
  * 1 枚のカードの中に並べるので、カードではなく fieldset で包む
  */
-export const QuizFields = ({ rows, ...grading }: { rows: QuizFormRow[] } & GradingProps) => (
+export const QuizFields = ({ rows, look, ...grading }: { rows: QuizFormRow[]; look: QuizLook } & GradingProps) => (
   <>
     <fieldset class="field">
       <legend>問題</legend>
@@ -332,6 +361,7 @@ export const QuizFields = ({ rows, ...grading }: { rows: QuizFormRow[] } & Gradi
       <legend>採点</legend>
       <GradingInputs {...grading} />
     </fieldset>
+    <LookInputs look={look} legend="見た目" />
   </>
 )
 
@@ -526,17 +556,35 @@ function TakeBody({ q }: { q: QuizTakeQuestion }) {
 
 type QuestionStatus = 'right' | 'wrong' | 'none'
 
-const STATUS_LABELS: Record<QuestionStatus, string> = { right: '正解', wrong: '不正解', none: '未採点' }
+const STATUS_LABELS: Record<QuizLook, Record<QuestionStatus, string>> = {
+  plain: { right: '正解', wrong: '不正解', none: '未採点' },
+  game: { right: 'せいかい！', wrong: 'おしい…', none: '未採点' },
+}
 
-const Question = ({ no, q, status, children }: { no: number; q: QuizTakeQuestion; status?: QuestionStatus; children: Child }) => (
+const Question = ({
+  no,
+  q,
+  status,
+  look = 'plain',
+  children,
+}: {
+  no: number
+  q: QuizTakeQuestion
+  status?: QuestionStatus
+  look?: QuizLook
+  children: Child
+}) => (
   <li class={cx('quiz-q', status && `is-${status}`)} data-quiz-q={q.kind}>
     <div class="quiz-q-head">
-      <span class="quiz-q-num">問 {no}</span>
+      {look === 'game' && (
+        <QuizAnimal kind={q.kind} size={44} mood={status === 'right' ? 'happy' : status === 'wrong' ? 'sad' : 'normal'} />
+      )}
+      <span class="quiz-q-num">{look === 'game' ? `ステージ ${no}` : `問 ${no}`}</span>
       <span class="quiz-q-kind muted small">{QUIZ_KIND_LABELS[q.kind]}</span>
       {status && (
         <span class="quiz-mark">
           {status !== 'none' && <Icon name={status === 'right' ? 'check' : 'x'} size={14} />}
-          {STATUS_LABELS[status]}
+          {STATUS_LABELS[look][status]}
         </span>
       )}
     </div>
@@ -763,16 +811,19 @@ function ReviewBody({ item, who }: { item: QuizReviewItem; who: string }) {
 export const QuizReview = ({
   items,
   who = 'あなた',
+  look = 'plain',
 }: {
   items: QuizReviewItem[]
   /** 答えた人の呼び方（「あなたの答え」「学生の答え」） */
   who?: string
+  /** 教師が学生の受験を見る画面では、どの見た目の小テストでも標準のまま出す */
+  look?: QuizLook
 }) => {
   useStyle('/src/components/form.css', '/src/components/quiz.css')
   return (
     <ol class="quiz-questions">
       {items.map((item, i) => (
-        <Question no={i + 1} q={item.question} status={item.correct === null ? 'none' : item.correct ? 'right' : 'wrong'}>
+        <Question no={i + 1} q={item.question} status={item.correct === null ? 'none' : item.correct ? 'right' : 'wrong'} look={look}>
           <ReviewBody item={item} who={who} />
           {item.correct === null && <p class="muted small">この問題は、受けたあとに足されました。</p>}
           {item.solution?.explanation && (
@@ -834,6 +885,282 @@ const Result = ({ quiz, mine, latest }: { quiz: QuizView; mine: NonNullable<Quiz
   )
 }
 
+// ---------------------------------------------------------------- ゲームの見た目
+
+/**
+ * ゲームの見た目の解答。問題を 1 問ずつのステージにして、上の道のりと下のボタンで行き来する（client.ts）。
+ * 3D のゲームでは、扉のレバーで 1 問ずつ答えを確かめ（data-qg-check）、正解するまで扉を開けない。点数は最初の答えで、ゴールでまとめて採点する
+ */
+const GameTake = ({ quiz, action }: { quiz: QuizView; action?: string }) => {
+  const { questions, passPercent } = quiz
+  const count = questions.length
+  const body = (
+    <>
+      {/* 道のりを 3D の枠の中に置くのは、3D を読み込むまでと、WebGL を使えない端末で、同じ場所に 2D の道のりを出しておくため */}
+      <div class="qg-world" data-qg-world="take" data-kinds={questions.map((q) => q.kind).join(',')}>
+        <ol class="qg-track" aria-label="ステージ">
+          {questions.map((q, i) => (
+            <li class="qg-step" data-quiz-kind={q.kind}>
+              <button
+                type="button"
+                class="qg-node"
+                data-qg-to={i}
+                aria-current={i === 0 ? 'step' : undefined}
+                aria-label={`ステージ ${i + 1}（${QUIZ_KIND_LABELS[q.kind]}）`}
+              >
+                <QuizAnimal kind={q.kind} size={36} />
+                <span class="qg-node-no">{i + 1}</span>
+                <span class="qg-node-star">
+                  <Icon name="star" size={14} />
+                </span>
+              </button>
+            </li>
+          ))}
+          <li class="qg-step qg-goal">
+            <button type="button" class="qg-node" data-qg-to={count} aria-label="ゴール">
+              <Icon name="flag" size={22} />
+            </button>
+          </li>
+        </ol>
+        {/* ここから下は 3D のゲームの画面に重ねる部品。3D を描けたときだけ出す（quiz-game.css）。操作は src/quiz-world.ts */}
+        <div class="qg-start">
+          <p class="qg-start-title">ダンジョンの扉をあけて、ゴールをめざそう！</p>
+          <Button size="lg" variant="primary" icon="play" data-qg-start>
+            ゲームスタート
+          </Button>
+          <p class="qg-start-keys">
+            <span class="qg-help-keys">
+              <kbd>W</kbd>
+              <kbd>A</kbd>
+              <kbd>S</kbd>
+              <kbd>D</kbd> で歩く・マウスで見まわす・部屋にある玉やブロックは、ねらって<kbd>クリック</kbd>で動かす・<kbd>Esc</kbd>{' '}
+              でメニュー
+            </span>
+            <span class="qg-help-touch">
+              左下のスティックで歩いて、画面をなぞって見まわそう。部屋にある玉やブロックは、タップで動かすよ
+            </span>
+          </p>
+          <p class="qg-start-keys">答えたら、扉の横のレバーを引こう。正解すると扉がひらくよ（点数になるのは、さいしょの答え）</p>
+          {/* 3D が重い端末や、マウスを使えない人が、同じ問題に 2D のステージで答えられるようにする（src/quiz-world.ts が 3D を片付ける） */}
+          <button type="button" class="qg-flat" data-qg-flat>
+            3D を使わずに答える
+          </button>
+        </div>
+        <div class="qg-hud">
+          <Button size="sm" icon="x" data-qg-exit>
+            やめる
+          </Button>
+          <p class="qg-world-score" title="開けた扉">
+            <Icon name="star" size={16} />
+            <span data-qg-opened>0</span> / {count}
+          </p>
+          <p class="qg-world-score" title="集めた宝石">
+            <span class="qg-gem" aria-hidden="true" />
+            <span class="sr-only">宝石</span>
+            <span data-qg-gems>0</span>
+          </p>
+          <Button size="sm" icon="book" data-qg-note>
+            ノート
+            <kbd class="qg-help-keys">N</kbd>
+          </Button>
+        </div>
+        <p class="qg-quest" data-qg-quest aria-live="polite" />
+        {/* 照準が合っているものを押すと、何が起きるか */}
+        <p class="qg-act" data-qg-act aria-hidden="true" hidden>
+          <kbd>クリック</kbd>
+          <span data-qg-act-label />
+        </p>
+        <canvas class="qg-map" data-qg-map aria-hidden="true" />
+        <span class="qg-aim" aria-hidden="true" />
+        {/* 動かせるものに重ねる、Tab キーで選ぶための目印。中のボタンは src/quiz-world.ts が、いまいる部屋のものに合わせて作る */}
+        <div class="qg-spots" data-qg-spots />
+        {/* 黒板や表に文字を書くときに、キーボードの入力を受け取る欄。ゲームの間は 2D のステージを隠していて、そこの欄にはフォーカスできないため */}
+        <textarea class="qg-typer" data-qg-typer tabindex={-1} autocomplete="off" autocapitalize="none" spellcheck={false} />
+        {/* Esc などでマウスが外れたときのメニュー。マウスを閉じ込めている間は「やめる」を押せないので、ここにも置く */}
+        <div class="qg-pause">
+          <p class="qg-pause-title">ひとやすみ</p>
+          <Button size="lg" variant="primary" icon="play" data-qg-resume>
+            つづける
+          </Button>
+          <Button size="lg" icon="x" data-qg-exit>
+            やめる
+          </Button>
+        </div>
+        {/* まちがえたあとに正解したときの解説（client.ts の qgCheck）。ゲームの枠の直下に置かないのは、全画面で遊んでいる間は 3D の枠の外が隠れるため */}
+        <div class="qg-explain" data-qg-explain role="dialog" aria-modal="true" aria-labelledby="qg-explain-title" hidden>
+          <div class="qg-explain-card">
+            <p class="qg-explain-badge">
+              <Icon name="check" size={16} />
+              正解！
+            </p>
+            <h2 class="qg-explain-title" id="qg-explain-title">
+              解説
+            </h2>
+            <p class="qg-explain-text" data-qg-explain-text />
+            <Button size="lg" variant="primary" icon="play" data-qg-explain-close>
+              つづける
+            </Button>
+          </div>
+        </div>
+        <div class="qg-pad">
+          <div class="qg-stick" data-qg-stick>
+            <span class="qg-stick-knob" />
+          </div>
+          <button type="button" class="qg-pad-btn" data-qg-jump>
+            ジャンプ
+          </button>
+        </div>
+      </div>
+      {/* 問題を 1 つの枠で包むのは、3D のゲームでは、この枠を「ノート」として画面に重ねて開け閉めするため（src/quiz-world.ts） */}
+      <div class="qg-panel" tabindex={-1}>
+        <ol class="qg-stages">
+          {questions.map((q, i) => (
+            <li class="quiz-q qg-stage" data-quiz-q={q.kind} data-quiz-id={q.id} data-qg-stage hidden={i > 0}>
+              <div class="qg-host">
+                <QuizAnimal kind={q.kind} size={88} label={QUIZ_ANIMALS[q.kind].name} />
+                <div class="qg-bubble">
+                  <p class="qg-stage-name">
+                    ステージ {i + 1}
+                    <span class="qg-kind">{QUIZ_KIND_LABELS[q.kind]}</span>
+                  </p>
+                  <p class="qg-hint">{QUIZ_ANIMALS[q.kind].hint}</p>
+                </div>
+              </div>
+              <p class="quiz-prompt">{q.prompt}</p>
+              <TakeBody q={q} />
+            </li>
+          ))}
+          {/* 採点のボタンを最後の問題に置かないのは、3D のゲームで「ゴールの島に着いたら採点」という区切りにするため。2D でも同じ流れにそろえる */}
+          <li class="quiz-q qg-stage qg-goal-stage" data-qg-stage data-qg-goal hidden>
+            <div class="qg-host">
+              <span class="qg-goal-flag" aria-hidden="true">
+                <Icon name="flag" size={44} />
+              </span>
+              <div class="qg-bubble">
+                <p class="qg-stage-name">ゴール</p>
+                <p class="qg-hint">
+                  {action
+                    ? 'ここまでおつかれさま！ ぜんぶのステージに答えたら、こたえあわせをしよう。'
+                    : '学生には、ここに「こたえあわせ」のボタンが出ます。'}
+                </p>
+              </div>
+            </div>
+            <p class="qg-goal-count">
+              答えたステージ <strong data-qg-done>0</strong> / {count}
+            </p>
+            {action && (
+              <Button type="submit" size="lg" variant="success" icon="check" data-qg-submit>
+                こたえあわせ
+              </Button>
+            )}
+          </li>
+        </ol>
+        <div class="qg-panel-foot">
+          <Button size="lg" data-qg-close>
+            とじる
+            <kbd class="qg-help-keys">Esc</kbd>
+          </Button>
+          <Button size="lg" variant="primary" icon="check" data-qg-answer>
+            こたえる！
+          </Button>
+        </div>
+      </div>
+      <div class="qg-nav">
+        <Button size="lg" icon="chevronLeft" data-qg-go="-1" disabled>
+          もどる
+        </Button>
+        <p class="qg-count" aria-live="polite">
+          <strong data-qg-now>1</strong>
+          <span data-qg-of> / {count}</span>
+        </p>
+        <Button size="lg" variant="primary" iconEnd="chevronRight" data-qg-go="1">
+          つぎへ
+        </Button>
+      </div>
+    </>
+  )
+  return (
+    <>
+      <p class="qg-lead">
+        全 {count} ステージ。{passCount(count, passPercent)} 問以上の正解でクリア！
+      </p>
+      {action ? (
+        <form
+          method="post"
+          action={action}
+          class="quiz-form"
+          data-quiz-form
+          data-quiz-game
+          data-qg-check={`${quiz.base}/check`}
+          data-loading-form
+        >
+          {body}
+        </form>
+      ) : (
+        <div class="quiz-form" data-quiz-game data-qg-check={`${quiz.base}/check`}>
+          {body}
+        </div>
+      )}
+    </>
+  )
+}
+
+const CONFETTI = 16
+
+const GameResult = ({ quiz, mine, latest }: { quiz: QuizView; mine: NonNullable<QuizView['mine']>; latest: QuizAttemptView }) => {
+  const { score, passed } = latest
+  const stars = quizStars(score, passed)
+  const full = mine.count >= MAX_QUIZ_ATTEMPTS
+  const kinds = QUIZ_KINDS.filter((kind) => latest.review.some((item) => item.question.kind === kind))
+  const need = passCount(score.total, quiz.passPercent) - score.correct
+  return (
+    <>
+      <div class={cx('qg-result', passed && 'is-clear')}>
+        {passed && (
+          <span class="qg-confetti" aria-hidden="true">
+            {range(CONFETTI).map((i) => (
+              <i style={`--i: ${i}`} />
+            ))}
+          </span>
+        )}
+        <div class="qg-world" data-qg-world="result" data-kinds={kinds.join(',')} data-stars={stars} data-passed={passed || undefined}>
+          <div class="qg-crowd">
+            {kinds.map((kind) => (
+              <QuizAnimal kind={kind} size={56} mood={passed ? 'happy' : 'sad'} />
+            ))}
+          </div>
+          <div class="qg-stars" aria-hidden="true">
+            {range(3).map((i) => (
+              <span class={cx('qg-star', i < stars && 'is-on')}>
+                <Icon name="star" size={44} />
+              </span>
+            ))}
+          </div>
+        </div>
+        <p class="qg-result-title">{stars === 3 ? 'パーフェクト！' : passed ? 'ステージクリア！' : 'あとすこし！'}</p>
+        {/* 星の数を文字でも置くのは、3D に切り替わると 2D の星を隠すので、読み上げで数が伝わらなくなるため */}
+        <p class="sr-only">星 {stars} つ（3 つ中）</p>
+        <p class="qg-result-score">
+          <strong>{score.correct}</strong> / {score.total} 問正解
+        </p>
+        <p class="muted small">
+          {formatDateTime(latest.createdAt)} · {mine.count} 回目のチャレンジ
+          {mine.count > 1 && mine.best && ` · これまでの最高 ${mine.best.correct} / ${mine.best.total}`}
+          {!passed && need > 0 && ` · あと ${need} 問でクリア`}
+        </p>
+        {!full && (
+          <Button href={`${quiz.itemUrl}?retake=1`} size="lg" icon="arrowPath" variant={passed ? 'default' : 'primary'}>
+            もう一度チャレンジ
+          </Button>
+        )}
+      </div>
+      {full && <Alert tone="info">受けられる回数の上限（{MAX_QUIZ_ATTEMPTS} 回）に達しました。</Alert>}
+      <h2 class="qg-review-title">ふりかえり</h2>
+      <QuizReview items={latest.review} look="game" />
+    </>
+  )
+}
+
 /**
  * アイテムの画面の小テスト。学生には解答の画面か、いちばん新しい受験の結果を出す。
  * 教師には学生と同じ問題を、採点のボタンなしで出す。editHref は教師にだけ渡す編集画面
@@ -841,6 +1168,9 @@ const Result = ({ quiz, mine, latest }: { quiz: QuizView; mine: NonNullable<Quiz
 export const QuizPanel = ({ quiz, editHref }: { quiz: QuizView; editHref?: string }) => {
   useStyle('/src/components/form.css', '/src/components/quiz.css')
   const { mine } = quiz
+  const game = quiz.look === 'game'
+  const Take = game ? GameTake : TakeForm
+  const Shown = game ? GameResult : Result
   if (quiz.questions.length === 0)
     return (
       <EmptyState
@@ -857,7 +1187,7 @@ export const QuizPanel = ({ quiz, editHref }: { quiz: QuizView; editHref?: strin
       />
     )
   return (
-    <section class="quiz" aria-label="小テスト">
+    <section class={cx('quiz', game && 'quiz-game')} aria-label="小テスト">
       {!mine && (
         <div class="quiz-teacher">
           <p class="muted small">学生に見える問題を表示しています。採点のボタンは学生にだけ出ます。正解は編集画面で確かめられます。</p>
@@ -869,9 +1199,9 @@ export const QuizPanel = ({ quiz, editHref }: { quiz: QuizView; editHref?: strin
         </div>
       )}
       {mine?.latest && !mine.retake ? (
-        <Result quiz={quiz} mine={mine} latest={mine.latest} />
+        <Shown quiz={quiz} mine={mine} latest={mine.latest} />
       ) : (
-        <TakeForm quiz={quiz} action={mine && mine.count < MAX_QUIZ_ATTEMPTS ? `${quiz.base}/submit` : undefined} />
+        <Take quiz={quiz} action={mine && mine.count < MAX_QUIZ_ATTEMPTS ? `${quiz.base}/submit` : undefined} />
       )}
     </section>
   )

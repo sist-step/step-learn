@@ -1,0 +1,1 @@
+ALTER TABLE `quiz_items` ADD `look` text DEFAULT 'plain' NOT NULL;

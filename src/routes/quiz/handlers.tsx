@@ -3,7 +3,18 @@
 import { Hono, type Context } from 'hono'
 import type { CourseAccess } from '../../lib/courses'
 import { intParam, readForm, redirectWith } from '../../lib/http'
-import { MAX_QUIZ_ATTEMPTS, bestScore, gradeQuiz, reviewQuiz, type QuizSettings } from '../../lib/quiz'
+import {
+  FIRST_ANSWER_FIELD,
+  MAX_QUIZ_ATTEMPTS,
+  answerField,
+  bestScore,
+  gradeQuiz,
+  isCorrectAnswer,
+  readFirstAnswers,
+  readQuizAnswer,
+  reviewQuiz,
+  type QuizSettings,
+} from '../../lib/quiz'
 import type { QuizAttemptSummary, QuizStore } from '../../lib/quiz-store'
 import type { AppEnv } from '../../lib/types'
 import { ResultPage, ResultsPage, type QuestionStat, type ResultRow } from './views'
@@ -45,7 +56,8 @@ export function createQuizHandlers({ resolve }: QuizBackend) {
     if (store.listOf(userId).length >= MAX_QUIZ_ATTEMPTS)
       return redirectWith(c, page, `受けられる回数の上限（${MAX_QUIZ_ATTEMPTS} 回）に達しました。`, 'error')
     const form = await readForm(c)
-    const graded = gradeQuiz(settings.questions, (field) => form[field])
+    const firsts = settings.look === 'game' ? readFirstAnswers(form[FIRST_ANSWER_FIELD]) : new Map()
+    const graded = gradeQuiz(settings.questions, (field, q) => (firsts.get(q.id) ?? form)[field])
     const passed = store.record(userId, graded, settings.passPercent)
     return redirectWith(
       c,
@@ -53,6 +65,20 @@ export function createQuizHandlers({ resolve }: QuizBackend) {
       `${graded.total} 問中 ${graded.correct} 問正解でした。${passed ? '合格です。' : ''}`,
       passed ? 'success' : 'info',
     )
+  }
+
+  /**
+   * ゲームの見た目で、扉のレバーを引いたときに、問題 1 つの答えを確かめる。正解なら解説も返す（まちがえたあとの正解で、client.ts が見せる）。
+   * 教師も使えるのは、プレビューで扉を開けて先の部屋を確かめられるようにするため。受験は残さない（採点はゴールの submit）
+   */
+  async function check(c: C) {
+    const ctx = await open(c)
+    if (!ctx || ctx.settings.look !== 'game') return c.notFound()
+    const form = await readForm(c)
+    const q = ctx.settings.questions.find((other) => other.id === form.q)
+    if (!q) return c.notFound()
+    const correct = isCorrectAnswer(q, readQuizAnswer(q, form[answerField(q)]))
+    return c.json(correct ? { correct, explanation: q.explanation } : { correct })
   }
 
   // ---------------------------------------------------------------- 教師: 受験結果を見る
@@ -103,13 +129,14 @@ export function createQuizHandlers({ resolve }: QuizBackend) {
     )
   }
 
-  return { submit, list, show }
+  return { submit, check, list, show }
 }
 
 /** /courses の下に組み込むルート。ログインの確認は、組み込む側で先に済ませておく */
 export function quizRoutes(h: ReturnType<typeof createQuizHandlers>) {
   const app = new Hono<AppEnv>()
   app.post('/:id/items/:iid/quiz/submit', h.submit)
+  app.post('/:id/items/:iid/quiz/check', h.check)
   app.get('/:id/items/:iid/quiz/results', h.list)
   app.get('/:id/items/:iid/quiz/results/:uid', h.show)
   return app

@@ -246,6 +246,20 @@
       "when": 1794720404912,
       "tag": "0034_item_type_quiz",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1794728051586,
+      "tag": "0035_quiz_look",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1794728061278,
+      "tag": "0036_quiz_look_check",
+      "breakpoints": true
     }
   ]
 }
