@@ -107,7 +107,16 @@ const count = <T>(list: T[], key: (t: T) => string) =>
 
 export const PARTICIPANT_LIMIT = 20
 
-const NATIVE_MODULE: Record<ItemType, string> = { page: 'page', link: 'url', file: 'resource', screen: '', code: '', bundle: '', agent: '' }
+const NATIVE_MODULE: Record<ItemType, string> = {
+  page: 'page',
+  link: 'url',
+  file: 'resource',
+  screen: '',
+  code: '',
+  bundle: '',
+  agent: '',
+  quiz: '',
+}
 
 /** source はプレビューの見出しに出す取り込み元（ファイル名やコースの URL） */
 export function printPreview(plan: Plan, source: string, { verbose = false } = {}) {

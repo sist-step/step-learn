@@ -13,6 +13,7 @@ import { formatBytes } from './lib/bytes'
 import { formatDateTimeInput } from './lib/course-period'
 import { isFormName, validate, type FieldErrors, type FormInput } from './lib/forms'
 import { renderMarkdown } from './lib/markdown'
+import { MAX_QUIZ_INDENT, MAX_QUIZ_STEPS, QUIZ_KEY_SLOT, lineAt, parseSteps } from './lib/quiz'
 import { showsEach, type RestrictionOp } from './lib/restriction'
 import { AI_PANEL_DOCKED, getSetting, setSetting, updateSetting, type Theme } from './lib/settings'
 
@@ -293,6 +294,260 @@ document.addEventListener(
 )
 
 document.addEventListener('submit', (e) => $$<HTMLElement>('[data-rs]', e.target as HTMLFormElement).forEach(rsSync), true)
+
+// --- 小テストの問題の編集（components/quiz.tsx の QuizEditor）
+// 入力の検証より前に置くのは、検証が読む questions を、送信と入力のたびに先に組み立て直すため
+let qzCount = 0
+
+const qzControl = (row: HTMLElement, field: string) =>
+  row.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[name="${CSS.escape(`${row.dataset.qzKey}.${field}`)}"]`)
+
+function qzReadQuestion(row: HTMLElement) {
+  const kind = row.dataset.qzQuestion
+  const value = (field: string) => qzControl(row, field)?.value ?? ''
+  const choices = $$<HTMLElement>('[data-qz-choice]', row)
+  return {
+    k: row.dataset.qzKey,
+    kind,
+    prompt: value('prompt'),
+    code: value('code'),
+    choices: choices.map((c) => c.querySelector<HTMLInputElement>('[data-qz-choice-text]')?.value ?? ''),
+    answer:
+      kind === 'choice'
+        ? String(choices.findIndex((c) => c.querySelector<HTMLInputElement>('input[type="radio"]')?.checked))
+        : value('answer'),
+    lines: value('lines'),
+    explanation: value('explanation'),
+  }
+}
+
+function qzSync(editor: HTMLElement) {
+  const value = editor.querySelector<HTMLInputElement>('[data-qz-value]')
+  if (value) value.value = JSON.stringify($$<HTMLElement>('[data-qz-question]', editor).map(qzReadQuestion))
+}
+
+const qzLineNote = (line: string | null) => (line === null ? '' : line.trim() || '（空の行）')
+
+/** バグ探しと実行の順番で、入力した行の番号の横に、その行の中身を出す */
+function qzShowLines(row: HTMLElement) {
+  const code = qzControl(row, 'code')?.value ?? ''
+  const answer = qzControl(row, 'answer')?.value ?? ''
+  const note = row.querySelector<HTMLElement>('[data-qz-bug-line]')
+  if (note) note.textContent = qzLineNote(lineAt(code, answer))
+  row.querySelector<HTMLElement>('[data-qz-flow-steps]')?.replaceChildren(
+    ...(parseSteps(answer) ?? []).map((n) => {
+      const item = document.createElement('li')
+      const no = Object.assign(document.createElement('span'), { className: 'qz-flow-no', textContent: String(n) })
+      const line = Object.assign(document.createElement('code'), {
+        className: 'truncate',
+        textContent: qzLineNote(lineAt(code, n)) || '（行がありません）',
+      })
+      item.append(no, line)
+      return item
+    }),
+  )
+}
+
+document.addEventListener('click', (e) => {
+  const target = e.target as Element
+  const editor = target.closest<HTMLElement>('[data-qz]')
+  if (!editor) return
+  const row = target.closest<HTMLElement>('[data-qz-question]')
+  const add = target.closest<HTMLElement>('[data-qz-add]')
+  const move = target.closest<HTMLElement>('[data-qz-move]')
+  const choiceRemove = target.closest<HTMLElement>('[data-qz-choice-remove]')
+  if (add) {
+    const template = editor.querySelector<HTMLTemplateElement>(`template[data-qz-template="${add.dataset.qzAdd}"]`)
+    const list = editor.querySelector<HTMLElement>('[data-qz-list]')
+    if (!template || !list) return
+    list.insertAdjacentHTML('beforeend', template.innerHTML.replaceAll(QUIZ_KEY_SLOT, `q${Date.now().toString(36)}${qzCount++}`))
+    const added = list.lastElementChild as HTMLElement
+    added.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    const first = added.querySelector<HTMLTextAreaElement>('textarea')
+    first?.focus({ preventScroll: true })
+    first?.select()
+  } else if (row && target.closest('[data-qz-remove]')) {
+    const next = (row.nextElementSibling ?? row.previousElementSibling) as HTMLElement | null
+    row.remove()
+    ;(next?.querySelector<HTMLElement>('textarea') ?? editor.querySelector<HTMLElement>('[data-qz-add]'))?.focus()
+  } else if (row && move) {
+    const up = move.dataset.qzMove === 'up'
+    const other = up ? row.previousElementSibling : row.nextElementSibling
+    if (!other) return
+    other[up ? 'before' : 'after'](row)
+    // 端まで動かすとボタンが隠れるので、反対向きのボタンへ移して、キーボードで続けて動かせるようにする
+    const again = row.querySelector<HTMLElement>(`[data-qz-move="${move.dataset.qzMove}"]`)
+    const back = row.querySelector<HTMLElement>(`[data-qz-move="${up ? 'down' : 'up'}"]`)
+    ;((up ? row.previousElementSibling : row.nextElementSibling) ? again : back)?.focus()
+  } else if (row && target.closest('[data-qz-choice-add]')) {
+    const template = row.querySelector<HTMLTemplateElement>('[data-qz-choice-template]')
+    const list = row.querySelector<HTMLElement>('[data-qz-choice-list]')
+    if (!template || !list) return
+    list.insertAdjacentHTML('beforeend', template.innerHTML)
+    list.lastElementChild?.querySelector<HTMLElement>('[data-qz-choice-text]')?.focus()
+  } else if (row && choiceRemove) {
+    const choice = choiceRemove.closest<HTMLElement>('[data-qz-choice]')
+    const next = (choice?.nextElementSibling ?? choice?.previousElementSibling) as HTMLElement | null
+    choice?.remove()
+    ;(next?.querySelector<HTMLElement>('[data-qz-choice-text]') ?? row.querySelector<HTMLElement>('[data-qz-choice-add]'))?.focus()
+  } else return
+  qzSync(editor)
+})
+
+const qzOnEdit = (e: Event) => {
+  const target = e.target as Element
+  const editor = target.closest<HTMLElement>('[data-qz]')
+  if (!editor) return
+  const row = target.closest<HTMLElement>('[data-qz-question]')
+  if (row && target.matches('[data-qz-code], [data-qz-bug-no], [data-qz-flow-answer]')) qzShowLines(row)
+  qzSync(editor)
+}
+document.addEventListener('input', qzOnEdit, true)
+document.addEventListener('change', qzOnEdit, true)
+
+document.addEventListener('submit', (e) => $$<HTMLElement>('[data-qz]', e.target as HTMLFormElement).forEach(qzSync), true)
+
+// --- 小テストを受ける（components/quiz.tsx の QuizPanel）
+function quizMoveLine(line: HTMLElement, before: Element | null) {
+  if (before === line || line.nextElementSibling === before) return false
+  line.parentElement!.insertBefore(line, before)
+  return true
+}
+
+document.addEventListener('click', (e) => {
+  const button = (e.target as Element).closest<HTMLElement>('[data-quiz-line-move]')
+  const line = button?.closest<HTMLElement>('[data-quiz-line]')
+  if (!button || !line) return
+  const up = button.dataset.quizLineMove === 'up'
+  const other = up ? line.previousElementSibling : line.nextElementSibling
+  if (!other) return
+  quizMoveLine(line, up ? other : other.nextElementSibling)
+  const again = line.querySelector<HTMLElement>(`[data-quiz-line-move="${button.dataset.quizLineMove}"]`)
+  const back = line.querySelector<HTMLElement>(`[data-quiz-line-move="${up ? 'down' : 'up'}"]`)
+  ;((up ? line.previousElementSibling : line.nextElementSibling) ? again : back)?.focus()
+})
+
+// HTML のドラッグ＆ドロップ（draggable）を使わないのは、タッチ端末で動かせないため
+document.addEventListener('pointerdown', (e) => {
+  const target = e.target as Element
+  const line = target.closest<HTMLElement>('[data-quiz-line]')
+  if (!line || e.button !== 0 || target.closest('button')) return
+  // タッチでは、つまみ以外をなぞったときにページをスクロールできるように残す
+  if (e.pointerType !== 'mouse' && !target.closest('[data-quiz-grip]')) return
+  const list = line.parentElement!
+  e.preventDefault()
+  line.classList.add('is-dragging')
+  const onMove = (move: PointerEvent) => {
+    const others = $$<HTMLElement>('[data-quiz-line]', list).filter((el) => el !== line)
+    const next = others.find((el) => {
+      const box = el.getBoundingClientRect()
+      return move.clientY < box.top + box.height / 2
+    })
+    quizMoveLine(line, next ?? null)
+  }
+  const onEnd = () => {
+    line.classList.remove('is-dragging')
+    document.removeEventListener('pointermove', onMove)
+    document.removeEventListener('pointerup', onEnd)
+    document.removeEventListener('pointercancel', onEnd)
+  }
+  // 行に setPointerCapture しないのは、並べ替えで行を DOM の中で動かすと、キャプチャが外れて続きの動きが届かなくなるため
+  document.addEventListener('pointermove', onMove)
+  document.addEventListener('pointerup', onEnd)
+  document.addEventListener('pointercancel', onEnd)
+})
+
+// --- 小テストの「実行の順番」: 行を押すたびに、その行の番号を順番の最後に足す
+const quizFlowSteps = (flow: HTMLElement) => parseSteps(flow.querySelector<HTMLInputElement>('[data-quiz-flow-value]')?.value ?? '') ?? []
+
+function quizSetFlow(flow: HTMLElement, steps: number[]) {
+  const value = flow.querySelector<HTMLInputElement>('[data-quiz-flow-value]')
+  if (!value) return
+  value.value = steps.join(',')
+  for (const line of $$<HTMLElement>('[data-quiz-flow-line]', flow)) {
+    const no = Number(line.dataset.quizFlowLine)
+    const badges = steps.flatMap((n, i) => (n === no ? [i + 1] : []))
+    line
+      .querySelector('[data-quiz-flow-badges]')
+      ?.replaceChildren(
+        ...badges.map((at) => Object.assign(document.createElement('span'), { className: 'quiz-flow-badge', textContent: String(at) })),
+      )
+  }
+  flow
+    .querySelector('[data-quiz-flow-steps]')
+    ?.replaceChildren(...steps.map((n) => Object.assign(document.createElement('li'), { className: 'quiz-step', textContent: String(n) })))
+  for (const button of $$<HTMLButtonElement>('[data-quiz-flow-undo], [data-quiz-flow-clear]', flow)) button.disabled = steps.length === 0
+  flow.closest('[data-quiz-q]')?.classList.remove('is-missing')
+}
+
+document.addEventListener('click', (e) => {
+  const target = e.target as Element
+  const flow = target.closest<HTMLElement>('[data-quiz-flow]')
+  if (!flow) return
+  const steps = quizFlowSteps(flow)
+  const line = target.closest<HTMLElement>('[data-quiz-flow-line]')
+  if (line) {
+    if (steps.length >= MAX_QUIZ_STEPS) return toast(`選べるのは ${MAX_QUIZ_STEPS} 行までです。`, 'error')
+    quizSetFlow(flow, [...steps, Number(line.dataset.quizFlowLine)])
+  } else if (target.closest('[data-quiz-flow-undo]')) quizSetFlow(flow, steps.slice(0, -1))
+  else if (target.closest('[data-quiz-flow-clear]')) quizSetFlow(flow, [])
+  else return
+  // 空に戻すとボタンが押せなくなってフォーカスを失うので、行へ移して、キーボードで続けて選べるようにする
+  if (!line && quizFlowSteps(flow).length === 0) flow.querySelector<HTMLElement>('[data-quiz-flow-line]')?.focus()
+})
+
+// --- 小テストの「字下げ」: 行ごとのボタンで、字下げを深く・浅くする
+document.addEventListener('click', (e) => {
+  const button = (e.target as Element).closest<HTMLButtonElement>('[data-quiz-indent-move]')
+  const line = button?.closest<HTMLElement>('[data-quiz-indent-line]')
+  const value = line?.querySelector<HTMLInputElement>('input[type="hidden"]')
+  if (!button || !line || !value) return
+  const level = Math.min(MAX_QUIZ_INDENT, Math.max(0, Number(value.value) + Number(button.dataset.quizIndentMove)))
+  value.value = String(level)
+  line.style.setProperty('--level', String(level))
+  const [shallower, deeper] = [-1, 1].map((d) => line.querySelector<HTMLButtonElement>(`[data-quiz-indent-move="${d}"]`)!)
+  shallower.disabled = level === 0
+  deeper.disabled = level === MAX_QUIZ_INDENT
+  // 端まで動かすとボタンが押せなくなってフォーカスを失うので、反対向きのボタンへ移す
+  if (button.disabled) (button === shallower ? deeper : shallower).focus()
+})
+
+const quizAnswered = (question: HTMLElement) => {
+  switch (question.dataset.quizQ) {
+    case 'order':
+    case 'indent':
+      return true
+    case 'output':
+      return !!question.querySelector<HTMLTextAreaElement>('textarea')?.value.trim()
+    case 'flow':
+      return !!question.querySelector<HTMLInputElement>('[data-quiz-flow-value]')?.value
+    case 'table':
+      return $$<HTMLInputElement>('input.quiz-cell', question).every((cell) => !!cell.value.trim())
+    default:
+      return !!question.querySelector('input[type="radio"]:checked')
+  }
+}
+
+document.addEventListener(
+  'submit',
+  (e) => {
+    const form = e.target as HTMLFormElement
+    if (!form.matches('[data-quiz-form]')) return
+    const questions = $$<HTMLElement>('[data-quiz-q]', form)
+    const missing = questions.filter((q) => !quizAnswered(q))
+    questions.forEach((q) => q.classList.toggle('is-missing', missing.includes(q)))
+    if (missing.length === 0) return
+    // 送信の処理（再読み込みなしの遷移）より先に止めるため、捕捉の段階で伝わるのを止める
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    toast(`まだ答えていない問題が ${missing.length} 問あります。`, 'error')
+    missing[0].scrollIntoView({ block: 'center', behavior: 'smooth' })
+    missing[0].querySelector<HTMLElement>('input:not([type="hidden"]), textarea, button')?.focus({ preventScroll: true })
+  },
+  true,
+)
+
+document.addEventListener('input', (e) => (e.target as Element).closest('[data-quiz-q].is-missing')?.classList.remove('is-missing'))
 
 // --- 入力の検証（components/form.tsx の validateWith を付けたフォーム）
 function formInput(form: HTMLFormElement) {

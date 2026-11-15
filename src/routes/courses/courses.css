@@ -78,7 +78,8 @@
 .item-form:not([data-kind='page']) .when-page-inline { display: none; }
 .item-form:not([data-kind='bundle']) .when-bundle { display: none; }
 .item-form:not([data-kind='agent']) .when-agent { display: none; }
-.item-form[data-kind='code'] .unless-code, .item-form:is([data-kind='bundle'], [data-kind='code'], [data-kind='agent']) .unless-edit-next { display: none; }
+.item-form:not([data-kind='quiz']) .when-quiz { display: none; }
+.item-form[data-kind='code'] .unless-code, .item-form:is([data-kind='bundle'], [data-kind='code'], [data-kind='agent'], [data-kind='quiz']) .unless-edit-next { display: none; }
 
 :root:not([data-edit-mode]) .edit-only,
 :root[data-edit-mode] .view-only { display: none; }
@@ -265,7 +266,9 @@
 .item-form[data-kind='file'] [data-kind-summary='file'],
 .item-form[data-kind='screen'] [data-kind-summary='screen'],
 .item-form[data-kind='code'] [data-kind-summary='code'],
-.item-form[data-kind='bundle'] [data-kind-summary='bundle'] { display: flex; }
+.item-form[data-kind='quiz'] [data-kind-summary='quiz'],
+.item-form[data-kind='bundle'] [data-kind-summary='bundle'],
+.item-form[data-kind='agent'] [data-kind-summary='agent'] { display: flex; }
 .kind-summary > .btn { flex: none; margin-left: auto; }
 /* 切り替え中にボタンの幅を残さないのは、カードの大きさから伸びはじめるときに文字が折り返して見えるため */
 .item-steps.is-switching .kind-summary { position: relative; }

@@ -14,8 +14,9 @@ import {
 import { dateInputToUnix, dateTimeInputToUnix, isDateInput, isDateTimeInput } from './course-period'
 import { checkPassword } from './password'
 import { isMediaFile } from './preview'
+import { readQuizForm } from './quiz'
 import { readRestrictionForm } from './restriction'
-import { COMPLETIONS, COURSE_COLORS, LINK_TARGETS, type Completion, type ItemType } from './types'
+import { COMPLETIONS, COURSE_COLORS, ITEM_TYPES, LINK_TARGETS, type Completion, type ItemType } from './types'
 import { checkUsername, normalizeUsername } from './username'
 
 export const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) && s.length <= 254
@@ -161,7 +162,9 @@ export const completionChoices = (type: ItemType): Completion[] =>
       ? ['none', 'manual', 'view', 'play']
       : type === 'code'
         ? ['none', 'manual', 'view', 'clear']
-        : ['none', 'manual', 'view']
+        : type === 'quiz'
+          ? ['none', 'manual', 'view', 'pass']
+          : ['none', 'manual', 'view']
 
 // file に null を受け付けるのは、ブラウザでは保存済みのファイルの種類が分からず、保存するときにサーバーで確かめ直すため
 export function completionError(type: ItemType, completion: Completion | undefined, file: { type: string; name: string } | null) {
@@ -241,11 +244,26 @@ const usd = (label: string, max: number) =>
     ),
   )
 
+const percent = (label: string, min = 0) =>
+  z.pipe(
+    z.pipe(
+      text(label, 3, { required: true }),
+      z
+        .string()
+        .check(
+          rule((s: string) =>
+            /^\d+$/.test(s) && Number(s) >= min && Number(s) <= 100 ? null : `${label}は ${min}〜100 の整数で入力してください。`,
+          ),
+        ),
+    ),
+    z.transform((s: string) => Number(s)),
+  )
+
 const itemFields = {
   title: text('タイトル', 200, { required: true }),
   body: text('本文', 100_000),
   hidden: flag(),
-  type: choice(['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent'], 'page'),
+  type: choice(ITEM_TYPES, 'page'),
   language: choice(CODE_LANGUAGES, 'web'),
   link_target: choice(LINK_TARGETS, 'new'),
   completion: z.optional(z.enum(COMPLETIONS, '完了の条件が正しくありません。')),
@@ -277,16 +295,29 @@ const itemEdit = z
     closes_at: z.optional(dateTime('終了日時')),
     user_limit: z.optional(usd('1 人あたりの上限', MAX_AGENT_LIMIT)),
     instructions: z.optional(text('AI への指示', MAX_AGENT_INSTRUCTIONS)),
+    // 問題ごとの誤りを外側の object で出すのは、questions の中で出すと path の先頭が questions になり、問題の入力欄に出せないため
+    questions: z.transform((v: unknown) => readQuizForm(typeof v === 'string' ? v : '')),
+    pass_percent: z.optional(percent('合格にする正解の割合', 1)),
+    show_answers: flag(),
     url: z.optional(z.pipe(text('URL', 2000), z.string().check(rule((s: string) => (isHttpUrl(s) ? null : URL_INVALID))))),
   })
   .check(
     z.superRefine((v, ctx) => {
       const message = completionIssue(v)
       if (message) ctx.issues.push({ code: 'custom', message, input: v, path: ['completion'] })
-      const issues = v.type === 'code' ? codeItemIssues(v) : v.type === 'agent' ? agentItemIssues(v) : []
+      const issues =
+        v.type === 'code' ? codeItemIssues(v) : v.type === 'agent' ? agentItemIssues(v) : v.type === 'quiz' ? quizItemIssues(v) : []
       for (const issue of issues) ctx.issues.push({ code: 'custom', input: v, ...issue })
     }),
   )
+
+/** 小テストのアイテムの編集画面の、問題と合格の割合の誤り */
+function quizItemIssues(v: { questions: ReturnType<typeof readQuizForm>; pass_percent?: number }) {
+  const issues = v.questions.issues.map((issue) => ({ message: issue.message, path: [issue.key] }))
+  // 欄そのものがないときだけ足すのは、欄の値の誤りは pass_percent のスキーマ（percent）が出すため
+  if (v.pass_percent === undefined) issues.push({ message: '合格にする正解の割合を入力してください。', path: ['pass_percent'] })
+  return issues
+}
 
 /** コーディングエージェントのアイテムの編集画面の、使える期間と上限の誤り */
 function agentItemIssues(v: { opens_at?: string; closes_at?: string; user_limit?: number }) {
@@ -372,16 +403,25 @@ const extraAgent = z
     }),
   )
 
-const image = z.object({ image: file('画像を選択してください。') })
-
-const percent = (label: string) =>
-  z.pipe(
-    z.pipe(
-      text(label, 3, { required: true }),
-      z.string().check(rule((s: string) => (/^\d+$/.test(s) && Number(s) <= 100 ? null : `${label}は 0〜100 の整数で入力してください。`))),
-    ),
-    z.transform((s: string) => Number(s)),
+/** Moodle モードの小テストのアイテム。quiz_set は、問題と採点の欄を出している画面（編集画面）から送られたときに 1 になる */
+const extraQuiz = z
+  .object({
+    ...extraItemFields,
+    body: text('説明', 100_000),
+    quiz_set: flag(),
+    questions: z.transform((v: unknown) => readQuizForm(typeof v === 'string' ? v : '')),
+    pass_percent: z.optional(percent('合格にする正解の割合', 1)),
+    show_answers: flag(),
+  })
+  .check(
+    z.superRefine((v, ctx) => {
+      // 追加のモーダルは問題と採点の欄を送らないので、編集画面から送られたときだけ求める
+      if (v.quiz_set !== 1) return
+      for (const issue of quizItemIssues(v)) ctx.issues.push({ code: 'custom', input: v, ...issue })
+    }),
   )
+
+const image = z.object({ image: file('画像を選択してください。') })
 
 // sk-ant- で始まるかだけを見るのは、キーの形は Anthropic が変えることがあり、使えるかは保存するときに Anthropic に確かめるため
 const agentKey = z.object({
@@ -432,6 +472,7 @@ export const FORMS = {
   extraItem,
   extraCode,
   extraAgent,
+  extraQuiz,
   image,
   aiSettings,
   aiMessage,

@@ -1,6 +1,6 @@
 import type { Child } from 'hono/jsx'
 import type { LogAs } from './operation-log'
-import type { codeItems, courses, items, sections } from './schema'
+import type { codeItems, courses, items, quizItems, sections } from './schema'
 
 export type Role = 'admin' | 'teacher' | 'student'
 export type CourseRole = 'teacher' | 'student'
@@ -39,7 +39,11 @@ export type Item = typeof items.$inferSelect
 
 export type CodeItem = typeof codeItems.$inferSelect
 
-export type ItemType = 'page' | 'link' | 'file' | 'screen' | 'code' | 'bundle' | 'agent'
+export type QuizItem = typeof quizItems.$inferSelect
+
+export const ITEM_TYPES = ['page', 'link', 'file', 'screen', 'code', 'quiz', 'bundle', 'agent'] as const
+
+export type ItemType = (typeof ITEM_TYPES)[number]
 
 export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   page: 'ページ',
@@ -47,11 +51,12 @@ export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   file: 'ファイル',
   screen: '画面共有',
   code: 'コード',
+  quiz: '小テスト',
   bundle: 'ファイル自動配布',
   agent: 'コーディングエージェント',
 }
 
-export const COMPLETIONS = ['none', 'manual', 'view', 'play', 'clear'] as const
+export const COMPLETIONS = ['none', 'manual', 'view', 'play', 'clear', 'pass'] as const
 
 export type Completion = (typeof COMPLETIONS)[number]
 
@@ -61,6 +66,7 @@ export const COMPLETION_LABELS: Record<Completion, string> = {
   view: '開いたら完了',
   play: '最後まで再生したら完了',
   clear: '制約をすべてクリアしたら完了',
+  pass: '合格したら完了',
 }
 
 export const LINK_TARGETS = ['new', 'same', 'embed'] as const

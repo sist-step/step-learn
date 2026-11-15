@@ -33,6 +33,7 @@ import { SegmentedControl, SelectField, TextField, validateWith } from '../../co
 import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
+import { QuizEditor, QuizGradingCard, QuizPanel } from '../../components/quiz'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import { agentBase, type AgentView } from '../../lib/agent'
 import { bundleBase } from '../../lib/bundle'
@@ -41,6 +42,8 @@ import { unixToDateTimeInput } from '../../lib/course-period'
 import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
 import { previewKind } from '../../lib/preview'
+import { quizFormRows, type QuizFormRow, type QuizSettings } from '../../lib/quiz'
+import type { QuizView } from '../../lib/quiz-store'
 import { formatBytes } from '../../lib/bytes'
 import type { CodeItem, Item, Section } from '../../lib/types'
 
@@ -61,6 +64,10 @@ export type ItemInput = {
   userLimit: string
   /** コーディングエージェントの、教師が書く AI への指示 */
   instructions: string
+  /** 小テストの問題・合格にする正解の割合（入力欄の値）・不正解の問題の正解を見せるか */
+  questions: QuizFormRow[]
+  passPercent: string
+  showAnswers: number
 }
 
 /** コードのアイテムの言語と、見ている学生の提出。goals は学生に見せるクリアの条件（制約のラベル） */
@@ -98,6 +105,7 @@ export const ItemEditPage = ({
   code,
   bundle,
   agent,
+  quiz,
   gradingEnabled,
   judge,
   sections,
@@ -111,6 +119,8 @@ export const ItemEditPage = ({
   bundle?: BundleView
   /** コーディングエージェントのアイテムの設定と利用状況 */
   agent?: AgentView
+  /** 小テストのアイテムの設定 */
+  quiz?: QuizSettings
   /** AI が設定されていて、提出を自動で採点するか */
   gradingEnabled: boolean
   /** 制約ごとの判定をするもの。切り替えられる開発サーバーでだけ渡す */
@@ -137,6 +147,9 @@ export const ItemEditPage = ({
     closesAt: unixToDateTimeInput(code?.closesAt ?? agent?.settings.closesAt ?? undefined),
     userLimit: agent ? String(agent.settings.userLimit) : '',
     instructions: agent?.settings.instructions ?? '',
+    questions: quizFormRows(quiz?.questions ?? []),
+    passPercent: quiz ? String(quiz.passPercent) : '',
+    showAnswers: quiz?.showAnswers ?? 1,
     ...values,
   }
   const section = sections.find((s) => s.id === item.sectionId)
@@ -145,7 +158,7 @@ export const ItemEditPage = ({
     { href: `/courses/${courseId}`, label: access.course.title },
     ...(section ? [{ href: editUrl(courseId, section.id), label: section.title }] : []),
   ]
-  const lost = `${bundle ? '配布するファイルと、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : agent ? '利用状況と' : ''}完了記録も消え、元に戻せません。`
+  const lost = `${bundle ? '配布するファイルと、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : agent ? '利用状況と' : quiz ? '受験の記録と' : ''}完了記録も消え、元に戻せません。`
   return (
     <AppShell
       tone={access.course.color}
@@ -199,9 +212,11 @@ export const ItemEditPage = ({
               errors={errors}
             />
           )}
+          {quiz && <QuizEditor rows={v.questions} errors={errors} />}
 
           <aside class="editor-side">
             {code && <CodePeriodCard opensAt={v.opensAt} closesAt={v.closesAt} errors={errors} />}
+            {quiz && <QuizGradingCard passPercent={v.passPercent} showAnswers={v.showAnswers} errors={errors} />}
             {agent && <AgentPeriodCard opensAt={v.opensAt} closesAt={v.closesAt} userLimit={v.userLimit} errors={errors} />}
             <Card heading="公開と配置">
               <div class="stack">
@@ -258,6 +273,7 @@ export const ItemPage = ({
   code,
   bundle,
   agent,
+  quiz,
   revision,
 }: {
   access: CourseAccess
@@ -274,6 +290,7 @@ export const ItemPage = ({
   code?: CodeView
   bundle?: BundleView
   agent?: AgentView
+  quiz?: QuizView
   revision: string
 }) => {
   const id = access.course.id
@@ -295,6 +312,7 @@ export const ItemPage = ({
     item.type === 'page' ||
     item.type === 'bundle' ||
     item.type === 'agent' ||
+    item.type === 'quiz' ||
     embedded ||
     !!code ||
     (!!preview && (preview !== 'text' || textPreview !== null))
@@ -503,6 +521,8 @@ export const ItemPage = ({
             {(item.body || item.type === 'page') && (
               <div class="reader-sheet">{item.body ? <Markdown source={item.body} /> : <p class="muted">本文はまだありません。</p>}</div>
             )}
+
+            {quiz && <QuizPanel quiz={quiz} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />}
 
             {waitsFor(item, 'view') && opensOnView && <span hidden data-complete-on-view={completeUrl(item)} />}
 

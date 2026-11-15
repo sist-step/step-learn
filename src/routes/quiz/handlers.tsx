@@ -1,0 +1,116 @@
+// 通常モードと Moodle モードの両方が読み込むので、DB を開くモジュール（lib/db.ts・lib/courses.ts など）を import しない。
+// モードごとの DB と権限の確認は QuizBackend として受け取る（通常モードは ./backend.ts、Moodle モードは moodle-mode/quiz.ts）
+import { Hono, type Context } from 'hono'
+import type { CourseAccess } from '../../lib/courses'
+import { intParam, readForm, redirectWith } from '../../lib/http'
+import { MAX_QUIZ_ATTEMPTS, bestScore, gradeQuiz, reviewQuiz, type QuizSettings } from '../../lib/quiz'
+import type { QuizAttemptSummary, QuizStore } from '../../lib/quiz-store'
+import type { AppEnv } from '../../lib/types'
+import { ResultPage, ResultsPage, type QuestionStat, type ResultRow } from './views'
+
+type C = Context<AppEnv>
+
+export type QuizContext = {
+  access: CourseAccess
+  /** URL の :iid。通常モードはアイテムの ID、Moodle モードは活動の cmid */
+  item: { id: number; title: string }
+  settings: QuizSettings
+  store: QuizStore
+}
+
+export type QuizBackend = {
+  /** URL のコースとアイテムを、ログインしている人が開けるなら、設定と置き場所を返す。開けなければ null */
+  resolve: (c: C) => Promise<QuizContext | null>
+}
+
+export function createQuizHandlers({ resolve }: QuizBackend) {
+  async function open(c: C) {
+    const ctx = await resolve(c)
+    return ctx && { ...ctx, page: `/courses/${ctx.access.course.id}/items/${ctx.item.id}` }
+  }
+
+  async function manage(c: C) {
+    const ctx = await open(c)
+    return ctx && ctx.access.canManage ? ctx : null
+  }
+
+  // ---------------------------------------------------------------- 学生: 受ける
+
+  async function submit(c: C) {
+    const ctx = await open(c)
+    if (!ctx || ctx.access.role !== 'student') return c.notFound()
+    const { settings, store, page } = ctx
+    const userId = c.var.user!.id
+    if (settings.questions.length === 0) return redirectWith(c, page, '問題がまだありません。', 'error')
+    if (store.listOf(userId).length >= MAX_QUIZ_ATTEMPTS)
+      return redirectWith(c, page, `受けられる回数の上限（${MAX_QUIZ_ATTEMPTS} 回）に達しました。`, 'error')
+    const form = await readForm(c)
+    const graded = gradeQuiz(settings.questions, (field) => form[field])
+    const passed = store.record(userId, graded, settings.passPercent)
+    return redirectWith(
+      c,
+      page,
+      `${graded.total} 問中 ${graded.correct} 問正解でした。${passed ? '合格です。' : ''}`,
+      passed ? 'success' : 'info',
+    )
+  }
+
+  // ---------------------------------------------------------------- 教師: 受験結果を見る
+
+  async function list(c: C) {
+    const ctx = await manage(c)
+    if (!ctx) return c.notFound()
+    const { access, item, settings, store, page } = ctx
+    const byStudent = new Map<number, QuizAttemptSummary[]>()
+    for (const attempt of store.listAll()) byStudent.set(attempt.userId, [...(byStudent.get(attempt.userId) ?? []), attempt])
+    const rows: ResultRow[] = store.listStudents().map((student) => {
+      const attempts = byStudent.get(student.id) ?? []
+      return { student, count: attempts.length, latest: attempts[0] ?? null, best: bestScore(attempts) }
+    })
+    // 最高点の受験ではなくいちばん新しい受験で数えるのは、受け直して答えを覚えた分を除き、今つまずいている問題を見るため
+    const latestAnswers = store.answersOf(rows.flatMap((r) => (r.latest ? [r.latest.id] : []))).flatMap((a) => a.answers)
+    const stats: QuestionStat[] = settings.questions.map((q) => {
+      const records = latestAnswers.filter((r) => r.id === q.id)
+      return { kind: q.kind, prompt: q.prompt, answered: records.length, correct: records.filter((r) => r.correct).length }
+    })
+    return c.render(<ResultsPage access={access} item={item} pageUrl={page} rows={rows} stats={stats} />, {
+      title: `受験結果 - ${item.title}`,
+    })
+  }
+
+  async function show(c: C) {
+    const ctx = await manage(c)
+    const studentId = intParam(c, 'uid')
+    if (!ctx || !studentId) return c.notFound()
+    const { access, item, settings, store, page } = ctx
+    const student = store.findUser(studentId)
+    const history = store.listOf(studentId)
+    if (!student || history.length === 0) return c.notFound()
+    // 学生の ID でも絞るのは、ほかの学生の受験の ID を付けた URL で開けないようにするため
+    const attempt = store.get(studentId, Number(c.req.query('attempt')) || history[0].id)
+    if (!attempt) return c.notFound()
+    return c.render(
+      <ResultPage
+        access={access}
+        item={item}
+        pageUrl={page}
+        student={student}
+        attempt={attempt}
+        history={history}
+        review={reviewQuiz(settings.questions, attempt.answers, 'all')}
+      />,
+      { title: `${student.name} さんの受験 - ${item.title}` },
+    )
+  }
+
+  return { submit, list, show }
+}
+
+/** /courses の下に組み込むルート。ログインの確認は、組み込む側で先に済ませておく */
+export function quizRoutes(h: ReturnType<typeof createQuizHandlers>) {
+  const app = new Hono<AppEnv>()
+  app.post('/:id/items/:iid/quiz/submit', h.submit)
+  app.get('/:id/items/:iid/quiz/results', h.list)
+  app.get('/:id/items/:iid/quiz/results/:uid', h.show)
+  return app
+}

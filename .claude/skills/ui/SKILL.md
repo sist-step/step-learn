@@ -145,6 +145,16 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `CodeSubmissions` / `VerdictList` | 学生の提出のタブの中身（次に提出できるまでの残り・完了の状態・いちばん新しい提出の判定・開いて判定を見られるこれまでの提出）と、制約ごとの ○ / △ / × と理由の一覧（学生にはラベルだけ、`VerdictList` に `showText` を付けた教師の提出画面では判定の内容も出す。Jev の判定は理由の代わりに確からしさを出す）。判定中は `code-editor.ts` が終わりを待ち、タブの中身とヘッダーの帯の表示を取り直す |
 | `CodeWorkspace` | コードのアイテムの本体（`AppShell` の `topbar` と一緒に使う）。ヘッダーの下いっぱいに置き、ページはスクロールしない（下に本文や前後のアイテムを置かない）。左に問題文と「クリアの条件」（`goals`、制約のラベル）とファイルのタブ付きのエディター、右にプレビューとコンソール（Web）か入力と実行結果（Python）。学生には `submissions`（`lib/code-grader.ts` の `submissionsOf`）を渡し、右の枠を「プレビュー / 提出」のタブにする（判定中は提出のタブから始める。`completion` は提出のタブに出す完了の状態）。コードはサーバーで描かず、`code-editor.ts` が `${base}/state` から読み込み、書きかけのコードを `${base}/draft` に自動で保存する。提出は `CODE_FORM` のフォームの送信（ヘッダーの帯のボタンに `form={CODE_FORM}` を付ける） |
 
+### 小テスト — `src/components/quiz.tsx`
+
+| 部品 | 用途 |
+| --- | --- |
+| `QuizQuestionsField` | 問題の欄。問題ごとに、問題文・コード・種類ごとの欄（選択は選択肢と正解の丸、出力の予測は正しい出力、並べ替えは正しい順の行、バグ探しは行の番号、実行の順番は行の番号の並び、字下げは正しく字下げしたコード、変数の追跡は `|` で区切った表）・解説を書く。問題の追加（`<template data-qz-template>` を複製）・削除・上下の移動・選択肢の増減と、入力した行の番号の横に行の中身を出すのは `client.ts` が受け持ち、送信と入力のたびに行から JSON を組み立てて `questions` に入れる（`lib/quiz.ts` の `readQuizForm` が読む）。問題ごとの入力欄は `<問題の目印>.<項目>` の name でエラーの置き場所にだけ使う。出題の形式を足すときは、`lib/quiz.ts` の `QUIZ_KINDS` と種類ごとの分岐（読み取り・出題・採点・結果）、この部品の編集欄・解答・結果、`client.ts` の `quizAnswered` に足す |
+| `QuizEditor` / `QuizGradingCard` | 通常モードの編集画面（`ItemEditPage`）の「問題」のカードと、右の列に置く「採点」のカード（合格にする正解の割合 `pass_percent`、不正解だった問題の正解と解説を見せるか `show_answers`） |
+| `QuizFields` | Moodle モードの種類ごとの入力欄（`extra-kinds.tsx`）で使う「問題」と「採点」の欄。1 枚のカードの中に並べるので、カードではなく fieldset で包む |
+| `QuizPanel` | アイテムの画面の小テスト（`lib/quiz-store.ts` の `quizViewOf` で作る `QuizView`）。学生には解答のフォーム（`data-quiz-form`。答えていない問題があると `client.ts` が送信を止めて、その問題へ移る）か、いちばん新しい受験の結果と「もう一度受ける」（`?retake=1`）を出す。教師には学生と同じ問題を採点のボタンなしで出し、「受験結果」への入口を置く。並べ替えの行（`data-quiz-line`）はドラッグか上下のボタンで、実行の順番（`data-quiz-flow`）は行を押して、字下げ（`data-quiz-indent-line`）は行ごとの左右のボタンで答える。学生に渡す問題は正解を含まない `QuizTakeQuestion` |
+| `QuizReview` / `QuizScoreChip` | 問題ごとの結果（正誤・答え・見せてよいときだけ正解と解説。`lib/quiz.ts` の `reviewQuiz` で作る `QuizReviewItem`）と、受験 1 回の点数（合格ならチップ）。学生の結果と、教師が学生の受験を見る画面（`routes/quiz`）で使う |
+
 ### ファイル自動配布 — `src/components/bundle.tsx`
 
 | 部品 | 用途 |

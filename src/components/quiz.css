@@ -1,0 +1,262 @@
+/* ===== 小テスト: 編集画面の問題（QuizEditor） */
+.qz-list { display: flex; flex-direction: column; gap: 16px; margin: 0; padding: 0; list-style: none; counter-reset: qz; }
+.qz-list:empty { display: none; }
+.qz-q { counter-increment: qz; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--surface); }
+.qz-q-head { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--border); }
+.qz-q-num::before { content: '問 ' counter(qz); font-weight: 650; font-variant-numeric: tabular-nums; }
+.qz-q-kind { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; background: var(--c-soft); color: var(--c-ink); font-size: var(--fs-xs); font-weight: 500; }
+.qz-q-actions { display: flex; gap: 2px; margin-left: auto; }
+.qz-q:first-child [data-qz-move='up'], .qz-q:last-child [data-qz-move='down'] { visibility: hidden; }
+.qz-fields { display: flex; flex-direction: column; gap: 16px; padding: 16px; }
+textarea.qz-code, .qz-bug-line, .qz-flow-steps { font-family: var(--mono); font-size: var(--fs-sm); }
+textarea.qz-code { white-space: pre; overflow-x: auto; tab-size: 4; }
+.qz-empty { margin: 0; }
+.qz:has(.qz-q) .qz-empty { display: none; }
+.qz > .field-error { margin-top: 8px; }
+
+.qz-choice-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
+.qz-choice-list:empty { display: none; }
+.qz-choice { display: flex; align-items: center; gap: 8px; }
+.qz-choice > .input { flex: 1; min-width: 0; }
+.qz-choice-radio { flex: none; width: 18px; height: 18px; margin: 0 4px; accent-color: var(--success-strong); cursor: pointer; }
+.qz-choice:has(.qz-choice-radio:checked) > .input { border-color: var(--success); background: var(--success-soft); }
+.qz-choice-foot { margin-top: 10px; }
+
+.qz-bug-row { display: flex; align-items: center; gap: 12px; }
+.qz-bug-row > .qz-bug-no { flex: none; width: 88px; }
+.qz-bug-line { flex: 1; min-width: 0; color: var(--text-2); }
+.qz-bug-line:empty { display: none; }
+.qz-flow-steps { display: flex; flex-direction: column; gap: 2px; margin: 2px 0 0; padding: 8px 12px; border-radius: var(--radius-field); background: var(--surface-2); list-style: none; color: var(--text-2); }
+.qz-flow-steps:empty { display: none; }
+.qz-flow-steps > li { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.qz-flow-no { flex: none; min-width: 2ch; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+
+.qz-add { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin-top: 16px; }
+.qz-add-kind {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.qz-add-kind:focus-visible { outline: none; box-shadow: var(--ring); }
+.qz-add-kind > .icon { flex: none; color: var(--c-ink); }
+.qz-add-kind > .qz-add-plus { margin-left: auto; color: var(--muted); }
+.qz-add-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.4; }
+@media (hover: hover) {
+  .qz-add-kind:hover { border-color: var(--text-2); background: var(--surface-2); }
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .qz-add-kind { min-height: var(--tap); }
+  .qz-choice-radio { width: 22px; height: 22px; }
+}
+
+/* ===== 小テスト: 解答と結果（QuizPanel / QuizReview） */
+.quiz { margin-top: 24px; }
+.quiz > .alert { margin-bottom: 20px; }
+.quiz-teacher { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; padding: 12px 16px; border: 1px dashed var(--border-strong); border-radius: var(--radius); }
+.quiz-teacher > p { flex: 1; min-width: 0; margin: 0; }
+.quiz-teacher > .btn { flex: none; }
+.quiz-lead { margin: 0 0 16px; }
+.quiz-questions { display: flex; flex-direction: column; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.quiz-q {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: clamp(16px, 2.4vw, 28px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  /* ほかのカードと同じ --glass にしないのは、問題とコードを読む面では背景の色が透けると文字が読みにくくなるため */
+  background: var(--glass-read);
+  box-shadow: var(--shadow-rest);
+  scroll-margin-top: calc(var(--topbar-h) + 16px);
+}
+.quiz-q.is-missing { border-color: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 20%, transparent); }
+.quiz-q-head { display: flex; align-items: center; gap: 10px; }
+.quiz-q-num { font-weight: 650; font-variant-numeric: tabular-nums; }
+.quiz-mark { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 2px 10px; border-radius: 999px; background: var(--surface-3); color: var(--text-2); font-size: var(--fs-xs); font-weight: 600; }
+.quiz-q.is-right .quiz-mark { background: var(--success-soft); color: var(--success-text); }
+.quiz-q.is-wrong .quiz-mark { background: var(--danger-soft); color: var(--danger-text); }
+.quiz-prompt { margin: 0; font-size: var(--fs-md); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.quiz-code, .quiz-lines, .quiz-order code, textarea.quiz-output { font-family: var(--mono); font-size: var(--fs-sm); line-height: 1.7; tab-size: 4; }
+.quiz-code { margin: 0; padding: 12px 16px; border: 1px solid var(--card-border); border-radius: var(--radius-field); background: var(--surface-2); overflow-x: auto; }
+.quiz-code code, .quiz-lines code { font: inherit; }
+.quiz-code code, .quiz-lines code { white-space: pre; }
+textarea.quiz-output { white-space: pre; overflow-x: auto; }
+
+.quiz-choices { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.quiz-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--tap);
+  padding: 8px 14px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-field);
+  background: var(--surface);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  transition: border-color 0.15s, background 0.15s;
+}
+label.quiz-choice { cursor: pointer; }
+.quiz-choice > input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--c-ink); }
+.quiz-choice:has(input:checked) { border-color: var(--c-ink); background: var(--c-soft); }
+.quiz-choice:has(input:focus-visible) { box-shadow: var(--ring); }
+.quiz-choice-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--field-border); }
+.quiz-choice.is-right, .quiz-choice.is-answer { border-color: var(--success); background: var(--success-soft); }
+.quiz-choice.is-wrong { border-color: var(--danger); background: var(--danger-soft); }
+.quiz-choice.is-right .quiz-choice-dot, .quiz-choice.is-answer .quiz-choice-dot { background: var(--success); box-shadow: none; }
+.quiz-choice.is-wrong .quiz-choice-dot { background: var(--danger); box-shadow: none; }
+.quiz-line-mark { flex: none; margin-left: auto; padding-left: 12px; font-family: var(--font); font-size: var(--fs-xs); font-weight: 600; color: var(--text-2); white-space: nowrap; }
+.is-right > .quiz-line-mark, .is-answer > .quiz-line-mark, .is-right > span > .quiz-line-mark, .is-answer > span > .quiz-line-mark { color: var(--success-text); }
+.is-wrong > .quiz-line-mark, .is-wrong > span > .quiz-line-mark { color: var(--danger-text); }
+
+.quiz-lines { margin: 0; padding: 6px 0; border: 1px solid var(--card-border); border-radius: var(--radius-field); background: var(--surface-2); list-style: none; overflow-x: auto; }
+.quiz-line { min-width: max-content; }
+.quiz-line > * { display: flex; align-items: center; gap: 12px; padding: 2px 16px 2px 0; }
+.quiz-line > button { width: 100%; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.quiz-line > button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.quiz-line > label { cursor: pointer; }
+.quiz-line-no { flex: none; width: 44px; padding-right: 4px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; user-select: none; }
+.quiz-line:has(input:checked) { background: var(--c-soft); box-shadow: inset 3px 0 0 var(--c-ink); }
+.quiz-line:has(input:checked) .quiz-line-no { color: var(--c-ink); font-weight: 600; }
+.quiz-line:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+.quiz-line.is-right, .quiz-line.is-answer { background: var(--success-soft); box-shadow: inset 3px 0 0 var(--success); }
+.quiz-line.is-wrong { background: var(--danger-soft); box-shadow: inset 3px 0 0 var(--danger); }
+@media (hover: hover) {
+  label.quiz-choice:hover { border-color: var(--border-strong); }
+  .quiz-line:not(:has(input:checked)) > label:hover, .quiz-line > button:hover { background: var(--surface-3); }
+}
+
+.quiz-order { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.quiz-order-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap);
+  padding: 2px 6px 2px 0;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-field);
+  background: var(--surface);
+  cursor: grab;
+  user-select: none;
+}
+/* 横スクロールにしないのは、行をつかんで動かす操作とぶつかり、スマホ幅で行の後ろが読めなくなるため */
+.quiz-order-line > code { flex: 1; min-width: 0; padding: 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.quiz-order-grip { display: grid; place-items: center; flex: none; align-self: stretch; width: 40px; color: var(--muted); touch-action: none; }
+.quiz-order-line.is-dragging { position: relative; z-index: 1; border-color: var(--c-ink); background: var(--c-soft); box-shadow: var(--shadow); cursor: grabbing; }
+.quiz-order-line:first-child [data-quiz-line-move='up'], .quiz-order-line:last-child [data-quiz-line-move='down'] { visibility: hidden; }
+
+.quiz-actions { display: flex; justify-content: center; margin-top: 24px; }
+.quiz-actions .btn { min-width: 200px; }
+
+.quiz-score {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 16px 20px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-read);
+  box-shadow: var(--shadow-rest);
+}
+.quiz-score > .mascot { flex: none; }
+.quiz-score-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.quiz-score-text p { margin: 0; }
+.quiz-score-value { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--fs-lg); font-variant-numeric: tabular-nums; }
+.quiz-score-value strong { font-size: var(--fs-display); font-weight: 650; line-height: 1; }
+.quiz-score.is-passed .quiz-score-value strong { color: var(--success-text); }
+.quiz-score > .btn { flex: none; }
+
+.quiz-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.quiz-compare-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.quiz-compare-side p { margin: 0; }
+.quiz-compare-label { font-size: var(--fs-xs); font-weight: 600; color: var(--text-2); }
+.quiz-compare-side.is-right .quiz-code, .quiz-compare-side.is-answer .quiz-code { border-color: var(--success); background: var(--success-soft); }
+.quiz-compare-side.is-wrong .quiz-code { border-color: var(--danger); background: var(--danger-soft); }
+
+/* 実行の順番 */
+.quiz-flow { display: flex; flex-direction: column; gap: 10px; }
+.quiz-flow-badges { display: flex; gap: 4px; margin-left: auto; padding-left: 12px; }
+.quiz-flow-badge, .quiz-step {
+  display: grid;
+  place-items: center;
+  flex: none;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--c-soft);
+  color: var(--c-ink);
+  font: 600 var(--fs-xs) var(--font);
+  font-variant-numeric: tabular-nums;
+}
+.quiz-flow-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.quiz-flow-bar > .quiz-steps, .quiz-flow-empty { flex: 1 1 240px; min-width: 0; margin: 0; }
+.quiz-flow-bar > .quiz-steps:empty, .quiz-flow-bar > .quiz-steps:not(:empty) + .quiz-flow-empty { display: none; }
+.quiz-steps { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 18px; margin: 0; padding: 0; list-style: none; }
+.quiz-step { position: relative; background: var(--surface-3); color: var(--text); }
+.quiz-step + .quiz-step::before { content: '→'; position: absolute; right: 100%; width: 18px; color: var(--muted); font-weight: 400; text-align: center; }
+.quiz-compare-side.is-right .quiz-step, .quiz-compare-side.is-answer .quiz-step { background: var(--success-soft); color: var(--success-text); }
+.quiz-compare-side .quiz-step.is-wrong { background: var(--danger-soft); color: var(--danger-text); }
+
+/* 字下げ */
+.quiz-indent { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.quiz-indent-line { --indent-step: 28px; display: flex; align-items: center; gap: 4px; min-height: var(--tap); padding: 2px 12px 2px 4px; border: 1px solid var(--field-border); border-radius: var(--radius-field); background: var(--surface); }
+/* 深さを縦の線でも示すのは、行ごとに枠で区切っているので、空白の幅だけでは上下の行と深さを比べにくいため */
+.quiz-indent-line > code {
+  flex: 1;
+  min-width: 0;
+  margin-left: 4px;
+  padding: 6px 0 6px calc(var(--level) * var(--indent-step) + 8px);
+  background: repeating-linear-gradient(to right, var(--border-strong) 0 1px, transparent 1px var(--indent-step)) left / calc(var(--level) * var(--indent-step)) 100% no-repeat;
+  font: var(--fs-sm)/1.7 var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  transition: padding-left 0.15s var(--ease), background-size 0.15s var(--ease);
+}
+
+/* 変数の追跡 */
+.quiz-table-wrap { overflow-x: auto; }
+.quiz-table { width: auto; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
+.quiz-table :is(th, td) { padding: 4px 6px; text-align: left; vertical-align: middle; }
+.quiz-table thead th { padding-bottom: 6px; color: var(--text-2); font-weight: 600; }
+.quiz-table thead code, .quiz-table td code, .quiz-table .quiz-cell { font-family: var(--mono); }
+/* 幅を % で絞らないのは、表が幅いっぱいに広がり、変数の列どうしが離れてしまうため */
+.quiz-table tbody th { padding-right: 12px; color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.quiz-table .quiz-cell { width: 128px; }
+.quiz-table.is-review td { min-width: 72px; padding: 6px 10px; border: 1px solid var(--card-border); background: var(--surface-2); }
+.quiz-table.is-review td + td { border-left: 0; }
+.quiz-table.is-review tr + tr td { border-top: 0; }
+.quiz-table.is-review td.is-right { background: var(--success-soft); }
+.quiz-table.is-review td.is-wrong { background: var(--danger-soft); }
+.quiz-cell-answer { display: block; color: var(--danger-text); font: 600 var(--fs-xs) var(--mono); }
+
+.quiz-explanation { display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; border-radius: var(--radius-field); background: var(--surface-2); }
+.quiz-explanation p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.quiz-explanation-label { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-xs); font-weight: 600; color: var(--text-2); }
+
+/* ===== 小テスト: 教師の受験結果（routes/quiz） */
+.quiz-stats > p { margin: 0 0 12px; }
+.quiz-stat-prompt { display: flex; flex-direction: column; min-width: 0; line-height: 1.4; }
+.quiz-rate { display: inline-flex; align-items: center; gap: 10px; }
+.quiz-rate-bar { width: 96px; height: 6px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.quiz-rate-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--progress-fill); }
+
+@media (max-width: 640px) {
+  .quiz-score { flex-wrap: wrap; }
+  .quiz-score > .btn { flex: 1 1 100%; }
+  .quiz-actions .btn { flex: 1; }
+  .quiz-rate-bar { display: none; }
+  .quiz-teacher { flex-wrap: wrap; }
+  .quiz-indent-line { --indent-step: 18px; }
+}

@@ -232,6 +232,20 @@
       "when": 1794717692082,
       "tag": "0032_melted_thunderball",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1794720396255,
+      "tag": "0033_quiz_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1794720404912,
+      "tag": "0034_item_type_quiz",
+      "breakpoints": true
     }
   ]
 }
