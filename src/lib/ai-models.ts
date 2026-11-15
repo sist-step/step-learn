@@ -17,6 +17,12 @@ export const OPENROUTER_EMBEDDING_MODELS = ['qwen/qwen3-embedding-8b'] as const
 
 export type EmbeddingModel = (typeof OPENROUTER_EMBEDDING_MODELS)[number]
 
+// AI_MODELS に入れないのは、音声を文字にするだけで、会話には使えないため
+/** パネルの音声入力の文字起こしに使うモデル（lib/ai-voice.ts）。使用量は OpenRouter の月の上限に数える */
+export const OPENROUTER_TRANSCRIPTION_MODELS = ['openai/whisper-large-v3-turbo'] as const
+
+export type TranscriptionModel = (typeof OPENROUTER_TRANSCRIPTION_MODELS)[number]
+
 export type OpenRouterModel = (typeof OPENROUTER_MODELS)[number]
 export type AnthropicModel = (typeof ANTHROPIC_MODELS)[number]
 export type AiModel = (typeof AI_MODELS)[number]
@@ -60,7 +66,7 @@ export type OpenRouterModelInfo = {
 
 export const isAiModel = (model: string): model is AiModel => (AI_MODELS as readonly string[]).includes(model)
 
-export const isAnthropicModel = (model: AiModel): model is AnthropicModel => (ANTHROPIC_MODELS as readonly string[]).includes(model)
+export const isAnthropicModel = (model: string): model is AnthropicModel => (ANTHROPIC_MODELS as readonly string[]).includes(model)
 
 export const AI_MODEL_LABELS: Record<AiModel, string> = {
   'deepseek/deepseek-v4.1-flash-1017': 'DeepSeek V4.1 Flash 1017',
@@ -113,7 +119,7 @@ export const AI_RETIRED_PROVIDER_MODELS: Record<AiProvider, readonly string[]> =
   anthropic: [],
 }
 
-export const aiProvider = (model: AiModel): AiProvider => (isAnthropicModel(model) ? 'anthropic' : 'openrouter')
+export const aiProvider = (model: AiModel | TranscriptionModel): AiProvider => (isAnthropicModel(model) ? 'anthropic' : 'openrouter')
 
 // 一覧から消さないのは、再開するときにここから外すだけで戻せて、止める前にそのモデルで使った今月の額も月の上限に数え続けるため
 /** 一時的に止めているモデル。会話の選択肢に出さず、呼び出しても断る */

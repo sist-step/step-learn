@@ -11,6 +11,7 @@ import { agentModelFacts, isAgentClaudeModel, type AgentModel } from './lib/agen
 import type { AiAgentEvent, AiUsageMeter } from './lib/ai-agent'
 import type { AiTouched } from './lib/ai-tool-kit'
 import { formatBytes } from './lib/bytes'
+import { formatClock } from './lib/clock'
 import { formatDateTimeInput } from './lib/course-period'
 import { isFormName, validate, type FieldErrors, type FormInput } from './lib/forms'
 import { renderMarkdown } from './lib/markdown'
@@ -2579,7 +2580,10 @@ function setAiOpen(open: boolean) {
   document.documentElement.toggleAttribute('data-ai-open', open)
   $$('.ai-panel-toggle').forEach((el) => el.setAttribute('aria-expanded', String(open)))
   setSetting('aiPanel', open)
-  if (!open) return scheduleAiSync()
+  if (!open) {
+    cancelAiVoice()
+    return scheduleAiSync()
+  }
   void syncAiPanel()
   scrollAiLog(true)
   // 狭い画面で入力欄にフォーカスしないのは、開いただけでキーボードが出て会話が隠れるため
@@ -2679,6 +2683,10 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('keydown', (e) => {
   const input = e.target as Element
+  if (e.key === 'Escape' && aiVoice) {
+    e.preventDefault()
+    return cancelAiVoice()
+  }
   if (e.key === 'Escape' && !aiDocked() && aiPanel()?.contains(input)) return setAiOpen(false)
   if (!(input instanceof HTMLTextAreaElement) || !input.matches('.ai-textarea') || e.key !== 'Enter' || e.shiftKey) return
   // keyCode も見るのは、Safari では変換を確定した Enter の keydown で isComposing が false になるため
@@ -2728,6 +2736,7 @@ async function refreshAiPanel(model?: string) {
     fitAiInput(input)
   }
   if (input && focused) input.focus()
+  showAiVoice()
   initMascots()
   scrollAiLog(true)
   scheduleAiSync()
@@ -2764,10 +2773,10 @@ async function refreshAiIfOutdated(model?: string) {
 }
 
 // 作成中の応答を開き直した画面に流し直さないのは、流れていた続きを受け取る手段がなく、言い終えて保存されたものを取り直せば足りるため
-// 変換中に取り直さないのは、入力欄が差し替わって、確定していない文字が消えるため
+// 変換中に取り直さないのは、入力欄が差し替わって、確定していない文字が消えるため。音声入力の途中も、入力欄を差し替えると録った文が消えるので取り直さない
 function syncAiPanel() {
   if (aiSending) return Promise.resolve()
-  if (aiComposing || !aiWatching()) {
+  if (aiComposing || aiVoice || !aiWatching()) {
     scheduleAiSync()
     return Promise.resolve()
   }
@@ -3006,6 +3015,7 @@ document.addEventListener('submit', (e) => {
   const form = e.target as HTMLFormElement
   if (e.defaultPrevented || !form.matches('[data-ai-form], [data-ai-close], [data-ai-confirm]')) return
   e.preventDefault()
+  if (aiVoice && form.matches('[data-ai-form]')) return void finishAiVoice()
   if (form.matches('[data-ai-form], [data-ai-confirm]')) {
     const submitter = e.submitter
     void runAiTask(() => (form.matches('[data-ai-form]') ? sendAiMessage() : decideAiCard(form, submitter)))
@@ -3039,8 +3049,270 @@ async function runAiTask(task: () => Promise<void>) {
 function initAiPanel() {
   const open = document.documentElement.hasAttribute('data-ai-open')
   $$('.ai-panel-toggle').forEach((el) => el.setAttribute('aria-expanded', String(open)))
+  showAiVoice()
   scheduleAiSync()
 }
+
+// --- AI のパネルの音声入力（components/ai-panel.tsx の data-ai-voice。文字起こしは /ai/voice）
+// 録った音声を区切って送らないのは、MediaRecorder の 2 つ目以降の断片はヘッダーがなく単独では読めず、
+// 区切りで言葉が切れて起こし間違えるため。録り始めからの音声を毎回まとめて送り、返った文字で置き換える
+type AiVoice = {
+  state: 'recording' | 'finishing'
+  recorder: MediaRecorder
+  stream: MediaStream
+  audio: AudioContext
+  chunks: Blob[]
+  /** 録り始めたときに入力欄にあった文。送るときは、この後ろに文字にした音声を続ける */
+  base: string
+  /** 最後に返った途中の文字起こし */
+  text: string
+  /** 途中の文字起こしに最後に送った時点の chunks の数 */
+  sent: number
+  /** 声らしい大きさの音を一度でも拾ったか */
+  heard: boolean
+  startedAt: number
+  /** 1 回に録れる長さ（ミリ秒）と、文字にできる長さ（components/ai-panel.tsx の data-max-seconds / data-max-chars） */
+  maxMs: number
+  maxChars: number
+  timer: number
+  limitTimer: number
+  frame: number
+  inflight: AbortController | null
+}
+
+let aiVoice: AiVoice | null = null
+const AI_VOICE_SLICE = 250
+const AI_VOICE_INTERVAL = 1200
+// 短すぎる音声を送らないのは、Whisper が 1 秒に満たない音声から、話していない言葉を作ることがあるため
+const AI_VOICE_MIN_MS = 1000
+const AI_VOICE_HEARD_LEVEL = 0.02
+// 残りがこれを切ったら時間と文字数の色を変えるのは、急に止まって送られる前に、話をまとめられるようにするため
+const AI_VOICE_NEAR_MS = 10_000
+const AI_VOICE_NEAR_CHARS = 0.9
+// Safari は webm を録れないので mp4 を、Firefox は ogg も録れるので最後の候補に入れる
+const AI_VOICE_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
+
+const aiVoiceSupported = () => !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined'
+const aiVoiceButton = () => aiPanel()?.querySelector<HTMLButtonElement>('[data-ai-voice]') ?? null
+
+function showAiVoice() {
+  const button = aiVoiceButton()
+  if (button) button.hidden = !aiVoiceSupported()
+}
+
+/** 入力欄の下の、録音した時間と文字数 */
+function paintAiVoiceStatus(voice: AiVoice | null) {
+  const panel = aiPanel()
+  const time = panel?.querySelector<HTMLElement>('[data-ai-voice-time]')
+  const chars = panel?.querySelector<HTMLElement>('[data-ai-voice-chars]')
+  const elapsed = voice ? Date.now() - voice.startedAt : 0
+  if (time) {
+    time.textContent = formatClock(elapsed / 1000)
+    time.toggleAttribute('data-near', !!voice && voice.maxMs - elapsed <= AI_VOICE_NEAR_MS)
+  }
+  if (chars) {
+    chars.textContent = String(voice?.text.length ?? 0)
+    chars.toggleAttribute('data-near', !!voice && voice.text.length >= voice.maxChars * AI_VOICE_NEAR_CHARS)
+  }
+}
+
+function paintAiVoice(voice: AiVoice | null) {
+  const box = aiPanel()?.querySelector<HTMLElement>('.ai-input')
+  const button = aiVoiceButton()
+  if (!box || !button) return
+  paintAiVoiceStatus(voice)
+  if (!voice) {
+    box.removeAttribute('data-voice')
+    button.setAttribute('aria-pressed', 'false')
+    button.setAttribute('aria-label', '音声で入力')
+    button.title = '音声で入力'
+    button.disabled = false
+    button.style.removeProperty('--ai-level')
+    return
+  }
+  box.dataset.voice = voice.state
+  const label = voice.state === 'finishing' ? '文字にしています' : '話し終えて送信'
+  button.setAttribute('aria-pressed', 'true')
+  button.setAttribute('aria-label', label)
+  button.title = label
+  button.disabled = voice.state === 'finishing'
+  const base = box.querySelector('[data-ai-ghost-base]')
+  const text = box.querySelector('[data-ai-ghost-text]')
+  if (base) base.textContent = voice.base
+  if (text) text.textContent = voice.text
+  const ghost = box.querySelector<HTMLElement>('[data-ai-ghost]')
+  if (ghost) ghost.scrollTop = ghost.scrollHeight
+}
+
+/** 音の大きさを録音ボタンの輪に出し、声らしい音を拾ったかを覚える */
+function meterAiVoice(voice: AiVoice) {
+  const analyser = voice.audio.createAnalyser()
+  analyser.fftSize = 1024
+  voice.audio.createMediaStreamSource(voice.stream).connect(analyser)
+  const samples = new Float32Array(analyser.fftSize)
+  const tick = () => {
+    if (aiVoice !== voice || voice.state !== 'recording') return
+    analyser.getFloatTimeDomainData(samples)
+    const level = Math.sqrt(samples.reduce((sum, v) => sum + v * v, 0) / samples.length)
+    if (level >= AI_VOICE_HEARD_LEVEL) voice.heard = true
+    aiVoiceButton()?.style.setProperty('--ai-level', String(Math.min(1, level * 8)))
+    paintAiVoiceStatus(voice)
+    voice.frame = requestAnimationFrame(tick)
+  }
+  voice.frame = requestAnimationFrame(tick)
+}
+
+async function transcribeAiVoice(voice: AiVoice, signal?: AbortSignal) {
+  const data = new FormData()
+  data.set('audio', new Blob(voice.chunks, { type: voice.recorder.mimeType || voice.chunks[0]?.type }), 'voice')
+  const res = await fetch('/ai/voice', { method: 'POST', body: data, headers: { Accept: 'application/json' }, signal })
+  const body = (await res.json().catch(() => null)) as { text?: unknown; error?: unknown } | null
+  if (!res.ok || typeof body?.text !== 'string')
+    throw new Error(typeof body?.error === 'string' ? body.error : '音声を文字にできませんでした。')
+  return body.text
+}
+
+// 前の問い合わせが返る前に次を送らないのは、遅れて返った古い結果で、新しい結果を上書きしてしまうため
+function scheduleAiVoice(voice: AiVoice) {
+  voice.timer = window.setTimeout(async () => {
+    const ready = voice.heard && voice.chunks.length > voice.sent && Date.now() - voice.startedAt >= AI_VOICE_MIN_MS
+    if (ready) {
+      voice.sent = voice.chunks.length
+      const controller = new AbortController()
+      voice.inflight = controller
+      try {
+        const text = await transcribeAiVoice(voice, controller.signal)
+        if (aiVoice === voice && voice.state === 'recording') {
+          voice.text = text
+          paintAiVoice(voice)
+          if (text.length >= voice.maxChars) void finishAiVoice(`音声入力は 1 回 ${voice.maxChars} 文字までのため、ここまでを送信します。`)
+        }
+      } catch {
+        // 途中の失敗を知らせないのは、話し終えたときにまとめて送り直し、そこで失敗したときだけ伝えれば足りるため
+      } finally {
+        if (voice.inflight === controller) voice.inflight = null
+      }
+    }
+    if (aiVoice === voice && voice.state === 'recording') scheduleAiVoice(voice)
+  }, AI_VOICE_INTERVAL)
+}
+
+async function startAiVoice(button: HTMLButtonElement) {
+  if (aiVoice || !aiVoiceSupported()) return
+  const input = aiInput()
+  if (!input) return
+  let stream: MediaStream
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+  } catch (e) {
+    const denied = e instanceof DOMException && (e.name === 'NotAllowedError' || e.name === 'SecurityError')
+    return toast(denied ? 'マイクの使用が許可されていません。ブラウザの設定で許可してください。' : 'マイクを使えませんでした。', 'error')
+  }
+  if (aiVoice) return stream.getTracks().forEach((t) => t.stop())
+  const type = AI_VOICE_TYPES.find((t) => MediaRecorder.isTypeSupported(t))
+  const recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined)
+  const voice: AiVoice = {
+    state: 'recording',
+    recorder,
+    stream,
+    audio: new AudioContext(),
+    chunks: [],
+    base: input.value.trim(),
+    text: '',
+    sent: 0,
+    heard: false,
+    startedAt: Date.now(),
+    maxMs: Number(button.dataset.maxSeconds) * 1000,
+    maxChars: Number(button.dataset.maxChars),
+    timer: 0,
+    limitTimer: 0,
+    frame: 0,
+    inflight: null,
+  }
+  recorder.addEventListener('dataavailable', (e) => {
+    if (e.data.size > 0) voice.chunks.push(e.data)
+  })
+  recorder.start(AI_VOICE_SLICE)
+  aiVoice = voice
+  meterAiVoice(voice)
+  scheduleAiVoice(voice)
+  voice.limitTimer = window.setTimeout(
+    () => void finishAiVoice(`音声入力は 1 回 ${voice.maxMs / 1000} 秒までのため、ここまでを送信します。`),
+    voice.maxMs,
+  )
+  paintAiVoice(voice)
+}
+
+/** 録音を止めてマイクを手放す。最後の断片（dataavailable）は stop の前に届く */
+async function releaseAiVoice(voice: AiVoice) {
+  clearTimeout(voice.timer)
+  clearTimeout(voice.limitTimer)
+  cancelAnimationFrame(voice.frame)
+  voice.inflight?.abort()
+  if (voice.recorder.state !== 'inactive') {
+    const stopped = new Promise((resolve) => voice.recorder.addEventListener('stop', resolve, { once: true }))
+    voice.recorder.stop()
+    await stopped
+  }
+  voice.stream.getTracks().forEach((t) => t.stop())
+  void voice.audio.close()
+}
+
+function endAiVoice(voice: AiVoice) {
+  if (aiVoice !== voice) return
+  aiVoice = null
+  paintAiVoice(null)
+  if (aiDocked()) aiInput()?.focus()
+  scheduleAiSync()
+}
+
+function cancelAiVoice() {
+  const voice = aiVoice
+  if (!voice) return
+  endAiVoice(voice)
+  void releaseAiVoice(voice)
+}
+
+const joinAiVoice = (base: string, text: string) => (base && text ? `${base} ${text}` : base || text)
+
+/**
+ * 話し終えた音声をまとめて文字にし、入力欄にあった文に続けてそのまま送る。失敗したら、途中までの文字を入力欄に残す。
+ * limit は、1 回の上限に届いて止めたときに知らせる文言
+ */
+async function finishAiVoice(limit?: string) {
+  const voice = aiVoice
+  if (!voice || voice.state !== 'recording') return
+  if (limit) toast(limit, 'info')
+  voice.state = 'finishing'
+  paintAiVoice(voice)
+  await releaseAiVoice(voice)
+  if (aiVoice !== voice) return
+  let text = ''
+  let problem = ''
+  try {
+    text = voice.heard && voice.chunks.length > 0 ? (await transcribeAiVoice(voice)).trim() : ''
+    if (!text) problem = '声を聞き取れませんでした。もう一度お試しください。'
+  } catch (e) {
+    problem = e instanceof Error ? e.message : '音声を文字にできませんでした。'
+  }
+  if (aiVoice !== voice) return
+  endAiVoice(voice)
+  const input = aiInput()
+  if (!input) return
+  input.value = joinAiVoice(voice.base, problem ? voice.text : text)
+  fitAiInput(input)
+  if (problem) return toast(problem, 'error')
+  input.form?.requestSubmit()
+}
+
+document.addEventListener('click', (e) => {
+  const target = e.target as Element
+  if (target.closest('[data-ai-voice-cancel]')) return cancelAiVoice()
+  const button = target.closest<HTMLButtonElement>('[data-ai-voice]')
+  if (!button || button.disabled) return
+  if (aiVoice) return void finishAiVoice()
+  void startAiVoice(button)
+})
 
 // --- AI が変えたところを、開いている画面にすぐ反映して強調する（lib/ai-tool-kit.ts の AiTouched）
 // 反映を CourseLiveSync の確認の間隔に任せないのは、頼んだ結果がどこに出たのかを、変えた直後に見せるため
