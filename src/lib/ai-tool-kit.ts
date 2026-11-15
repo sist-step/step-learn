@@ -3,6 +3,7 @@ import * as z from 'zod/mini'
 import type { AiTool } from './ai'
 import type { Context } from 'hono'
 import { MAX_CONSTRAINT_LABEL_LENGTH, MAX_CONSTRAINT_LENGTH, MAX_CONSTRAINTS, describeConstraint, type CodeConstraint } from './code'
+import { formatBytes } from './bytes'
 import type { AppEnv } from './types'
 
 /** ツールを呼んだ要求。利用者は c.var.user、Moodle モードではトークンも c.var から読む */
@@ -31,6 +32,23 @@ export type AiAgentTool =
       propose: (c: AiToolContext, args: unknown) => Promise<AiProposal | AiToolResult>
       apply: (c: AiToolContext, args: unknown, snapshot: unknown) => Promise<AiToolResult>
     }
+
+/** request_file で受け取ったファイルの置き場所（通常モードは lib/ai-uploads.ts、Moodle モードは moodle-mode/ai-uploads.ts）。receive は AI に渡す file_id を返す */
+export type AiFileStore = { receive: (c: AiToolContext, file: File) => Promise<number> }
+
+/** request_file で受け取ったファイルを使うツールの引数 */
+export const fileId = (description: string) => id(`${description}。request_file で受け取った file_id`)
+
+export const UPLOAD_NOT_FOUND =
+  'その file_id のファイルは見つかりません。使えるのは、このチャットで受け取ってから 1 回だけです。request_file で受け取り直してください。'
+
+// 名前だけにしないのは、同じ名前のファイルに差し替えると、確認カードの変更前と変更後が同じに見えるため
+/** ファイルを差し替える確認カードの行 */
+export const fileChange = (before: { name: string; size: number }, upload: { fileName: string; fileSize: number }): AiChange => ({
+  label: 'ファイル',
+  before: before.name && `${before.name}（${formatBytes(before.size)}）`,
+  after: `${upload.fileName}（受け取ったファイル・${formatBytes(upload.fileSize)}）`,
+})
 
 export const isToolResult = (v: AiProposal | AiToolResult): v is AiToolResult => 'content' in v
 

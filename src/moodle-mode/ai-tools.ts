@@ -12,10 +12,13 @@ import {
   inItem,
   describedString,
   failure,
+  fileChange,
+  fileId,
   id,
   sameSnapshot,
   success,
   toConstraints,
+  UPLOAD_NOT_FOUND,
   type AiAgentTool,
   type AiToolContext,
 } from '../lib/ai-tool-kit'
@@ -24,6 +27,7 @@ import { config } from '../lib/config'
 import { isHttpUrl } from '../lib/forms'
 import { availableCodeLanguages } from '../lib/sandbox'
 import { LINK_TARGET_LABELS, LINK_TARGETS } from '../lib/types'
+import { consumeUpload, findUpload, type MoodleAiUpload } from './ai-uploads'
 import type { MoodleEnv } from './auth'
 import { forgetCourse } from './cache'
 import { codeSettingsOf } from './code'
@@ -207,16 +211,17 @@ const createSection = defineTool(
 
 const extraUrl = (c: AiToolContext, key: string) => `${config.appOrigin ?? new URL(c.req.url).origin}${EXTRA_PATH}${key}`
 
-const CREATABLE_TYPES = ['link', 'code'] as const
+const CREATABLE_TYPES = ['link', 'file', 'code'] as const
 
 const createItem = defineTool(
   'create_item',
-  'セクションの末尾にアイテムを追加する。作れるのはリンク（Moodle の URL の活動）とコード（学生がブラウザでコードを書いて提出し、AI が制約ごとに判定する課題）。学生には非表示の状態で作られる。',
+  'セクションの末尾にアイテムを追加する。作れるのはリンク（Moodle の URL の活動）・ファイル（Moodle のファイルの活動。request_file で受け取ったもの）・コード（学生がブラウザでコードを書いて提出し、AI が制約ごとに判定する課題）。学生には非表示の状態で作られる。',
   z.object({
     course_id: id('コースの ID'),
     section_id: id('追加先のセクションの ID'),
-    type: z.enum(CREATABLE_TYPES).check(z.describe('link: リンク / code: コード')),
+    type: z.enum(CREATABLE_TYPES).check(z.describe('link: リンク / file: ファイル / code: コード')),
     title: describedString('タイトル', 200, 1),
+    file_id: z.optional(fileId('ファイルのアイテムに置くファイル。ファイルでは必須')),
     url: z.optional(describedString('リンクの URL（http:// か https:// で始まる）。リンクでは必須', 2000)),
     link_target: z.optional(
       z.enum(LINK_TARGETS).check(z.describe('リンクの開き方。new: 新しいタブ / same: 同じタブ / embed: ページに埋め込む')),
@@ -245,11 +250,16 @@ const createItem = defineTool(
       return fail(
         `${CODE_LANGUAGE_LABELS[args.language ?? 'web']} のコードは作れません。今は ${availableCodeLanguages.map((l) => CODE_LANGUAGE_LABELS[l]).join('・')} だけ作れます。`,
       )
+    const upload = args.type === 'file' && args.file_id ? findUpload(c.var.user!.id, args.file_id) : undefined
+    if (args.type === 'file' && !upload) return fail(args.file_id ? UPLOAD_NOT_FOUND : 'ファイルには file_id を渡してください。')
     const api = moodle(moodleContext(c))
     const activity = { courseid: args.course_id, cmid: 0, sectionid: args.section_id, name: title, completion: 'none', visible: false }
     let cmid: number
     if (args.type === 'link') {
       cmid = await api.saveUrl({ ...activity, externalurl: url, display: args.link_target ?? 'new' })
+    } else if (upload) {
+      cmid = await api.saveResource({ ...activity, draftitemid: upload.draftItemId })
+      consumeUpload(upload.id)
     } else {
       const language = args.language ?? 'web'
       const key = newExtraKey()
@@ -398,6 +408,7 @@ const updateItemArgs = z.object({
   url: z.optional(describedString('新しい URL（リンクだけ）', 2000)),
   link_target: z.optional(z.enum(LINK_TARGETS).check(z.describe('リンクの開き方（リンクだけ）'))),
   section_id: z.optional(id('移し先のセクションの ID（同じコースの中だけ）。移すと末尾に入る')),
+  file_id: z.optional(fileId('差し替える新しいファイル（ファイルだけ）')),
   body: z.optional(describedString('新しい問題文（コードだけ。Markdown）。全文を書く', 100_000)),
   constraints: z.optional(constraintsSchema('新しい制約の一覧（コードだけ）。一部だけでなくすべての制約を書く')),
   criteria: z.optional(describedString('新しい補足（コードだけ）', 5000)),
@@ -418,12 +429,18 @@ const itemSnapshot = (item: MItem) => ({
   url: item.kind === 'link' ? item.url : '',
   linkTarget: item.linkTarget,
   sectionId: item.sectionId,
+  ...(item.kind === 'file' && { file: item.fileUrl }),
   code: codeOf(item),
 })
 
-function checkItemArgs(loaded: LoadedCourse, item: MItem, args: UpdateItemArgs) {
-  if (item.kind !== 'link' && !codeKind(item))
-    return 'STEP Learn から変えられるのは、リンクとコードのアイテムだけです。ほかの活動は Moodle の画面で変えてください。'
+const uploadOf = (c: AiToolContext, args: UpdateItemArgs) =>
+  args.file_id === undefined ? undefined : findUpload(c.var.user!.id, args.file_id)
+
+function checkItemArgs(loaded: LoadedCourse, item: MItem, args: UpdateItemArgs, upload: MoodleAiUpload | undefined) {
+  if (item.kind !== 'link' && item.kind !== 'file' && !codeKind(item))
+    return 'STEP Learn から変えられるのは、リンク・ファイル・コードのアイテムだけです。ほかの活動は Moodle の画面で変えてください。'
+  if (args.file_id !== undefined && item.kind !== 'file') return 'ファイルを差し替えられるのは、ファイルのアイテムだけです。'
+  if (args.file_id !== undefined && !upload) return UPLOAD_NOT_FOUND
   if ((args.url !== undefined || args.link_target !== undefined) && item.kind !== 'link')
     return 'URL と開き方はリンクのアイテムでだけ変えられます。'
   if (args.url !== undefined && !isHttpUrl(args.url.trim())) return 'URL は http:// か https:// で始めてください。'
@@ -437,12 +454,13 @@ function checkItemArgs(loaded: LoadedCourse, item: MItem, args: UpdateItemArgs) 
 
 const sectionTitle = (loaded: LoadedCourse, sectionId: number) => loaded.sections.find((s) => s.id === sectionId)?.title ?? ''
 
-function itemChanges(loaded: LoadedCourse, item: MItem, args: UpdateItemArgs) {
+function itemChanges(loaded: LoadedCourse, item: MItem, args: UpdateItemArgs, upload: MoodleAiUpload | undefined) {
   const code = codeOf(item)
   return [
     ...changed('タイトル', item.title, args.title?.trim() || undefined),
     ...changed('URL', item.url, args.url?.trim()),
     ...changed('開き方', LINK_TARGET_LABELS[item.linkTarget], args.link_target && LINK_TARGET_LABELS[args.link_target]),
+    ...(upload ? [fileChange({ name: item.fileName, size: item.fileSize }, upload)] : []),
     ...(args.section_id !== undefined && args.section_id !== item.sectionId
       ? [{ label: 'セクション', before: sectionTitle(loaded, item.sectionId), after: sectionTitle(loaded, args.section_id) }]
       : []),
@@ -462,15 +480,16 @@ function itemChanges(loaded: LoadedCourse, item: MItem, args: UpdateItemArgs) {
 
 const updateItem = defineConfirmTool(
   'update_item',
-  'リンクのタイトル・URL・開き方・セクション、コードのタイトル・問題文・最初のコード・制約・補足を変える。利用者が確認カードで承認してから実行される。変えない欄は省く。',
+  'リンクのタイトル・URL・開き方・セクション、ファイルのタイトル・セクション・ファイル、コードのタイトル・問題文・最初のコード・制約・補足を変える。利用者が確認カードで承認してから実行される。変えない欄は省く。',
   updateItemArgs,
   async (c, args) => {
     const found = await courseOfItem(c, args.item_id, args.course_id)
     if (!found) return failure(NOT_FOUND, 'アイテムを開けませんでした')
     const { loaded, item } = found
-    const problem = checkItemArgs(loaded, item, args)
+    const upload = uploadOf(c, args)
+    const problem = checkItemArgs(loaded, item, args, upload)
     if (problem) return failure(problem, `「${item.title}」を変更しませんでした`)
-    const changes = itemChanges(loaded, item, args)
+    const changes = itemChanges(loaded, item, args, upload)
     if (changes.length === 0) return failure(NO_CHANGE, `「${item.title}」を変更しませんでした`)
     return { title: `「${item.title}」を変更する`, changes, snapshot: itemSnapshot(item) }
   },
@@ -480,7 +499,8 @@ const updateItem = defineConfirmTool(
     const { loaded, item } = found
     const label = `「${item.title}」を変更できませんでした`
     if (!sameSnapshot(itemSnapshot(item), snapshot)) return failure(STALE, label)
-    const problem = checkItemArgs(loaded, item, args)
+    const upload = uploadOf(c, args)
+    const problem = checkItemArgs(loaded, item, args, upload)
     if (problem) return failure(problem, label)
     const api = moodle(moodleContext(c))
     const courseId = loaded.course.id
@@ -500,6 +520,10 @@ const updateItem = defineConfirmTool(
         externalurl: args.url?.trim() ?? item.url,
         display: args.link_target && args.link_target !== item.linkTarget ? args.link_target : 'keep',
       })
+    } else if (item.kind === 'file') {
+      // 差し替えないときに 0 を送るのは、save_resource が下書きの itemid 0 を「今のファイルのまま」として扱うため
+      await api.saveResource({ ...activity, draftitemid: upload?.draftItemId ?? 0 })
+      if (upload) consumeUpload(upload.id)
     } else {
       const code = codeOf(item)!
       updateExtraData(item.extraKey!, courseId, {
@@ -583,7 +607,7 @@ const setVisibility = defineConfirmTool(
   },
 )
 
-/** Moodle モードで AI が使えるツール。削除・ファイル・画面共有・ファイル自動配布・参加者・コースの設定・アクセス制限は扱わない */
+/** Moodle モードで AI が使えるツール。削除・画面共有・ファイル自動配布・参加者・コースの設定・アクセス制限は扱わない */
 export const MOODLE_AI_TOOLS: readonly AiAgentTool[] = [
   listCourses,
   getCourse,

@@ -2,9 +2,11 @@
 import type { AiUsageMeter } from '../lib/ai-agent'
 import type { AiCardState } from '../lib/ai-chat'
 import type { AiTouched } from '../lib/ai-tool-kit'
+import { formatBytes } from '../lib/bytes'
 import type { DiffLine } from '../lib/diff'
+import { FILE_TOO_LARGE, MAX_FILE_SIZE } from '../lib/storage'
 import { Button, IconButton } from './button'
-import { FieldError, SegmentedControl, validateWith } from './form'
+import { FieldError, FileChip, FileInput, SegmentedControl, validateWith } from './form'
 import { Icon } from './icons'
 import { Markdown } from './markdown'
 import { Mascot } from './mascot'
@@ -20,6 +22,22 @@ export type AiChatEntry =
   | { kind: 'compacted' }
   | { kind: 'tool'; label: string; touched?: AiTouched }
   | { kind: 'card'; callId: string; title: string; changes: AiCardChange[]; state: AiCardState; note?: string; touched?: AiTouched }
+  | AiFileEntry
+
+/**
+ * AI がファイルを選んでもらうために出したカード（lib/ai-agent.ts の REQUEST_FILE）。accept はファイルの選択に渡す拡張子（なければ種類を問わない）、
+ * kinds は受け取れる種類の名前、received は受け取ったファイル（size は表示用）
+ */
+export type AiFileEntry = {
+  kind: 'file'
+  callId: string
+  title: string
+  accept?: string
+  kinds: string
+  state: AiCardState
+  note?: string
+  received?: { name: string; size: string }
+}
 
 /**
  * hardLabel は「難しい依頼」を選んだときに答えるモデル（なければ選べない）、hardOff はそれを今使えない短い理由、
@@ -145,8 +163,61 @@ const Card = ({ entry, chatId }: { entry: Extract<AiChatEntry, { kind: 'card' }>
   </div>
 )
 
+const FILE_STATE_LABELS: Record<AiCardState, string> = {
+  pending: 'ファイルを選んで送ってください',
+  approved: '受け取りました',
+  rejected: '受け取らずに取り消しました',
+  failed: '受け取れませんでした',
+}
+
+/** ファイルを選ぶカード。送るのは確認カードと同じ /ai/chat/confirm で、承認にファイルを添える（client.ts の decideAiCard） */
+const FileRequest = ({ entry, chatId }: { entry: AiFileEntry; chatId: number }) => (
+  <div class="ai-card ai-file-card" data-state={entry.state}>
+    <p class="ai-card-title">
+      <Icon name="upload" size={15} />
+      <strong>{entry.title}</strong>
+    </p>
+    <p class="ai-file-kinds">
+      {entry.kinds}（{formatBytes(MAX_FILE_SIZE)} まで）
+    </p>
+    {entry.state === 'pending' ? (
+      <form method="post" action="/ai/chat/confirm" class="ai-file-form" data-ai-confirm data-ai-file>
+        <input type="hidden" name="chat" value={String(chatId)} />
+        <input type="hidden" name="call" value={entry.callId} />
+        <FileInput
+          id={`ai-file-${entry.callId}`}
+          name="file"
+          accept={entry.accept}
+          aria-label={`送るファイル（${entry.kinds}）`}
+          data-max-size={String(MAX_FILE_SIZE)}
+          data-too-large={FILE_TOO_LARGE}
+        />
+        <div class="ai-card-actions">
+          <span class="ai-card-ask">{FILE_STATE_LABELS.pending}</span>
+          <Button type="submit" name="decision" value="reject" size="sm" variant="ghost">
+            取り消す
+          </Button>
+          <Button type="submit" name="decision" value="approve" size="sm" variant="primary" icon="upload">
+            送る
+          </Button>
+        </div>
+      </form>
+    ) : (
+      <>
+        {entry.received && <FileChip name={entry.received.name} meta={entry.received.size} />}
+        <p class="ai-card-state">
+          <Icon name={entry.state === 'approved' ? 'checkCircle' : entry.state === 'failed' ? 'alert' : 'x'} size={15} />
+          {FILE_STATE_LABELS[entry.state]}
+          {entry.state === 'failed' && entry.note && `（${entry.note}）`}
+        </p>
+      </>
+    )}
+  </div>
+)
+
 const Entry = ({ entry, chatId }: { entry: AiChatEntry; chatId: number }) => {
   if (entry.kind === 'card') return <Card entry={entry} chatId={chatId} />
+  if (entry.kind === 'file') return <FileRequest entry={entry} chatId={chatId} />
   if (entry.kind === 'tool') return <ToolLine label={entry.label} touched={entry.touched} />
   if (entry.kind === 'user') return <UserMessage text={entry.text} />
   if (entry.kind === 'stopped') return <StoppedLine />
