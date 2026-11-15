@@ -257,6 +257,23 @@ export const aiChats = sqliteTable(
   (t) => [index('ai_chats_user').on(t.userId), index('ai_chats_updated').on(t.updatedAt)],
 )
 
+/** AI が request_file で受け取り、Moodle の利用者の下書き領域に上げたファイル（moodle-mode/ai-uploads.ts）。完全移行では引き継がない */
+export const aiUploads = sqliteTable(
+  'ai_uploads',
+  {
+    id: integer('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    draftItemId: integer('draft_item_id').notNull(),
+    fileName: text('file_name').notNull(),
+    fileSize: integer('file_size').notNull(),
+    fileType: text('file_type').notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [index('ai_uploads_user').on(t.userId), index('ai_uploads_created').on(t.createdAt)],
+)
+
 /** アプリ全体の設定（AI の月の上限など）。通常モードの app_settings と同じ形。完全移行では引き継がない */
 export const appSettings = sqliteTable('app_settings', {
   key: text('key').primaryKey(),

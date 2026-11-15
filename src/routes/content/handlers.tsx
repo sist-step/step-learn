@@ -29,7 +29,6 @@ import {
   MAX_CONSTRAINTS,
   MAX_STDIN_LENGTH,
   JUDGE_LABELS,
-  isJudge,
 } from '../../lib/code'
 import { gradingEnabled, submissionsOf } from '../../lib/code-grader'
 import { currentJudge, grader, judgeSwitchable, setJudge } from '../../lib/code-grading'
@@ -37,7 +36,7 @@ import { codeStore, getCodeItem, updateCodeItem } from '../../lib/code-items'
 import { dateTimeInputToUnix } from '../../lib/course-period'
 import { db } from '../../lib/db'
 import { completionError, firstError, isFile, readConstraints, validate, type FieldErrors } from '../../lib/forms'
-import { field, fileField, intParam, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
+import { field, fileField, intParam, readFields, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
 import { previewKind } from '../../lib/preview'
 import { availableCodeLanguages, sandboxEnabled } from '../../lib/sandbox'
 import { codeItems, completions, items, sections } from '../../lib/schema'
@@ -135,13 +134,14 @@ export async function moveSection(c: Context<AppEnv>) {
   const access = await manageAccess(c)
   const sid = intParam(c, 'sid')
   if (!access || !sid) return c.notFound()
-  const dir = field(await readForm(c), 'dir') === 'up' ? 'up' : 'down'
-  moveRow(sections, eq(sections.courseId, access.course.id), sid, dir)
+  const fields = await readFields(c, 'move')
+  if (!fields) return c.notFound()
+  moveRow(sections, eq(sections.courseId, access.course.id), sid, fields.dir)
   return c.redirect(editUrl(access.course.id, sid), 303)
 }
 
 // トグルにせず値を送らせるのは、二重送信や古い画面からの送信で意図と逆の状態になるのを避けるため
-const readHidden = async (c: Context<AppEnv>) => (field(await readForm(c), 'hidden') === '1' ? 1 : 0)
+const readHidden = async (c: Context<AppEnv>) => (await readFields(c, 'visibility'))?.hidden ?? 0
 
 const hiddenMessage = (title: string, hidden: number) => `「${title}」を${hidden ? '学生に非表示にしました' : '学生に表示しました'}。`
 
@@ -237,8 +237,9 @@ export async function createItem(c: Context<AppEnv>) {
   if (!access) return c.notFound()
   const courseId = access.course.id
   const form = await readForm(c)
-  const sectionId = Number(field(form, 'section_id'))
-  if (!getSection(courseId, sectionId)) return c.notFound()
+  const placement = validate('itemPlacement', form)
+  const sectionId = placement.ok ? placement.values.section_id : 0
+  if (!placement.ok || !getSection(courseId, sectionId)) return c.notFound()
   const result = validate('item', form)
   if (!result.ok) return redirectWith(c, editUrl(courseId, sectionId), firstError(result.errors), 'error')
   const { type, hidden, language, ...input } = result.values
@@ -291,7 +292,7 @@ export async function createItem(c: Context<AppEnv>) {
       `/courses/${courseId}/items/${created.id}/edit`,
       `「${input.title}」を追加しました。使える期間と上限を設定してください。`,
     )
-  const next = field(form, 'then') === 'view' ? `/courses/${courseId}/items/${created.id}` : editUrl(courseId, sectionId)
+  const next = placement.values.after === 'view' ? `/courses/${courseId}/items/${created.id}` : editUrl(courseId, sectionId)
   return redirectWith(c, next, `「${input.title}」を追加しました。`)
 }
 
@@ -327,7 +328,8 @@ export async function updateItem(c: Context<AppEnv>) {
   const code = getCodeItem(iid)
 
   const form = await readForm(c)
-  const requestedSection = Number(field(form, 'section_id'))
+  const placement = validate('itemPlacement', form)
+  const requestedSection = placement.ok ? placement.values.section_id : 0
   const sectionId = getSection(courseId, requestedSection) ? requestedSection : item.sectionId
   // 送られてきた種類を使わないのは、画面の隠し欄は書き換えられ、保存済みのアイテムの種類と違うかもしれないため
   const result = validate('itemEdit', { ...form, type: item.type })
@@ -415,8 +417,9 @@ export async function switchJudge(c: Context<AppEnv>) {
   const access = await manageAccess(c)
   const iid = intParam(c, 'iid')
   if (!judgeSwitchable || !access || !iid || !getCodeItem(iid) || !getItem(access.course.id, iid)) return c.notFound()
-  const judge = field(await readForm(c), 'judge', 10)
-  if (!isJudge(judge)) return c.notFound()
+  const fields = await readFields(c, 'judge')
+  if (!fields) return c.notFound()
+  const { judge } = fields
   setJudge(judge)
   return redirectWith(c, `/courses/${access.course.id}/items/${iid}/edit`, `制約の判定を ${JUDGE_LABELS[judge]} で行うようにしました。`)
 }
@@ -427,8 +430,9 @@ export async function moveItem(c: Context<AppEnv>) {
   if (!access || !iid) return c.notFound()
   const item = getItem(access.course.id, iid)
   if (!item) return c.notFound()
-  const dir = field(await readForm(c), 'dir') === 'up' ? 'up' : 'down'
-  moveRow(items, eq(items.sectionId, item.sectionId), iid, dir)
+  const fields = await readFields(c, 'move')
+  if (!fields) return c.notFound()
+  moveRow(items, eq(items.sectionId, item.sectionId), iid, fields.dir)
   return c.redirect(editUrl(access.course.id, item.sectionId), 303)
 }
 
@@ -525,8 +529,8 @@ export async function updateRestriction(c: Context<AppEnv>) {
   if (!access || !subject) return c.notFound()
   const form = await readForm(c)
   let set: RestrictionSet | null = null
-  if (field(form, 'clear') !== '1') {
-    const result = validate('restriction', form)
+  const result = validate('restriction', form)
+  if (!result.ok || !result.values.clear) {
     const read = result.ok ? result.values.availability : readRestrictionForm(field(form, 'availability', MAX_RESTRICTION_JSON_LENGTH + 1))
     const choices = restrictionChoices(access.course, subject.kind === 'item' ? subject.id : undefined)
     const errors = result.ok
@@ -675,7 +679,9 @@ export async function toggleComplete(c: Context<AppEnv>) {
   )
     return c.notFound()
   const item = getItem(id, iid)
-  const on = field(await readForm(c), 'on', 10)
+  const fields = await readFields(c, 'completionToggle')
+  if (!fields) return c.notFound()
+  const { on } = fields
   const manual = item?.completion === 'manual' && !on
   if (!item || !(manual || (on && AUTO_COMPLETE_ON[item.completion] === on))) return c.notFound()
   const userId = c.var.user!.id

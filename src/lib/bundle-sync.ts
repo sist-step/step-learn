@@ -1,6 +1,7 @@
 // 通常モードと Moodle モードの両方が読み込むので、DB を開くモジュールを import しない
 import crypto from 'node:crypto'
 import zlib from 'node:zlib'
+import * as z from 'zod/mini'
 import { bundlePath, isExcludedPath, samePath, type BundleFile } from './bundle'
 import type { Student } from './code-store'
 import { diffLines, diffStats, splitLines } from './diff'
@@ -90,27 +91,27 @@ export async function distributedText(files: BundleFile[], path: string, read: (
 /** 拡張機能から送られた変更 1 つ。content が null なら、ファイルを消した */
 export type SyncChange = { path: string; content: Uint8Array | null }
 
-const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
+const SYNC_CHANGE = z.union([z.object({ path: z.string(), deleted: z.literal(true) }), z.object({ path: z.string(), content: z.string() })])
 
-/** 要求の本文から、記録できる変更だけを取り出す。記録しないもの（大きすぎる・文字でない・配らない場所）は捨てる */
-export function parseChanges(body: unknown): SyncChange[] | null {
-  if (!isObject(body) || !Array.isArray(body.changes) || body.changes.length > MAX_SYNC_CHANGES) return null
-  // 同じファイルが 2 回あれば後のものだけを残すのは、1 回の要求の中の途中の状態を記録しても、同じ時刻の記録が並ぶだけになるため
-  const changes = new Map<string, SyncChange>()
-  for (const raw of body.changes as unknown[]) {
-    if (!isObject(raw) || typeof raw.path !== 'string') return null
-    const path = bundlePath(raw.path)
-    if (!path || isExcludedPath(path)) continue
-    if (raw.deleted === true) {
-      changes.set(path, { path, content: null })
-      continue
+/** 拡張機能が送る変更の本文。記録できる変更だけを取り出し、記録しないもの（大きすぎる・文字でない・配らない場所）は捨てる */
+export const SYNC_REQUEST = z.pipe(
+  z.object({ changes: z.array(SYNC_CHANGE).check(z.maxLength(MAX_SYNC_CHANGES)) }),
+  z.transform(({ changes: list }): SyncChange[] => {
+    // 同じファイルが 2 回あれば後のものだけを残すのは、1 回の要求の中の途中の状態を記録しても、同じ時刻の記録が並ぶだけになるため
+    const changes = new Map<string, SyncChange>()
+    for (const raw of list) {
+      const path = bundlePath(raw.path)
+      if (!path || isExcludedPath(path)) continue
+      if ('deleted' in raw) {
+        changes.set(path, { path, content: null })
+        continue
+      }
+      const content = Buffer.from(raw.content, 'base64')
+      if (content.length <= MAX_SYNC_FILE_SIZE && isText(content)) changes.set(path, { path, content })
     }
-    if (typeof raw.content !== 'string') return null
-    const content = Buffer.from(raw.content, 'base64')
-    if (content.length <= MAX_SYNC_FILE_SIZE && isText(content)) changes.set(path, { path, content })
-  }
-  return [...changes.values()]
-}
+    return [...changes.values()]
+  }),
+)
 
 /**
  * 変更を記録する。前の記録（なければ配ったファイル）と同じ中身のものは記録しない。

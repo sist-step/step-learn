@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "044c064b-6dcf-4284-a271-e13bca733107",
+  "id": "00608b4e-2660-487e-a4c7-f6e3803083a1",
   "prevId": "f4fa4298-b31a-4163-8220-f682a2dfada8",
   "tables": {
     "agent_items": {
@@ -23,21 +23,6 @@
         },
         "api_key_hint": {
           "name": "api_key_hint",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "''"
-        },
-        "openrouter_api_key": {
-          "name": "openrouter_api_key",
-          "type": "blob",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "openrouter_api_key_hint": {
-          "name": "openrouter_api_key_hint",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -336,6 +321,95 @@
         "ai_chats_user_id_users_id_fk": {
           "name": "ai_chats_user_id_users_id_fk",
           "tableFrom": "ai_chats",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "ai_uploads": {
+      "name": "ai_uploads",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "draft_item_id": {
+          "name": "draft_item_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "file_name": {
+          "name": "file_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "file_size": {
+          "name": "file_size",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "file_type": {
+          "name": "file_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        }
+      },
+      "indexes": {
+        "ai_uploads_user": {
+          "name": "ai_uploads_user",
+          "columns": [
+            "user_id"
+          ],
+          "isUnique": false
+        },
+        "ai_uploads_created": {
+          "name": "ai_uploads_created",
+          "columns": [
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "ai_uploads_user_id_users_id_fk": {
+          "name": "ai_uploads_user_id_users_id_fk",
+          "tableFrom": "ai_uploads",
           "tableTo": "users",
           "columnsFrom": [
             "user_id"

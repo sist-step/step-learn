@@ -9,13 +9,14 @@ import {
   MAX_CONSTRAINTS,
   MAX_STDIN_LENGTH,
   MAX_SUBMIT_PERIOD,
+  JUDGES,
   type CodeConstraint,
 } from './code'
 import { dateInputToUnix, dateTimeInputToUnix, isDateInput, isDateTimeInput } from './course-period'
 import { checkPassword } from './password'
 import { isMediaFile } from './preview'
 import { readRestrictionForm } from './restriction'
-import { COMPLETIONS, COURSE_COLORS, LINK_TARGETS, type Completion, type ItemType } from './types'
+import { COMPLETIONS, COURSE_COLORS, COURSE_ROLES, LINK_TARGETS, ROLES, type Completion, type ItemType } from './types'
 import { checkUsername, normalizeUsername } from './username'
 
 export const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) && s.length <= 254
@@ -146,11 +147,15 @@ const dateTime = (label: string) =>
 
 // 選んだアイテムや項目が今も選べるかをここで確かめないのは、選べるものがコースの中身で決まり、ハンドラで選択肢と照らし合わせるため
 // 行ごとのエラーを外側の object で出すのは、availability の中で出すと path の先頭が availability になり、行の入力欄に出せないため
-const restriction = z.object({ availability: z.transform((v: unknown) => readRestrictionForm(typeof v === 'string' ? v : '')) }).check(
-  z.superRefine((v, ctx) => {
-    for (const issue of v.availability.issues) ctx.issues.push({ code: 'custom', message: issue.message, input: v, path: [issue.key] })
-  }),
-)
+// clear が 1 のときに条件の誤りを出さないのは、条件を消す操作で、送られた条件は使わないため
+const restriction = z
+  .object({ clear: flag(), availability: z.transform((v: unknown) => readRestrictionForm(typeof v === 'string' ? v : '')) })
+  .check(
+    z.superRefine((v, ctx) => {
+      if (v.clear) return
+      for (const issue of v.availability.issues) ctx.issues.push({ code: 'custom', message: issue.message, input: v, path: [issue.key] })
+    }),
+  )
 
 const section = z.object({ title: text('セクション名', 120, { required: true }), summary: z.optional(text('説明', 2000)) })
 
@@ -190,8 +195,9 @@ const codeFields = {
   stdin: source('入力', MAX_STDIN_LENGTH),
 }
 
-const list = () =>
-  z.transform((v: unknown) => (Array.isArray(v) ? v : v === undefined ? [] : [v]).map((s) => (typeof s === 'string' ? s.trim() : '')))
+const many = (v: unknown): unknown[] => (Array.isArray(v) ? v : v === undefined ? [] : [v])
+
+const list = () => z.transform((v: unknown) => many(v).map((s) => (typeof s === 'string' ? s.trim() : '')))
 
 /**
  * 編集画面の制約の行（constraint_label[] と constraint_text[] を同じ順に送る）を、制約の一覧にする。ラベルも内容も空の行は捨てる。
@@ -419,6 +425,79 @@ const aiMessage = z.object({
   revision: hidden(50),
 })
 
+const id = () => z.pipe(hidden(20), z.pipe(z.transform(Number), z.int().check(z.positive())))
+
+// 読めない ID を飛ばして失敗させないのは、ほかのタブで消されたセクションが混ざっても、残りの開閉は記録するため
+const ids = () =>
+  z.pipe(
+    hidden(2000),
+    z.transform((s: string) =>
+      s
+        .split(',')
+        .map(Number)
+        .filter((n) => Number.isSafeInteger(n) && n > 0),
+    ),
+  )
+
+const viewed = z.object({ path: hidden(500) })
+
+const next = z.object({ next: hidden(500) })
+
+const linkToken = z.object({ token: hidden(100) })
+
+const move = z.object({ dir: z.enum(['up', 'down']) })
+
+const visibility = z.object({ hidden: flag() })
+
+const collapse = z.object({ open: ids(), closed: ids() })
+
+// section_id が正しくなくても失敗させないのは、編集画面では今のセクションのままにするため。
+// type を item の選択肢で絞らないのは、Moodle モードの extra の種類（src/moodle-mode/extra-kinds.tsx）も送られるため
+const itemPlacement = z.object({ section_id: z.catch(id(), 0), after: choice(['edit', 'view'], 'edit'), type: hidden(50) })
+
+const completionToggle = z.object({ on: z.pipe(hidden(10), z.enum(['', 'view', 'ended'])) })
+
+const judge = z.object({ judge: z.enum(JUDGES) })
+
+const participant = z.object({ user_id: id(), role: z.enum(COURSE_ROLES) })
+
+const courseRole = z.object({ role: z.enum(COURSE_ROLES) })
+
+const siteRole = z.object({ role: z.enum(ROLES) })
+
+const codeSuggest = z.object({
+  title: hidden(200),
+  body: z.pipe(hidden(100_000), z.string().check(z.minLength(1, '先に問題文を書いてください。'))),
+})
+
+const regrade = z.object({ submission: id() })
+
+// 空のファイルも受け付けるのは、中身のない __init__.py や .gitkeep も配るため
+const files = () => z.transform((v: unknown) => many(v).filter((f): f is File => f instanceof File))
+
+const bundleUpload = z.object({
+  files: files(),
+  // 前後の空白を削らないのは、ファイルやフォルダーの名前の一部のため
+  paths: z.transform((v: unknown) => many(v).map((p) => (typeof p === 'string' ? p : ''))),
+  archives: files(),
+  skipped: z.catch(z.pipe(hidden(20), z.pipe(z.transform(Number), z.int().check(z.minimum(0), z.maximum(1_000_000)))), 0),
+})
+
+const bundleRemove = z.object({ path: hidden(1000), folder: hidden(1000), all: flag() })
+
+const bundleSync = z.object({ sync: flag() })
+
+// file を必須にしないのは、ファイルを選ぶカードでだけ送られるため。大きさと中身はストレージの設定と中身で決まるので、ハンドラで確かめる
+const aiDecision = z.object({
+  call: hidden(200),
+  decision: choice(['approve', 'reject'], 'reject'),
+  page: hidden(500),
+  chat: hidden(20),
+  file: z.transform((v: unknown) => (isFile(v) ? v : null)),
+})
+
+const aiChat = z.object({ chat: hidden(20) })
+
 export const FORMS = {
   login,
   register,
@@ -442,6 +521,25 @@ export const FORMS = {
   aiSettings,
   aiMessage,
   agentKey,
+  viewed,
+  next,
+  linkToken,
+  move,
+  visibility,
+  collapse,
+  itemPlacement,
+  completionToggle,
+  judge,
+  participant,
+  courseRole,
+  siteRole,
+  codeSuggest,
+  regrade,
+  bundleUpload,
+  bundleRemove,
+  bundleSync,
+  aiDecision,
+  aiChat,
 }
 
 export type FormName = keyof typeof FORMS

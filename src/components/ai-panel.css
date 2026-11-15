@@ -123,6 +123,10 @@
 .ai-card-state { display: flex; align-items: center; gap: 6px; padding-top: 10px; border-top: 1px solid var(--border); font-size: var(--fs-xs); color: var(--muted); }
 .ai-card[data-state='approved'] .ai-card-state { color: var(--success-text); }
 .ai-card[data-state='failed'] .ai-card-state { color: var(--danger-text); }
+.ai-file-kinds { margin: -4px 0 0 21px; font-size: var(--fs-xs); color: var(--muted); }
+.ai-file-form { display: flex; flex-direction: column; gap: 10px; }
+.ai-file-card .file-drop-zone { min-height: 96px; padding: 16px 12px; }
+.ai-file-card .file-drop-body { gap: 8px; font-size: var(--fs-sm); }
 
 .ai-pending[hidden] { display: none; }
 .ai-dots { flex: none; width: 24px; height: 8px; background: radial-gradient(circle, currentColor 2.5px, transparent 3px) 0 50% / 8px 8px repeat-x; animation: pulse 1.2s ease-in-out infinite; }

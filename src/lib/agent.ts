@@ -1,11 +1,11 @@
 // 画面の部品（components/agent.tsx）と Moodle モードも読み込むので、DB や Node の API を使うモジュールを import しない
+import * as z from 'zod/mini'
 import {
   CLAUDE_CONTEXT_WINDOW,
   CLAUDE_MODEL_LABELS,
   CLAUDE_PRICES,
   type AiMessage,
   type AiTool,
-  type AiToolCall,
   type AiUsage,
   type ClaudeModel,
   type OpenRouterModelInfo,
@@ -89,19 +89,20 @@ export function agentModelFacts(m: AgentModel): [string, string][] {
 /** コーディングエージェントに使える OpenRouter のモデルか。ツールを呼べないモデルや、会話の短いモデルは使えない */
 export const isAgentOpenRouterModel = (m: OpenRouterModelInfo) => m.tools && m.contextLength >= MIN_AGENT_CONTEXT
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
-
-const nonNegative = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null)
+const STORED_OPENROUTER_MODEL = z.object({
+  id: z.string().check(z.minLength(1)),
+  name: z.string(),
+  contextLength: z.number().check(z.positive()),
+  maxOutput: z.catch(z.nullable(z.number()), null),
+  prompt: z.number().check(z.nonnegative()),
+  completion: z.number().check(z.nonnegative()),
+})
 
 /** 保存した OpenRouter のモデルの情報（JSON から読んだもの）。正しくなければ null */
 export function parseOpenRouterModel(v: unknown): OpenRouterModelInfo | null {
-  if (!isRecord(v)) return null
-  const { id, name, contextLength, maxOutput } = v
-  const prompt = nonNegative(v.prompt)
-  const completion = nonNegative(v.completion)
-  if (typeof id !== 'string' || !id || typeof name !== 'string' || typeof contextLength !== 'number' || contextLength <= 0) return null
-  if (prompt === null || completion === null) return null
-  return { id, name, contextLength, maxOutput: typeof maxOutput === 'number' ? maxOutput : null, prompt, completion, tools: true }
+  const result = STORED_OPENROUTER_MODEL.safeParse(v)
+  // tools を保存した値から読まないのは、ツールを使えるモデルしか選べず、保存した時点で必ず使えるため
+  return result.success ? { ...result.data, tools: true } : null
 }
 
 /** 保存する OpenRouter のモデルの情報 */
@@ -355,8 +356,8 @@ const FIRST_TOOL_NAMES = ['list_files', 'read_file', 'search_text', 'write_file'
 
 // 全部を渡さないのは、古い拡張機能が実行できないツールを AI が呼ぶと、失敗の結果が返るだけで使える量を無駄にするため
 /** 拡張機能が実行できると伝えてきたツール（names）の定義。定義にない名前は無視する */
-export function agentToolsFor(names: unknown): AiTool[] {
-  const supported = new Set<unknown>(Array.isArray(names) ? names : FIRST_TOOL_NAMES)
+export function agentToolsFor(names: readonly string[] | undefined): AiTool[] {
+  const supported = new Set(names ?? FIRST_TOOL_NAMES)
   return AGENT_TOOLS.filter((t) => supported.has(t.name))
 }
 
@@ -369,9 +370,6 @@ const PLATFORM_LABELS: Record<AgentPlatform, string> = {
   darwin: 'macOS（コマンドは zsh で実行される）',
   linux: 'Linux（コマンドは sh で実行される）',
 }
-
-export const isAgentPlatform = (s: unknown): s is AgentPlatform =>
-  typeof s === 'string' && (AGENT_PLATFORMS as readonly string[]).includes(s)
 
 const MAX_DESCRIPTION = 4000
 
@@ -464,64 +462,48 @@ export function agentSummaryMessages(messages: AiMessage[]): AiMessage[] {
 }
 
 // 会話の中身を厳しく決めすぎないのは、Anthropic の応答の形が増えても、拡張機能から送り返されたものを弾かないようにするため
-const NATIVE_BLOCK_TYPES = new Set(['text', 'thinking', 'redacted_thinking', 'tool_use'])
+const NATIVE_BLOCK_TYPES = ['text', 'thinking', 'redacted_thinking', 'tool_use'] as const
 
 export const MAX_AGENT_MESSAGES = 2000
 const MAX_TEXT = 200_000
 
-const str = (v: unknown, max = MAX_TEXT) => (typeof v === 'string' && v.length <= max ? v : null)
+const text = (max = MAX_TEXT) => z.string().check(z.maxLength(max))
 
-function parseToolCall(v: unknown): AiToolCall | null {
-  if (!isRecord(v)) return null
-  const id = str(v.id, 200)
-  const name = str(v.name, 100)
-  const args = str(v.arguments)
-  return id && name && args !== null ? { id, name, arguments: args } : null
-}
+const name = (max: number) => z.string().check(z.minLength(1), z.maxLength(max))
 
-/** OpenRouter の応答の native（lib/ai-openrouter.ts）。考えた内容を、作ったモデルに送り返す */
-function parseOpenRouterNative(v: Record<string, unknown>) {
-  const details = v.reasoningDetails
-  if (typeof v.openrouter !== 'string' || !Array.isArray(details) || details.length > 200) return undefined
-  return details.every((d) => isRecord(d) && typeof d.type === 'string')
-    ? { openrouter: v.openrouter, reasoningDetails: details }
-    : undefined
-}
+const TOOL_CALL = z.object({ id: name(200), name: name(100), arguments: text() })
 
-function parseNative(v: unknown) {
-  if (isRecord(v)) return parseOpenRouterNative(v)
-  if (!Array.isArray(v) || v.length > 200) return undefined
-  return v.every((b) => isRecord(b) && typeof b.type === 'string' && NATIVE_BLOCK_TYPES.has(b.type)) ? v : undefined
-}
+const CLAUDE_NATIVE = z.array(z.looseObject({ type: z.enum(NATIVE_BLOCK_TYPES) })).check(z.maxLength(200))
 
-function parseMessage(v: unknown): AiMessage | null {
-  if (!isRecord(v)) return null
-  if (v.role === 'user') {
-    const content = str(v.content)
-    return content ? { role: 'user', content } : null
-  }
-  if (v.role === 'assistant') {
-    const content = str(v.content) ?? ''
-    const calls = Array.isArray(v.toolCalls) ? v.toolCalls.map(parseToolCall) : []
-    if (calls.some((c) => !c)) return null
-    const toolCalls = calls as AiToolCall[]
-    return { role: 'assistant', content, toolCalls, native: parseNative(v.native) }
-  }
-  if (v.role === 'tool') {
-    const toolCallId = str(v.toolCallId, 200)
-    const content = str(v.content)
-    return toolCallId && content !== null ? { role: 'tool', toolCallId, content, isError: v.isError === true } : null
-  }
-  return null
-}
+/** OpenRouter の応答の native（lib/ai-openrouter.ts の OpenRouterNative）。考えた内容を、作ったモデルに送り返す */
+const OPENROUTER_NATIVE = z.object({
+  openrouter: name(200),
+  reasoningDetails: z.array(z.looseObject({ type: z.string() })).check(z.maxLength(200)),
+})
 
-/** 拡張機能が送ってきた会話。system の発言は受け付けない（サーバーが先頭に置く）。正しくなければ null */
-export function parseAgentMessages(v: unknown): AiMessage[] | null {
-  if (!Array.isArray(v) || v.length === 0 || v.length > MAX_AGENT_MESSAGES) return null
-  const messages = v.map(parseMessage)
-  if (messages.some((m) => !m) || messages[0]?.role !== 'user') return null
-  const list = messages as AiMessage[]
-  // ツールの名前を確かめるのは、定義にないツールを呼んだことにした会話を送られると、Anthropic が要求ごと弾くため
-  const unknownTool = list.some((m) => m.role === 'assistant' && m.toolCalls?.some((c) => !AGENT_TOOL_NAMES.has(c.name)))
-  return unknownTool ? null : list
-}
+const AGENT_MESSAGE = z.discriminatedUnion('role', [
+  z.object({ role: z.literal('user'), content: z.string().check(z.minLength(1), z.maxLength(MAX_TEXT)) }),
+  z.object({
+    role: z.literal('assistant'),
+    content: z.catch(text(), ''),
+    toolCalls: z.pipe(
+      z.transform((v: unknown) => (Array.isArray(v) ? v : [])),
+      z.array(TOOL_CALL),
+    ),
+    native: z.catch(z.optional(z.union([CLAUDE_NATIVE, OPENROUTER_NATIVE])), undefined),
+  }),
+  z.object({ role: z.literal('tool'), toolCallId: name(200), content: text(), isError: z.catch(z.boolean(), false) }),
+])
+
+/** 拡張機能が送ってくる会話の本文。system の発言は受け付けない（サーバーが先頭に置く） */
+export const AGENT_REQUEST = z.object({
+  messages: z.array(AGENT_MESSAGE).check(
+    z.minLength(1),
+    z.maxLength(MAX_AGENT_MESSAGES),
+    z.refine((list) => list[0]?.role === 'user'),
+    // ツールの名前を確かめるのは、定義にないツールを呼んだことにした会話を送られると、Anthropic が要求ごと弾くため
+    z.refine((list) => !list.some((m) => m.role === 'assistant' && m.toolCalls.some((c) => !AGENT_TOOL_NAMES.has(c.name)))),
+  ),
+  platform: z.catch(z.nullable(z.enum(AGENT_PLATFORMS)), null),
+  tools: z.catch(z.optional(z.array(z.string())), undefined),
+})
