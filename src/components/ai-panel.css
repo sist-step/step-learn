@@ -173,6 +173,27 @@
 }
 .ai-note { margin-left: auto; font-size: var(--fs-xs); color: var(--muted); text-align: right; }
 
+/* ===== 音声入力（client.ts の startAiVoice。録音中は入力欄の代わりに、文字にした途中の結果を薄く出す） */
+.ai-voice, .ai-voice-cancel { flex: none; border-radius: 999px; }
+.ai-voice[hidden], .ai-voice-cancel, .ai-ghost, .ai-note-voice { display: none; }
+.ai-input[data-voice] .ai-textarea, .ai-composer:has(.ai-input[data-voice]) .ai-note-type { display: none; }
+.ai-input[data-voice] .ai-voice-cancel { display: inline-flex; }
+.ai-composer:has(.ai-input[data-voice]) .ai-note-voice { display: inline; }
+.ai-panel[data-busy] .ai-voice:not([aria-pressed='true']) { display: none; }
+/* 外側に広がる輪で音の大きさを見せるのは、話しているのに拾えていないことに、文字が出る前に気付けるようにするため */
+.ai-voice[aria-pressed='true'] { background: var(--danger-strong); color: var(--on-strong); box-shadow: 0 0 0 calc(var(--ai-level, 0) * 9px) color-mix(in srgb, var(--danger) 28%, transparent); transition: box-shadow 0.08s linear; }
+.ai-voice[aria-pressed='true']:disabled { opacity: 0.6; cursor: default; }
+@media (hover: hover) { .ai-voice[aria-pressed='true']:not(:disabled):hover { background: var(--danger-strong-hover); color: var(--on-strong); } }
+.ai-input[data-voice] .ai-ghost { display: block; flex: 1; align-self: center; min-width: 0; max-height: 200px; margin: 0; padding: 6px 0 6px 6px; overflow-y: auto; color: var(--text); font-size: var(--fs-base); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; text-wrap: wrap; word-break: normal; }
+.ai-hard:not([hidden]) ~ .ai-ghost { padding-left: 0; }
+.ai-ghost-text { color: var(--muted); }
+.ai-ghost-text:empty::before { content: attr(data-placeholder); }
+[data-ai-ghost-base]:not(:empty)::after { content: ' '; }
+.ai-input[data-voice='finishing'] .ai-ghost-text::after { content: '…'; animation: pulse 1.2s ease-in-out infinite; }
+@media (max-width: 640px), (pointer: coarse) {
+  .ai-input[data-voice] .ai-ghost { font-size: 16px; }
+}
+
 /* ===== 今週の利用状況（入力欄の下。client.ts の paintAiUsage が応答のあとに書き換える） */
 .ai-foot { position: relative; display: flex; align-items: center; gap: 8px; min-height: 26px; }
 /* 自分の位置から開かないのは、左の利用状況の隣にあり、パネルの幅だけ右へはみ出すため。入力欄の下の行の左端からに開く */
