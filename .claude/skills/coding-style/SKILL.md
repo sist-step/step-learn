@@ -43,8 +43,8 @@ Prettier では決まらないもの:
 - 値の集合は `as const` の配列: `COURSE_COLORS`
 - ハンドラでは `Hono<AppEnv>` と `Context<AppEnv>` を使う
 - `requireAuth` を通したあとは `c.var.user!` でよい
-- 外部入力の絞り込みは型ガード: `const isCourseRole = (r: string): r is CourseRole => ...`
-- `any` は使わない。DB の結果は `.first<T>()` / `.all<T>()` で型を付ける
+- 外部入力の絞り込みは型ガード: `const isImageExt = (ext: string): ext is ImageExt => ...`（`lib/images.ts`）
+- `any` は使わない。DB の結果の型は Drizzle の推論に任せ、行の型が要るときは `typeof table.$inferSelect`（`db-change` スキル）
 
 ## 関数とモジュール
 
