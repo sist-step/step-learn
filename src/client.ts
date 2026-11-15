@@ -359,10 +359,13 @@ document.addEventListener(
 const recheck = (e: Event) => {
   const control = e.target as HTMLInputElement
   const form = control.form
-  const errors = form && checkForm(form)
-  if (!form || !errors || !control.name) return
-  if ('validated' in form.dataset) fieldNames(form).forEach((name) => setFieldError(form, name, errors[name]))
-  else if (control.getAttribute('aria-invalid') === 'true') setFieldError(form, control.name, errors[control.name])
+  if (!form || !control.name) return
+  const all = 'validated' in form.dataset
+  if (!all && control.getAttribute('aria-invalid') !== 'true') return
+  const errors = checkForm(form)
+  if (!errors) return
+  if (all) fieldNames(form).forEach((name) => setFieldError(form, name, errors[name]))
+  else setFieldError(form, control.name, errors[control.name])
 }
 document.addEventListener('input', recheck)
 document.addEventListener('change', recheck)
@@ -1649,13 +1652,23 @@ addEventListener('hashchange', updateToc)
 
 // --- Markdown エディター（components/markdown.tsx の MarkdownEditor）
 // ここに直接 import しないのは、CodeMirror が大きく、エディターのない画面でも毎回読み込むことになるため
-function initMarkdownEditors() {
-  const fields = $$<HTMLElement>('[data-md-editor]:not([data-md-ready])')
+// 閉じたモーダルの中は開くまで組み込まないのは、コースページの「アイテムを追加」のように開かずに終わることの多いモーダルのために、毎回 CodeMirror を読み込むことになるため
+function initMarkdownEditors(root: ParentNode = document) {
+  const fields = $$<HTMLElement>('[data-md-editor]:not([data-md-ready])', root).filter((el) => !el.closest('[popover]:not(:popover-open)'))
   if (!fields.length) return
   import('./markdown-editor')
     .then(({ mountMarkdownEditor }) => fields.forEach(mountMarkdownEditor))
     .catch(() => toast('エディターを読み込めませんでした。', 'error'))
 }
+// beforetoggle で組み込まないのは、その時点ではまだ :popover-open にならず、閉じたモーダルの中として飛ばされるため
+document.addEventListener(
+  'toggle',
+  (e) => {
+    const target = e.target
+    if (target instanceof HTMLElement && target.matches('[popover]') && (e as ToggleEvent).newState === 'open') initMarkdownEditors(target)
+  },
+  true,
+)
 
 // --- コードのエディター（components/code.tsx の CodeInput / CodeWorkspace）
 // ここに直接 import しないのは、CodeMirror と各言語の文法が大きく、コードの入力欄のない画面でも毎回読み込むことになるため
