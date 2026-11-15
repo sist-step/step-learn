@@ -9,6 +9,7 @@ import {
   AI_RETIRED_PROVIDER_MODELS,
   OPENROUTER_DECISION_MODELS,
   OPENROUTER_EMBEDDING_MODELS,
+  OPENROUTER_TRANSCRIPTION_MODELS,
   aiProvider,
   isLimitedModel,
   isModelPaused,
@@ -18,6 +19,7 @@ import {
   type AiModel,
   type DecisionModel,
   type EmbeddingModel,
+  type TranscriptionModel,
   type AiProvider,
   type AiUsage,
 } from './ai'
@@ -83,7 +85,9 @@ export function createAiLedger<S extends Record<string, unknown>>({
     inArray(aiUsage.model, [
       ...AI_PROVIDER_MODELS[provider],
       ...AI_RETIRED_PROVIDER_MODELS[provider],
-      ...(provider === 'openrouter' ? [...OPENROUTER_DECISION_MODELS, ...OPENROUTER_EMBEDDING_MODELS] : []),
+      ...(provider === 'openrouter'
+        ? [...OPENROUTER_DECISION_MODELS, ...OPENROUTER_EMBEDDING_MODELS, ...OPENROUTER_TRANSCRIPTION_MODELS]
+        : []),
     ])
 
   /** 月の上限（USD）。0 なら、その提供元のモデルは使えない */
@@ -122,7 +126,7 @@ export function createAiLedger<S extends Record<string, unknown>>({
   }
 
   /** userId が null のものは、特定の利用者に数えない使用量（コードのアイテムの採点・判定・ドキュメントの検索） */
-  function recordUsage(userId: number | null, model: AiModel | DecisionModel | EmbeddingModel, usage: AiUsage) {
+  function recordUsage(userId: number | null, model: AiModel | DecisionModel | EmbeddingModel | TranscriptionModel, usage: AiUsage) {
     db.insert(aiUsage)
       .values({ userId, model, ...usage })
       .run()
@@ -160,7 +164,7 @@ export function createAiLedger<S extends Record<string, unknown>>({
       .get()?.n ?? 0
 
   /** model を使うときに確かめる、本人の今週の枠と使った額。先頭は提供元の枠で、model だけの枠があれば続ける */
-  function getQuotas(userId: number, model: AiModel, at = unixNow()): AiQuota[] {
+  function getQuotas(userId: number, model: AiModel | TranscriptionModel, at = unixNow()): AiQuota[] {
     const provider = aiProvider(model)
     const period = aiPeriod(at)
     const quota = aiQuota({
@@ -178,7 +182,7 @@ export function createAiLedger<S extends Record<string, unknown>>({
   }
 
   /** model を今使えるかを決める枠。使えない枠があればそれを、なければ提供元の枠を返す */
-  function getQuota(userId: number, model: AiModel, at = unixNow()): AiQuota {
+  function getQuota(userId: number, model: AiModel | TranscriptionModel, at = unixNow()): AiQuota {
     const quotas = getQuotas(userId, model, at)
     return quotas.find((q) => q.state !== 'ok') ?? quotas[0]
   }

@@ -56,6 +56,8 @@ export type AiPanelProps = {
   models: readonly AiModelOption[]
   /** チャットの版（lib/ai-chat.ts の chatRevision） */
   revision: string
+  /** 音声入力を使えるときの、1 回に録れる長さ（秒）。使えなければ null */
+  voice: { maxSeconds: number } | null
   /**
    * hard は最後の発言で「難しい依頼」を選んでいたこと、replies は最後の応答のあとに出す、押して送れる続きの依頼、
    * context は会話の大きさ（lib/ai-agent.ts の contextPercent）
@@ -421,7 +423,7 @@ export const AiPanelToggle = () => (
   />
 )
 
-export const AiPanel = ({ models, revision, chat }: AiPanelProps) => {
+export const AiPanel = ({ models, revision, voice, chat }: AiPanelProps) => {
   useStyle('/src/components/ai-panel.css')
   useStyle('/src/components/markdown.css')
   const usable = models.filter((m) => !m.problem)
@@ -516,6 +518,25 @@ export const AiPanel = ({ models, revision, chat }: AiPanelProps) => {
             aria-describedby="ai-message-error"
             disabled={!chat && usable.length === 0}
           />
+          {voice && (
+            <>
+              <p class="ai-ghost" data-ai-ghost aria-live="polite">
+                <span data-ai-ghost-base />
+                <span class="ai-ghost-text" data-ai-ghost-text data-placeholder="話してください…" />
+              </p>
+              <IconButton icon="x" label="音声入力を取り消す" class="ai-voice-cancel" data-ai-voice-cancel />
+              {/* 最初は隠すのは、録音できないブラウザでは押しても何もできないため。client.ts が使えると確かめてから出す */}
+              <IconButton
+                icon="microphone"
+                label="音声で入力"
+                class="ai-voice"
+                data-ai-voice={String(voice.maxSeconds)}
+                aria-pressed="false"
+                hidden
+                disabled={!chat && usable.length === 0}
+              />
+            </>
+          )}
           <IconButton type="submit" icon="arrowUp" label="送信" class="ai-send" disabled={!chat && usable.length === 0} />
           <IconButton icon="stop" label="生成を停止" class="ai-stop" data-ai-stop />
         </div>
@@ -525,7 +546,10 @@ export const AiPanel = ({ models, revision, chat }: AiPanelProps) => {
             <Usage option={m} hidden={m.value !== current?.value} />
           ))}
           {chat && <ContextMeter percent={chat.context} />}
-          <p class="ai-note">Shift + Enter で改行</p>
+          <p class="ai-note">
+            <span class="ai-note-type">Shift + Enter で改行</span>
+            {voice && <span class="ai-note-voice">マイクを押して送信</span>}
+          </p>
         </div>
       </form>
 

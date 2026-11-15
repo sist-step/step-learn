@@ -498,6 +498,9 @@ const aiDecision = z.object({
 
 const aiChat = z.object({ chat: hidden(20) })
 
+// 形式と大きさをここで確かめないのは、受け取れる形式が文字起こしの提供元の都合で決まり、lib/ai-voice.ts にまとめておくため
+const aiVoice = z.object({ audio: file('音声がありません。') })
+
 export const FORMS = {
   login,
   register,
@@ -540,6 +543,7 @@ export const FORMS = {
   bundleSync,
   aiDecision,
   aiChat,
+  aiVoice,
 }
 
 export type FormName = keyof typeof FORMS
