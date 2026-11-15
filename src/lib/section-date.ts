@@ -1,5 +1,4 @@
 const DAY_MS = 86_400_000
-const WEEK_DAYS = 7
 
 const TOKYO_DATE = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' })
 
@@ -28,17 +27,27 @@ export function sectionDay(title: string, now = new Date()) {
   return candidates.reduce((a, b) => (Math.abs(b - today.day) < Math.abs(a - today.day) ? b : a))
 }
 
-export type TodaySection = { id: number; when: 'today' | 'recent' }
+export type LessonWhen = 'prev' | 'today' | 'next'
+export type Lesson = { id: number; title: string; when: LessonWhen; date: string }
+export type Lessons = { prev?: Lesson; today?: Lesson; next?: Lesson }
 
-/** 今日の日付のセクション。なければ、1 週間以内に終わったいちばん新しい回 */
-export function findTodaySection(sections: { id: number; title: string }[], now = new Date()): TodaySection | null {
+const DAY_LABEL = new Intl.DateTimeFormat('ja-JP', { timeZone: 'UTC', month: 'numeric', day: 'numeric' })
+
+/** 今日の日付のセクションと、その前後でいちばん近い日付のセクション */
+export function findLessons(sections: { id: number; title: string }[], now = new Date()): Lessons {
   const today = todayOf(now).day
-  let recent: { id: number; day: number } | null = null
+  const lessons: Lessons = {}
+  const days: Partial<Record<LessonWhen, number>> = {}
   for (const s of sections) {
     const day = sectionDay(s.title, now)
     if (day == null) continue
-    if (day === today) return { id: s.id, when: 'today' }
-    if (day < today && today - day < WEEK_DAYS && (!recent || day > recent.day)) recent = { id: s.id, day }
+    const when: LessonWhen = day === today ? 'today' : day < today ? 'prev' : 'next'
+    const best = days[when]
+    if (best != null && (when === 'prev' ? day <= best : day >= best)) continue
+    days[when] = day
+    lessons[when] = { id: s.id, title: s.title, when, date: DAY_LABEL.format(day * DAY_MS) }
   }
-  return recent && { id: recent.id, when: 'recent' }
+  return lessons
 }
+
+export const lessonWhen = (lessons: Lessons, id: number) => Object.values(lessons).find((l) => l.id === id)?.when
