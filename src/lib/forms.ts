@@ -481,7 +481,14 @@ const bundleRemove = z.object({ path: hidden(1000), folder: hidden(1000), all: f
 
 const bundleSync = z.object({ sync: flag() })
 
-const aiDecision = z.object({ call: hidden(200), decision: choice(['approve', 'reject'], 'reject'), page: hidden(500), chat: hidden(20) })
+// file を必須にしないのは、ファイルを選ぶカードでだけ送られるため。大きさと中身はストレージの設定と中身で決まるので、ハンドラで確かめる
+const aiDecision = z.object({
+  call: hidden(200),
+  decision: choice(['approve', 'reject'], 'reject'),
+  page: hidden(500),
+  chat: hidden(20),
+  file: z.transform((v: unknown) => (isFile(v) ? v : null)),
+})
 
 const aiChat = z.object({ chat: hidden(20) })
 
