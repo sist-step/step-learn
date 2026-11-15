@@ -7,24 +7,23 @@ import {
   AGENT_MAX_TOKENS,
   AGENT_MODEL,
   AGENT_MODEL_LABEL,
+  AGENT_REQUEST,
   AGENT_STATE_MESSAGES,
   agentState,
   agentSummaryMessages,
   agentSystemPrompt,
   agentToolsFor,
   isAgentOpen,
-  isAgentPlatform,
-  parseAgentMessages,
   usagePercent,
   type AgentStore,
 } from '../../lib/agent'
 import { AiError } from '../../lib/ai-models'
 import { checkAnthropicKey, completeAnthropic } from '../../lib/ai-anthropic'
 import { VSCODE_EXTENSION_ID } from '../../lib/bundle'
-import { claimLaunch, signLaunch } from '../../lib/bundle-token'
+import { LAUNCH_CLAIM, claimLaunch, signLaunch } from '../../lib/bundle-token'
 import { config } from '../../lib/config'
 import { firstError, validate } from '../../lib/forms'
-import { clientIp, readForm, redirectWith, wantsJson } from '../../lib/http'
+import { clientIp, readForm, readJson, redirectWith, wantsJson } from '../../lib/http'
 import { rateLimiter } from '../../lib/rate-limit'
 import type { AppEnv } from '../../lib/types'
 
@@ -163,9 +162,7 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
     const ip = clientIp(c)
     if (claimLimit.retryAfter(ip)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
     claimLimit.hit(ip)
-    const body: unknown = await c.req.json().catch(() => null)
-    const raw = typeof body === 'object' && body !== null && 'token' in body && typeof body.token === 'string' ? body.token : ''
-    const claims = claimLaunch(raw)
+    const claims = claimLaunch((await readJson(c, LAUNCH_CLAIM))?.token ?? '')
     const user = claims && findUser(claims.userId)
     const item = claims && user && (await targetOf(claims.ref, user.id))
     if (!claims || !user || !item)
@@ -213,10 +210,8 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
     const limitKey = String(target.tokenId)
     if (messageLimit.retryAfter(limitKey)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
     messageLimit.hit(limitKey)
-    const body: unknown = await c.req.json().catch(() => null)
-    const record = typeof body === 'object' && body !== null ? (body as Record<string, unknown>) : {}
-    const messages = parseAgentMessages(record.messages)
-    if (!messages) return c.json({ error: '送られた会話が正しくありません。新しいチャットを始めてください。' }, 400)
+    const request = await readJson(c, AGENT_REQUEST)
+    if (!request) return c.json({ error: '送られた会話が正しくありません。新しいチャットを始めてください。' }, 400)
     const { store } = item
     const { settings, state } = stateOf(store, userId)
     const apiKey = state === 'ok' ? store.apiKey() : null
@@ -225,20 +220,21 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
     if (running.has(runKey)) return c.json({ error: 'ほかのウィンドウで AI が応答を作っています。終わってからお試しください。' }, 409)
     const controller = new AbortController()
     running.set(runKey, controller)
-    return { userId, item, store, settings, apiKey, record, messages, controller, release: () => running.delete(runKey) }
+    const { messages } = request
+    return { userId, item, store, settings, apiKey, request, messages, controller, release: () => running.delete(runKey) }
   }
 
   app.post('/messages', async (c) => {
     const accepted = await accept(c)
     if (accepted instanceof Response) return accepted
-    const { userId, item, store, settings, apiKey, record, messages, controller, release } = accepted
+    const { userId, item, store, settings, apiKey, request, messages, controller, release } = accepted
 
     const system = agentSystemPrompt({
       course: item.course,
       title: item.title,
       description: item.description,
       instructions: settings.instructions,
-      platform: isAgentPlatform(record.platform) ? record.platform : null,
+      platform: request.platform,
     })
     c.header('Content-Type', 'application/x-ndjson; charset=utf-8')
     c.header('Cache-Control', 'no-store')
@@ -252,7 +248,7 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
           {
             model: AGENT_MODEL,
             messages: [{ role: 'system', content: system }, ...messages],
-            tools: agentToolsFor(record.tools),
+            tools: agentToolsFor(request.tools),
             maxTokens: AGENT_MAX_TOKENS,
             onText: (text) => emit({ type: 'text', text }),
             signal: controller.signal,

@@ -4,10 +4,10 @@ import { listAgentItems } from '../../lib/agent-items'
 import { aiLedger, usageByUser } from '../../lib/ai-usage'
 import { teacherNames } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
-import { field, intParam, readForm, redirectWith } from '../../lib/http'
+import { intParam, readFields, redirectWith } from '../../lib/http'
 import { actionLabel } from '../../lib/operation-log'
 import { courses, enrollments, items, operationLogs, users } from '../../lib/schema'
-import { LOG_KINDS, ROLE_LABELS, type AppEnv, type LogKind, type Role } from '../../lib/types'
+import { LOG_KINDS, ROLE_LABELS, type AppEnv, type LogKind } from '../../lib/types'
 import { createAiAdminHandlers } from './ai'
 import { AgentsPage, CoursesPage, LogsPage, UsersPage, type CourseRow, type LogRow, type UserRow } from './views'
 
@@ -38,8 +38,9 @@ export async function listUsers(c: Context<AppEnv>) {
 
 export async function changeRole(c: Context<AppEnv>) {
   const id = intParam(c, 'id')
-  const role = field(await readForm(c), 'role') as Role
-  if (!id || !['admin', 'teacher', 'student'].includes(role)) return c.notFound()
+  const fields = await readFields(c, 'siteRole')
+  if (!id || !fields) return c.notFound()
+  const { role } = fields
   if (id === c.var.user!.id) return redirectWith(c, '/admin', '自分自身のロールは変更できません。', 'error')
 
   const row = db.update(users).set({ role }).where(eq(users.id, id)).returning({ name: users.name }).get()
