@@ -27,7 +27,7 @@ import { forgetCourse, forgetProgress, forgetSections } from './cache'
 import { exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
 import { loadCourse, moodle, myCourses, otherCourses, outlineOf, progressOf, revisionOf, type LoadedCourse } from './data'
 import { findExtra, insertExtra, newExtraKey, updateExtraData } from './extra'
-import { addableExtraKinds, extraKindOf, type ExtraKind } from './extra-kinds'
+import { addableExtraKinds, extraKindOf, type ExtraData, type ExtraKind } from './extra-kinds'
 import {
   EXTRA_PATH,
   isInProgress,
@@ -380,18 +380,20 @@ export async function createItem(c: C) {
   return redirectWith(c, next, `「${title}」を追加しました。`)
 }
 
-function validateExtra(kind: ExtraKind, form: Form) {
+async function validateExtra(kind: ExtraKind, form: Form, current?: ExtraData) {
   const own = validate(kind.form, form)
   const common = validate('extraItem', form)
   if (!own.ok || !common.ok) return { ok: false as const, errors: { ...(common.ok ? {} : common.errors), ...(own.ok ? {} : own.errors) } }
-  return { ok: true as const, common: common.values, data: kind.toData(own.values) }
+  const prepared = kind.prepare ? await kind.prepare(own.values, current) : { values: own.values }
+  if ('errors' in prepared) return { ok: false as const, errors: prepared.errors }
+  return { ok: true as const, common: common.values, data: kind.toData(prepared.values) }
 }
 
 const extraUrl = (c: C, key: string) => `${config.appOrigin ?? new URL(c.req.url).origin}${EXTRA_PATH}${key}`
 
 async function createExtraItem(c: C, loaded: LoadedCourse, sectionId: number, kind: ExtraKind, form: Form) {
   const id = loaded.course.id
-  const result = validateExtra(kind, form)
+  const result = await validateExtra(kind, form)
   if (!result.ok) return redirectWith(c, editUrl(loaded, sectionId), firstError(result.errors), 'error')
   const { title, hidden } = result.common
   const completion = loaded.course.completionenabled ? (result.common.completion ?? 'none') : 'none'
@@ -423,6 +425,7 @@ export async function editItem(c: C) {
   const loaded = await manageCourse(c)
   const item = loaded && findItem(loaded, c)
   if (!loaded || !editable(item)) return c.notFound()
+  if (item.kind === 'extra') await extraKindOf(item.extra.type)?.preload?.()
   return c.render(<ItemEditPage access={loaded.access} item={item} sections={loaded.sections} layout={loaded.layout} />, {
     title: `編集 - ${item.title}`,
   })
@@ -482,8 +485,9 @@ async function updateExtraItem(c: C, loaded: LoadedCourse, item: EditableItem & 
   const id = loaded.course.id
   const kind = extraKindOf(item.extra.type)
   if (!kind) return c.notFound()
-  const result = validateExtra(kind, form)
+  const result = await validateExtra(kind, form, item.extra.data)
   if (!result.ok) {
+    await kind.preload?.()
     c.status(422)
     return c.render(
       <ItemEditPage

@@ -1,4 +1,4 @@
-import { AGENT_BODY_HINT, AgentEditPanel, AgentInstructionsField, AgentOpen, AgentPeriodCard } from '../../components/agent'
+import { AGENT_BODY_HINT, AgentEditPanel, AgentInstructionsField, AgentModelCard, AgentOpen, AgentPeriodCard } from '../../components/agent'
 import { BundleEditPanel, BundleOpen, type BundleView } from '../../components/bundle'
 import {
   CodeBarActions,
@@ -35,6 +35,7 @@ import { Card, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import { agentBase, type AgentView } from '../../lib/agent'
+import type { OpenRouterModelInfo } from '../../lib/ai-models'
 import { bundleBase } from '../../lib/bundle'
 import type { CodeFiles, CodeLanguage, Judge } from '../../lib/code'
 import { unixToDateTimeInput } from '../../lib/course-period'
@@ -61,6 +62,8 @@ export type ItemInput = {
   userLimit: string
   /** コーディングエージェントの、教師が書く AI への指示 */
   instructions: string
+  /** コーディングエージェントの、選んだモデルの ID */
+  model: string
 }
 
 /** コードのアイテムの言語と、見ている学生の提出。goals は学生に見せるクリアの条件（制約のラベル） */
@@ -98,6 +101,7 @@ export const ItemEditPage = ({
   code,
   bundle,
   agent,
+  agentModels = null,
   gradingEnabled,
   judge,
   sections,
@@ -111,6 +115,8 @@ export const ItemEditPage = ({
   bundle?: BundleView
   /** コーディングエージェントのアイテムの設定と利用状況 */
   agent?: AgentView
+  /** コーディングエージェントのアイテムで選べる OpenRouter のモデル。一覧を取れなければ null */
+  agentModels?: OpenRouterModelInfo[] | null
   /** AI が設定されていて、提出を自動で採点するか */
   gradingEnabled: boolean
   /** 制約ごとの判定をするもの。切り替えられる開発サーバーでだけ渡す */
@@ -137,6 +143,7 @@ export const ItemEditPage = ({
     closesAt: unixToDateTimeInput(code?.closesAt ?? agent?.settings.closesAt ?? undefined),
     userLimit: agent ? String(agent.settings.userLimit) : '',
     instructions: agent?.settings.instructions ?? '',
+    model: agent?.settings.model.id ?? '',
     ...values,
   }
   const section = sections.find((s) => s.id === item.sectionId)
@@ -202,6 +209,7 @@ export const ItemEditPage = ({
 
           <aside class="editor-side">
             {code && <CodePeriodCard opensAt={v.opensAt} closesAt={v.closesAt} errors={errors} />}
+            {agent && <AgentModelCard value={v.model} saved={agent.settings.model} models={agentModels} error={errors.agent_model} />}
             {agent && <AgentPeriodCard opensAt={v.opensAt} closesAt={v.closesAt} userLimit={v.userLimit} errors={errors} />}
             <Card heading="公開と配置">
               <div class="stack">
