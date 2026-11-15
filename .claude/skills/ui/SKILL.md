@@ -5,306 +5,143 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 
 # UI の作り方
 
-方針は「SSR ＋ 小さなクライアント JS」。JavaScript は必須で、無効なときは renderer の noscript が案内だけを出すので、JS なしの代替は作らない。CSS は部品・画面ごとのファイルに分け、そのページで使う分だけを読み込む（下の「CSS の置き場所と読み込み」）。JS は `src/client.ts` の 1 ファイル（重いライブラリを使うものは分けて、使う画面でだけ `client.ts` が動的に読み込む。Markdown エディターの CodeMirror は `src/markdown-editor.ts`、コードのエディターの CodeMirror と各言語の文法は `src/code-editor.ts`、ログイン画面の three.js は `src/auth-art.ts`、小テストのゲームの見た目の three.js は `src/quiz-world.ts`、PDF ビューアーの pdf.js は `src/pdf-viewer.ts`）。CSS フレームワークや UI ライブラリは入れない。
+方針は「SSR ＋ 小さなクライアント JS」。CSS フレームワークや UI ライブラリは入れない。JS は `src/client.ts` の 1 ファイルで、重いライブラリを使うものだけ別のファイルにして、使う画面でだけ `client.ts` が動的に読み込む（一覧は AGENTS.md）。
+
+このスキルには、コードを読んでも気づきにくい規則だけを書く。部品の props や挙動は、その部品の `.tsx` を読む。
 
 ## まず既存の部品を使う
 
-ボタン・入力欄・タブなどは**生の HTML やクラスを書かず、部品を使う**。部品が見た目（CSS クラス）・アクセシビリティ（`aria-*`）・既定値をまとめて持っているので、画面ごとに見た目がずれない。部品にない属性（`data-*`、`popovertarget`、`hidden`、`aria-*` など）はそのまま渡せば要素に付く。
+ボタン・入力欄・タブなどは生の HTML やクラスを書かず、部品を使う。部品にない属性（`data-*`、`popovertarget`、`hidden`、`aria-*` など）はそのまま渡せば要素に付く。
 
-### ボタン — `src/components/button.tsx`
+| ファイル | 部品 | 気をつけること |
+| --- | --- | --- |
+| `components/button.tsx` | `Button` / `IconButton` | `type` の既定は `button`。送信するボタンには必ず `type="submit"`。`IconButton` は `label` が必須 |
+| `components/form.tsx` | `TextField` / `SelectField` / `TextAreaField` / `FileField` / `DateTimeField` / `ImageField` / `FormField` / `Input` / `Select` / `Textarea` / `FileInput` / `FileChip` / `SearchBox` / `SegmentedControl` / `Switch` | 日時はブラウザ標準の `datetime-local` / `date` ではなく `DateTimeField`。ファイルは `FileInput`（`id` 必須）、画像は `ImageField` で受けて `lib/images.ts` の `putImage` / `serveImage`。ラベルなしの部品には `aria-label` |
+| `components/markdown.tsx` | `MarkdownEditor` / `Markdown` | Markdown を受け取る欄は `TextAreaField` ではなく `MarkdownEditor`。表示は `Markdown`（生の HTML は通らない） |
+| `components/card.tsx` | `Card` / `DangerRow` / `Block` / `Table` / `Stats` / `Stat` / `LinkCard` | 危険な操作は `Card tone="danger"` と `DangerRow` |
+| `components/overlay.tsx` | `Modal` / `Popover` / `MenuItem` | 行の「その他の操作」は `Popover class="row-menu"` に `MenuItem` を並べ、危険な操作は `class="is-danger"` |
+| `components/ui.tsx` | `PageHeader` / `Tabs` / `TabPanel` / `Chip` / `Alert` / `Breadcrumbs` / `Person` / `EmptyState` / `Avatar` / `Progress` / `ProgressRing` / `formatDate` | `Tabs` を置いた画面では中身を必ず `TabPanel` で包む。一覧が空なら `EmptyState` |
+| `components/course.tsx` | `CourseCard` / `CourseIcon` / `CourseHeader` / `CourseLiveSync` / `ItemBar` / `ItemEditActions` / `LessonBadge` / `LessonJump` / `OutlineToggle` など | コース配下の画面は `CourseHeader` でタブを出す |
+| `components/code.tsx` | `CodeInput` / `CodeField` / `CodeWorkspace` と編集画面のカード | コードを受け取る欄は `TextAreaField` ではなく `CodeField` |
+| `components/quiz.tsx` / `quiz-animal.tsx` | 小テストの編集欄・解答・結果・動物のキャラクター | |
+| `components/bundle.tsx` / `restriction.tsx` / `ai-panel.tsx` / `pdf.tsx` | ファイル自動配布・アクセス制限・AI のパネル・PDF | |
+| `components/mascot.tsx` | `Mascot` / `MascotYard` / `WalkingMascot` | 飾りなので、伝える情報のない空きにだけ置く |
 
-| 部品 | 使い方 |
-| --- | --- |
-| `Button` | `variant`（`default` / `primary` / `ghost` / `danger` / `danger-outline` / `success`）、`size`（`sm` / `md` / `lg`）、`block`、`icon` / `iconEnd`（アイコン名）。`href` を渡すとリンク、`as="span"` でリンクの中に置く飾りになる |
-| `IconButton` | アイコンだけのボタン。`icon` と `label`（`aria-label` と `title` になる）が必須。`danger`、`href`、`as="summary"`（`details` の開閉ボタン） |
+クラス名を条件で組み立てるときは `components/cx.ts` の `cx('a', cond && 'b')`。
 
-`type` の既定は `button`。フォームを送信するボタンには必ず `type="submit"` を書く。
+Moodle モードの種類ごとの入力欄（`moodle-mode/extra-kinds.tsx`）は 1 枚のカードの中に並べるので、`XxxFields` の部品はカードではなく fieldset で包む。
 
-```tsx
-<Button type="submit" variant="primary">保存</Button>
-<Button href="/courses" variant="ghost" icon="chevronLeft">戻る</Button>
-<form method="post" action={url} data-confirm="削除しますか？">
-  <IconButton type="submit" icon="trash" label="削除" danger />
-</form>
-```
+### 入力の検証とエラーの置き場所
 
-### フォーム — `src/components/form.tsx`
+フォームに `{...validateWith('名前')}` を付けると、`client.ts` が各欄の `FieldError` にエラーを出す。`XxxField` と `MarkdownEditor` は `FieldError` を含んでいる。部品を使わない入力欄では、入力欄に `id` と `aria-describedby="${id}-error"` を付け、近くに `<FieldError id={id} />` を置いて `.field` で囲む（`client.ts` が `${id}-error` で探すため。例は `MarkdownEditor`）。
 
-| 部品 | 使い方 |
-| --- | --- |
-| `TextField` | ラベル付きの 1 行入力。`label` / `name` / `error` / `hint`、`type="password"` で表示切り替え付き。`id` の既定は `f-${name}`（同じ画面に複数置くときは `id` を渡す） |
-| `SelectField` | ラベル付きのセレクト。`options`（`{ value, label }[]`）と `value` |
-| `TextAreaField` | ラベル付きの複数行入力 |
-| `FileField` | ラベル付きのファイル選択（中身は `FileInput`） |
-| `DateTimeField` | ラベル付きの日時（`mode="datetime"`、値は `YYYY-MM-DDTHH:mm`）か日付（`mode="date"`、値は `YYYY-MM-DD`）の選択。ブラウザ標準の `datetime-local` / `date` は使わずこれを使う。欄は「2026年11月13日（金） 14:30」と出すボタンで、押すと `client.ts` がパネルを出す。パソコン（幅 641px 以上かつ細かいポインター）では欄の下にカレンダーと時・分（5 分刻み）の一覧のポップオーバーを出し、選んだそばから欄に入れる（矢印キーで日を、PageUp / PageDown で月を移せる）。スマホ・タブレットでは下からシートを出し、カレンダーと時・分のホイールで選んで「決定」で入れる（背景を押すと取り消し）。`optional` で値を消す × とパネルの「クリア」が付く。送信されるのは隠した入力欄（`name`）の値なので、サーバー側の検証はそのまま使える |
-| `ImageField` | プレビュー付きの画像選択。`src`（保存済みの画像の URL）/ `aspect`（プレビューの縦横比、既定 `16 / 9`）/ `width`。`FileInput` のドロップ領域がそのままプレビューになり、画像があるときはホバー・ドラッグ中だけ案内を重ねる。選ぶとプレビューが替わり、上限を超えるファイルは `client.ts` が送信前に取り消す。受け取ったファイルは `lib/images.ts` の `putImage(prefix, file)` で検証・保存し、`serveImage(key)` で配信する |
-| `FormField` | ラベル・エラー・ヒントの枠だけ。中身を自由に組みたいとき（`children` に `Input` などを置く） |
-| `Input` / `Select` / `Textarea` | ラベルなしの部品。表の中や横並びのフォームで使う（`aria-label` を付ける）。`compact` で小さくなる |
-| `FileInput` | ファイル選択。ブラウザ標準の部品を隠し、点線のドロップ領域（「ドラッグ＆ドロップ または {`buttonLabel`}」、既定「ファイルを選択」。タッチ端末と幅の狭い領域ではドラッグの案内を省く）を出す。`id` は必須（領域が `label[for]` になる）。押して選ぶほか、ファイルをドロップしても選べ（`client.ts` が `accept` を確かめる）、選ぶと下に `FileChip`（名前・拡張子・サイズ・取り消しの ×）が出る。`icon` は `FileChip` のアイコン、`zoneClass` / `zoneStyle` / `children` は領域の見た目と中身（`ImageField` のプレビュー） |
-| `FileChip` | ファイル 1 件の行（`name` / `meta` / `icon`、既定 `file`）。編集画面の「現在のファイル」にも使い、`FileInput` で選んだファイルと同じ見た目にそろえる |
-| `SearchBox` | 一覧上部の検索欄（`/` キーでフォーカス） |
-| `SegmentedControl` | ラジオボタンの切り替え（`name` / `label` / `options`（`icon` 付き可）/ `value`） |
-| `MarkdownEditor`（`markdown.tsx`） | Markdown の入力欄。CodeMirror のエディターに書式ボタン（⌘B / ⌘I / ⌘K）と「書く / プレビュー」の切り替え、書き方の早見表が付く。`label` / `name` / `value` / `rows`（最低の高さ）/ `placeholder` / `error` / `hint`。`split` を付けると、欄の幅が 760px 以上のときだけ「並べる」（左に書く欄、右に入力に追従するプレビュー）が増える。並べるかどうかは端末ごとの設定（`mdSplit`、既定は並べる）で、幅の広いときに「書く / 並べる」を選ぶと覚える。アイテムの編集画面の本文・問題文・説明で使う。送信されるのは中の `textarea`（`name`）の値。Markdown を受け取る入力欄では `TextAreaField` ではなくこれを使う |
-| `Switch` | オン・オフのスイッチ（`role="switch"` のボタン）。`label` / `checked` / `icon`。切り替えの処理は `data-*` を付けて `client.ts` に書く |
+### 画面の骨組み
 
-各 `XxxField` の `fieldClass` は外側の `.field` に付くクラス（`when-link` などの出し分け用）。
-
-入力の検証にブラウザの `required` / `maxlength` などは使わない。フォームに `{...validateWith('名前')}`（`lib/forms.ts` の `FORMS` の名前）を付けると、`client.ts` が送信前と入力中にスキーマで確かめ、各欄の `FieldError` にエラーを出す。`XxxField` と `MarkdownEditor` は `FieldError` を含んでいる（`error` がなくても隠して置いておき、`client.ts` が `${入力欄の id}-error` で探す）。部品を使わない入力欄には、入力欄に `id` と `aria-describedby="${id}-error"` を付け、近くに `<FieldError id={id} />` を置き、`.field` で囲む（例は `components/markdown.tsx` の `MarkdownEditor`）。置き場所のない欄のエラーはトーストで出る
-
-```tsx
-<TextField label="氏名" name="name" value={name} error={errors.name} />
-<SelectField label="セクション" name="section_id" options={sections.map((s) => ({ value: String(s.id), label: s.title }))} value={String(current)} />
-<Select name="role" compact options={ROLE_OPTIONS} value={role} aria-label="ロール" />
-```
-
-### カード・表 — `src/components/card.tsx`
-
-| 部品 | 用途 |
-| --- | --- |
-| `Card` | 白い箱。`heading` / `description` / `leading`（見出しの左のアイコンなど）/ `actions`（見出しの右）。`as="form"` でフォームそのものをカードにできる（`method` などはそのまま渡す）。`tone="danger"` で危険な操作の枠 |
-| `DangerRow` | `Card tone="danger"` の中の 1 行（`heading` / `description` / 右側にボタン） |
-| `Block` | 見出し付きのまとまり（`heading` / `count`（件数バッジ）/ `actions`） |
-| `Table` | 表。`columns`（`{ label, class?, srOnly? }[]`。`false` を混ぜると出さない）を渡し、`children` に `<tr>` を並べる |
-| `Stats` / `Stat` | 数字のカードを並べる。`Stat` は `label` / `value`、`href` でリンクになり矢印が付く。`label` の先頭に `<span class="stat-icon"><Icon … /></span>` を置くとアイコンが付く。`<Stats compact>` で数字を横に並べた低いカードになる（例は管理 > ユーザー） |
-| `LinkCard` | アイコン付きの横長の行（外部リンク・ファイルなど）。`href` でリンクになる。`class="link-card-lg"` を渡すと、アイテム画面の主操作のパネルになる（スマホではボタンが全幅で折り返す） |
-
-```tsx
-<Card heading="プロフィール" description="参加者一覧に表示されます。">…</Card>
-<Card as="form" method="post" action={url} class="stack" data-loading-form heading="編集">…</Card>
-<Table columns={[{ label: '名前' }, manage && { label: '進捗', class: 'hide-sm' }, { label: '操作', srOnly: true }]}>
-  {rows.map((r) => <tr>…</tr>)}
-</Table>
-```
-
-### 重ねて出すもの — `src/components/overlay.tsx`
-
-| 部品 | 用途 |
-| --- | --- |
-| `Modal` | 中央に出すダイアログ（`id` / `heading` / `description`）。開くボタンは `<Button popovertarget={id}>`、閉じるボタンは `popovertargetaction="hide"` を足す。右上の × は部品に含まれる |
-| `Popover` | ボタンの下に出す小さなパネル（`details` で開閉、外側クリックと Esc で閉じる）。開くときに `client.ts`（`placePopoverPanel`）が高さを測り、下に収まらなければボタンの上に開き（`is-above`）、上にも収まらなければパネル全体が見えるまでスクロールする。`trigger` に `<IconButton as="summary" …>` などの `summary` を渡す |
-| `MenuItem` | メニューの 1 行（`icon`、`href` でリンク、なければボタン）。削除などの危険な操作は `class="is-danger"` |
-
-表の行やカードの「その他の操作」は、`<Popover class="row-menu" panelClass="row-menu-panel" trigger={<IconButton as="summary" icon="ellipsis" label="その他の操作" />}>` の中に `MenuItem` を並べる（`.row-menu-panel` と `is-danger` の色は `overlay.css` にある）。
-
-```tsx
-<Button variant="primary" icon="plus" popovertarget="create-x">作成</Button>
-<Modal id="create-x" heading="作成">…</Modal>
-
-<Popover trigger={<IconButton as="summary" icon="pencil" label="編集" />}>
-  <form method="post" class="stack">…</form>
-</Popover>
-```
-
-### 表示 — `src/components/ui.tsx`
-
-| 部品 | 用途 |
-| --- | --- |
-| `PageHeader` | 画面上部の見出し（`eyebrow` / `title` / `description` / `actions`） |
-| `Tabs` | ページを切り替えるタブ（`label` / `items`（`{ href, label, active }[]`）/ `block` で横幅いっぱい）。切り替えると選択中の背景が前のタブから滑る（`client.ts` の `markTabSwitch`） |
-| `TabPanel` | `Tabs` の下の中身を包む。タブを切り替えたとき、中身が切り替えた向きに少し流れて入れ替わる。`Tabs` を置いた画面では必ず使う |
-| `Chip` | 小さなラベル（`tone`: `default` / `accent` / `success` / `live`、`icon`） |
-| `Alert` | 帯状のメッセージ（`tone`: `error` / `info` / `success` / `warning`）。フォームのエラーなど |
-| `Breadcrumbs` | パンくず（`items`: `{ label, href? }[]`。最後は現在地なので `href` なし） |
-| `Person` | アバターと名前・補足を横に並べる（`avatar` / `name` / `meta` / `href`）。表の 1 列目など。`meta` に `userMeta(user)` の配列（`string[]`）を渡すと「@ユーザー名」とメールアドレスが別々の要素になり、メールアドレスのほうが先に省略される。スマホの表では 2 行に分かれる |
-| `EmptyState` | 一覧が空のとき（`icon` / `title` / `text` / `action`）。`page` で画面全体の空状態（404 など） |
-| `Markdown`（`markdown.tsx`） | Markdown を HTML にして `.prose` の見た目で出す（`source`）。`lib/markdown.ts` の変換を使うので生の HTML は通らない |
-| `Avatar` | 名前から色とイニシャルを作るアイコン |
-| `Progress` / `ProgressRing` | 進捗バー・リング（JS で更新できる `data-*` 付き） |
-| `CourseCard` | コースのカード（名前 → コード → 概要）。コース一覧で `.course-grid` に並べる（ダッシュボードのマイコースは、カードではなく線で区切った行の `routes/dashboard/views.tsx` の `CourseRow`）。期間外のコースには `data-course-ended`、参加していないコースには `data-course-unenrolled` が付き、コース一覧の「進行中 / すべて」の絞り込みで隠れる（下の「マークアップ」） |
-| `CourseIcon` | コースの頭文字のバッジ。コースアイコンが設定されていれば画像を出す。大きさと形は `class`（`course-mono` / `course-hero-mono` / `dot`）で決める |
-| `LessonBadge` / `LessonJump`（`course.tsx`） | セクション名の日付（`lib/section-date.ts` の `findLessons`）で決めた授業の回の目印。`LessonBadge` はセクションのカード・タイルに付ける「今日」「前回」「次回」のバッジ。`LessonJump` はコースページの右下に固定するボタンで、「前回」と「今回」（今日の回がなければ「次回」）を押すと、`client.ts` がそのセクションを開いてスクロールし（タイル形式ならタイルを開く）、縁を一瞬光らせる。AI のパネルを横に並べているときはパネルの左に寄る |
-| `formatDate` | UNIX 秒を「2026年10月28日」形式で表示 |
-
-### マスコット — `src/components/mascot.tsx`
-
-| 部品 | 用途 |
-| --- | --- |
-| `Mascot` | ロゴ（シアンの輪・黒い枠・STEP の帯）を元にした SVG のキャラクター。`act` で動きのパターン（`MASCOT_ACTS`: `greet` あいさつ / `cheer` 応援 / `advise` 助言 / `idea` ひらめき / `ask` 質問 / `think` 考える / `warn` 注意 / `agree` うなずく / `share` すすめる / `rest` 休む）を選ぶと、表情・ポーズ・動き・視線がまとめて決まる。個別に渡した `mood`（`normal` / `happy` / `sad` / `surprised` / `thinking` / `sleepy`）/ `pose`（`idle` / `wave`（振り続ける）/ `greet`（表示したときに 3 回振って下ろす）/ `cheer` / `point` / `raise`（手を挙げる）/ `open`（両手を広げる）/ `type`（両手を前に出してキーを打つ）/ `hold`（両手で前に持つ）/ `sip`（右手のマグカップを口へ運ぶ））/ `motion`（`none` / `float` / `bounce` / `hop` / `wiggle` / `nod`（うなずく）/ `tilt`（首をかしげる）/ `shake`（首を振る）/ `walk`（よちよち歩く。足・腕・体を `--mascot-step` の間隔で揺らす）/ `swing`（座って足をぶらぶらさせる）、既定 `float`）/ `look`（`front` / `left` / `right` / `up` / `down`）は `act` より優先する。`prop`（`MASCOT_PROPS`: `none` / `laptop`（ノートパソコン。顔が画面の光で色づき、記号が浮かぶ）/ `book`（本。目が行を追う）/ `mug`（右手のマグカップ。湯気が立つ）/ `magnifier`（右手の虫めがね）/ `notes`（頭のまわりに音符）、既定 `none`）で小物を持たせる。`size`（幅 px、既定 120）/ `stand`（足元の STEP の台、既定 `true`）/ `say`（右に出す吹き出し）/ `label`（渡すと `role="img"` の代替テキストになり、なければ飾りとして隠す）。値の一覧は `MASCOT_MOODS` などの配列。ダッシュボードのヒント（`lib/tips.ts`）は 1 件ずつ言葉に合う `act` を持ち、ダッシュボードでは `pose="wave"` で手を振り続ける |
-| `MascotYard` | マスコットの遊び場。伝える情報のない空きに置く（ダッシュボードのマイコースの下）。色を付けた足場（床 `is-floor`・棚 `is-shelf`・箱 `is-box`）と `WalkingMascot` を含み、マスコットが足場の上を歩き、跳び移り、座って作業する。飾りなので `aria-hidden`。足場を足すときは、`mascot.css` に `.mascot-yard-block.is-<名前>` を足し、`client.ts` の `WALKER_GROUNDS` にも 1 つずつ足す（セレクターごとに、最初に見つかった 1 つだけが足場になる）。浮いた足場は、床を歩くマスコットの頭が当たらない高さ（床の上辺から 60px 以上）に置く |
-| `WalkingMascot` | コースページ（教材タブ）を歩き回る `Mascot`。通常モードと Moodle モードのすべてのコースフォーマット（トピック・折りたたみ型トピック・タイル）に置く。足場は `client.ts` の `WALKER_GROUNDS` に挙げた要素の上辺（ヒーロー画像 `.course-hero-cover` と、見えている最初のセクションのカード。タイル形式で全体のセクションがなければ最初のタイル）で、その上に乗って左右に歩き、ときどき屈んでから放物線を描いて別の足場へ跳び移る（上へ跳ぶときはたまに宙返りする。見えていない足場へは跳ばない）。最初に現れる足場もランダム。置き場所は `client.ts`（`initWalkers`）が描いたあとに決める。角の丸みの分だけ端を空け、戻るリンク・タブ・編集モードのスイッチ・「すべて開く／閉じる」など（`WALKER_WALLS`）は壁にして通り抜けない。歩く・走る・虫めがねで探しながら右へ歩くのあいだに、`WALKER_ACTIVITIES` から重み付きで選んだ動作（座ってパソコンでコーディング（終わると跳ねて喜ぶ）・本を読む・コーヒーを飲む・足をぶらぶらさせる・音符を出して踊る・眠る・考える・立ち止まる）をする。座ると（`data-sitting`）胴が上辺に乗り、足が足場の前に垂れる。壁にぶつかると驚き、マウスが近づくと手を振り、クリックでハートを出して跳ね、ドラッグでつまんで離すと近い足場（下の足場を優先）に落ちて着地する。レイアウトが変わったときも足場に乗り直す。ウインドウを縮めて立っていた場所が足場の端や壁に削られたときは、すり抜けずに同じ足場の上を押し出され（`data-state="pushed"`、押してきた側を `data-pushed`）、壁の側を起点に横へ潰れて壁へ体を傾け、驚いた顔で踏ん張る（縮めている間は毎フレーム測り直す）。押し出せる場所がなければ近い足場へ移る。動きを減らす設定では歩かずに立っているだけ |
-
-`Mascot` は全部の表情・腕を描いておき、ルート要素の `data-mood` / `data-pose` / `data-motion` / `data-look` で CSS が出し分ける。表示後に `client.ts` から `el.dataset.mood = 'happy'` と書き換えるだけで切り替わる（腕と視線はトランジションで動く）。`say` を渡すと吹き出しが開き、`client.ts`（`typeMascotSay`）が文字を 1 文字ずつ出す（`data-typing`）。打っているあいだは口が動き（`data-talking`）、句読点では間を置いて口を止め（`data-hush`）、「！」で言い終えると跳ねる。読み上げ用には全文を `sr-only` で置く。ほっぺ・左腕・右上の角は CSS で常に小さく揺れる。機械的に見えないよう、`client.ts`（`initMascots`）が `[data-mascot]` ごとにランダムな間隔で、まばたき（`data-blink`、ときどき 2 回）・視線（`data-glance`）・気まぐれな動作（`data-quirk`: `hop` / `lean-l` / `lean-r` / `squish` / `peek` / `tap`）・一瞬の表情（`data-mood` を驚き・笑顔・考え顔にして戻す）を付け外しする。気まぐれな動作は `.mascot-actor` で動かすので `data-motion` と重なる。これらは `transform` ではなく `translate` / `scale` / `rotate` で動かしているので、表情やポーズの `transform` と重なっても打ち消し合わない。色は `.mascot` の `--mascot-ink` / `--mascot-ring` / `--mascot-face` / `--mascot-eye` / `--mascot-cheek` で上書きできる。
-
-```tsx
-<Mascot act="cheer" say="その調子！" />
-<Mascot act="think" look="left" say="どうしてだろう？" />
-<Mascot mood="sleepy" motion="none" stand={false} size={64} label="眠っている STEP のキャラクター" />
-```
-
-### コード — `src/components/code.tsx`
-
-| 部品 | 用途 |
-| --- | --- |
-| `CodeInput` | コードの入力欄。`src/code-editor.ts` が中の textarea を VS Code に寄せた CodeMirror のエディターに置き換える（行番号・色分け・かっこの補完・打つと出る候補・折りたたみ・検索と置換・複数カーソル（Alt + クリック、⌘ / Ctrl + D）・構文の誤りの赤い波線・Tab でカーソル位置に字下げ）。候補は、JavaScript ではブラウザの window・document の名前、HTML では Emmet の略記（`ul>li*3`。タグ名でないただの単語は出さない）。ファイルのタブで並べたとき（`CodeWorkspace` / `CodeStarterCard`）は、HTML の `class` / `id` に CSS のクラス名・id、CSS のセレクターに HTML のクラス名・id、JavaScript の `getElementById` / `querySelector` / `classList` の文字列に HTML の id・クラス名も出す。Shift + Alt + F で Prettier による整形（HTML / CSS / JavaScript。Prettier は整形するときに読み込む）、⌘ / Ctrl + S は書きかけのコードの保存（`CodeWorkspace`）。`syntax`（`html` / `css` / `js` / `py` / `text`）/ `rows`（最低の高さ）/ `fill`（親の高さいっぱいに広げ、枠を消す）。送信されるのは textarea（`name`）の値で、書き換えるたびに textarea に `input` イベントが出る |
-| `CodeEditorTools` | ファイルのタブの帯（`CodeWorkspace`）とカードの見出し（`CodeStarterCard`）に置く、整形のボタン（Web だけ。`data-code-format`、表示中のファイルを整形する）とキーボードショートカットの一覧（`Popover`。Mac では `code-editor.ts` がキーを ⌘ / ⌥ / ⇧ の表示に替える。タッチ端末では隠す） |
-| `CodeField` | ラベル・エラー・ヒント付きの `CodeInput`（`label` / `name` / `syntax` / `value` / `rows` / `error` / `hint`）。コードを受け取る入力欄では `TextAreaField` ではなくこれを使う |
-| `CodeStarterFields` / `CodeGradingFields` / `CodePeriodFields` | Moodle モードの種類ごとの入力欄（`extra-kinds.tsx`）で使う「最初のコード」（言語ごとのファイルと、Python の入力の例）・「判定」（制約と補足。制約の欄は `CodeGradingCard` と同じもの）・「提出の期間」の欄。1 枚のカードの中に並べるので、カードではなく fieldset で包む |
-| `CodePeriodCard` | 通常モードの編集画面の右の列に置く「提出の期間」のカード（開始日時 `opens_at`・終了日時 `closes_at` の `datetime-local`。どちらも必須で、長さは `MAX_SUBMIT_PERIOD`（24 時間）まで）。期間の外は提出だけを止め、問題とエディターは開ける |
-| `CodeSuggest` / `CodeStarterCard` / `CodeGradingCard` | 通常モードの編集画面の部品。`CodeSuggest` は問題のカードの一番下に置く、問題文から最初のコードと制約の下書きを AI に作らせる 1 行（`action` に問題文を送り、`code-editor.ts` が返ってきた最初のコードと制約を同じフォームの欄に入れ、最初のコードのカードまで移動する）。`CodeStarterCard` はファイルのタブで切り替えるエディターと、Web なら学生に見えるページのプレビューを横に並べたカード（「ひな形に戻す」付き。エラーのあるファイルのタブを最初に選び、ブラウザの検証でエラーが出たときは `client.ts` がそのタブに切り替える）。`CodeGradingCard` は「判定」のカードで、制約（1 行ずつ、学生にも見せるラベル `constraint_label[]` と、AI だけが使う判定の内容 `constraint_text[]`（空ならラベルで判定）。1 つ以上が必須。エラーは fieldset の `constraints` に出す）と補足の欄。開発サーバーでは `judge` を渡すと、制約の判定をするもの（AI / Jev）の切り替えを出す |
-| `CodeBarActions` | ヘッダーの帯（`ItemBar`）に置く、提出の一覧への入口（教師）と、提出の状況（「クリア」「3 / 4 クリア」「判定中…」。押すと右の枠の提出のタブを開く）・提出ボタン（学生、`submissions`）。続けて提出できないあいだは、提出ボタンを押せなくして「あと 42 秒」と出し、`code-editor.ts` が数え直す |
-| `CodeSubmissions` / `VerdictList` | 学生の提出のタブの中身（次に提出できるまでの残り・完了の状態・いちばん新しい提出の判定・開いて判定を見られるこれまでの提出）と、制約ごとの ○ / △ / × と理由の一覧（学生にはラベルだけ、`VerdictList` に `showText` を付けた教師の提出画面では判定の内容も出す。Jev の判定は理由の代わりに確からしさを出す）。判定中は `code-editor.ts` が終わりを待ち、タブの中身とヘッダーの帯の表示を取り直す |
-| `CodeWorkspace` | コードのアイテムの本体（`AppShell` の `topbar` と一緒に使う）。ヘッダーの下いっぱいに置き、ページはスクロールしない（下に本文や前後のアイテムを置かない）。左に問題文と「クリアの条件」（`goals`、制約のラベル）とファイルのタブ付きのエディター、右にプレビューとコンソール（Web）か入力と実行結果（Python）。学生には `submissions`（`lib/code-grader.ts` の `submissionsOf`）を渡し、右の枠を「プレビュー / 提出」のタブにする（判定中は提出のタブから始める。`completion` は提出のタブに出す完了の状態）。コードはサーバーで描かず、`code-editor.ts` が `${base}/state` から読み込み、書きかけのコードを `${base}/draft` に自動で保存する。提出は `CODE_FORM` のフォームの送信（ヘッダーの帯のボタンに `form={CODE_FORM}` を付ける） |
-
-### 小テスト — `src/components/quiz.tsx`
-
-| 部品 | 用途 |
-| --- | --- |
-| `QuizQuestionsField` | 問題の欄。問題ごとに、問題文・コード・種類ごとの欄（選択は選択肢と正解の丸、出力の予測は正しい出力、並べ替えは正しい順の行、バグ探しは行の番号、実行の順番は行の番号の並び、字下げは正しく字下げしたコード、変数の追跡は `|` で区切った表）・解説を書く。問題の追加（`<template data-qz-template>` を複製）・削除・上下の移動・選択肢の増減と、入力した行の番号の横に行の中身を出すのは `client.ts` が受け持ち、送信と入力のたびに行から JSON を組み立てて `questions` に入れる（`lib/quiz.ts` の `readQuizForm` が読む）。問題ごとの入力欄は `<問題の目印>.<項目>` の name でエラーの置き場所にだけ使う。出題の形式を足すときは、`lib/quiz.ts` の `QUIZ_KINDS` と種類ごとの分岐（読み取り・出題・採点・結果）、この部品の編集欄・解答・結果、`client.ts` の `quizAnswered` に足す |
-| `QuizEditor` / `QuizGradingCard` | 通常モードの編集画面（`ItemEditPage`）の「問題」のカードと、右の列に置く「採点」のカード（合格にする正解の割合 `pass_percent`、不正解だった問題の正解と解説を見せるか `show_answers`） |
-| `QuizLookCard` | 通常モードの編集画面の右の列に置く「見た目」のカード（学生に出す画面を「標準」「ゲーム」から選ぶ `look`） |
-| `QuizFields` | Moodle モードの種類ごとの入力欄（`extra-kinds.tsx`）で使う「問題」「採点」「見た目」の欄。1 枚のカードの中に並べるので、カードではなく fieldset で包む |
-| `QuizAnimal`（`quiz-animal.tsx`） | ゲームの見た目に出す動物のキャラクター（SVG）。`kind`（出題の形式。形式ごとに動物が決まる。呼び名と答え方のひとことは `QUIZ_ANIMALS`）/ `size` / `mood`（`normal` / `happy` / `sad`）/ `label`（渡すと代替テキストになり、なければ飾りとして隠す）。3 つの表情をすべて描いておき、`data-mood` か、親の `data-done` で CSS（`quiz-game.css`）が出し分ける。体の色は `quiz-game.css` の先頭の `--qg-*` / `--qa-*` で、ライトとダークで変えない。動物を足すときは、`body`（目より後ろ）・`front`（目と口より手前）・目と口の位置を `QUIZ_ANIMALS` に、色を `quiz-game.css` に足す |
-| `QuizPanel` | アイテムの画面の小テスト（`lib/quiz-store.ts` の `quizViewOf` で作る `QuizView`）。学生には解答のフォーム（`data-quiz-form`。答えていない問題があると `client.ts` が送信を止めて、その問題へ移る）か、いちばん新しい受験の結果と「もう一度受ける」（`?retake=1`）を出す。教師には学生と同じ問題を採点のボタンなしで出し、「受験結果」への入口を置く。並べ替えの行（`data-quiz-line`）はドラッグか上下のボタンで、実行の順番（`data-quiz-flow`）は行を押して、字下げ（`data-quiz-indent-line`）は行ごとの左右のボタンで答える。学生に渡す問題は正解を含まない `QuizTakeQuestion`。`QuizView.look` が `game` のときは、同じ問題を 1 問ずつのステージ（`data-qg-stage`）にして、上の道のり（`data-qg-to`）と下の「もどる／つぎへ」（`data-qg-go`）で行き来する形で出す（`client.ts` の `qgShow`。答えの入ったステージには、触ったときと、見てから離れたときに `data-done` が付き、道のりに星が付く。最後に採点のボタンを置いたゴールのステージ（`data-qg-goal`）があり、答えていないステージと一度も開いていないステージがあると、そのステージへ戻る）。結果は星と動物の並ぶ帯と「ふりかえり」。見た目は `quiz-game.css`（`qg-*`）で、形式ごとの色は `--qa-main`。道のりと結果の動物・星は `.qg-world`（`data-qg-world` が `take` か `result`、`data-kinds` に形式の並び）の中に 2D で描いておき、`src/quiz-world.ts`（`client.ts` の `initQuizWorlds` が読み込む）がその枠に three.js の canvas を重ねて `data-ready` を付けると、CSS が 2D の中身を隠す。3D の世界は 2D の DOM の状態（見えているステージ・`data-done`・`is-missing`）を `MutationObserver` で読み取って合わせるので、ステージの移動や解答の処理は `client.ts` の側だけに書く。解答の 3D（`buildGame`）は、画面全体を使うゲーム。「ゲームスタート」（`data-qg-start`）で `[data-quiz-game]` に `data-play` が付き、CSS が画面全体に固定する（「やめる」`data-qg-exit` で戻る）。学生は一人称の視点で（W A S D で歩き、マウスで見まわす。スタートと画面のクリックで Pointer Lock を取り、取れないときは画面をなぞった分だけ回す。左右の矢印キーでも向きを変える。タッチ端末はスティック `data-qg-stick` とジャンプ `data-qg-jump`）、ランダムに作ったダンジョン（`layout` が部屋のつながりを、`edgesOf` が壁・扉・通り道を決める。開くたびに形が変わる）を進む。壁・床・木の模様は画像を使わず、`surface` がキャンバスに描いて作る（色は `quiz-game.css` の `--qg-rock` などを読む）。右上のミニマップ（`data-qg-map` の 2D の canvas）・案内（`data-qg-quest`）・宝石の数（`data-qg-gems`）は 3D の側が毎フレーム書く。問題は画面に映さず、扉の前の部屋に実物として置く。形式ごとに `choicePuzzle`（玉を「こたえの台座」へ運ぶ）・`orderPuzzle`（棚のブロックを持って入れ替える）・`bugPuzzle`（行のブロックを押す）・`flowPuzzle`（順に押す）・`indentPuzzle`（ブロックを左右にずらす）・`outputPuzzle`（黒板に書く）・`tablePuzzle`（表のますに書く）が `Puzzle`（`sync` / `update` / `answered`）を作り、問題文は `signboard` が石板に書く。文字はどれも `plate`（キャンバスを貼った板）に `wrapText` / `fitText` で描く。答えを持つのは 2D の DOM のステージのままで、3D の側は DOM の部品の `click()` を呼んで答えを入れ（並べ替えは「上へ／下へ」を段の数だけ、選択とバグ探しはラジオ、実行の順番と字下げはそれぞれのボタン）、`sync` で DOM の状態を読み直して置き物に映す。だから、出題の形式に DOM の操作を足したら、その形式の `Puzzle` にも足す。動かせるものは `handle`（`Handle`: `id` / 名前 / `act`（押すと起きること。押せないなら空）/ `use` / 当たり判定の見えない箱 `hit`）で登録し、`pickAt` が `Raycaster` で照準（マウスを固定していないときはカーソル・タップした場所）の先のものを探す。手の届く長さ `REACH` より遠いと「もっと近づこう」になる。合っているものは金色の枠（`selector`）で囲み、`[data-quiz-game]` に `data-qg-aim`、照準の下の `data-qg-act` に `act` の文を出す。持って運ぶもの（玉・ブロック）は `hold` / `take` / `release` で、手もとの別の場面（`hands`）に写しを出す。文字を打つ黒板と表は、画面の外に置いた入力欄 `data-qg-typer` にフォーカスして打たせ、その値を DOM の欄へ写して `input` イベントを出す（`type`。ゲームの間は 2D のステージを `display: none` にしていて、そこの欄にはフォーカスできないため）。いまいる部屋の `Handle` には、同じ数の目印のボタン（`data-qg-spots` の中の `data-qg-spot`。見えている場所に重ね、`data-qg-far` に距離、画面の外なら `data-qg-off`）を作る。Tab キーで選ぶと視点がそのものへ向き、Enter で `use` を呼ぶ（マウスを使えない人のため。動作確認でも、ものの場所を知るのに使う）。扉の右の柱のレバーは 2D の「こたえる！」（`data-qg-answer`）を押したことにし、`client.ts` の `qgCheck` が、そのステージの答えの欄（`a.<問題の ID>`。ステージの `data-quiz-id`）を `data-qg-check`（`/courses/:id/items/:iid/quiz/check`。`routes/quiz/handlers.tsx` の `check`。ゲームの見た目のときだけ、受験は残さない）へ送って確かめる。正解ならステージに `data-qg-passed` を付け、3D の側がそれを `MutationObserver` で見て扉を開ける。まちがいなら、最初の答えを `first[]`（`{ id, fields }` の JSON）としてステージに残し（ゴールの採点は `lib/quiz.ts` の `readFirstAnswers` でこれを使い、最初の答えで数える）、`qg:wrong` イベントを送る（3D の側が `preventDefault` してレバーと動物で知らせる。ノートで答えているときはトースト）。まちがえたあとに正解すると、`qgExplain` が解説（`data-qg-explain`）を開き、`[data-quiz-game]` に `data-qg-explaining` が付く（3D の側はマウスの固定を外し、「つづける」`data-qg-explain-close` で固定し直す。Esc で閉じたときはポーズのメニューを出す）。置き物の 3D モデルは、`rounded`（角の丸い箱）・`lathe`（断面を回した形）・`frameGeometry`（面取りした額縁）を組み合わせて作り、模様は `boxMap` で面の向きごとに貼る（`pedestal` / `lectern` / `orbModel` / `chestModel` など）。HUD の星（`data-qg-opened`）は開けた扉の数。ゴールの宝箱は採点のボタン（`data-qg-submit`）を押したことにする。N キーか「ノート」（`data-qg-note`）は、2D のステージの枠（`.qg-panel`）を画面の真ん中に重ねて開く（`data-qg-open`。「とじる」`data-qg-close`。石板に収まらない長い問題を読むときと、キーボードだけで答えるとき用）。キー操作は、遊んでいる間は画面全体で受け取るが、文字を打っている間とノートを開いている間は Esc（ノートは N も）だけを受け取り、入力欄のキー操作を奪わない。マウスの固定が外れると `data-qg-paused` が付いてメニュー（`.qg-pause`。「つづける」`data-qg-resume`）を出す。タッチ端末（`pointer: coarse`）ではマウスを固定しない。スタートの画面の「3D を使わずに答える」（`data-qg-flat`）は 3D を片付けて `data-flat` を付け、2D のステージに切り替える。3D を描けるときは、遊び始めるまで 2D のステージと「もどる／つぎへ」を隠す。WebGL を使えない端末と、動きを減らす設定では canvas を置かず、2D のまま。3D の動物は、球・円すい・円柱を組み合わせた `ANIMALS`（色は `quiz-game.css` の `--qa-*` を読み取る）で、動物を足すときは `quiz-animal.tsx` の 2D の絵と両方に足す |
-| `QuizReview` / `QuizScoreChip` | 問題ごとの結果（正誤・答え・見せてよいときだけ正解と解説。`lib/quiz.ts` の `reviewQuiz` で作る `QuizReviewItem`）と、受験 1 回の点数（合格ならチップ）。学生の結果と、教師が学生の受験を見る画面（`routes/quiz`）で使う |
-
-### ファイル自動配布 — `src/components/bundle.tsx`
-
-| 部品 | 用途 |
-| --- | --- |
-| `BundleOpen` | ファイル自動配布のアイテムの画面の本体。「VS Code で開く」（`data-vscode-launch` のフォームで、`client.ts` が鍵付きの `vscode://` のリンクを受け取って開く）・拡張機能の案内・データの同期の案内と変更履歴への入口（`sync`。`lib/bundle-sync.ts` の `syncStateOf` で作る）・zip のダウンロード・配るファイルの木。ファイルがなければ空の表示（`editHref` を渡すと教師向けのアップロードへの入口） |
-| `BundleEditPanel` | 編集画面の、配るファイルのアップロード（フォルダー・ファイルの選択とドラッグ＆ドロップ。`client.ts` がフォルダーの中の場所を `paths` として一緒に送る）と削除ボタン付きの木、その下の「データを同期する」の切り替え（`${base}/sync` へのフォーム）。保存のフォームの外に置く（通常モードの `ItemEditPage` と、Moodle モードの `ExtraKind` の `Panel`） |
-| `BundleTree` | 配るファイルのフォルダーの木（`files`、`deleteAction` を渡すと行ごとの削除ボタン） |
-
-### アクセス制限 — `src/components/restriction.tsx`
-
-| 部品 | 用途 |
-| --- | --- |
-| `RestrictionPage` | セクション・アイテムのアクセス制限の編集画面（通常モードと Moodle モード）。左に条件の編集、右に「現在の制限」（説明・「制限をなくす」・`side`）。`editable` でなければ編集の代わりに `notice` |
-| `RestrictionEditor` | 条件の編集（日付・アイテムの完了・評点・ユーザープロフィール・入れ子の制限セット、組み合わせの選択、満たさない学生への表示の目のアイコン）。行の追加は `<template data-rs-template>` を `client.ts` が複製し、送信と入力のたびに行から JSON を組み立てて `availability` に入れる。選べるものは `lib/restriction.ts` の `RestrictionChoices` |
-| `RestrictionNote` | 鍵のアイコン付きの制限の説明（複数行）。学生には満たしていない条件、教師にはすべての条件（`describeRestriction`）を出す |
-
-### AI アシスタント — `src/components/ai-panel.tsx`
-
-| 部品 | 用途 |
-| --- | --- |
-| `AiPanel` | 右に出す AI のパネル。`AppShell` が `c.var.aiPanel`（通常モードは `app.tsx`、Moodle モードは `moodle-mode/app.tsx` で設定。AI を使えない利用者には設定しない）を呼んで、本文の後ろに置く。会話は描いた時点のものをサーバーが出し、そのあと `client.ts` が `template[data-ai-template]` を複製して書き足す（`data-keep` があるので、再読み込みなしの遷移では中身を差し替えない）。送信は `/ai/chat` への POST で、応答は NDJSON（`lib/ai-agent.ts` の `AiAgentEvent`）で届いた分から出す。AI が確認の要るツールを呼ぶと、会話に確認カード（変更前と変更後。複数行の文章は `lib/diff.ts` の差分）を出し、「実行する／取り消す」は `/ai/chat/confirm` への送信で、応答は同じく NDJSON で流れる。AI が `request_file`（`lib/ai-agent.ts` の `REQUEST_FILE`）を呼ぶと、ファイルを選ぶカード（`AiFileEntry`。受け取れる種類は `lib/ai-file-kinds.ts` で、`FileInput` の `accept` になる）を出し、選んだファイルは承認と一緒に同じ `/ai/chat/confirm` へ送る（`data-ai-file`）。受け取れない種類や大きすぎるファイルなら、カードは選ぶ前に戻る。カードを出したあとや送信のあとは、`client.ts` が `/ai/chat`（パネルだけのページ）を取り直して、サーバーの描いたものに置き換える。ヘッダーには今のモデルを出し、入力欄の中の左の電球のボタン（「難しい依頼」。`data-ai-hard`、`aria-pressed`。ホバーとフォーカスで CSS のチップに名前を出す）を押すと、`client.ts` がヘッダーのモデル名と送信する `hard` を切り替える（任せる先は `lib/ai-models.ts` の `AI_HARD_TASK_MODELS`。チャットを開き直したときは、最後の発言で選んでいたかを出す）。応答の作成中（パネルの `data-busy`）は送信のボタンが停止のボタン（`data-ai-stop`）に替わり、押すと `/ai/chat/stop` でサーバーが提供元の呼び出しを中断して、そこまでの本文を「生成を停止しました」の行と一緒に残す（何も答えないうちに止めたら、発言を入力欄に戻す。ほかのタブで作成中の応答も止められる）。入力欄の右のマイクのボタン（`data-ai-voice`。`data-max-seconds` / `data-max-chars` は 1 回に録れる秒数と文字数（`lib/ai-voice.ts` の `MAX_VOICE_SECONDS` / `MAX_VOICE_CHARS`）。本人の OpenRouter の週の枠が残っているときだけ描き、録音できるブラウザでだけ `client.ts` が出す）を押すと音声入力になり、録り始めからの音声を約 1.2 秒ごとに `/ai/voice`（Whisper Large V3 Turbo。`lib/ai-voice.ts`）へ送って、返った文字を入力欄の代わりの `[data-ai-ghost]` に薄く出す（録り始めに入力欄にあった文は普通の色で前に置く）。もう一度押すか送信のボタンで録音を止め、音声全体をもう一度文字にして、入力欄に入れずにそのまま送る（失敗したら途中までの文字を入力欄に残す）。× か Esc で取り消す。録音中は入力欄の下に録った時間と文字数を出し（残り 10 秒・9 割で `data-near`）、どちらかの上限に届くとトーストで知らせてそのまま送る。録音中（`.ai-input[data-voice]`）はパネルを取り直さない。利用状況の右には会話の長さ（`data-ai-context`。`lib/ai-agent.ts` の `contextPercent` で、最後に AI を呼んだときのトークン数の `AI_CONTEXT_COMPACT_AT` に対する %）を出し、押すと `Popover` で説明を開く。100% に達すると、次の発言の前にサーバーが古いやり取りを要約して AI に渡す会話をそこから始め（`AiChatContent.summary` / `compactions`。パネルの会話は消さない）、会話に「これまでの会話を要約しました」の区切りを出す。開閉は端末ごとの設定（`aiPanel`）で、`<html data-ai-open>`。幅 1100px 以上では本文を狭めて横に並べ、それより狭いと本文に重ねる。AI のツールが内容を変えると、何を変えたか（`lib/ai-tool-kit.ts` の `AiTouched`。ツールは `success` の 3 つ目に `inCourse` / `inItem` を渡す）が `applied` として届き、`client.ts` が `data-ai-watch`（`course:<id>` は `CourseLiveSync`、`item:<id>` は編集画面のフォーム・`CodeWorkspace`・アイテムの本文）の付いた画面をその場で取り直して差分を当てる。差し込んだ部分に、追加（`ai-enter`）・移動（`ai-move`。前の位置から滑らせる）・変更（`ai-touch`、大きな入れ物は縁だけ光る `ai-frame`）の印を付け、変えたもの自体を輪郭（`ai-spot`）と「AI が変更」などの札で示す（非表示のものなら編集モードにし、閉じたセクションは開く）。コードのエディターは変わった行を光らせ（`code-editor.ts` の `flashAiLines`）、`CodeWorkspace` は書いている途中でなければ最初のコードを取り直す。編集画面で入力の途中なら差し替えず、上書きの注意をトーストで出す。会話のツールの行と承認したカードには「開く」（`data-ai-spot`）が付き、移った先でも同じように示す。次におすすめの作業や答えの候補があるときは、AI が `suggest_replies`（`lib/ai-agent.ts` の `SUGGEST_REPLIES`。会話の行には出さない）で出した続きの依頼（最大 3 つ）を、応答の下に右寄せのボタン（`data-ai-replies` / `data-ai-suggest`）で出し、押すとそのまま送る。候補は最後の応答のあとにだけ出し（`AiChatContent.replies`）、次の発言や確認カードの承認で消える。入力欄の下の左には今週の枠の使い具合（`lib/ai-agent.ts` の `AiUsageMeter`。枠ごとの細いバーと主な枠の %）を出し、押すと `Popover` で枠ごと（Claude 全体・Sonnet のみ）のバーとリセットの日時を開く。8 割で `data-high`（警告色）、使えない枠は `data-state` で赤くなる。応答のあとは `done` の `usage` で `client.ts`（`paintAiUsage`）が同じ `data-ai-meter` の行を書き換え、「難しい依頼」の枠を使い切ったら電球のボタンを押せなくする（`hardOff`） |
-| `AiPanelToggle` | ヘッダーの右に置く開閉ボタン |
-
-### PDF — `src/components/pdf.tsx`
-
-| 部品 | 用途 |
-| --- | --- |
-| `PdfBar` | PDF のアイテムで `AppShell` の `topbar` に渡す帯（パンくず・タイトル・「ビューアー / ブラウザ」の切り替え・`children` の操作ボタン）。帯そのものは `components/course.tsx` の `ItemBar`（`type` か `icon`（種類のアイコンの代わり。Moodle モードの `KindIcon` など）/ `crumbs` / `title` / `hiddenNote` / `children`）で、アイテムを画面いっぱいに出すほかの画面（コード・アイテムの編集画面）もこれを使う。切り替えは保存せず、`client.ts` がその場で `PdfStage` の中身を入れ替える（開いているあいだは再読み込みなしの遷移でも保ち、再読み込みすると既定のビューアーに戻る） |
-| `PdfStage` | ヘッダーの下いっぱいの PDF 表示。既定は pdf.js の自作ビューアー（`src/pdf-viewer.ts`。`client.ts` が PDF のある画面でだけ読み込む）、ブラウザを選ぶと iframe でブラウザ標準のビューアー（サーバーは両方を描き、iframe は選ばれるまで `hidden` のまま `src` を入れない）。ビューアーは左にページのサムネイルの一覧を出し（ツールバーの左端のボタンで開閉。開閉は端末ごとの設定（`pdfThumbs`）に保存し、スマホ幅では閉じた状態から始めてページに重ねて出す）、今のページを `aria-current` で示す |
-
-ログイン前の画面（`AuthShell`）の右側は、`src/auth-art.ts` が three.js で描く 3D アニメーション（背景は無地で、台座の上で小さなキューブが 14 種類の形（ロケット・ネコ・家・アイスクリームなど。`MODELS`）に組み上がっては組み替わる。クリックでつつくとキューブが弾け、3 回続けると次の形へ。ドラッグで回せる）。`data-auth-art` の要素に `client.ts` が canvas を置き、再読み込みなしの遷移では同じ canvas を新しい要素へ移して続きから動かす。色は `--art-deep` / `--art-mid` / `--art-bright` / `--art-shine` とコースの色（`tone-*`）を読み取る。スマホ幅（非表示）では three.js を読み込まない
-
-クラス名を条件で組み立てるときは `components/cx.ts` の `cx('a', cond && 'b')` を使う。
+- ログイン後は `AppShell`、ログイン前は `AuthShell` で必ず包む。コース配下の画面では `AppShell` の `tone` にコースの色を渡す
+- アイテムを画面いっぱいに出す画面（PDF・コード・アイテムの編集画面）は、`AppShell` の `topbar` に `ItemBar` を渡す
+- アイテムの編集画面（通常モードと Moodle モードの `ItemEditPage`）は、左の列（`editor-main` / `editor-extra`）にカード、右の列（`editor-side`）に設定のカードを置く
+- コースの内容を見せる画面（コースページ・アイテム）には `CourseLiveSync` を置く。コースの版は描画の前に読む（読み出しの後だと変更を取りこぼす）
 
 ### 部品を足す・直すとき
 
-- 2 か所以上で同じマークアップを書いたら部品にする。置き場所はボタンなら `button.tsx`、入力なら `form.tsx`、箱や表なら `card.tsx`、ダイアログやメニューなら `overlay.tsx`、その他の表示は `ui.tsx`、コース専用なら `course.tsx`
+- 2 か所以上で同じマークアップを書いたら部品にし、上の表の該当するファイルに置く。表には 1 行で足す（props や挙動の説明は書かない）
 - 見出しは `title` ではなく `heading` で受ける（`title` は HTML のツールチップ属性とぶつかる）
-- 見た目の違いは `variant` / `size` / `tone` のような文字列リテラルのユニオンで受け、CSS の修飾クラス（`btn-primary` など）に対応させる。真偽値を何個も並べない
-- 残りの属性は `...rest` で要素に渡し、型は `JSX.IntrinsicElements['button']` などと交差させる（`data-*` や `aria-*` をそのまま受けられる）
-- 部品が出すクラスは `src/client.ts` も参照している（`btn-success` の切り替え、`data-toggle-password` など）。名前を変えるときは `client.ts` も検索する
-- 部品を足したら、この表にも追記する
+- 見た目の違いは `variant` / `size` / `tone` のような文字列リテラルのユニオンで受け、CSS の修飾クラスに対応させる。真偽値を何個も並べない
+- 残りの属性は `...rest` で要素に渡し、型は `JSX.IntrinsicElements['button']` などと交差させる
+- 部品が出すクラスや `data-*` は `client.ts` も参照している。名前を変えるときは `client.ts` も検索する
+- 新しい部品は、描画時に `useStyle('/src/components/<部品>.css')` で自分の CSS を登録する
+- 2 か所に足さないと動かないものがある
+  - マスコットの足場: `mascot.css` の `.mascot-yard-block.is-<名前>` と、`client.ts` の `WALKER_GROUNDS`
+  - 小テストの出題形式: `lib/quiz.ts` の `QUIZ_KINDS` と種類ごとの分岐、`components/quiz.tsx` の編集欄・解答・結果、`client.ts` の `quizAnswered`
+  - 小テストの動物: `quiz-animal.tsx` の `QUIZ_ANIMALS` と `quiz-game.css` の色
+  - AI のツールが変えた内容をその場で反映する画面: 画面の要素に `data-ai-watch`（`item:<id>`。コースは `CourseLiveSync` が `course:<id>` を持つ）と、ツールの `success` の 3 つ目に `lib/ai-tool-kit.ts` の `inCourse` / `inItem`
 
-アイテムの編集画面（通常モードの `routes/content/views.tsx` と Moodle モードの `moodle-mode/views.tsx` の `ItemEditPage`）は、`AppShell` の `topbar` に `ItemBar` を渡し、その `children` に `components/course.tsx` の `ItemEditActions`（「編集中」・表示・保存（`ITEM_FORM` のフォームを送る）と、削除を入れた「その他の操作」）を置く。本文は `content.css` の `.item-editor` で、横幅いっぱい（最大 1920px）のグリッドの左の列にカード（`editor-main` / `editor-extra`）、右の列（`editor-side`）に設定のカードを置く。右の列はスクロールしても見えたまま止まり、画面より高ければその中だけスクロールする。幅 900px 以下では 1 列にして、設定を最後に回す。ファイルのアイテムの今のファイルと差し替えの欄は `ItemFileField`（幅があれば横に並べる）。アクセス制限の画面（`RestrictionPage`）は、従来の `.editor-head` / `.editor` のまま
+### アイコン
 
-`src/components/layout.tsx` の `AppShell`（ログイン後。コース配下の画面では `tone` にコースの色を渡す。`topbar` に中身を渡すとヘッダーにその画面の見出しや操作を置き、レールを畳んで本文をヘッダーの下いっぱいに広げる。例は PDF のアイテム）/ `AuthShell`（ログイン前）で必ず包む。コース配下の画面は `components/course.tsx` の `CourseHeader` でタブを出す。
+`<Icon name="..." size={16} />`（`components/icons.tsx`）。[Heroicons](https://heroicons.com/) の 24px outline だけを使い、足すときは `import foo from 'heroicons/24/outline/<名前>.svg?raw'` で読み込んで `svgs` に加える。パスを手書きしたり、アイコンフォントや画像を使ったりしない。
 
-アイコンは `<Icon name="..." size={16} />`（`components/icons.tsx`）。使える名前は `svgs` のキー。アイコンは [Heroicons](https://heroicons.com/) の 24px outline だけを使い、足すときは devDependency の `heroicons` から `import foo from 'heroicons/24/outline/<名前>.svg?raw'` で読み込んで `svgs` に加える（ビルド時に文字列として埋め込まれるので、実行時の依存は増えない）。パスを手書きしたり、外部のアイコンフォントや画像を使ったりしない。
+## CSS
 
-## よく使う CSS クラス
-
-- レイアウト: `stack` `stack-lg`（縦並び）、`row`、`grid-2`、`toolbar`、`form-actions`
-- 戻るリンク: `back-link`（`<a href="/courses" class="back-link"><Icon name="chevronLeft" size={16} />コース一覧</a>`。コースヘッダーの上に置く、親へ戻るだけの小さなリンク。粗いポインターでは高さが `--tap` になる）
-- 文字: `muted`、`small`、`strong`、`truncate`、`eyebrow`、`sr-only`
-- スマホで隠す列: `hide-sm`
-
-新しいクラスを作る前に、`grep -rn "^\.<名前>" src --include='*.css'` で似たものがないか探す。
-
-## CSS の置き場所と読み込み
-
-CSS は 1 ファイルにまとめず、使う部品・画面の隣に置く。ページには、そのページで描かれた部品が使う CSS だけが `<link>` で読み込まれる。
+### 置き場所と読み込み
 
 | ファイル | 中身 | 読み込まれる条件 |
 | --- | --- | --- |
-| `src/styles/base.css` | デザイントークン・リセット・共通ユーティリティ（`stack` `row` `muted` `form-actions` `toolbar` `row-actions` など）・アニメーション | 常に |
-| `src/components/<部品>.css` | その `.tsx` の部品の見た目（`button.css` なら `Button` / `IconButton`） | 部品が描かれたとき |
-| `src/routes/<ルート>/<ルート>.css` | その画面だけで使うクラス（`courses/courses.css` ならセクションやアイテムの行） | 画面が `<Styles use={[...]} />` で登録したとき |
+| `src/styles/base.css` | デザイントークン・リセット・共通ユーティリティ・アニメーション | 常に |
+| `src/components/<部品>.css` | その部品の見た目 | 部品が `useStyle` で登録したとき |
+| `src/routes/<ルート>/<ルート>.css` | その画面だけで使うクラス | 画面が `<Styles use={[...]} />` で登録したとき |
 
-- 部品は描画時に `useStyle('/src/components/button.css')` で自分の CSS を登録する（`src/components/style.tsx`）。新しい部品を作ったら、使う CSS をこれで登録する
-- 画面専用の CSS は、その画面の `views.tsx` のマークアップの先頭に `<Styles use={['/src/routes/courses/courses.css']} />` を置いて登録する
-- CSS ファイルを足したら、`src/components/style.tsx` の `STYLESHEETS` に追加する。並びがカスケードの順（同じ詳細度なら後ろが勝つ）なので、上書きしたいファイルより後ろに置く。パスは型で決まるので、登録し忘れや書き間違いは型チェックで分かる
-- ビルドでは `src/**/*.css` がすべてクライアント側の入力になる（`vite.config.ts`）。追加の設定は要らない
-- 再読み込みなしの画面遷移では、移動先に必要で未読み込みの CSS を、読み込み終わってから本文を差し替える（`client.ts` の `loadStyles`）。読み込み済みの CSS は外さない
-
-## CSS を書くとき
-
-- 入力欄とボタンの高さはトークン（`--control-h` / `--control-h-sm` / `--control-h-lg`）で揃えている。数値を直接書かない
-- 色・角丸・影は必ずトークン（`var(--surface)` `var(--border)` `var(--text-2)` `var(--muted)` `var(--primary)` `var(--radius)` `var(--shadow)` など）を使う。色コードを直接書かない
-- 文字の大きさは `--fs-xs`（12px）/ `--fs-sm` / `--fs-base` / `--fs-md` / `--fs-lg` / `--fs-xl` / `--fs-2xl` / `--fs-3xl`（ページの見出し）/ `--fs-display`（数字と、ダッシュボードのヒーローの見出し）から選ぶ。数値を直接書かない（例外は、iOS の拡大を避ける入力欄の 16px と、ロゴ・`kbd` のような部品固有の大きさ）
-- 見た目は「色のにじむ背景の上に、半透明のガラスの面を置く」。背景の色は `layout.css` の `.content::before` が描き、右上はコースの色（`--c1`、コースの外ではブランドのシアン）になる
-- ページに直接置く面（カード・タイル・表・検索欄など）は `background: var(--glass)` ＋ `border: 1px solid var(--glass-border)` ＋ `box-shadow: var(--shadow-card)` にする。ホバーで持ち上げるのは `@media (hover: hover)` の中で `background: var(--glass-hover)` ＋ `--shadow` ＋ `translateY(-2px)`。`--glass` はグラデーションなので `background` にだけ使い、`color-mix()` には渡さない（薄くしたい面は `--glass-faint`）
-- カードには `backdrop-filter` を付けない（枚数だけぼかしを合成し直すことになり、スクロールが重くなる。背景はなめらかなグラデーションなので、半透明だけでガラスに見える）。ぼかし（`backdrop-filter: var(--glass-blur)`）は、本文の上に重なる面だけに付ける: ヘッダー（`--glass-chrome`）、広がったレール・ポップオーバー・日時のパネル・トースト・AI パネル（`--glass-raised`）、モーダル・確認ダイアログ（`--glass-modal`）。スマホ幅で下から出すシートは、下に固定した行で中身を隠すので不透明（`--surface-raised`）のまま
-- ヘッダー（`.topbar`）の中に置くポップオーバーは不透明にしてある（`view-transition-name` の付いた要素はぼかしの範囲を区切るので、ヘッダーの外へはみ出した部分がぼけない）。同じ理由で、`backdrop-filter` や `view-transition-name` の付いた要素の中に、その外へはみ出すガラスの面を置かない
-- アイテムを読む画面（`content.css` の `.reader` の中）の面は、影を `--shadow-rest`（輪郭だけ）にする。本文・前後のアイテム・目次がそれぞれ浮いて見えると、読む画面が落ち着かないため。持ち上げるのはホバーしたリンクだけ
-- カードの中に置く面（入力欄・行・小さな部品）は、これまでどおり不透明の `--surface` / `--surface-2` と `--card-border` を使う。長い本文を読む面（`.reader-sheet`）は透け方を抑えた `--glass-read`
-- 透明感を減らす設定・コントラストを上げる設定（`prefers-reduced-transparency` / `prefers-contrast`）では、`base.css` がガラスのトークンを不透明の面に置き換える。ガラスの面は必ずトークンで書く（`rgb(255 255 255 / 0.6)` のように直接書くと、この切り替えが効かない）
-- 状態色を文字に使うときは `--danger-text` / `--success-text` / `--warning-text` / `--info-text`（`--danger` などは背景や枠用。白地で文字にすると薄い）。塗りのボタンは `--danger-strong` / `--success-strong`
-- フォーカスは全体の `:focus-visible`（`--focus` の outline）に任せる。入力欄は `border-color: var(--focus)` と `box-shadow: var(--ring-field)`、角丸の小さな部品のリングは `var(--ring)`
-- トークンを足すときは `:root` と `:root[data-theme='dark']` の両方に定義する。ダークモードは OS の設定ではなく、利用者がヘッダーのユーザーメニューで選んだときだけ（端末ごとの設定の `theme` → `<html data-theme>`。サーバーは常にライトで描き、`renderer.tsx` の `<head>` の小さなスクリプトが描画前にダークへ切り替える）。ダーク用の上書きは `[data-theme='dark'] .foo` で書き、`prefers-color-scheme` は使わない。ダークモードで必ず見た目を確認する
-- 薄い色は `color-mix(in srgb, var(--primary) 12%, transparent)` で作る
-- コースの色は `tone-${color}` クラスと `--c1` / `--c2` を使う
-- 選択中のタブ・メニュー・セクション番号など「今いる場所」の色は `--c-ink`（文字）/ `--c-soft`（背景）を使う。コースの外ではブランドのシアン、`AppShell` に `tone={access.course.color}` を渡したコース配下の画面ではそのコースの色になる。主ボタンは `--primary`（ライトでは黒）のまま
-- `--primary` の塗りは主ボタン（`--primary-fill` のグラデーション）とスイッチのオンだけに使う。切り替え（`SegmentedControl` / Markdown エディターの `md-modes`）は `--track` ＋ `inset` の `--track-border` のトラックに、つまみ（`--thumb` ＋ `--shadow-sm` ＋ `inset` の `--card-border`）、現在地（`Tabs` / 目次 / レール）は `--c-soft` で示す
-- ダッシュボード（`routes/dashboard/`）は、左に「あいさつ（コースを作れる人には右に「コースを作成」）→ マイコース（縦書きの見出しと、カードにせず線で区切った行。進み具合を数えているコースの学生には行の右に `Progress`）→ マスコットの遊び場（`MascotYard`）」、右に「カレンダー（進行中のコースの終了日）→ 管理の入口（管理者）→ 今日のヒント」を並べる。数字のタイルや大きなヒーローは置かない。組み替えは `@container`（AI パネルを開くと本文だけが狭くなるため、画面の幅では決めない）
-- アイテムを読む画面の目次（`.reader-outline`）はカードにせず、左の線だけで区切る。見出しの右の `OutlineToggle`（`components/course.tsx`）で閉じると、ボタンだけを残した細い帯になり本文が広がる。閉じたかどうかはアイテムの種類ごとの端末の設定（`outlineHidden`。`.reader` の `data-outline-kind` の値を覚える。Moodle モードは extra の種類か活動名）で、`<html data-outline-closed>` で出し分ける。最初の描画前に当てるのは `lib/settings.ts` の `BOOT_SCRIPT`。幅 900px 以下では目次が本文の下に回るので、ボタンを出さず常に開いておく
-- 見出しの段は「ページタイトル `--fs-3xl` → カード・セクションの見出し `--fs-lg` → 行のタイトル `--fs-md` → 本文 `--fs-base` → メタ `--fs-sm` / `--fs-xs`」の 5 段にする。間の大きさを新しく作らない
-- 操作部品（入力欄・チェック・スイッチ）の輪郭は `--field-border`、ほかの面の上に重なる面は `--surface-raised`（輪郭は `--overlay-border`）を使い、粗いポインター（`@media (max-width: 640px), (pointer: coarse)`）でのタップ領域は `--tap` 以上にする
-- `:hover` は `@media (hover: hover)` の中に書く（タッチ端末でタップ後にホバーの見た目が残らないように）。押下（`:active`）のフィードバックは `base.css` の `@media (hover: none)` にまとめる（背景は `--press`、カード類は `scale(0.985)`）。ボタンの押下は `button.css` にある
-- 入力欄（1 行入力・`select`・`textarea`・Markdown エディター・画像プレビュー）の角丸は `--radius-field`、ボタン・タブ・検索欄・Segmented はピル（`999px`）にする
-- 用語: コースの中身のまとまりは「教材」、1 件の単位は「アイテム」と呼ぶ
-- スマホ対応は既存のブレークポイント（`max-width: 640px` / `900px`）に合わせる
+- CSS ファイルを足したら `components/style.tsx` の `STYLESHEETS` に追加する。並びがカスケードの順なので、上書きしたいファイルより後ろに置く
+- 新しいクラスを作る前に `grep -rn "^\.<名前>" src --include='*.css'` で似たものを探す。よく使うのは `stack` `stack-lg` `row` `grid-2` `toolbar` `form-actions` `back-link` `muted` `small` `strong` `truncate` `eyebrow` `sr-only` `hide-sm`
+- クラス名は kebab-case の `ブロック-要素`（`course-card` `course-title`）。状態は `is-done` `active` `has-error`
 - 関係する既存ブロック（`/* ===== */` の見出しで区切られている）の近くに追記する
-- クラス名は kebab-case で、`ブロック-要素` の形（`course-card` `course-title`）。状態は `is-done` `active` `has-error`
 
-### デザイントークン（`src/styles/base.css`）
+### 値はトークンで書く
 
-| 用途 | トークン |
-| --- | --- |
-| ガラス | `--glass`（ページに直接置くカードの面。左上が明るいグラデーション）/ `--glass-hover`（ホバー）/ `--glass-faint`（非表示のセクションなど、薄く見せる面）/ `--glass-read`（長い本文を読む面）/ `--glass-raised`（ぼかしを付けて重ねる面）/ `--glass-modal`（暗くした背景の上のモーダル）/ `--glass-chrome`（ヘッダー）/ `--glass-border`（ガラスの面の輪郭）/ `--glass-blur`（`backdrop-filter` の値）/ `--scrim`（モーダルの後ろを暗くする色） |
-| 背景の色 | `--aura-2` / `--aura-3`（左下・左上ににじむ色）/ `--aura-1-mix` / `--aura-2-mix` / `--aura-3-mix`（にじむ濃さ。濃くすると、背景に直接置いた `--muted` の文字が読みにくくなる） |
-| グラデーションの塗り | `--primary-fill` / `--primary-fill-hover`（主ボタン）/ `--progress-fill`（進捗バー） |
-| 面 | `--bg`（ページの背景）/ `--chrome`（トップバー・レール）/ `--surface`（カード・表）/ `--surface-2` / `--surface-3`（一段沈んだ面・ホバー）/ `--surface-raised`（ポップオーバー・モーダル・ダイアログ・トースト・スマホのドロワー。ダークでは影の代わりに `--surface` より明るくして高さを示す） |
-| 線 | `--border` / `--border-strong`（区切り線・ホバー時の枠）/ `--card-border`（白い面の輪郭）/ `--field-border`（入力欄・チェック・スイッチなど操作部品の輪郭。背景に対して 3:1 以上）/ `--overlay-border`（`--surface-raised` の面の輪郭）/ `--control-border`（枠だけのボタンの輪郭。ダークでは半透明の白）|
-| 操作部品の面 | `--control-bg`（枠だけのボタンの面。ライトは `--surface`、ダークは半透明の白でカードから浮かせる）/ `--track` / `--track-border`（Tabs・Segmented・`md-modes` のトラック。半透明なのでどの面の上でも一段沈んで見える）/ `--thumb`（Segmented・`md-modes` の選択中のつまみ）/ `--press`（タッチ端末での押下の背景）/ `--success-strong-hover` / `--danger-strong-hover`（`--success-strong` / `--danger-strong` の塗りのホバー・押下） |
-| 文字 | `--text` / `--text-2` / `--muted`（メタ情報）/ `--on-primary`（`--primary` の上）/ `--on-strong`（`--danger-strong` / `--success-strong` の塗りの上。両テーマとも白） |
-| 中立色の値 | ライト: `--bg #e9edf5` `--chrome #f6f7f9` `--surface-2 #f5f6f8` `--surface-3 #e9ecef` `--border #e7e9ec` `--border-strong #d5d9de` `--text-2 #363a41` `--muted #5a5f67`。ダーク: `--bg #0a0b0d` `--chrome #141518` `--surface #16171a` `--surface-2 #1e1f23` `--surface-3 #2a2b30` `--border #26282c` `--border-strong #36383d` `--text #eceef1` `--text-2 #c3c6cc` `--muted #8e9299`（どちらもわずかに寒色に寄せてそろえている。灰色を足すときもこの温度に合わせる） |
-| 寸法 | `--control-h` / `--control-h-sm`（スマホ幅では 40px）/ `--control-h-lg`、`--tap`（44px。粗いポインターでの最小タップ寸法）、`--radius-sm` / `--radius` / `--radius-lg` / `--radius-field`（入力欄の角丸。12px）、`--brand-mark`（ロゴの幅と高さ。`layout.css` がトップバーの左余白の計算に使う） |
-| コースの色 | `tone-*` が `--c1` / `--c2` / `--c-on`（塗りの上の文字。既定は白）/ `--c-deep`（白文字を載せても 4.5:1 になる塗り。黒文字のトーンでは `--c1`。頭文字のバッジ `.dot` やダッシュボードのタイルに使う）/ `--c-ink` / `--c-soft` を決める |
+色・角丸・影・文字の大きさ・操作部品の高さは、`base.css` のトークンを使う。数値や色コードを直接書かない。
+
+- 文字の大きさは「ページタイトル `--fs-3xl` → カード・セクションの見出し `--fs-lg` → 行のタイトル `--fs-md` → 本文 `--fs-base` → メタ `--fs-sm` / `--fs-xs`」の段から選び、間の大きさを作らない（例外は iOS の拡大を避ける入力欄の 16px と、ロゴ・`kbd` などの部品固有の大きさ）
+- 入力欄とボタンの高さは `--control-h` / `--control-h-sm` / `--control-h-lg`
+- 状態色を文字に使うときは `--danger-text` などの `-text`（`--danger` は背景や枠用で、文字にすると薄い）。塗りのボタンは `--danger-strong` / `--success-strong`
+- 「今いる場所」（選択中のタブ・メニュー・セクション番号）は `--c-ink` / `--c-soft`。コース配下ではコースの色になる。主ボタンは `--primary` のまま
+- `--primary` の塗りは主ボタンとスイッチのオンだけ。切り替え（`SegmentedControl` など）はトラック（`--track`）とつまみ（`--thumb`）で示す
+- 操作部品の輪郭は `--field-border`、ほかの面の上に重なる面は `--surface-raised`（輪郭は `--overlay-border`）
+- 薄い色は `color-mix(in srgb, var(--primary) 12%, transparent)`
+- 灰色を足すときは、既存の中立色と同じわずかに寒色に寄せた温度に合わせる
+- トークンを足すときは `:root` と `:root[data-theme='dark']` の両方に定義する
+
+### ガラスの面
+
+背景の色のにじみ（`layout.css` の `.content::before`）の上に、半透明のガラスの面を置く。
+
+- ページに直接置く面（カード・タイル・表・検索欄）は `--glass` ＋ `--glass-border` ＋ `--shadow-card`。`--glass` はグラデーションなので `background` にだけ使い、`color-mix()` には渡さない（薄くするなら `--glass-faint`）
+- カードの中に置く面（入力欄・行・小さな部品）は不透明の `--surface` / `--surface-2` と `--card-border`
+- カードには `backdrop-filter` を付けない。枚数だけぼかしを合成し直すことになり、スクロールが重くなる。ぼかし（`--glass-blur`）は本文の上に重なる面（ヘッダー・ポップオーバー・トースト・AI パネル・モーダル）にだけ付ける
+- `backdrop-filter` や `view-transition-name` の付いた要素の中に、その外へはみ出すガラスの面を置かない（ぼかしの範囲が区切られて、はみ出した部分がぼけない。ヘッダーの中のポップオーバーが不透明なのはこのため）
+- スマホ幅で下から出すシートは、下に固定した行で中身を隠すので不透明（`--surface-raised`）のまま
+- アイテムを読む画面（`.reader`）の面は影を `--shadow-rest` にする。本文・前後のアイテム・目次がそれぞれ浮いて見えると落ち着かないため
+- ガラスの面は必ずトークンで書く。`prefers-reduced-transparency` / `prefers-contrast` で `base.css` がトークンを不透明の面に置き換えるので、`rgb(255 255 255 / 0.6)` のように直接書くと切り替えが効かない
+
+### ダークモード
+
+利用者がユーザーメニューで選んだときだけ（`<html data-theme>`）。サーバーは常にライトで描き、`renderer.tsx` の `<head>` のスクリプトが描画前に切り替える。上書きは `[data-theme='dark'] .foo` で書き、`prefers-color-scheme` は使わない。
+
+### 操作と形
+
+- `:hover` は `@media (hover: hover)` の中に書く（タッチ端末でタップ後にホバーの見た目が残らないように）。押下のフィードバックは `base.css` の `@media (hover: none)` にまとめてある
+- ホバーで持ち上げる面は `--glass-hover` ＋ `--shadow` ＋ `translateY(-2px)`
+- フォーカスは全体の `:focus-visible` に任せる。入力欄は `border-color: var(--focus)` と `box-shadow: var(--ring-field)`
+- 入力欄の角丸は `--radius-field`、ボタン・タブ・検索欄・Segmented はピル（`999px`）
+- 粗いポインター（`@media (max-width: 640px), (pointer: coarse)`）ではタップ領域を `--tap` 以上にする
+- ブレークポイントは既存の `max-width: 640px` / `900px` に合わせる。AI のパネルを開くと本文だけが狭くなるので、本文の中の組み替えは画面の幅ではなく `@container` で決める
+- マスコットは `transform` ではなく `translate` / `scale` / `rotate` で動かしている。表情やポーズの `transform` と打ち消し合わないように、動きを足すときも合わせる
+- ダッシュボードに数字のタイルや大きなヒーローは置かない
 
 ## マークアップ
 
-- 操作はリンクか `<form method="post">`。送信ボタンは `<Button type="submit">` / `<IconButton type="submit">`（部品の `type` の既定は `button`）
+- 操作はリンクか `<form method="post">`
 - 送信に時間がかかるフォームには `data-loading-form`（二重送信防止）
-- 取り消せない操作のフォームには `data-confirm="〜しますか？"`
-  - 確認は画面の中央に出し、ほかを操作できなくする。`data-confirm-scope` を付けた要素（`position` が `static` 以外のもの）の中のフォームでは、その要素の上だけを覆って中央に出し、外は操作できるまま残す（例は `AiPanel`）
+- 取り消せない操作のフォームには `data-confirm="〜しますか？"`。`data-confirm-scope` を付けた要素の中では、確認がその要素の上だけを覆う
 - `select` を変えたら即送信するフォームには `data-autosubmit`
-- 編集画面の保存ボタンには `data-save-shortcut`（⌘S / Ctrl+S で押される。フォームの外に置くときは `form="<id>"` を付ける）
-- 開閉は `<details>` / `<summary>` で作る（ボタンの下に出すパネルは `Popover` 部品）
-- モーダルは `Modal` 部品と `<Button popovertarget="...">` で作る（開閉・Esc・外側クリックをブラウザに任せられる。例は `components/course.tsx` の `CreateCourseButton`）。自前で書く場合も `popover` は値まで書く（真偽値で書くと hono が `popover="true"` と出力し、manual 扱いになって Esc や外側のクリックで閉じない）。`<dialog>` は開閉の処理を `client.ts` に書くことになるので使わない
+- 編集画面の保存ボタンには `data-save-shortcut`（⌘S / Ctrl+S。フォームの外に置くときは `form="<id>"`）
+- 開閉は `<details>` / `<summary>`、ボタンの下に出すパネルは `Popover`
+- モーダルは `Modal` と `<Button popovertarget="...">`。自前で書くときも `popover` は値まで書く（真偽値で書くと hono が `popover="true"` と出力し、manual 扱いになって Esc や外側のクリックで閉じない）。`<dialog>` は開閉の処理を `client.ts` に書くことになるので使わない
 - 先読みさせたくないリンク（ログアウト・ダウンロードなど）は `data-no-prefetch`
-- リンクとフォーム送信は `client.ts` が fetch に置き換え、body を差し替えて再読み込みなしで遷移する。通常の遷移で開かせたいリンク・フォームには `data-reload`（`download` 付きのリンクと `target` 付きは自動で対象外）
-- 遷移しても DOM ごと残したい要素（開いたまま保ちたいサイドバーなど）には `id` と `data-persist` を付ける。その要素は丸ごと差し替えず、新しいページとの違い（属性・文字・増減した子要素）だけを書き換える。入力途中の値まで持ち越されるので、フォームには付けない
-- ダッシュボード・レールのマイコースには、サーバーが進行中のコースだけを描く。コース一覧には、参加しているコースのうち開始前のもの（教師として登録しているコースは除く）以外を描き、管理者にはすべてのコースを描く。コース一覧の絞り込み（「進行中 / すべて」と管理者の「登録外も表示」）は端末ごとの設定で、`client.ts` が端末ごとの設定（`coursesAll` / `coursesOthers`）から `<html>` に `data-courses-all` / `data-courses-others` を付け、`base.css` が `data-course-ended` / `data-course-unenrolled` の要素を隠す。サーバーは候補のコースをすべて描き、件数や空の表示は既定（進行中・参加しているコースだけ）で描く。件数は `[data-course-list]` の中の `[data-course-count]`、絞り込みで空になったときの案内は `[data-courses-empty]` に置くと `client.ts` が合わせる
-- コースの内容を見せる画面（コースページ・アイテム）には `components/course.tsx` の `CourseLiveSync` を置く。`client.ts` が 10 秒ごとにコースの版（`lib/courses.ts` の `courseRevision`。`/courses/:id/` 配下の POST で進む）を確かめ、変わっていたら同じ URL を取り直して、前回描いた内容との差分だけを `<main>` に当てる。入力中の欄・開いているポップオーバーやモーダル・再生中の動画を含む部分は、使い終わるまで差し替えない。比べるのは `<main>` とヘッダーの帯（`.topbar-main`）で、エディターを組み込んだ入力欄（`[data-code-ready]` / `[data-md-ready]`）は中を比べず丸ごと差し替えて組み込み直す。描画前に版を読むこと（読み出しの後だと変更を取りこぼす）
-- body を差し替えても `<script>` は実行されないので、専用スクリプトを読み込むページは自動で通常の読み込みになる。毎回の表示で必要な初期化は `client.ts` の `initPage()` に足す
-- 入力欄には `label`、アイコンボタンには `aria-label`、状態は `aria-pressed` / `aria-invalid` で伝える
-- 文言はすべて日本語
+- 通常の遷移で開かせたいリンク・フォームには `data-reload`（`download` や `target` 付きは自動で対象外）
+- 遷移しても DOM ごと残したい要素には `id` と `data-persist`。違いだけを書き換えるので入力途中の値も持ち越される。フォームには付けない
+- 端末ごとの設定で絞り込む表示（コース一覧の「進行中 / すべて」など）は、サーバーが候補をすべて描き、`client.ts` が `<html>` の `data-*` で隠す
+- 入力欄には `label`、アイコンボタンには `aria-label`、状態は `aria-pressed` / `aria-invalid`
+- 用語: コースの中身のまとまりは「教材」、1 件の単位は「アイテム」
 
 ## クライアント JS（src/client.ts）
 
-- データを変える操作はフォーム送信で作り、`client.ts` で画面遷移なしに反映する。テーマのような表示だけの状態は端末ごとの設定に保存し、`client.ts` が読んで表示を切り替える（POST のルートは作らない）
-- 要素には `data-*` 属性で目印を付け、`document` へのイベント委譲で拾う（要素ごとに addEventListener しない）
+- データを変える操作はフォーム送信で作る。テーマのような表示だけの状態は端末ごとの設定に保存し、POST のルートは作らない
+- 要素には `data-*` で目印を付け、`document` へのイベント委譲で拾う（要素ごとに addEventListener しない）
+- body を差し替えても `<script>` は実行されない。毎回の表示で要る初期化は `initPage()` に足す
 - 区切りは `// --- 何の処理か` の見出しに合わせる
-- `fetch` するときは `Accept: application/json` を付け、サーバー側は `wantsJson(c)` で分岐する（`add-page` スキル参照）
+- `fetch` するときは `Accept: application/json` を付け、サーバーは `wantsJson(c)` で分ける
 - 失敗したら元の状態に戻し、`toast('〜できませんでした。', 'error')` を出す
-- 端末ごとの設定は `lib/settings.ts` の `getSetting('theme')` / `setSetting('editMode', true)` / `updateSetting('collapsedSections', (ids) => …)` で読み書きする。中身は localStorage の `settings` 1 つに JSON でまとめて保存する。項目を足すときは `SETTINGS` のスキーマに `.catch(既定値)` 付きで足す（キー名と値の型が補完・型チェックされる）。localStorage を直接触るキーを新しく作らない
-- それ以外で `localStorage` を使うときは try/catch で包む
-- ライブラリは入れない。`alert` / `confirm` は使わず、確認は `data-confirm` の独自ダイアログを使う
+- 端末ごとの設定は `lib/settings.ts` の `getSetting` / `setSetting` / `updateSetting` で読み書きし、項目は `SETTINGS` のスキーマに `.catch(既定値)` 付きで足す。localStorage を直接触るキーを新しく作らない。それ以外で `localStorage` を使うときは try/catch で包む
+- `alert` / `confirm` は使わず、確認は `data-confirm` の独自ダイアログを使う
 
 ## 確認
 

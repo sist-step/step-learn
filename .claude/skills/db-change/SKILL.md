@@ -24,7 +24,7 @@ Moodle モード（`MOODLE_URL` を設定したとき）は `data/moodle-mode.db
 
 - `migrations/` の既存ファイル（SQL・`meta/` のスナップショットと journal）を編集・削除しない
 - マイグレーションの SQL を手で書かない。必ず `db:generate` で作る
-- 他の PR が先にマイグレーションを追加した場合は、ベースブランチを取り込み、自分のマイグレーションを消してから作り直す
+- 他の PR が先にマイグレーションを追加した場合は、ベースブランチを取り込む。自分のマイグレーションを消して作り直すのは、自分の開発 DB 以外に適用していないことをユーザーに確かめてからにする。適用済みなら消さず（その DB と食い違うため）、journal と最後のスナップショットだけを直して両立させる
 
 ## schema.ts の書き方
 
@@ -74,7 +74,7 @@ if (!res.changes) return c.notFound()
 ```
 
 - better-sqlite3 は同期 API なので、`.get()`（1 行。なければ `undefined`）/ `.all()` / `.run()` で同期的に実行する。`await` は付けない
-- 件数は `await db.$count(table, 条件)`。SELECT の列に置けば相関サブクエリになる（`participants.tsx` の `done`、`lib/courses.ts` の `memberCount` 参照）
+- 件数は `await db.$count(table, 条件)`。SELECT の列に置けば相関サブクエリになる（`participants/handlers.tsx` の `done`、`lib/courses.ts` の `memberCount` 参照）
 - 結果のプロパティは schema.ts の camelCase（`createdAt`、`fileKey`）。必要な列だけを `select({ ... })` で選ぶ
 - 条件の組み立ては `and()` / `or()` に `undefined` を混ぜると無視されるので、検索語が空のときなどは `q ? or(...) : undefined` と書く
 - 部分一致の検索は `like()` ではなく `contains(column, q)`（`lib/db.ts`）。入力の `%` `_` をエスケープする
@@ -90,4 +90,4 @@ if (!res.changes) return c.notFound()
 ## データを消すとき
 
 - 外部キーの `cascade` に任せ、子テーブルを個別に DELETE しない
-- ストレージのファイルなど DB の外にあるものは、DB から消す前に `file_key` を SELECT しておき、消したあと `inBackground(deleteKeys(...))` で消す（`content.tsx` のセクション削除参照）
+- ストレージのファイルなど DB の外にあるものは、DB から消す前に `file_key` を SELECT しておき、消したあと `inBackground(deleteKeys(...))` で消す（`content/handlers.tsx` のセクション削除参照）

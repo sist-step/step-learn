@@ -27,10 +27,10 @@ npm run db:check
 ## 2. 動作確認
 
 ```sh
-npm run dev   # http://localhost:5173
+npm run dev -- --port <番号> --strictPort
 ```
 
-- 開発サーバーはバックグラウンドで起動し、終わったら止める
+- 開発サーバーはバックグラウンドで起動し、終わったら止める。worktree では 5173 番（メイン）・5174 番（Moodle 検証環境）を使わず、worktree を作ったときに表示されたポートで起動する
 - ログインが必要な画面は、開発用のユーザーを作ってから確かめる。`npm run dev:users` で `data/step-learn.db` に `admin` / `teacher` / `student`（メールアドレスは `<ユーザー名>@example.com`、パスワードはユーザー名と同じ）を作る。すでにいれば、ユーザー名とパスワードをこの形に戻す
   - `npm run user:create` を使わないのは、パスワードの規則（8 文字以上・推測されやすい語は不可）でユーザー名と同じパスワードが弾かれるため
 
