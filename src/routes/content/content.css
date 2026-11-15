@@ -185,7 +185,10 @@
   padding: 4px 0 4px 20px;
   border-left: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
 }
-.outline-head { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 14px; }
+.outline-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; column-gap: 8px; row-gap: 2px; padding: 0 8px 14px; }
+.outline-head > :not(.outline-toggle) { grid-column: 1; }
+.outline-toggle { grid-column: 2; grid-row: 1 / span 2; margin: -6px -10px 0 0; }
+.outline-toggle .icon { transition: rotate 0.2s; }
 .outline-head a { color: var(--text); }
 .outline-section + .outline-section { margin-top: 14px; }
 .outline-section.is-empty + .outline-section.is-empty { margin-top: 0; }
@@ -216,7 +219,17 @@
 .outline-link.active .outline-kind { color: var(--c-ink); }
 .outline-dot .icon { stroke-width: 3; }
 
+/* 幅の狭い画面で閉じないのは、目次が本文の下に回って本文の幅を取らないため */
+@media (min-width: 901px) {
+  :root[data-outline-closed] .reader { grid-template-columns: minmax(0, 1fr) auto; }
+  :root[data-outline-closed] .reader-outline { padding-left: 8px; overflow: visible; }
+  :root[data-outline-closed] .outline-head { display: block; padding: 0; }
+  :root[data-outline-closed] :is(.reader-outline > :not(.outline-head), .outline-head > :not(.outline-toggle)) { display: none; }
+  :root[data-outline-closed] .outline-toggle { margin: 0; }
+  :root[data-outline-closed] .outline-toggle .icon { rotate: 180deg; }
+}
 @media (max-width: 900px) {
+  .outline-toggle { display: none; }
   .reader { grid-template-columns: minmax(0, 1fr); gap: 28px; }
   .reader-outline { position: static; max-height: none; padding: 20px 0 0; border-top: 1px solid color-mix(in srgb, var(--text) 14%, transparent); border-left: 0; }
 }

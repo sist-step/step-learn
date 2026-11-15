@@ -23,6 +23,7 @@ import {
   LinkEmbed,
   LinkTargetField,
   linkOpenAttrs,
+  OutlineToggle,
 } from '../../components/course'
 import { cx } from '../../components/cx'
 import { Icon } from '../../components/icons'
@@ -411,7 +412,7 @@ export const ItemPage = ({
       {/* コードのアイテムで本文の欄を出さないのは、エディターを画面いっぱいに置き、ページをスクロールさせないため */}
       {code && waitsFor(item, 'view') && <span hidden data-complete-on-view={completeUrl(item)} />}
       {!code && (
-        <div class="reader">
+        <div class="reader" data-outline-kind={item.type}>
           <article class="reader-main" data-ai-watch={`item:${item.id}`}>
             {!pdf && head}
 
@@ -574,6 +575,7 @@ export const ItemPage = ({
                   <span data-progress-done>{tracked.filter((o) => done.has(o.id)).length}</span> / {tracked.length} 完了
                 </span>
               )}
+              <OutlineToggle />
             </div>
             {outlineSections.map(({ section: s, items }) => (
               <div class={cx('outline-section', items.length === 0 && 'is-empty')}>

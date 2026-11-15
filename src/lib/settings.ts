@@ -17,6 +17,7 @@ const SETTINGS = z.object({
   collapsedSections: z.array(z.string()).catch([]),
   aiPanel: z.boolean().catch(false),
   mdSplit: z.boolean().catch(true),
+  outlineHidden: z.array(z.string()).catch([]),
 })
 
 export type Settings = z.infer<typeof SETTINGS>
@@ -82,4 +83,6 @@ function migrateLegacy(): Settings {
 
 // client.ts で当てないのは、module のスクリプトは描画のあとに動くので、ダークの人に一瞬ライトの画面が見えてしまい、AI のパネルを開いている人には本文の幅が一瞬広く見えてしまうため
 // 幅の狭い画面で AI のパネルを開き直さないのは、本文を覆って出るので、ページを開くたびに本文が隠れてしまうため
-export const BOOT_SCRIPT = `try{var s=JSON.parse(localStorage.getItem(${JSON.stringify(SETTINGS_KEY)}));if(s.theme==='dark'){document.documentElement.dataset.theme='dark';document.querySelector('meta[name=color-scheme]').content='dark'}if(s.aiPanel&&matchMedia(${JSON.stringify(AI_PANEL_DOCKED)}).matches)document.documentElement.dataset.aiOpen=''}catch(e){}`
+// 目次を閉じた種類を CSS の属性セレクターで書き出さないのは、種類（Moodle の活動名を含む）が増えるたびに CSS を直すことになるため
+// MutationObserver で待つのは、<head> で動くこのスクリプトからは、まだ解析されていないアイテムの種類が見えないため（描画の前に呼ばれるので、閉じた目次が一瞬見えることはない）
+export const BOOT_SCRIPT = `try{var s=JSON.parse(localStorage.getItem(${JSON.stringify(SETTINGS_KEY)}));if(s.theme==='dark'){document.documentElement.dataset.theme='dark';document.querySelector('meta[name=color-scheme]').content='dark'}if(s.aiPanel&&matchMedia(${JSON.stringify(AI_PANEL_DOCKED)}).matches)document.documentElement.dataset.aiOpen='';var h=s.outlineHidden;if(Array.isArray(h)&&h.length){var o=new MutationObserver(function(){var r=document.querySelector('.reader[data-outline-kind]');if(!r)return;o.disconnect();if(h.indexOf(r.dataset.outlineKind)>=0)document.documentElement.dataset.outlineClosed=''});o.observe(document.documentElement,{childList:true,subtree:true});addEventListener('DOMContentLoaded',function(){o.disconnect()})}}catch(e){}`
