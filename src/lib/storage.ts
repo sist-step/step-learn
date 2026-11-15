@@ -1,11 +1,10 @@
-import { AwsClient } from 'aws4fetch'
 import fs from 'node:fs'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { formatBytes } from './bytes'
 import { config } from './config'
 
-// 教材ファイルの保存先。開発はローカルディスク、本番は R2（S3 互換 API）。
+// 教材ファイルの保存先（ローカルディスクの data/files）。
 // キーは courses/{courseId}/{random}/{filename} の形にして、コース削除時に prefix 単位で消せるようにしている。
 
 export const MAX_FILE_SIZE = 30 * 1024 * 1024 // 30MB
@@ -49,13 +48,12 @@ interface Storage {
   put(key: string, file: File, contentType: string): Promise<void>
   delete(keys: string[]): Promise<void>
   deletePrefix(prefix: string): Promise<void>
-  /** ダウンロード用のレスポンス。R2 では署名付き URL へのリダイレクトを返し、Node を経由させない */
+  /** ダウンロード用のレスポンス */
   serve(key: string, opts: ServeOptions): Promise<Response | null>
   /** 先頭から最大 maxBytes を読む（テキストのプレビュー用） */
   read(key: string, maxBytes: number): Promise<Uint8Array | null>
 }
 
-// 署名付き URL のクエリに載せるため空白を含めない（"+" と "%20" の解釈差で署名がずれるのを避ける）
 const disposition = ({ filename, inline }: ServeOptions) =>
   `${inline ? 'inline' : 'attachment'};filename*=UTF-8''${encodeURIComponent(filename)}`
 
@@ -135,81 +133,7 @@ class LocalStorage implements Storage {
   }
 }
 
-class R2Storage implements Storage {
-  private client: AwsClient
-  private base: string
-
-  constructor(r2: NonNullable<typeof config.r2>) {
-    this.client = new AwsClient({
-      accessKeyId: r2.accessKeyId,
-      secretAccessKey: r2.secretAccessKey,
-      service: 's3',
-      region: 'auto',
-    })
-    this.base = `https://${r2.accountId}.r2.cloudflarestorage.com/${r2.bucket}`
-  }
-
-  private url(key: string) {
-    return `${this.base}/${key.split('/').map(encodeURIComponent).join('/')}`
-  }
-
-  private async send(url: string, init?: RequestInit) {
-    const res = await this.client.fetch(url, init)
-    if (!res.ok && res.status !== 404) throw new Error(`R2 ${init?.method ?? 'GET'} ${res.status}: ${await res.text()}`)
-    return res
-  }
-
-  async put(key: string, file: File, contentType: string) {
-    await this.send(this.url(key), {
-      method: 'PUT',
-      body: await file.arrayBuffer(),
-      headers: { 'Content-Type': contentType },
-    })
-  }
-
-  async delete(keys: string[]) {
-    // 少数ずつ並列に削除（教材ファイルは 1 コースあたり多くても数百件程度）
-    for (let i = 0; i < keys.length; i += 10) {
-      await Promise.all(keys.slice(i, i + 10).map((k) => this.send(this.url(k), { method: 'DELETE' })))
-    }
-  }
-
-  async deletePrefix(prefix: string) {
-    let token: string | undefined
-    do {
-      const q = new URLSearchParams({ 'list-type': '2', prefix, ...(token ? { 'continuation-token': token } : {}) })
-      const xml = await (await this.send(`${this.base}?${q}`)).text()
-      const keys = [...xml.matchAll(/<Key>([^<]+)<\/Key>/g)].map((m) => unescapeXml(m[1]))
-      await this.delete(keys)
-      token = xml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/)?.[1]
-    } while (token)
-  }
-
-  async serve(key: string, opts: ServeOptions) {
-    const url = new URL(this.url(key))
-    // 動画・音声はシークのたびに署名付き URL へ Range で取り直すので、視聴の途中で期限が切れないよう長めにする
-    url.searchParams.set('X-Amz-Expires', opts.inline ? '3600' : '300')
-    url.searchParams.set('response-content-type', servedType(opts))
-    url.searchParams.set('response-content-disposition', disposition(opts))
-    const signed = await this.client.sign(url.toString(), { method: 'GET', aws: { signQuery: true } })
-    return new Response(null, { status: 302, headers: { Location: signed.url, 'Cache-Control': 'private, no-store' } })
-  }
-
-  async read(key: string, maxBytes: number) {
-    const res = await this.send(this.url(key), { headers: { Range: `bytes=0-${maxBytes - 1}` } })
-    return res.status === 404 ? null : new Uint8Array(await res.arrayBuffer())
-  }
-}
-
-const unescapeXml = (s: string) =>
-  s
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, '&')
-
-export const storage: Storage = config.r2 ? new R2Storage(config.r2) : new LocalStorage(path.resolve(config.filesDir))
+export const storage: Storage = new LocalStorage(path.resolve(config.filesDir))
 
 const safeName = (name: string) => name.replace(/[\\/\p{Cc}]/gu, '_').slice(-120) || 'file'
 

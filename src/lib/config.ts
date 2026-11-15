@@ -92,16 +92,6 @@ export const config = {
   /** Moodle モードで使う DB。step-learn.db とは別にして、完全移行のときに持ち込まないようにする */
   moodleDatabasePath: path.join(dataDir, 'moodle-mode.db'),
   filesDir: path.join(dataDir, 'files'),
-  /** R2 の 4 項目がすべて設定されていれば R2、なければローカルディスクに保存 */
-  r2:
-    env.R2_ACCOUNT_ID && env.R2_ACCESS_KEY_ID && env.R2_SECRET_ACCESS_KEY && env.R2_BUCKET
-      ? {
-          accountId: env.R2_ACCOUNT_ID,
-          accessKeyId: env.R2_ACCESS_KEY_ID,
-          secretAccessKey: env.R2_SECRET_ACCESS_KEY,
-          bucket: env.R2_BUCKET,
-        }
-      : null,
   /** SMTP_HOST が設定されていれば SMTP で送信、なければメール本文をサーバーログに出す */
   smtp: loadSmtp(),
   /** MOODLE_URL が設定されていれば Moodle モード（Moodle をバックエンドにして、STEP Learn は画面だけを受け持つ） */

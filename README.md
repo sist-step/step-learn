@@ -1,7 +1,7 @@
 # STEP Learn
 
 Moodle の「よく使う機能だけ」を、速く・安く・使いやすく作り直した軽量 LMS です。
-Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はローカルディスク、本番は Cloudflare R2 に保存します。
+Node.js（Hono）＋ SQLite で動き、教材ファイルはサーバーのローカルディスク（`data/files`）に保存します。
 1 台の小さな VPS で十分に動く構成です。
 
 ## 機能（現時点）
@@ -84,8 +84,8 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルは開発時はロー�
 | --- | --- |
 | 速さ | SSR（hono/jsx）＋ 小さなクライアント JS。リンクとフォーム送信を fetch に置き換え、ホバー時の先読みと View Transitions で再読み込みなしに遷移する（SPA）。JavaScript は必須で、無効なブラウザには有効化を求める案内だけを表示する |
 | DB | `better-sqlite3`（WAL モード）＋ Drizzle ORM。DB サーバーは要らない。テーブル定義は `src/lib/schema.ts` で、マイグレーションは drizzle-kit で生成する。クエリも Drizzle のクエリビルダーで書き、結果に型が付く |
-| コスト | 必要なのは Node.js が動くサーバー 1 台だけ。R2 を使う場合、ダウンロードは署名付き URL で R2 から直接配信されるので、サーバーの帯域を使わない（R2 は転送料無料） |
-| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`aws4fetch`（R2 用、数 KB）・`nodemailer`（確認メールの SMTP 送信）・`better-sqlite3`・`drizzle-orm`・`socket.io`（画面共有の中継）・`zod`（入力の検証。同じ規則をブラウザでも使うので、ブラウザ側は軽量版の `zod/mini`）・`@anthropic-ai/sdk`（Claude の呼び出し）・`yauzl`（ファイル自動配布でアップロードされた zip の展開）だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる。ブラウザ側のライブラリは入力の検証の `zod/mini` と、Markdown エディターの CodeMirror、コードのエディターの Emmet（HTML の略記の展開）と Prettier（コードの整形）、ログイン画面の 3D アニメーションの three.js、PDF ビューアーの pdf.js だけ。CodeMirror はエディターのある画面でだけ（HTML / CSS / JavaScript / Python の文法と Emmet は、コードのアイテムとその編集画面でだけ）、Prettier は整形したときだけ、three.js はログイン前の画面でだけ、pdf.js は PDF のアイテムをビューアーで開いたときだけ読み込む |
+| コスト | 必要なのは Node.js が動くサーバー 1 台だけ。DB も教材ファイルも同じサーバーのディスクに置く |
+| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`nodemailer`（確認メールの SMTP 送信）・`better-sqlite3`・`drizzle-orm`・`socket.io`（画面共有の中継）・`zod`（入力の検証。同じ規則をブラウザでも使うので、ブラウザ側は軽量版の `zod/mini`）・`@anthropic-ai/sdk`（Claude の呼び出し）・`yauzl`（ファイル自動配布でアップロードされた zip の展開）だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる。ブラウザ側のライブラリは入力の検証の `zod/mini` と、Markdown エディターの CodeMirror、コードのエディターの Emmet（HTML の略記の展開）と Prettier（コードの整形）、ログイン画面の 3D アニメーションの three.js、PDF ビューアーの pdf.js だけ。CodeMirror はエディターのある画面でだけ（HTML / CSS / JavaScript / Python の文法と Emmet は、コードのアイテムとその編集画面でだけ）、Prettier は整形したときだけ、three.js はログイン前の画面でだけ、pdf.js は PDF のアイテムをビューアーで開いたときだけ読み込む |
 | セキュリティ | PBKDF2（60 万回、ログイン時に旧設定のハッシュを再計算）、推測されやすいパスワードの拒否、ログイン失敗と確認メール・再設定メール送信のレート制限、登録画面と再設定画面からメールアドレスの登録有無がわからない設計、セッション Cookie は HMAC-SHA256 で署名しトークンは SHA-256 で保存、Microsoft アカウントでのログインは認可コードフロー（PKCE・state・nonce）で確かめ、持ち主を確認済みのメールアドレスだけを既存のアカウントとの照合に使う、CSRF 対策は Origin 検証と SameSite=Lax、ファイルは権限を確認したうえで配信（PDF と画像以外は添付として返す） |
 
 ## 開発
@@ -337,21 +337,12 @@ CI はチェックだけを行い、デプロイはしません。Actions の画
 
 1. Docker（Compose v2.24 以上）を入れ、ラベル `self-hosted` / `linux` と、ラベル `beta` を付けたランナーを登録する（ランナーのユーザーが `docker` を実行できること）
 2. GitHub の Environment `beta` に設定値を登録する。デプロイのたびに、ここから `.env` をランナーの一時ディレクトリに書き出してコンテナに渡し、終わったら消します
-   - Secrets：`SESSION_SECRET` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `SMTP_PASS` / `MOODLE_EXCHANGE_TOKEN` / `MOODLE_BACKCHANNEL_SECRET` / `OPENROUTER_API_KEY` / `CLAUDE_API_KEY` / `MICROSOFT_CLIENT_SECRET`
-   - Variables：`APP_ORIGIN` / `TRUST_PROXY` / `R2_ACCOUNT_ID` / `R2_BUCKET` / `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `MAIL_FROM` / `MOODLE_URL` / `AI_EMAIL_DOMAIN` / `MICROSOFT_CLIENT_ID` / `MICROSOFT_TENANT`
+   - Secrets：`SESSION_SECRET` / `SMTP_PASS` / `MOODLE_EXCHANGE_TOKEN` / `MOODLE_BACKCHANNEL_SECRET` / `OPENROUTER_API_KEY` / `CLAUDE_API_KEY` / `MICROSOFT_CLIENT_SECRET`
+   - Variables：`APP_ORIGIN` / `TRUST_PROXY` / `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `MAIL_FROM` / `MOODLE_URL` / `AI_EMAIL_DOMAIN` / `MICROSOFT_CLIENT_ID` / `MICROSOFT_TENANT`
    - 使わない項目は登録しなくてかまいません。値に `'` と改行は使えません
    - Moodle モードで動かす場合は `MOODLE_URL` などを登録します
 3. ホスト側のポートを変える場合は変数 `DEPLOY_HOST_PORT` を、公開するアドレスを変える場合は変数 `DEPLOY_HOST_BIND` を、Environment かリポジトリに設定する
 4. 必要に応じて、Environment に承認者などの保護ルールを設定する
-
-### 教材ファイルを Cloudflare R2 に保存する
-
-1. Cloudflare ダッシュボードで R2 バケットを作成する（例 `step-learn-files`）
-2. 「R2 API トークンを管理」で、そのバケットへの「オブジェクト読み取りと書き込み」権限を持つトークンを発行する
-3. `.env` に `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` を設定して再起動する
-
-4 つすべてが設定されていると R2 に保存され、未設定ならローカルディスクに保存されます。
-ダウンロードは、アプリで閲覧権限を確認したあと、有効期限 5 分の署名付き URL へリダイレクトして配信します。
 
 ## ディレクトリ構成
 
