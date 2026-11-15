@@ -25,6 +25,8 @@ import { agentHtml } from './agent-webview'
 import { EXCLUDED_GLOB, isExcluded, relativePath } from './history'
 import { SyncError, parseServer } from './sync'
 
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
+
 /** globalState のキー。値は「サーバー アイテムの ref」ごとのつないだアイテム */
 const CONNECTIONS_KEY = 'agentConnections'
 const tokenKey = (key: string) => `agentToken:${key}`
@@ -238,9 +240,8 @@ export class AgentController implements vscode.WebviewViewProvider {
     })
   }
 
-  private async receive(m: unknown) {
-    if (typeof m !== 'object' || m === null || !('type' in m)) return
-    const msg = m as { type: string; text?: unknown; key?: unknown; id?: unknown; ok?: unknown; file?: unknown; query?: unknown }
+  private async receive(msg: unknown) {
+    if (!isObject(msg)) return
     if (msg.type === 'ready') this.render()
     else if (msg.type === 'send' && typeof msg.text === 'string' && msg.text.trim()) await this.send(msg.text.trim())
     else if (msg.type === 'stop') this.chatOf(this.current)?.running?.abort()
