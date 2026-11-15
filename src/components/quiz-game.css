@@ -1,0 +1,390 @@
+/* ===== 小テスト: 動物のキャラクター（QuizAnimal） */
+/* 体の色を base.css のトークンにしないのは、キャラクターの絵の色で、ライトとダークで変えず、ほかの画面でも使わないため */
+:where(.quiz-game, .qa) {
+  --qg-purple: #8f7fd0;
+  --qg-orange: #f5a55a;
+  --qg-navy: #4a66a0;
+  --qg-green: #6fc452;
+  --qg-pink: #f7bfcd;
+  --qg-red: #f0655a;
+  --qg-brown: #b97a4a;
+  --qg-yellow: #ffd45c;
+  --qg-rock: #8a8ba3;
+  --qg-rock-dark: #55566e;
+  --qg-night: #14121d;
+  --qg-flame: #ffb24a;
+  --qg-gold: var(--warning);
+  --qa-ink: #2b2733;
+  --qa-white: #fffdf7;
+  --qa-cheek: #ff9aa5;
+}
+:is(.qa-choice, .quiz-game [data-quiz-q='choice'], .quiz-game [data-quiz-kind='choice']) { --qa-main: var(--qg-purple); --qa-sub: #e4dcfa; --qa-accent: #f7a531; }
+:is(.qa-output, .quiz-game [data-quiz-q='output'], .quiz-game [data-quiz-kind='output']) { --qa-main: var(--qg-orange); --qa-sub: #fdebd3; --qa-accent: #f58fa0; --qa-shade: #dc8436; }
+:is(.qa-order, .quiz-game [data-quiz-q='order'], .quiz-game [data-quiz-kind='order']) { --qa-main: var(--qg-navy); --qa-accent: #f7a531; }
+:is(.qa-bug, .quiz-game [data-quiz-q='bug'], .quiz-game [data-quiz-kind='bug']) { --qa-main: var(--qg-green); --qa-sub: #cdf0b6; }
+:is(.qa-flow, .quiz-game [data-quiz-q='flow'], .quiz-game [data-quiz-kind='flow']) { --qa-main: var(--qg-pink); --qa-accent: #ef8fa6; }
+:is(.qa-indent, .quiz-game [data-quiz-q='indent'], .quiz-game [data-quiz-kind='indent']) { --qa-main: var(--qg-red); }
+:is(.qa-table, .quiz-game [data-quiz-q='table'], .quiz-game [data-quiz-kind='table']) { --qa-main: var(--qg-brown); --qa-sub: #f3dcc0; --qa-accent: #f3b58f; --qa-shade: #99603a; }
+
+.qa { flex: none; overflow: visible; }
+.qa-main { fill: var(--qa-main); }
+.qa-sub { fill: var(--qa-sub); }
+.qa-accent { fill: var(--qa-accent); }
+.qa-shade { fill: var(--qa-shade); }
+.qa-white, .qa-shine { fill: var(--qa-white); }
+.qa-ink { fill: var(--qa-ink); }
+.qa-cheek { fill: var(--qa-cheek); opacity: 0.75; }
+.qa-round { stroke-width: 2.5; stroke-linejoin: round; }
+.qa-main.qa-round { stroke: var(--qa-main); }
+.qa-accent.qa-round { stroke: var(--qa-accent); }
+.qa-ink.qa-round { stroke: var(--qa-ink); }
+.qa-line { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.qa-ink-line { stroke: var(--qa-ink); stroke-width: 2.6; }
+.qa-shade-line { stroke: var(--qa-shade); stroke-width: 3; }
+.qa-whisker { stroke: var(--qa-ink); stroke-width: 1.4; opacity: 0.45; }
+.qa-limb { stroke: var(--qa-main); stroke-width: 5.5; }
+
+.qa .qa-happy, .qa .qa-sad { display: none; }
+:is(.qa[data-mood='happy'], .qa[data-mood='sad'], [data-done] .qa) .qa-normal { display: none; }
+:is(.qa[data-mood='happy'], [data-done] .qa) .qa-happy { display: inline; }
+.qa[data-mood='sad'] .qa-sad { display: inline; }
+.qa-eyes.qa-normal { transform-box: fill-box; transform-origin: center; animation: qa-blink 4.6s infinite; }
+@keyframes qa-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.12); } }
+
+/* ===== 小テスト: ゲームの見た目の解答（GameTake） */
+.quiz-game { scroll-margin-top: calc(var(--topbar-h) + 16px); }
+.qg-lead { margin: 0 0 8px; font-weight: 600; }
+
+.qg-track { position: relative; display: flex; align-items: center; margin: 0 0 18px; padding: 12px 8px; list-style: none; overflow-x: auto; scrollbar-width: none; }
+.qg-step { display: flex; align-items: center; flex: none; }
+.qg-step + .qg-step::before { content: ''; width: clamp(10px, 2.6vw, 28px); margin: 0 4px; border-top: 3px dotted var(--border-strong); }
+.qg-node {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--qa-main) 16%, var(--surface));
+  cursor: pointer;
+  transition: transform 0.2s var(--ease), border-color 0.2s, background 0.2s;
+}
+.qg-node:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.qg-node-no {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--card-border);
+  color: var(--text-2);
+  font: 700 var(--fs-xs) / 20px var(--font);
+  font-variant-numeric: tabular-nums;
+  translate: -50% 0;
+}
+.qg-node-star { position: absolute; top: -6px; right: -6px; display: none; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 1px var(--card-border); color: var(--qg-gold); }
+.qg-node-star > .icon, .qg-star > .icon { fill: currentColor; }
+.qg-node[data-done] .qg-node-star { display: grid; animation: pop 0.3s var(--ease); }
+.qg-node[aria-current] { border-color: var(--qa-main); background: color-mix(in srgb, var(--qa-main) 30%, var(--surface)); transform: scale(1.14); }
+.qg-node[aria-current] > .qa { animation: qg-bob 1.6s ease-in-out infinite; }
+.qg-node.is-missing { border-color: var(--danger); }
+.qg-goal > .qg-node, .qg-goal-stage { --qa-main: var(--qg-gold); }
+.qg-goal > .qg-node > .icon { color: var(--text-2); }
+@media (hover: hover) {
+  .qg-node:not([aria-current]):hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--qa-main) 60%, transparent); }
+}
+
+.qg-stages { margin: 0; padding: 0; list-style: none; }
+.qg-stage {
+  border: 2px solid color-mix(in srgb, var(--qa-main) 50%, transparent);
+  border-radius: calc(var(--radius-lg) + 6px);
+  box-shadow: 0 6px 0 color-mix(in srgb, var(--qa-main) 24%, transparent);
+  animation: qg-next 0.28s var(--ease);
+}
+/* .quiz-q が display を決めているので、hidden 属性だけでは消えない */
+.qg-stage[hidden], .qg-nav > .btn[hidden] { display: none; }
+[data-qg-dir='-1'] .qg-stage { animation-name: qg-prev; }
+@keyframes qg-next { from { opacity: 0; transform: translateX(28px); } }
+@keyframes qg-prev { from { opacity: 0; transform: translateX(-28px); } }
+@keyframes qg-bob { 50% { transform: translateY(-3px); } }
+@keyframes qg-hop { 40% { transform: translateY(-14px) scale(1.06); } 70% { transform: translateY(0) scale(0.96, 1.04); } }
+
+.qg-host { display: flex; align-items: flex-end; gap: 16px; }
+.qg-host > .qa { animation: qg-bob 2.4s ease-in-out infinite; }
+.qg-stage[data-done] > .qg-host > .qa { animation: qg-hop 0.55s var(--ease); }
+.qg-bubble { position: relative; display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; margin-bottom: 8px; padding: 10px 16px 12px; border-radius: 18px; background: color-mix(in srgb, var(--qa-main) 16%, transparent); }
+/* 四角を回して重ねないのは、半透明の面どうしが重なったところだけ濃く見えるため */
+.qg-bubble::before { content: ''; position: absolute; bottom: 16px; left: -9px; width: 10px; height: 16px; background: inherit; clip-path: polygon(100% 0, 0 50%, 100% 100%); }
+.qg-bubble p { margin: 0; }
+.qg-stage-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-weight: 700; }
+.qg-kind { padding: 1px 10px; border-radius: 999px; background: var(--surface); color: var(--text-2); font-size: var(--fs-xs); font-weight: 600; }
+.qg-hint { color: var(--text-2); font-size: var(--fs-sm); }
+.qg-stage > .quiz-prompt { font-weight: 600; }
+.qg-goal-flag { display: grid; place-items: center; flex: none; width: 88px; height: 88px; border-radius: 50%; background: color-mix(in srgb, var(--qg-gold) 20%, transparent); color: var(--qg-red); }
+.qg-goal-count { margin: 0; font-size: var(--fs-md); font-variant-numeric: tabular-nums; }
+.qg-goal-count > strong { font-size: var(--fs-xl); }
+.qg-goal-stage > .btn { align-self: center; min-width: 220px; }
+
+.quiz-game .quiz-choices { gap: 10px; counter-reset: qg-choice; }
+.quiz-game label.quiz-choice {
+  position: relative;
+  min-height: 52px;
+  border-width: 2px;
+  border-radius: 16px;
+  box-shadow: 0 3px 0 var(--border-strong);
+  counter-increment: qg-choice;
+  transition: transform 0.1s, box-shadow 0.1s, border-color 0.15s, background 0.15s;
+}
+.quiz-game label.quiz-choice > input { position: absolute; opacity: 0; pointer-events: none; }
+.quiz-game label.quiz-choice::before {
+  content: counter(qg-choice, upper-alpha);
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.quiz-game label.quiz-choice:has(input:checked) { border-color: var(--qa-main); background: color-mix(in srgb, var(--qa-main) 14%, var(--surface)); box-shadow: 0 3px 0 var(--qa-main); }
+.quiz-game label.quiz-choice:has(input:checked)::before { background: var(--qa-main); color: var(--qa-ink); animation: pop 0.25s var(--ease); }
+.quiz-game label.quiz-choice:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.quiz-game label.quiz-choice:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--border-strong); }
+
+.qg-nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-top: 22px; }
+.qg-nav > .btn { min-width: 132px; }
+.qg-nav > [data-qg-go='-1'] { justify-self: start; }
+.qg-nav > :is([data-qg-go='1'], [data-qg-submit]) { grid-column: 3; justify-self: end; }
+.qg-count { grid-column: 2; margin: 0; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.qg-count > strong { color: var(--text); font-size: var(--fs-xl); }
+
+/* ===== 小テスト: ゲームの見た目の結果（GameResult） */
+.qg-result {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 28px;
+  padding: 28px 20px 24px;
+  border: 2px solid var(--glass-border);
+  border-radius: calc(var(--radius-lg) + 6px);
+  background: var(--glass-read);
+  box-shadow: var(--shadow-rest);
+  text-align: center;
+  overflow: hidden;
+}
+.qg-result.is-clear { border-color: color-mix(in srgb, var(--qg-gold) 55%, transparent); background: linear-gradient(color-mix(in srgb, var(--qg-gold) 14%, transparent), transparent 62%), var(--glass-read); }
+.qg-result p { margin: 0; }
+.qg-crowd { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; }
+.qg-result.is-clear .qg-crowd > .qa { animation: qg-hop 0.7s var(--ease) 3; }
+.qg-result.is-clear .qg-crowd > .qa:nth-child(3n + 2) { animation-delay: 0.12s; }
+.qg-result.is-clear .qg-crowd > .qa:nth-child(3n) { animation-delay: 0.24s; }
+.qg-result-title { font-size: var(--fs-3xl); font-weight: 800; letter-spacing: 0.02em; }
+.qg-stars { display: flex; align-items: flex-end; gap: 6px; }
+.qg-star { color: var(--surface-3); }
+.qg-star > .icon { stroke: var(--border-strong); }
+.qg-star:nth-child(2) { translate: 0 -6px; }
+.qg-star.is-on { color: var(--qg-gold); animation: qg-star 0.5s 0.15s var(--ease) backwards; }
+.qg-star.is-on > .icon { stroke: color-mix(in srgb, var(--qg-gold) 70%, var(--text)); }
+.qg-star.is-on:nth-child(2) { animation-delay: 0.4s; }
+.qg-star.is-on:nth-child(3) { animation-delay: 0.65s; }
+@keyframes qg-star { from { opacity: 0; transform: scale(0.2) rotate(-40deg); } 70% { transform: scale(1.25) rotate(8deg); } }
+.qg-result-score { font-size: var(--fs-lg); font-variant-numeric: tabular-nums; }
+.qg-result-score > strong { font-size: var(--fs-display); font-weight: 800; line-height: 1; }
+.qg-result > .btn { margin-top: 10px; }
+
+.qg-confetti { position: absolute; inset: 0; pointer-events: none; }
+.qg-confetti > i { position: absolute; top: -14px; left: calc(var(--i) * 6.2% + 3%); width: 8px; height: 13px; border-radius: 2px; background: var(--qg-gold); opacity: 0; animation: qg-confetti 1.9s calc(var(--i) * 0.07s) ease-in forwards; }
+.qg-confetti > i:nth-child(5n + 1) { background: var(--qg-red); }
+.qg-confetti > i:nth-child(5n + 2) { background: var(--qg-green); animation-duration: 2.3s; }
+.qg-confetti > i:nth-child(5n + 3) { background: var(--qg-purple); }
+.qg-confetti > i:nth-child(5n + 4) { background: var(--qg-pink); animation-duration: 1.6s; }
+@keyframes qg-confetti { from { opacity: 1; transform: translateY(0) rotate(0); } to { opacity: 0; transform: translateY(280px) rotate(540deg); } }
+
+/* ===== 小テスト: ゲームの見た目の 3D の世界（src/quiz-world.ts） */
+/* 3D を読み込む前から高さを取っておくのは、読み込んだあとに下の問題が押し下げられて、読んでいる場所がずれるのを防ぐため */
+.qg-world { position: relative; display: flex; flex-direction: column; justify-content: center; height: 230px; }
+.qg-world[data-qg-world='take'] {
+  height: 360px;
+  margin-bottom: 16px;
+  border-radius: calc(var(--radius-lg) + 6px);
+  background: linear-gradient(color-mix(in srgb, var(--qg-navy) 16%, transparent), color-mix(in srgb, var(--qg-green) 12%, transparent));
+  overflow: hidden;
+}
+.qg-world[data-qg-world='result'] { align-items: center; align-self: stretch; gap: 8px; }
+.qg-world > .qg-track { margin: 0; }
+.qg-world-canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.4s; }
+.qg-world-canvas.is-pointing { cursor: pointer; }
+.qg-world-canvas:focus-visible { outline: 2px solid var(--focus); outline-offset: -3px; }
+.qg-world[data-ready] > .qg-world-canvas { opacity: 1; }
+.qg-world[data-ready] > .qg-track { visibility: hidden; }
+
+/* ===== 小テスト: 画面全体の 3D ゲーム（src/quiz-world.ts が data-play / data-qg-paused / data-qg-open / data-qg-aim を付け外しする） */
+/* ゲームの部品は、3D を描けたときだけ出す。描けないときは、下の 2D のステージをそのまま使う */
+.qg-start, .qg-hud, .qg-pad, .qg-panel-foot, .qg-quest, .qg-pause, .qg-spots, .qg-typer { display: none; }
+.qg-act[hidden] { display: none; }
+.qg-help-touch { display: none; }
+@media (hover: none), (pointer: coarse) {
+  .qg-help-keys { display: none; }
+  .qg-help-touch { display: inline; }
+}
+.quiz-game kbd { display: inline-grid; place-items: center; min-width: 24px; height: 24px; margin: 0 1px; padding: 0 6px; border-radius: 6px; background: var(--surface); box-shadow: 0 0 0 1px var(--field-border), 0 2px 0 var(--field-border); color: var(--text); font: 700 var(--fs-xs) var(--font); }
+
+/* はじめる前: 3D の世界を背景に、スタートのボタンだけを出す。3D で遊べるときは、下の 2D のステージと「もどる／つぎへ」は出さない。
+   文字の色をテーマに合わせないのは、後ろのダンジョンがライトでもダークでも暗いため */
+.qg-world[data-ready] > .qg-start { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 16px; background: color-mix(in srgb, var(--qg-night) 62%, transparent); color: var(--qa-white); text-align: center; }
+.qg-start p { margin: 0; }
+.qg-start-title { font-size: var(--fs-2xl); font-weight: 800; }
+.qg-start > .btn { min-width: 220px; }
+.qg-start-keys { color: color-mix(in srgb, var(--qa-white) 80%, transparent); font-size: var(--fs-sm); }
+.qg-flat { padding: 4px 8px; border: 0; border-radius: 8px; background: none; color: color-mix(in srgb, var(--qa-white) 80%, transparent); font: var(--fs-sm) var(--font); text-decoration: underline; cursor: pointer; }
+.qg-flat:hover { color: var(--qa-white); }
+[data-quiz-game]:has(.qg-world[data-ready]):not([data-play]) > :is(.qg-panel, .qg-nav) { display: none; }
+
+/* 遊んでいる間: 画面全体を覆う。アプリのヘッダーとレールより上、トーストより下に置く */
+:root:has([data-quiz-game][data-play]) { overflow: hidden; }
+[data-quiz-game][data-play] { position: fixed; inset: 0; z-index: 60; margin: 0; background: var(--qg-night); }
+[data-quiz-game][data-play] > .qg-world[data-qg-world] { position: absolute; inset: 0; height: auto; margin: 0; border-radius: 0; background: none; }
+[data-play] > .qg-world > .qg-start, [data-play] > .qg-nav { display: none; }
+/* 画面のふちを暗くして、明かりの届く真ん中へ目を集める */
+[data-play] > .qg-world::after { content: ''; position: absolute; inset: 0; z-index: 1; background: radial-gradient(ellipse at center, transparent 58%, color-mix(in srgb, var(--qg-night) 78%, transparent)); pointer-events: none; }
+/* 遊んでいる間にフォーカスの枠を出さないのは、画面全体がゲームなので、枠が画面のふちを一周するだけで何も伝えないため */
+[data-play] .qg-world-canvas { outline: none; touch-action: none; }
+
+/* 画面に重ねる表示。色をテーマに合わせないのは、ダンジョンがいつも暗く、ライトの白い札が明かりより目立ってしまうため */
+[data-play] :is(.qg-hud > .btn, .qg-world-score, .qg-quest, .qg-act) {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--qg-night) 74%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--qg-flame) 42%, transparent);
+  color: var(--qa-white);
+  backdrop-filter: blur(6px);
+}
+[data-play] .qg-hud { position: absolute; z-index: 2; top: 16px; left: 16px; display: flex; align-items: center; gap: 10px; }
+.qg-world-score { display: flex; align-items: center; gap: 6px; margin: 0; padding: 6px 14px; border-radius: 999px; font-size: var(--fs-md); font-weight: 700; font-variant-numeric: tabular-nums; }
+.qg-world-score > .icon { color: var(--qg-gold); fill: currentColor; }
+.qg-gem { width: 11px; height: 11px; margin: 0 2px; border-radius: 2px; background: var(--qg-green); box-shadow: inset -4px -4px 0 color-mix(in srgb, var(--qa-ink) 28%, transparent); rotate: 45deg; }
+/* いま何をすればよいかの案内 */
+[data-play] .qg-quest { position: absolute; z-index: 2; top: 16px; left: 50%; display: block; max-width: calc(100% - 680px); margin: 0; padding: 7px 18px; border-radius: 999px; font-size: var(--fs-md); font-weight: 700; text-align: center; translate: -50% 0; pointer-events: none; }
+/* ミニマップ。位置は右上 */
+.qg-map { display: none; }
+[data-play] .qg-map { position: absolute; z-index: 2; top: 16px; right: 16px; display: block; width: 168px; height: 168px; border-radius: 16px; background: color-mix(in srgb, var(--qg-night) 78%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--qg-rock) 60%, transparent); pointer-events: none; }
+
+/* 視点の真ん中の照準。動かせるものに合うと、金色の輪に変わる */
+.qg-aim { display: none; }
+[data-play]:not([data-qg-paused], [data-qg-open], [data-qg-explaining]) .qg-aim { position: absolute; z-index: 2; top: 50%; left: 50%; display: block; width: 8px; height: 8px; border-radius: 50%; background: color-mix(in srgb, var(--qa-white) 85%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--qa-ink) 55%, transparent); translate: -50% -50%; pointer-events: none; transition: width 0.12s, height 0.12s, background 0.12s; }
+[data-play][data-qg-aim] .qg-aim { width: 22px; height: 22px; background: transparent; box-shadow: 0 0 0 3px var(--qg-gold), 0 0 0 5px color-mix(in srgb, var(--qa-ink) 55%, transparent); }
+/* 照準の下に出す「押すと何が起きるか」。遠くて届かないときは、キーの印を出さずに「もっと近づこう」だけにする */
+[data-play] .qg-act { position: absolute; z-index: 2; top: calc(50% + 26px); left: 50%; display: flex; align-items: center; gap: 6px; margin: 0; padding: 5px 14px 5px 8px; border-radius: 999px; font-size: var(--fs-md); font-weight: 700; white-space: nowrap; translate: -50% 0; pointer-events: none; }
+[data-play] .qg-act[hidden] { display: none; }
+[data-play] .qg-act[data-far] { padding-left: 14px; color: color-mix(in srgb, var(--qa-white) 75%, transparent); }
+[data-play] .qg-act[data-far] > kbd { display: none; }
+[data-play]:is([data-qg-paused], [data-qg-open], [data-qg-explaining]) .qg-act { display: none; }
+/* 動かせるものに重ねる、Tab キーで選ぶための目印。マウスでは 3D のほうを直接押すので、ふだんは見せず、押せもしない */
+/* 枠を hidden ではなく clip で切るのは、画面のふちの目印にフォーカスしたときに、ブラウザが枠の中をスクロールさせて、目印がずれるため */
+[data-play] .qg-spots { position: absolute; inset: 0; z-index: 2; display: block; overflow: clip; pointer-events: none; }
+.qg-spot { position: absolute; top: -17px; left: -17px; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: none; opacity: 0; pointer-events: none; }
+.qg-spot:focus-visible { background: color-mix(in srgb, var(--qg-gold) 30%, transparent); outline: 3px solid var(--qg-gold); opacity: 1; }
+/* 文字を受け取る欄は、見せずに置く。display: none にしないのは、フォーカスできなくなって、キーボードの入力を受け取れないため。
+   文字を 16px より小さくしないのは、iPhone がフォーカスした欄へ画面を拡大するため */
+[data-play] .qg-typer { position: absolute; bottom: 0; left: 50%; display: block; width: 1px; height: 1px; padding: 0; border: 0; font-size: 16px; opacity: 0; resize: none; pointer-events: none; }
+
+/* Esc などでマウスが外れたときのメニュー */
+[data-play][data-qg-paused] .qg-pause { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: color-mix(in srgb, var(--qg-night) 72%, transparent); color: var(--qa-white); backdrop-filter: blur(4px); }
+.qg-pause-title { margin: 0 0 8px; font-size: var(--fs-3xl); font-weight: 800; letter-spacing: 0.08em; }
+.qg-pause > .btn { min-width: 220px; }
+
+/* まちがえたあとに正解したときの解説（client.ts の qgCheck が開く）。ノートより上、メニューより上に重ねる */
+.qg-explain:not([hidden]) { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--qg-night) 70%, transparent); backdrop-filter: blur(4px); }
+.qg-explain-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; width: min(560px, 100%); max-height: calc(100% - 32px); overflow: auto; padding: 22px 24px; border-radius: 18px; background: var(--surface); box-shadow: 0 0 0 4px color-mix(in srgb, var(--qg-gold) 70%, transparent), 0 18px 48px color-mix(in srgb, var(--qg-night) 60%, transparent); color: var(--text); }
+.qg-explain-badge { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 3px 12px; border-radius: 999px; background: var(--success-soft); color: var(--success); font-weight: 800; }
+.qg-explain-title { margin: 0; font-size: var(--fs-xl); }
+.qg-explain-text { margin: 0 0 6px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.qg-explain-card > .btn { align-self: flex-end; min-width: 160px; }
+
+/* タッチ端末のスティックとジャンプ */
+@media (hover: none), (pointer: coarse) {
+  [data-play] .qg-pad { display: block; }
+  /* 照準を出さないのは、タッチでは押した所がそのまま選ばれて、真ん中の印が何も指さないため */
+  [data-play]:not([data-qg-paused]) .qg-aim, [data-play] .qg-act { display: none; }
+}
+[data-play][data-qg-open] .qg-pad { display: none; }
+.qg-stick { position: absolute; z-index: 2; bottom: 28px; left: 28px; display: grid; place-items: center; width: 120px; height: 120px; border-radius: 50%; background: color-mix(in srgb, var(--surface) 55%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 25%, transparent); touch-action: none; }
+.qg-stick-knob { width: 52px; height: 52px; border-radius: 50%; background: var(--surface); box-shadow: 0 2px 6px color-mix(in srgb, var(--text) 30%, transparent); pointer-events: none; }
+.qg-pad-btn { position: absolute; z-index: 2; right: 28px; bottom: 44px; width: 88px; height: 88px; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--surface) 80%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 25%, transparent); color: var(--text); font: 700 var(--fs-sm) var(--font); touch-action: none; }
+
+/* ノート: 2D のステージを、画面の真ん中に重ねて開く。石板に収まらない長い問題を読むときと、キーボードだけで答えるときに使う */
+[data-play] > .qg-panel { display: none; }
+[data-play][data-qg-open] > .qg-panel {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  width: min(760px, calc(100% - 32px));
+  max-height: calc(100% - 48px);
+  border: 10px solid var(--qg-brown);
+  border-radius: 26px;
+  background: var(--surface);
+  box-shadow: 0 8px 0 color-mix(in srgb, var(--qg-brown) 60%, black), 0 26px 60px rgb(0 0 0 / 0.35);
+  overflow: hidden;
+  translate: -50% -50%;
+  animation: qg-board 0.3s var(--ease);
+}
+@keyframes qg-board { from { opacity: 0; scale: 0.9; } }
+.qg-panel:has(.qg-goal-stage:not([hidden])) [data-qg-answer] { display: none; }
+[data-play] > .qg-panel:focus { outline: none; }
+[data-play] > .qg-panel > .qg-stages { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+/* ノートの中ではステージの枠を消すのは、ノートの枠と二重になり、スマホ幅で問題の横幅が狭くなるため */
+[data-play] .qg-stage { border: 0; border-radius: 0; background: none; box-shadow: none; animation: none; }
+[data-play] .qg-panel-foot { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--border); }
+[data-play] .qg-panel-foot > .btn { min-width: 180px; }
+@media (max-width: 1280px) {
+  /* ミニマップの下まで伸ばさないのは、案内の文字がミニマップに重なって、どちらも読めなくなるため */
+  [data-play] .qg-quest { top: 60px; left: 16px; max-width: calc(100% - 216px); border-radius: 16px; font-size: var(--fs-sm); text-align: left; translate: none; }
+}
+@media (max-width: 640px) {
+  [data-play] .qg-map { width: 104px; height: 104px; }
+  [data-play] .qg-hud { gap: 6px; max-width: calc(100% - 136px); flex-wrap: wrap; }
+  [data-play] .qg-quest { top: 128px; max-width: calc(100% - 32px); }
+  [data-play][data-qg-open] > .qg-panel { width: calc(100% - 16px); max-height: calc(100% - 24px); border-width: 6px; border-radius: 20px; }
+  [data-play] .qg-panel-foot > .btn { min-width: 0; flex: 1; }
+  .qg-start-title { font-size: var(--fs-xl); }
+}
+.qg-result:has(.qg-world[data-ready]) > .qg-confetti { display: none; }
+/* 3D を描けなかったとき（quiz-world.ts が data-flat を付ける）は、2D の表示の分の高さだけにする */
+.qg-world[data-flat] { height: auto; }
+.qg-world[data-flat][data-qg-world='take'] { padding: 8px 0; }
+/* 動きを減らす設定では 3D を描かない（quiz-world.ts）ので、はじめから 2D の表示の分の高さにする */
+@media (prefers-reduced-motion: reduce) {
+  .qg-world { height: auto; }
+  .qg-world[data-qg-world='take'] { background: none; }
+}
+
+.qg-review-title { margin: 0 0 12px; font-size: var(--fs-lg); }
+.quiz-game .quiz-questions > .quiz-q { border-width: 2px; border-radius: calc(var(--radius-lg) + 6px); }
+.quiz-game .quiz-questions > .quiz-q.is-right { border-color: color-mix(in srgb, var(--success) 45%, transparent); }
+.quiz-game .quiz-questions > .quiz-q.is-wrong { border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.quiz-game .quiz-questions .quiz-mark { padding: 4px 12px; font-size: var(--fs-sm); }
+
+@media (max-width: 640px) {
+  .qg-node { width: 46px; height: 46px; }
+  .qg-node > .qa { width: 32px; height: 32px; }
+  .qg-host { gap: 12px; }
+  .qg-host > .qa { width: 64px; height: 64px; }
+  .qg-nav { gap: 8px; }
+  .qg-nav > .btn { min-width: 0; }
+  .qg-crowd > .qa { width: 38px; height: 38px; }
+  .qg-world { height: 200px; }
+  .qg-world[data-qg-world='take'] { height: 300px; }
+  .qg-goal-flag { width: 64px; height: 64px; }
+}

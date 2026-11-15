@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { blob, check, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { CODE_LANGUAGES, GRADING_STATUSES, type CodeConstraint, type CodeFiles, type ConstraintResult } from './code'
-import { DEFAULT_PASS_PERCENT, type QuizAnswerRecord, type QuizQuestion } from './quiz'
+import { DEFAULT_PASS_PERCENT, QUIZ_LOOKS, type QuizAnswerRecord, type QuizQuestion } from './quiz'
 import type { RunResult } from './sandbox'
 import { LOG_KINDS } from './types'
 
@@ -458,17 +458,22 @@ export const codeSubmissions = sqliteTable(
 )
 
 /** 小テストのアイテム（items.type が quiz）の設定。行がなければ、問題がまだない */
-export const quizItems = sqliteTable('quiz_items', {
-  itemId: integer('item_id')
-    .primaryKey()
-    .references(() => items.id, { onDelete: 'cascade' }),
-  // 問題ごとの行にしないのは、問題をまとめて読んでまとめて書き換えるだけで、問題をまたいだ検索をしないため
-  questions: text('questions', { mode: 'json' }).$type<QuizQuestion[]>().notNull().default([]),
-  /** 合格にする正解の割合（%） */
-  passPercent: integer('pass_percent').notNull().default(DEFAULT_PASS_PERCENT),
-  /** 採点のあとに、不正解だった問題の正解と解説も見せる */
-  showAnswers: integer('show_answers').notNull().default(1),
-})
+export const quizItems = sqliteTable(
+  'quiz_items',
+  {
+    itemId: integer('item_id')
+      .primaryKey()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    // 問題ごとの行にしないのは、問題をまとめて読んでまとめて書き換えるだけで、問題をまたいだ検索をしないため
+    questions: text('questions', { mode: 'json' }).$type<QuizQuestion[]>().notNull().default([]),
+    /** 合格にする正解の割合（%） */
+    passPercent: integer('pass_percent').notNull().default(DEFAULT_PASS_PERCENT),
+    /** 採点のあとに、不正解だった問題の正解と解説も見せる */
+    showAnswers: integer('show_answers').notNull().default(1),
+    look: text('look', { enum: QUIZ_LOOKS }).notNull().default('plain'),
+  },
+  (t) => [check('quiz_items_look', sql`${t.look} IN ('plain', 'game')`)],
+)
 
 /** 小テストの受験。受け直しても前の受験は残す */
 export const quizAttempts = sqliteTable(

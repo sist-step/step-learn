@@ -38,7 +38,7 @@ import { db } from '../../lib/db'
 import { completionError, firstError, isFile, readConstraints, validate, type FieldErrors } from '../../lib/forms'
 import { field, fileField, intParam, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
 import { previewKind } from '../../lib/preview'
-import { DEFAULT_PASS_PERCENT, MAX_QUIZ_JSON_LENGTH, readQuizForm } from '../../lib/quiz'
+import { DEFAULT_PASS_PERCENT, MAX_QUIZ_JSON_LENGTH, isQuizLook, readQuizForm } from '../../lib/quiz'
 import { getQuizSettings, quizStore, saveQuizSettings } from '../../lib/quiz-items'
 import { quizViewOf } from '../../lib/quiz-store'
 import { availableCodeLanguages, sandboxEnabled } from '../../lib/sandbox'
@@ -203,6 +203,11 @@ const sourceField = (form: Form, key: string, max: number) => {
   return typeof v === 'string' ? v.slice(0, max) : ''
 }
 
+function quizLookField(form: Form) {
+  const look = field(form, 'look', 10)
+  return isQuizLook(look) ? look : 'plain'
+}
+
 function readItemInput(form: Form): ItemInput {
   return {
     title: field(form, 'title', 200),
@@ -229,6 +234,7 @@ function readItemInput(form: Form): ItemInput {
     questions: readQuizForm(sourceField(form, 'questions', MAX_QUIZ_JSON_LENGTH + 1)).rows,
     passPercent: field(form, 'pass_percent', 5),
     showAnswers: field(form, 'show_answers', 1) === '0' ? 0 : 1,
+    look: quizLookField(form),
   }
 }
 
@@ -420,6 +426,7 @@ export async function updateItem(c: Context<AppEnv>) {
       questions: input.questions.questions,
       passPercent: input.pass_percent ?? DEFAULT_PASS_PERCENT,
       showAnswers: input.show_answers,
+      look: input.look,
     })
   if (stored && item.fileKey) inBackground(deleteKeys([item.fileKey]))
   return redirectWith(c, `/courses/${courseId}/items/${iid}/edit`, '保存しました。')

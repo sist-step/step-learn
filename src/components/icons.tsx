@@ -43,6 +43,7 @@ import eyeSlash from 'heroicons/24/outline/eye-slash.svg?raw'
 import folder from 'heroicons/24/outline/folder.svg?raw'
 import globe from 'heroicons/24/outline/globe-alt.svg?raw'
 import heading from 'heroicons/24/outline/h2.svg?raw'
+import flag from 'heroicons/24/outline/flag.svg?raw'
 import heart from 'heroicons/24/outline/heart.svg?raw'
 import home from 'heroicons/24/outline/home.svg?raw'
 import info from 'heroicons/24/outline/information-circle.svg?raw'
@@ -66,6 +67,7 @@ import question from 'heroicons/24/outline/question-mark-circle.svg?raw'
 import pages from 'heroicons/24/outline/rectangle-stack.svg?raw'
 import shield from 'heroicons/24/outline/shield-check.svg?raw'
 import sparkles from 'heroicons/24/outline/sparkles.svg?raw'
+import star from 'heroicons/24/outline/star.svg?raw'
 import layers from 'heroicons/24/outline/square-3-stack-3d.svg?raw'
 import stop from 'heroicons/24/outline/stop.svg?raw'
 import table from 'heroicons/24/outline/table-cells.svg?raw'
@@ -148,6 +150,8 @@ const svgs = {
   folder,
   arrowPath,
   heart,
+  star,
+  flag,
   terminal,
   play,
   undo,

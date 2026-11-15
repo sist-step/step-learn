@@ -30,6 +30,7 @@ import { readConstraints, type FieldErrors, type FormName } from '../lib/forms'
 import {
   DEFAULT_PASS_PERCENT,
   QUIZ_KIND,
+  isQuizLook,
   quizFormRows,
   quizSettingsOf,
   readQuizForm,
@@ -389,6 +390,7 @@ const QuizKindFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
         rows={quizRowsOf(values)}
         passPercent={typeof values.pass_percent === 'string' ? values.pass_percent : String(saved.passPercent)}
         showAnswers={typeof values.show_answers === 'string' ? (values.show_answers === '0' ? 0 : 1) : saved.showAnswers}
+        look={saved.look}
         errors={errors}
         idPrefix={idPrefix}
       />
@@ -424,6 +426,7 @@ const quiz: ExtraKind = {
       questions: edited ? read.questions : [],
       passPercent: edited && typeof values.pass_percent === 'number' ? values.pass_percent : DEFAULT_PASS_PERCENT,
       showAnswers: edited && values.show_answers === 0 ? 0 : 1,
+      look: edited && isQuizLook(values.look) ? values.look : 'plain',
     }
   },
   Fields: QuizKindFields,

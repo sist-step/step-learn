@@ -33,7 +33,7 @@ import { SegmentedControl, SelectField, TextField, validateWith } from '../../co
 import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
-import { QuizEditor, QuizGradingCard, QuizPanel } from '../../components/quiz'
+import { QuizEditor, QuizGradingCard, QuizLookCard, QuizPanel } from '../../components/quiz'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import { agentBase, type AgentView } from '../../lib/agent'
 import { bundleBase } from '../../lib/bundle'
@@ -42,7 +42,7 @@ import { unixToDateTimeInput } from '../../lib/course-period'
 import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
 import { previewKind } from '../../lib/preview'
-import { quizFormRows, type QuizFormRow, type QuizSettings } from '../../lib/quiz'
+import { quizFormRows, type QuizFormRow, type QuizLook, type QuizSettings } from '../../lib/quiz'
 import type { QuizView } from '../../lib/quiz-store'
 import { formatBytes } from '../../lib/bytes'
 import type { CodeItem, Item, Section } from '../../lib/types'
@@ -64,10 +64,11 @@ export type ItemInput = {
   userLimit: string
   /** コーディングエージェントの、教師が書く AI への指示 */
   instructions: string
-  /** 小テストの問題・合格にする正解の割合（入力欄の値）・不正解の問題の正解を見せるか */
+  /** 小テストの問題・合格にする正解の割合（入力欄の値）・不正解の問題の正解を見せるか・学生に出す見た目 */
   questions: QuizFormRow[]
   passPercent: string
   showAnswers: number
+  look: QuizLook
 }
 
 /** コードのアイテムの言語と、見ている学生の提出。goals は学生に見せるクリアの条件（制約のラベル） */
@@ -150,6 +151,7 @@ export const ItemEditPage = ({
     questions: quizFormRows(quiz?.questions ?? []),
     passPercent: quiz ? String(quiz.passPercent) : '',
     showAnswers: quiz?.showAnswers ?? 1,
+    look: quiz?.look ?? 'plain',
     ...values,
   }
   const section = sections.find((s) => s.id === item.sectionId)
@@ -217,6 +219,7 @@ export const ItemEditPage = ({
           <aside class="editor-side">
             {code && <CodePeriodCard opensAt={v.opensAt} closesAt={v.closesAt} errors={errors} />}
             {quiz && <QuizGradingCard passPercent={v.passPercent} showAnswers={v.showAnswers} errors={errors} />}
+            {quiz && <QuizLookCard look={v.look} />}
             {agent && <AgentPeriodCard opensAt={v.opensAt} closesAt={v.closesAt} userLimit={v.userLimit} errors={errors} />}
             <Card heading="公開と配置">
               <div class="stack">

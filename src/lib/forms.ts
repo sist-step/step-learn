@@ -14,7 +14,7 @@ import {
 import { dateInputToUnix, dateTimeInputToUnix, isDateInput, isDateTimeInput } from './course-period'
 import { checkPassword } from './password'
 import { isMediaFile } from './preview'
-import { readQuizForm } from './quiz'
+import { QUIZ_LOOKS, readQuizForm } from './quiz'
 import { readRestrictionForm } from './restriction'
 import { COMPLETIONS, COURSE_COLORS, ITEM_TYPES, LINK_TARGETS, type Completion, type ItemType } from './types'
 import { checkUsername, normalizeUsername } from './username'
@@ -299,6 +299,7 @@ const itemEdit = z
     questions: z.transform((v: unknown) => readQuizForm(typeof v === 'string' ? v : '')),
     pass_percent: z.optional(percent('合格にする正解の割合', 1)),
     show_answers: flag(),
+    look: choice(QUIZ_LOOKS, 'plain'),
     url: z.optional(z.pipe(text('URL', 2000), z.string().check(rule((s: string) => (isHttpUrl(s) ? null : URL_INVALID))))),
   })
   .check(
@@ -412,6 +413,7 @@ const extraQuiz = z
     questions: z.transform((v: unknown) => readQuizForm(typeof v === 'string' ? v : '')),
     pass_percent: z.optional(percent('合格にする正解の割合', 1)),
     show_answers: flag(),
+    look: choice(QUIZ_LOOKS, 'plain'),
   })
   .check(
     z.superRefine((v, ctx) => {

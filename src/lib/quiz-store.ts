@@ -4,6 +4,7 @@ import {
   reviewQuiz,
   takeQuestions,
   type QuizAnswerRecord,
+  type QuizLook,
   type QuizReviewItem,
   type QuizScore,
   type QuizSettings,
@@ -46,6 +47,7 @@ export type QuizView = {
   itemUrl: string
   questions: QuizTakeQuestion[]
   passPercent: number
+  look: QuizLook
   /** 見ている学生の受験。学生でなければ null */
   mine: {
     count: number
@@ -59,11 +61,11 @@ export type QuizView = {
 
 export function quizViewOf(
   store: QuizStore,
-  { questions, passPercent, showAnswers }: QuizSettings,
+  { questions, passPercent, showAnswers, look }: QuizSettings,
   { itemUrl, userId, student, retake }: { itemUrl: string; userId: number; student: boolean; retake: boolean },
 ): QuizView {
   // 並べ替えの混ぜ方を学生とアイテムで変えるのは、隣の学生やほかのアイテムと同じ並びにしないため
-  const view = { base: `${itemUrl}/quiz`, itemUrl, questions: takeQuestions(questions, `${userId}:${itemUrl}`), passPercent }
+  const view = { base: `${itemUrl}/quiz`, itemUrl, questions: takeQuestions(questions, `${userId}:${itemUrl}`), passPercent, look }
   if (!student) return { ...view, mine: null }
   const attempts = store.listOf(userId)
   const latest = store.latest(userId)

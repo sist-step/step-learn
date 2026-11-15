@@ -38,6 +38,15 @@ export const QUIZ_DEFAULT_PROMPTS: Record<QuizKind, string> = {
   table: 'このコードを実行したとき、繰り返しの各回が終わった時点での変数の値を書いてください。',
 }
 
+/** 学生に出す画面の見た目。game は中学生向けで、動物のキャラクターが案内し、1 問ずつ進む。問題と採点は plain と同じ */
+export const QUIZ_LOOKS = ['plain', 'game'] as const
+
+export type QuizLook = (typeof QUIZ_LOOKS)[number]
+
+export const QUIZ_LOOK_LABELS: Record<QuizLook, string> = { plain: '標準', game: 'ゲーム' }
+
+export const isQuizLook = (v: unknown): v is QuizLook => QUIZ_LOOKS.some((look) => look === v)
+
 export const MAX_QUIZ_QUESTIONS = 50
 export const MAX_QUIZ_PROMPT_LENGTH = 2000
 export const MAX_QUIZ_CODE_LENGTH = 5000
@@ -384,15 +393,17 @@ export type QuizSettings = {
   passPercent: number
   /** 採点のあとに、不正解だった問題の正解と解説も見せるか（0 / 1） */
   showAnswers: number
+  look: QuizLook
 }
 
-export const DEFAULT_QUIZ_SETTINGS: QuizSettings = { questions: [], passPercent: DEFAULT_PASS_PERCENT, showAnswers: 1 }
+export const DEFAULT_QUIZ_SETTINGS: QuizSettings = { questions: [], passPercent: DEFAULT_PASS_PERCENT, showAnswers: 1, look: 'plain' }
 
 /** Moodle モードの extra_items の data（extra-kinds.tsx の quiz の toData が作る）を、小テストの設定として読む */
 export const quizSettingsOf = (data: Record<string, unknown>): QuizSettings => ({
   questions: Array.isArray(data.questions) ? (data.questions as QuizQuestion[]) : [],
   passPercent: typeof data.passPercent === 'number' ? data.passPercent : DEFAULT_PASS_PERCENT,
   showAnswers: data.showAnswers === 0 ? 0 : 1,
+  look: isQuizLook(data.look) ? data.look : 'plain',
 })
 
 // ---------------------------------------------------------------- 出題
@@ -527,18 +538,54 @@ export type QuizScore = { correct: number; total: number }
 /** input は、欄の名前（answerField）から送られた値を返す */
 export function gradeQuiz(
   questions: readonly QuizQuestion[],
-  input: (field: string) => unknown,
+  input: (field: string, q: QuizQuestion) => unknown,
 ): QuizScore & { records: QuizAnswerRecord[] } {
   const records = questions.map((q) => {
-    const answer = readQuizAnswer(q, input(answerField(q)))
+    const answer = readQuizAnswer(q, input(answerField(q), q))
     return { id: q.id, answer, correct: isCorrectAnswer(q, answer) }
   })
   return { records, correct: records.filter((r) => r.correct).length, total: records.length }
 }
 
+/** ゲームの見た目で、1 問ずつ確かめたときの最初の答え（client.ts の qgCheck が送る first[]）の欄の名前 */
+export const FIRST_ANSWER_FIELD = 'first[]'
+
+/**
+ * ゲームの見た目で、扉のレバーを引いて最初にまちがえた答えを、問題の ID ごとの「送られた欄」にする。
+ * 扉は正解するまで開かないので、最後の答えはいつも正解になる。最初の答えで採点して、まちがえた問題を点数に残す
+ */
+export function readFirstAnswers(raw: unknown): Map<string, Record<string, string | string[]>> {
+  const firsts = new Map<string, Record<string, string | string[]>>()
+  for (const text of stringList(raw)) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      continue
+    }
+    if (!parsed || typeof parsed !== 'object') continue
+    const { id, fields } = parsed as { id?: unknown; fields?: unknown }
+    if (typeof id !== 'string' || !Array.isArray(fields) || firsts.has(id)) continue
+    const form: Record<string, string | string[]> = {}
+    for (const entry of fields) {
+      if (!Array.isArray(entry) || typeof entry[0] !== 'string' || typeof entry[1] !== 'string') continue
+      const [name, value] = entry as [string, string]
+      if (name !== `a.${id}` && name !== `a.${id}[]`) continue
+      const prev = form[name]
+      form[name] = name.endsWith('[]') ? [...(Array.isArray(prev) ? prev : []), value] : value
+    }
+    firsts.set(id, form)
+  }
+  return firsts
+}
+
 export const quizPercent = ({ correct, total }: QuizScore) => (total > 0 ? (correct / total) * 100 : 0)
 
 export const isQuizPassed = (score: QuizScore, passPercent: number) => score.total > 0 && quizPercent(score) >= passPercent
+
+/** ゲームの見た目の結果に出す星の数（0〜3）。全問正解で 3、合格で 2、1 問でも正解なら 1 */
+export const quizStars = (score: QuizScore, passed: boolean) =>
+  score.total > 0 && score.correct === score.total ? 3 : passed ? 2 : score.correct > 0 ? 1 : 0
 
 /** いちばん正解の割合が高い受験 */
 export const bestScore = <T extends QuizScore>(attempts: readonly T[]): T | null =>
