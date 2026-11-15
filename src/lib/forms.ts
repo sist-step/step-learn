@@ -1,6 +1,6 @@
 // サーバーの handlers と client.ts の両方が読み込むので、DB や Node の API を使うモジュールを import しない
 import * as z from 'zod/mini'
-import { MAX_AGENT_INSTRUCTIONS, MAX_AGENT_LIMIT, MAX_AGENT_PERIOD } from './agent'
+import { MAX_AGENT_INSTRUCTIONS, MAX_AGENT_LIMIT, MAX_AGENT_PERIOD, isAgentClaudeModel } from './agent'
 import {
   CODE_LANGUAGES,
   MAX_CODE_LENGTH,
@@ -283,6 +283,7 @@ const itemEdit = z
     closes_at: z.optional(dateTime('終了日時')),
     user_limit: z.optional(usd('1 人あたりの上限', MAX_AGENT_LIMIT)),
     instructions: z.optional(text('AI への指示', MAX_AGENT_INSTRUCTIONS)),
+    agent_model: z.optional(text('モデル', 200)),
     url: z.optional(z.pipe(text('URL', 2000), z.string().check(rule((s: string) => (isHttpUrl(s) ? null : URL_INVALID))))),
   })
   .check(
@@ -294,8 +295,11 @@ const itemEdit = z
     }),
   )
 
-/** コーディングエージェントのアイテムの編集画面の、使える期間と上限の誤り */
-function agentItemIssues(v: { opens_at?: string; closes_at?: string; user_limit?: number }) {
+/** OpenRouter のモデルの ID（openai/gpt-5.1、meta-llama/llama-4:free など） */
+const OPENROUTER_MODEL_ID = /^~?[\w.-]+\/[\w.:-]+$/
+
+/** コーディングエージェントのアイテムの編集画面の、モデル・使える期間・上限の誤り */
+function agentItemIssues(v: { opens_at?: string; closes_at?: string; user_limit?: number; agent_model?: string }) {
   const issues = periodIssues(
     v.opens_at ?? '',
     v.closes_at ?? '',
@@ -304,6 +308,10 @@ function agentItemIssues(v: { opens_at?: string; closes_at?: string; user_limit?
   )
   // 欄そのものがないときだけ足すのは、欄の値の誤りは user_limit のスキーマ（usd）が出すため
   if (v.user_limit === undefined) issues.push({ message: '1 人あたりの上限を入力してください。', path: ['user_limit'] })
+  // ID の形だけを見るのは、OpenRouter にあるかとツールを使えるかは、保存するときにモデル一覧で確かめるため
+  if (!v.agent_model) issues.push({ message: 'モデルを選んでください。', path: ['agent_model'] })
+  else if (!isAgentClaudeModel(v.agent_model) && !OPENROUTER_MODEL_ID.test(v.agent_model))
+    issues.push({ message: 'モデルが正しくありません。', path: ['agent_model'] })
   return issues
 }
 
@@ -369,6 +377,7 @@ const extraAgent = z
     closes_at: z.optional(dateTime('終了日時')),
     user_limit: z.optional(usd('1 人あたりの上限', MAX_AGENT_LIMIT)),
     instructions: text('AI への指示', MAX_AGENT_INSTRUCTIONS),
+    agent_model: z.optional(text('モデル', 200)),
   })
   .check(
     z.superRefine((v, ctx) => {
@@ -389,16 +398,13 @@ const percent = (label: string) =>
     z.transform((s: string) => Number(s)),
   )
 
-// sk-ant- で始まるかだけを見るのは、キーの形は Anthropic が変えることがあり、使えるかは保存するときに Anthropic に確かめるため
+// 始まりだけを見るのは、キーの形は提供元が変えることがあり、使えるかは保存するときに提供元に確かめるため
+const apiKeyField = (pattern: RegExp, message: string) =>
+  z.pipe(text('API キー', 400), z.string().check(rule((s: string) => (!s || pattern.test(s) ? null : message))))
+
 const agentKey = z.object({
-  api_key: z.pipe(
-    text('API キー', 400),
-    z
-      .string()
-      .check(
-        rule((s: string) => (!s || /^sk-ant-[\w-]+$/.test(s) ? null : 'Anthropic の API キー（sk-ant- で始まる）を入力してください。')),
-      ),
-  ),
+  api_key: apiKeyField(/^sk-ant-[\w-]+$/, 'Anthropic の API キー（sk-ant- で始まる）を入力してください。'),
+  openrouter_api_key: apiKeyField(/^sk-or-[\w-]+$/, 'OpenRouter の API キー（sk-or- で始まる）を入力してください。'),
   total_limit: usd('アイテム全体の上限', MAX_AGENT_LIMIT),
 })
 

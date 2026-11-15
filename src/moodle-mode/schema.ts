@@ -171,6 +171,9 @@ export const agentItems = sqliteTable('agent_items', {
   /** Anthropic の API キーを AES-256-GCM で暗号化したもの（lib/agent-secret.ts）。NULL は未設定 */
   apiKey: blob('api_key', { mode: 'buffer' }),
   apiKeyHint: text('api_key_hint').notNull().default(''),
+  /** OpenRouter の API キー（api_key と同じく暗号化したもの）。教師が OpenRouter のモデルを選んだときに使う */
+  openrouterApiKey: blob('openrouter_api_key', { mode: 'buffer' }),
+  openrouterApiKeyHint: text('openrouter_api_key_hint').notNull().default(''),
   totalLimit: real('total_limit').notNull().default(10),
 })
 
