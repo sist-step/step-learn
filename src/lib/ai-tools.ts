@@ -10,14 +10,19 @@ import {
   defineTool,
   describedString,
   failure,
+  fileChange,
+  fileId,
   id,
   inCourse,
   inItem,
   sameSnapshot,
   success,
   toConstraints,
+  UPLOAD_NOT_FOUND,
   type AiAgentTool,
+  type AiToolContext,
 } from './ai-tool-kit'
+import { adoptUpload, findUpload, type AiUpload } from './ai-uploads'
 import {
   CODE_FILES,
   CODE_LANGUAGES,
@@ -34,6 +39,7 @@ import { contains, db } from './db'
 import { isHttpUrl } from './forms'
 import { availableCodeLanguages } from './sandbox'
 import { bundleFiles, codeItems, courses, enrollments, items, sections } from './schema'
+import { deleteKeys, inBackground, type StoredFile } from './storage'
 import { ITEM_TYPE_LABELS, LINK_TARGET_LABELS, LINK_TARGETS, type Item, type User } from './types'
 
 const MAX_LISTED_COURSES = 100
@@ -264,16 +270,20 @@ const createSection = defineTool(
   },
 )
 
-const CREATABLE_TYPES = ['page', 'link', 'code'] as const
+const CREATABLE_TYPES = ['page', 'link', 'file', 'code'] as const
+
+const fileColumns = (stored: StoredFile | null | undefined) =>
+  stored ? { fileKey: stored.key, fileName: stored.name, fileSize: stored.size, fileType: stored.type } : {}
 
 const createItem = defineTool(
   'create_item',
-  'セクションの末尾にアイテムを追加する。作れるのはページ・リンク・コード（学生がブラウザでコードを書いて提出し、AI が制約ごとに判定する課題）。学生には非表示の状態で作られる。',
+  'セクションの末尾にアイテムを追加する。作れるのはページ・リンク・ファイル（request_file で受け取ったもの）・コード（学生がブラウザでコードを書いて提出し、AI が制約ごとに判定する課題）。学生には非表示の状態で作られる。',
   z.object({
     section_id: id('追加先のセクションの ID'),
-    type: z.enum(CREATABLE_TYPES).check(z.describe('page: ページ（Markdown の本文） / link: リンク / code: コード')),
+    type: z.enum(CREATABLE_TYPES).check(z.describe('page: ページ（Markdown の本文） / link: リンク / file: ファイル / code: コード')),
     title: describedString('タイトル', 200, 1),
-    body: z.optional(describedString('ページは本文、コードは問題文、リンクは説明（いずれも Markdown）', 100_000)),
+    body: z.optional(describedString('ページは本文、コードは問題文、リンクとファイルは説明（いずれも Markdown）', 100_000)),
+    file_id: z.optional(fileId('ファイルのアイテムに置くファイル。ファイルでは必須')),
     url: z.optional(describedString('リンクの URL（http:// か https:// で始まる）。リンクでは必須', 2000)),
     link_target: z.optional(
       z.enum(LINK_TARGETS).check(z.describe('リンクの開き方。new: 新しいタブ / same: 同じタブ / embed: ページに埋め込む')),
@@ -303,6 +313,9 @@ const createItem = defineTool(
       return fail(
         `${CODE_LANGUAGE_LABELS[language]} のコードは作れません。今は ${availableCodeLanguages.map((l) => CODE_LANGUAGE_LABELS[l]).join('・')} だけ作れます。`,
       )
+    const upload = args.type === 'file' && args.file_id ? findUpload(c.var.user!.id, args.file_id) : undefined
+    if (args.type === 'file' && !upload) return fail(args.file_id ? UPLOAD_NOT_FOUND : 'ファイルには file_id を渡してください。')
+    const stored = upload && (await adoptUpload(upload, courseId))
 
     const created = db.transaction((tx) => {
       const row = tx
@@ -315,6 +328,7 @@ const createItem = defineTool(
           body: args.body ?? '',
           url: args.type === 'link' ? url : '',
           linkTarget: args.type === 'link' ? (args.link_target ?? 'new') : 'new',
+          ...fileColumns(stored),
           hidden: 1,
           position: nextPosition(items, eq(items.sectionId, args.section_id)),
         })
@@ -467,6 +481,7 @@ const itemSnapshot = (item: Item) => {
     url: item.url,
     linkTarget: item.linkTarget,
     sectionId: item.sectionId,
+    ...(item.type === 'file' && { fileKey: item.fileKey }),
     code: code ? { starter: code.starter, stdin: code.stdin, criteria: code.criteria, constraints: code.constraints } : null,
   }
 }
@@ -484,6 +499,7 @@ const updateItemArgs = z.object({
   url: z.optional(describedString('新しい URL（リンクだけ）', 2000)),
   link_target: z.optional(z.enum(LINK_TARGETS).check(z.describe('リンクの開き方（リンクだけ）'))),
   section_id: z.optional(id('移し先のセクションの ID（同じコースの中だけ）。移すと末尾に入る')),
+  file_id: z.optional(fileId('差し替える新しいファイル（ファイルだけ）')),
   constraints: z.optional(constraintsSchema('新しい制約の一覧（コードだけ）。一部だけでなくすべての制約を書く')),
   criteria: z.optional(describedString('新しい補足（コードだけ）', 5000)),
   starter: z.optional(
@@ -496,7 +512,9 @@ const updateItemArgs = z.object({
 
 type UpdateItemArgs = z.output<typeof updateItemArgs>
 
-function checkItemArgs(item: Item, args: UpdateItemArgs, sectionCourse: number | null) {
+function checkItemArgs(item: Item, args: UpdateItemArgs, sectionCourse: number | null, upload: AiUpload | undefined) {
+  if (args.file_id !== undefined && item.type !== 'file') return 'ファイルを差し替えられるのは、ファイルのアイテムだけです。'
+  if (args.file_id !== undefined && !upload) return UPLOAD_NOT_FOUND
   if ((args.url !== undefined || args.link_target !== undefined) && item.type !== 'link')
     return 'URL と開き方はリンクのアイテムでだけ変えられます。'
   if (args.url !== undefined && !isHttpUrl(args.url.trim())) return 'URL は http:// か https:// で始めてください。'
@@ -512,7 +530,10 @@ const sectionCourseOf = (sectionId: number | undefined) =>
     ? null
     : (db.select({ courseId: sections.courseId }).from(sections).where(eq(sections.id, sectionId)).get()?.courseId ?? null)
 
-function itemChanges(item: Item, args: UpdateItemArgs) {
+const uploadOf = (c: AiToolContext, args: UpdateItemArgs) =>
+  args.file_id === undefined ? undefined : findUpload(c.var.user!.id, args.file_id)
+
+function itemChanges(item: Item, args: UpdateItemArgs, upload: AiUpload | undefined) {
   const code = item.type === 'code' ? codeOf(item.id) : undefined
   const files = code ? CODE_FILES[code.language] : []
   return [
@@ -520,6 +541,7 @@ function itemChanges(item: Item, args: UpdateItemArgs) {
     ...changed(BODY_LABELS[item.type], item.body, args.body, true),
     ...changed('URL', item.url, args.url?.trim()),
     ...changed('開き方', LINK_TARGET_LABELS[item.linkTarget], args.link_target && LINK_TARGET_LABELS[args.link_target]),
+    ...(upload ? [fileChange({ name: item.fileName ?? '', size: item.fileSize ?? 0 }, upload)] : []),
     ...(args.section_id !== undefined && args.section_id !== item.sectionId
       ? [{ label: 'セクション', before: sectionTitle(item.sectionId), after: sectionTitle(args.section_id) }]
       : []),
@@ -536,15 +558,16 @@ function itemChanges(item: Item, args: UpdateItemArgs) {
 
 const updateItem = defineConfirmTool(
   'update_item',
-  'アイテムのタイトル・本文・URL・セクション、コードの制約・補足・最初のコードを変える。利用者が確認カードで承認してから実行される。変えない欄は省く。',
+  'アイテムのタイトル・本文・URL・セクション、ファイルのアイテムのファイル、コードの制約・補足・最初のコードを変える。利用者が確認カードで承認してから実行される。変えない欄は省く。',
   updateItemArgs,
   async (c, args) => {
     const found = await itemOf(c.var.user!, args.item_id)
     if (!found) return failure(NOT_FOUND, 'アイテムを開けませんでした')
     const { item } = found
-    const problem = checkItemArgs(item, args, sectionCourseOf(args.section_id))
+    const upload = uploadOf(c, args)
+    const problem = checkItemArgs(item, args, sectionCourseOf(args.section_id), upload)
     if (problem) return failure(problem, `「${item.title}」を変更しませんでした`)
-    const changes = itemChanges(item, args)
+    const changes = itemChanges(item, args, upload)
     if (changes.length === 0) return failure(NO_CHANGE, `「${item.title}」を変更しませんでした`)
     return { title: `「${item.title}」を変更する`, changes, snapshot: itemSnapshot(item) }
   },
@@ -554,10 +577,12 @@ const updateItem = defineConfirmTool(
     const { item } = found
     const label = `「${item.title}」を変更できませんでした`
     if (!sameSnapshot(itemSnapshot(item), snapshot)) return failure(STALE, label)
-    const problem = checkItemArgs(item, args, sectionCourseOf(args.section_id))
+    const upload = uploadOf(c, args)
+    const problem = checkItemArgs(item, args, sectionCourseOf(args.section_id), upload)
     if (problem) return failure(problem, label)
     const moving = args.section_id !== undefined && args.section_id !== item.sectionId
     const code = item.type === 'code' ? codeOf(item.id) : undefined
+    const stored = upload && (await adoptUpload(upload, item.courseId))
     db.transaction((tx) => {
       tx.update(items)
         .set({
@@ -565,6 +590,7 @@ const updateItem = defineConfirmTool(
           body: args.body ?? item.body,
           url: args.url?.trim() ?? item.url,
           linkTarget: args.link_target ?? item.linkTarget,
+          ...fileColumns(stored),
           ...(moving && { sectionId: args.section_id, position: nextPosition(items, eq(items.sectionId, args.section_id!)) }),
         })
         .where(eq(items.id, item.id))
@@ -582,6 +608,7 @@ const updateItem = defineConfirmTool(
           .run()
       }
     })
+    if (stored && item.fileKey) inBackground(deleteKeys([item.fileKey]))
     touchCourse(item.courseId)
     return success(
       { ok: true },
@@ -648,7 +675,7 @@ const setVisibility = defineConfirmTool(
   },
 )
 
-/** 通常モードで AI が使えるツール。削除・ファイル・画面共有・受講者・コースの設定は扱わない */
+/** 通常モードで AI が使えるツール。削除・画面共有・受講者・コースの設定は扱わない。ファイルは request_file（lib/ai-agent.ts）で受け取ったものだけを置ける */
 export const AI_TOOLS: readonly AiAgentTool[] = [
   listCourses,
   getCourse,

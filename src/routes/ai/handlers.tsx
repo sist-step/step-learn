@@ -4,11 +4,14 @@ import { stream } from 'hono/streaming'
 import { AiPanel, type AiCardChange, type AiChatEntry, type AiPanelProps } from '../../components/ai-panel'
 import { AI_CHAT_MODELS, AI_MODEL_LABELS, aiProvider, isAiModel, isProviderEnabled, type AiModel } from '../../lib/ai'
 import { contextPercent, quotaProblem, SUGGEST_REPLIES, type AiAgent, type AiAgentEvent } from '../../lib/ai-agent'
-import { chatRevision, type AiChatContent } from '../../lib/ai-chat'
-import type { AiChange } from '../../lib/ai-tool-kit'
+import { chatRevision, type AiCard, type AiChatContent } from '../../lib/ai-chat'
+import { fileKindsAccept, fileKindsLabel } from '../../lib/ai-file-kinds'
+import type { AiChange, AiTouched } from '../../lib/ai-tool-kit'
+import { formatBytes } from '../../lib/bytes'
 import { diffHunks, diffLines } from '../../lib/diff'
 import { firstError, validate } from '../../lib/forms'
-import { field, readForm, sameOriginReferer, wantsJson } from '../../lib/http'
+import { field, fileField, readForm, sameOriginReferer, wantsJson } from '../../lib/http'
+import { EXECUTABLE_NOT_ALLOWED, FILE_TOO_LARGE, MAX_FILE_SIZE, isExecutable } from '../../lib/storage'
 import type { AppEnv, User } from '../../lib/types'
 
 export type AiBackend = {
@@ -22,6 +25,29 @@ const TOOL_FALLBACK_LABEL = 'ツールを使いました'
 // 変更前と変更後を丸ごと並べないのは、長いページの 1 行だけを直す提案で、どこが変わるのかが見つけられないため
 const cardChange = ({ label, before, after, long }: AiChange): AiCardChange =>
   long ? { label, hunks: diffHunks(diffLines(before, after), 1) } : { label, before, after }
+
+function cardEntry(callId: string, card: AiCard, touched: AiTouched | undefined): AiChatEntry {
+  if (card.request)
+    return {
+      kind: 'file',
+      callId,
+      title: card.title,
+      accept: fileKindsAccept(card.request.kinds),
+      kinds: fileKindsLabel(card.request.kinds),
+      state: card.state,
+      note: card.note,
+      received: card.received && { name: card.received.name, size: formatBytes(card.received.size) },
+    }
+  return {
+    kind: 'card',
+    callId,
+    title: card.title,
+    changes: card.changes.map(cardChange),
+    state: card.state,
+    note: card.note,
+    touched,
+  }
+}
 
 function entriesOf({ messages, labels, cards, touched, compactions = [] }: AiChatContent): AiChatEntry[] {
   return messages.flatMap((m, i): AiChatEntry[] => {
@@ -37,15 +63,7 @@ function entriesOf({ messages, labels, cards, touched, compactions = [] }: AiCha
         .map((t): AiChatEntry => {
           const card = cards[t.id]
           if (!card) return { kind: 'tool', label: labels[t.id] ?? TOOL_FALLBACK_LABEL, touched: touched[t.id] }
-          return {
-            kind: 'card',
-            callId: t.id,
-            title: card.title,
-            changes: card.changes.map(cardChange),
-            state: card.state,
-            note: card.note,
-            touched: touched[t.id],
-          }
+          return cardEntry(t.id, card, touched[t.id])
         }),
     ]
   })
@@ -160,6 +178,14 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     })
   }
 
+  // lib/forms.ts で確かめないのは、上限の値がストレージの設定にあり、実行ファイルかどうかは中身を読まないと分からないため
+  async function uploadProblem(file: File) {
+    if (file.size > MAX_FILE_SIZE) return FILE_TOO_LARGE
+    if (await isExecutable(file)) return EXECUTABLE_NOT_ALLOWED
+    return null
+  }
+
+  /** 確認カードを決める。ファイルを選ぶカードでは、承認にファイルを添えて送る */
   async function decide(c: Context<AppEnv>) {
     const user = c.var.user!
     if (!(await canUse(c))) return c.notFound()
@@ -167,13 +193,17 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     const callId = field(form, 'call', 200)
     const approve = field(form, 'decision', 10) === 'approve'
     const page = field(form, 'page', 500)
+    const file = approve ? fileField(form, 'file') : null
+    const problem = file && (await uploadProblem(file))
     return streamEvents(c, async (emit) => {
       const chat = chats.currentChat(user.id)
       if (!chat || String(chat.id) !== field(form, 'chat', 20)) {
         emit({ type: 'error', message: 'このチャットは閉じられています。' })
         return emit({ type: 'closed' })
       }
-      await agent.decide({ c, chat, callId, approve, page }, emit)
+      if (problem) return emit({ type: 'error', message: problem, retract: true })
+      if (file) await agent.receive({ c, chat, callId, file, page }, emit)
+      else await agent.decide({ c, chat, callId, approve, page }, emit)
     })
   }
 
