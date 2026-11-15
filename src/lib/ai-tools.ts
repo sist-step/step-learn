@@ -37,6 +37,7 @@ import { unixToDateInput } from './course-period'
 import { getCourseAccessFor, nextPosition, touchCourse } from './courses'
 import { contains, db } from './db'
 import { isHttpUrl } from './forms'
+import { getQuizSettings } from './quiz-items'
 import { availableCodeLanguages } from './sandbox'
 import { bundleFiles, codeItems, courses, enrollments, items, sections } from './schema'
 import { deleteKeys, inBackground, type StoredFile } from './storage'
@@ -203,12 +204,21 @@ function itemDetail(item: Item) {
     }
     case 'agent':
       return { description: item.body.slice(0, MAX_BODY_LENGTH) }
+    case 'quiz': {
+      const quiz = getQuizSettings(item.id)
+      return {
+        description: item.body.slice(0, MAX_BODY_LENGTH),
+        questions: quiz.questions,
+        pass_percent: quiz.passPercent,
+        show_answers: quiz.showAnswers === 1,
+      }
+    }
   }
 }
 
 const getItem = defineTool(
   'get_item',
-  'アイテムの中身を返す。ページは本文（Markdown）、リンクは URL、コードは問題文・最初のコード・制約・補足、ファイル自動配布は配るファイルの一覧。',
+  'アイテムの中身を返す。ページは本文（Markdown）、リンクは URL、コードは問題文・最初のコード・制約・補足、ファイル自動配布は配るファイルの一覧、小テストは問題と正解。',
   z.object({ item_id: id('アイテムの ID') }),
   async (c, { item_id }) => {
     const found = await itemOf(c.var.user!, item_id)
@@ -469,6 +479,7 @@ const BODY_LABELS: Record<Item['type'], string> = {
   screen: '説明',
   bundle: '説明',
   agent: '説明',
+  quiz: '説明',
 }
 
 const codeOf = (itemId: number) => db.select().from(codeItems).where(eq(codeItems.itemId, itemId)).get()

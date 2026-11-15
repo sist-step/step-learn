@@ -2,6 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm'
 import type { CourseAccess } from './courses'
 import { isCleared } from './code'
 import { db } from './db'
+import { quizGradesOf } from './quiz-items'
 import {
   RESTRICTION_KINDS,
   checkRestriction,
@@ -62,18 +63,20 @@ function loadOutline(courseId: number) {
 
 type Outline = ReturnType<typeof loadOutline>
 
+const isGraded = (it: OutlineRow) => it.type === 'code' || it.type === 'quiz'
+
 function choicesOf(course: Pick<Course, 'completionEnabled'>, { sectionRows, ordered }: Outline, exclude?: number): RestrictionChoices {
   const sectionTitles = new Map(sectionRows.map((s) => [s.id, s.title]))
   const tracked = course.completionEnabled ? ordered.filter((it) => it.completion !== 'none' && it.id !== exclude) : []
-  const graded = ordered.filter((it) => it.type === 'code' && it.id !== exclude)
+  const graded = ordered.filter((it) => isGraded(it) && it.id !== exclude)
   const unavailable: RestrictionChoices['unavailable'] = {}
   if (!course.completionEnabled) unavailable.completion = 'このコースでは完了ステータスを使っていません。'
   else if (tracked.length === 0) unavailable.completion = '完了の条件があるアイテムがありません。'
-  if (graded.length === 0) unavailable.grade = '評点が付くアイテム（コード）がありません。'
+  if (graded.length === 0) unavailable.grade = '評点が付くアイテム（コード・小テスト）がありません。'
   return {
     kinds: RESTRICTION_KINDS.filter((k) => !unavailable[k]),
     unavailable,
-    items: tracked.map((it) => ({ id: it.id, label: it.title, meta: sectionTitles.get(it.sectionId), passFail: it.type === 'code' })),
+    items: tracked.map((it) => ({ id: it.id, label: it.title, meta: sectionTitles.get(it.sectionId), passFail: isGraded(it) })),
     previous: tracked.length > 0,
     grades: graded.map((it) => ({ id: it.id, label: it.title, meta: sectionTitles.get(it.sectionId) })),
     profile: PROFILE_FIELDS,
@@ -139,6 +142,15 @@ export function courseAvailability(user: User, access: CourseAccess): CourseAvai
     scores.set(g.itemId, Math.max(score, scores.get(g.itemId) ?? 0))
   }
   const gradedIds = new Set(graded.map((g) => g.itemId))
+  const quizGrades = quizGradesOf(
+    user.id,
+    ordered.filter((it) => it.type === 'quiz').map((it) => it.id),
+  )
+  for (const [id, grade] of quizGrades) {
+    gradedIds.add(id)
+    scores.set(id, grade.percent)
+    if (grade.passed) cleared.add(id)
+  }
   const exists = new Set(ordered.map((it) => it.id))
   const completionOf = (id: number): CompletionState | null => {
     if (!exists.has(id)) return null

@@ -92,7 +92,7 @@ function moduleKeyOf(m: MoodleModule) {
 }
 
 /** STEP Learn の完了の条件に、Moodle にしかない「そのほかの自動の条件」（auto）を足したもの */
-export type ItemCompletion = Exclude<Completion, 'play' | 'clear'> | 'auto'
+export type ItemCompletion = Exclude<Completion, 'play' | 'clear' | 'pass'> | 'auto'
 
 export type MItem = {
   id: number

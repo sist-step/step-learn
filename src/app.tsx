@@ -24,6 +24,7 @@ import content from './routes/content'
 import courses from './routes/courses'
 import dashboard from './routes/dashboard'
 import participants from './routes/participants'
+import quiz from './routes/quiz'
 import screen from './routes/screen'
 
 const app = new Hono<AppEnv>()
@@ -74,6 +75,7 @@ app.route('/courses', content)
 app.route('/courses', participants)
 app.route('/courses', screen)
 app.route('/courses', code)
+app.route('/courses', quiz)
 app.route('/courses', bundle)
 app.route('/courses', agent)
 app.route('/api/vscode/agent', agentApi)
