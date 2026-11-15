@@ -1,11 +1,13 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { withoutUnanswered, type AgentMessage } from './agent-core'
+import { withoutUnanswered, type AgentMessage, type AgentToolCall } from './agent-core'
+
+const ENTRY_KINDS = ['user', 'assistant', 'tool', 'error', 'notice', 'confirm', 'changes'] as const
 
 /** 画面に出す会話の 1 行 */
 export type Entry = {
   id: number
-  kind: 'user' | 'assistant' | 'tool' | 'error' | 'notice' | 'confirm' | 'changes'
+  kind: (typeof ENTRY_KINDS)[number]
   text: string
   /** user: 依頼に付けたファイルの表示 / tool: コマンドの出力 / confirm: 実行する理由 */
   detail?: string
@@ -25,6 +27,21 @@ export type StoredChat = { messages: AgentMessage[]; entries: Entry[]; contextTo
 const FILE = 'agent-chats.json'
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
+
+const isToolCall = (v: unknown): v is AgentToolCall =>
+  isObject(v) && typeof v.id === 'string' && typeof v.name === 'string' && typeof v.arguments === 'string'
+
+function isAgentMessage(v: unknown): v is AgentMessage {
+  if (!isObject(v) || typeof v.content !== 'string') return false
+  if (v.role === 'user') return true
+  if (v.role === 'assistant') return Array.isArray(v.toolCalls) && v.toolCalls.every(isToolCall)
+  return v.role === 'tool' && typeof v.toolCallId === 'string' && typeof v.isError === 'boolean'
+}
+
+const isEntry = (v: unknown): v is Entry =>
+  isObject(v) && typeof v.id === 'number' && typeof v.text === 'string' && ENTRY_KINDS.some((kind) => kind === v.kind)
+
+const arrayOf = <T>(v: unknown, isItem: (item: unknown) => item is T): T[] | null => (Array.isArray(v) && v.every(isItem) ? v : null)
 
 // 途中の様子をそのまま戻さないのは、確認を待っていたコマンドや、前の内容が残っていない変更を、押せるまま出さないため
 function restoreEntry(entry: Entry): Entry {
@@ -53,11 +70,14 @@ export class ChatStore {
       .catch(() => null)
     if (!isObject(saved) || !isObject(saved.chats)) return chats
     for (const [key, chat] of Object.entries(saved.chats)) {
-      if (!isObject(chat) || !Array.isArray(chat.messages) || !Array.isArray(chat.entries)) continue
+      if (!isObject(chat)) continue
+      const messages = arrayOf(chat.messages, isAgentMessage)
+      const entries = arrayOf(chat.entries, isEntry)
+      if (!messages || !entries) continue
       chats.set(key, {
         // 応答を作っている途中で VS Code が閉じたときの、結果のないツールの呼び出しと、中身のない応答の行を除く
-        messages: withoutUnanswered(chat.messages as AgentMessage[]),
-        entries: (chat.entries as Entry[]).filter((e) => e.kind !== 'assistant' || e.text).map(restoreEntry),
+        messages: withoutUnanswered(messages),
+        entries: entries.filter((e) => e.kind !== 'assistant' || e.text).map(restoreEntry),
         contextTokens: typeof chat.contextTokens === 'number' ? chat.contextTokens : 0,
         notes: Array.isArray(chat.notes) ? chat.notes.filter((n): n is string => typeof n === 'string') : [],
       })

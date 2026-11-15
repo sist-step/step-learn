@@ -263,7 +263,10 @@ export const AgentsPage = ({ list, moodleAdminUrl }: { list: AgentItemRow[]; moo
               <span class="strong">{row.title}</span>
               <span class="muted small wrap"> {row.courseTitle}</span>
             </td>
-            <td>{row.configured ? <Chip tone="success">有効</Chip> : <Chip>キー未設定</Chip>}</td>
+            <td>
+              {row.configured ? <Chip tone="success">有効</Chip> : <Chip>キー未設定</Chip>}
+              <span class="muted small wrap"> {row.model}</span>
+            </td>
             <td class="hide-sm muted">
               {row.opensAt !== null && row.closesAt !== null
                 ? `${formatDateTime(row.opensAt)} 〜 ${formatDateTime(row.closesAt)}`

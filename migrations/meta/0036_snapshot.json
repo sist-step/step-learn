@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "330260fb-0703-48bf-a587-23ca59c417d0",
-  "prevId": "784f4801-df85-4e58-9ea3-97ab761229b0",
+  "id": "784f4801-df85-4e58-9ea3-97ab761229b0",
+  "prevId": "a644303b-fa35-4ae4-8bca-27d3e114afdd",
   "tables": {
     "agent_items": {
       "name": "agent_items",
@@ -66,6 +66,36 @@
           "notNull": true,
           "autoincrement": false,
           "default": "''"
+        },
+        "openrouter_api_key": {
+          "name": "openrouter_api_key",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "openrouter_api_key_hint": {
+          "name": "openrouter_api_key_hint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "model": {
+          "name": "model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'claude-haiku-5-5'"
+        },
+        "openrouter_model": {
+          "name": "openrouter_model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -2081,12 +2111,7 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {
-        "quiz_items_look": {
-          "name": "quiz_items_look",
-          "value": "\"quiz_items\".\"look\" IN ('plain', 'game')"
-        }
-      }
+      "checkConstraints": {}
     },
     "sections": {
       "name": "sections",

@@ -359,6 +359,15 @@ export const agentItems = sqliteTable('agent_items', {
   apiKey: blob('api_key', { mode: 'buffer' }),
   /** 入れたキーの末尾の数文字。キーそのものは画面に出さないので、どのキーかを見分けるのに使う */
   apiKeyHint: text('api_key_hint').notNull().default(''),
+  /** OpenRouter の API キー（api_key と同じく暗号化したもの）。OpenRouter のモデルを選んだときに使う */
+  openrouterApiKey: blob('openrouter_api_key', { mode: 'buffer' }),
+  openrouterApiKeyHint: text('openrouter_api_key_hint').notNull().default(''),
+  // CHECK を付けないのは、OpenRouter のモデルの ID も入り、決まった値の集合にならないため
+  /** 教師が選んだモデル。Claude のモデルの ID（lib/agent.ts の AGENT_CLAUDE_MODELS）か、OpenRouter のモデルの ID */
+  model: text('model').notNull().default('claude-haiku-5-5'),
+  // 使うたびにモデル一覧から引かないのは、一覧から消えたり料金が変わったりしても、教師が選び直すまで同じ条件で使えるようにするため
+  /** OpenRouter のモデルを選んだときの、モデル一覧の情報（JSON。lib/ai-models.ts の OpenRouterModelInfo） */
+  openrouterModel: text('openrouter_model', { mode: 'json' }),
   /** 使える期間（UNIX 秒） */
   opensAt: integer('opens_at'),
   closesAt: integer('closes_at'),

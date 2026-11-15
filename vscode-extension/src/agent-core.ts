@@ -184,12 +184,11 @@ export async function sendAgentMessages(
     signal,
   })
   if (!res.ok || !res.body) throw await failure(res)
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader()
   let buffered = ''
   for (;;) {
     const { done, value } = await reader.read()
-    buffered += decoder.decode(value, { stream: !done })
+    buffered += value ?? ''
     const lines = buffered.split('\n')
     buffered = lines.pop() ?? ''
     for (const line of lines) {

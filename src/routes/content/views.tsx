@@ -1,4 +1,4 @@
-import { AGENT_BODY_HINT, AgentEditPanel, AgentInstructionsField, AgentOpen, AgentPeriodCard } from '../../components/agent'
+import { AGENT_BODY_HINT, AgentEditPanel, AgentInstructionsField, AgentModelCard, AgentOpen, AgentPeriodCard } from '../../components/agent'
 import { BundleEditPanel, BundleOpen, type BundleView } from '../../components/bundle'
 import {
   CodeBarActions,
@@ -23,6 +23,7 @@ import {
   LinkEmbed,
   LinkTargetField,
   linkOpenAttrs,
+  OutlineToggle,
 } from '../../components/course'
 import { cx } from '../../components/cx'
 import { Icon } from '../../components/icons'
@@ -36,6 +37,7 @@ import { PdfBar, PdfStage } from '../../components/pdf'
 import { QuizEditor, QuizGradingCard, QuizLookCard, QuizPanel } from '../../components/quiz'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import { agentBase, type AgentView } from '../../lib/agent'
+import type { OpenRouterModelInfo } from '../../lib/ai-models'
 import { bundleBase } from '../../lib/bundle'
 import type { CodeFiles, CodeLanguage, Judge } from '../../lib/code'
 import { unixToDateTimeInput } from '../../lib/course-period'
@@ -69,6 +71,8 @@ export type ItemInput = {
   passPercent: string
   showAnswers: number
   look: QuizLook
+  /** コーディングエージェントの、選んだモデルの ID */
+  model: string
 }
 
 /** コードのアイテムの言語と、見ている学生の提出。goals は学生に見せるクリアの条件（制約のラベル） */
@@ -107,6 +111,7 @@ export const ItemEditPage = ({
   bundle,
   agent,
   quiz,
+  agentModels = null,
   gradingEnabled,
   judge,
   sections,
@@ -122,6 +127,8 @@ export const ItemEditPage = ({
   agent?: AgentView
   /** 小テストのアイテムの設定 */
   quiz?: QuizSettings
+  /** コーディングエージェントのアイテムで選べる OpenRouter のモデル。一覧を取れなければ null */
+  agentModels?: OpenRouterModelInfo[] | null
   /** AI が設定されていて、提出を自動で採点するか */
   gradingEnabled: boolean
   /** 制約ごとの判定をするもの。切り替えられる開発サーバーでだけ渡す */
@@ -152,6 +159,7 @@ export const ItemEditPage = ({
     passPercent: quiz ? String(quiz.passPercent) : '',
     showAnswers: quiz?.showAnswers ?? 1,
     look: quiz?.look ?? 'plain',
+    model: agent?.settings.model.id ?? '',
     ...values,
   }
   const section = sections.find((s) => s.id === item.sectionId)
@@ -220,6 +228,7 @@ export const ItemEditPage = ({
             {code && <CodePeriodCard opensAt={v.opensAt} closesAt={v.closesAt} errors={errors} />}
             {quiz && <QuizGradingCard passPercent={v.passPercent} showAnswers={v.showAnswers} errors={errors} />}
             {quiz && <QuizLookCard look={v.look} />}
+            {agent && <AgentModelCard value={v.model} saved={agent.settings.model} models={agentModels} error={errors.agent_model} />}
             {agent && <AgentPeriodCard opensAt={v.opensAt} closesAt={v.closesAt} userLimit={v.userLimit} errors={errors} />}
             <Card heading="公開と配置">
               <div class="stack">
@@ -424,7 +433,7 @@ export const ItemPage = ({
       {/* コードのアイテムで本文の欄を出さないのは、エディターを画面いっぱいに置き、ページをスクロールさせないため */}
       {code && waitsFor(item, 'view') && <span hidden data-complete-on-view={completeUrl(item)} />}
       {!code && (
-        <div class="reader">
+        <div class="reader" data-outline-kind={item.type}>
           <article class="reader-main" data-ai-watch={`item:${item.id}`}>
             {!pdf && head}
 
@@ -589,6 +598,7 @@ export const ItemPage = ({
                   <span data-progress-done>{tracked.filter((o) => done.has(o.id)).length}</span> / {tracked.length} 完了
                 </span>
               )}
+              <OutlineToggle />
             </div>
             {outlineSections.map(({ section: s, items }) => (
               <div class={cx('outline-section', items.length === 0 && 'is-empty')}>

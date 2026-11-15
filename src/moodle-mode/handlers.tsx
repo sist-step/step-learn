@@ -1,11 +1,12 @@
 import crypto from 'node:crypto'
 import type { Context } from 'hono'
 import { deleteCookie, getSignedCookie, setSignedCookie } from 'hono/cookie'
+import * as z from 'zod/mini'
 import { RestrictionPage } from '../components/restriction'
 import type { CourseCardData } from '../components/ui'
 import { config } from '../lib/config'
 import { firstError, isFile, validate, type FieldErrors } from '../lib/forms'
-import { field, intParam, readForm, redirectWith, safeNext, wantsJson, type Form } from '../lib/http'
+import { field, intParam, readFields, readForm, redirectWith, safeNext, wantsJson, type Form } from '../lib/http'
 import { previewKind } from '../lib/preview'
 import {
   MAX_RESTRICTION_JSON_LENGTH,
@@ -27,7 +28,7 @@ import { forgetCourse, forgetProgress, forgetSections } from './cache'
 import { exchangeCode, fetchFile, moodleUrl, uploadDraft, type StateAction } from './client'
 import { loadCourse, moodle, myCourses, otherCourses, outlineOf, progressOf, revisionOf, type LoadedCourse } from './data'
 import { findExtra, insertExtra, newExtraKey, updateExtraData } from './extra'
-import { addableExtraKinds, extraKindOf, type ExtraKind } from './extra-kinds'
+import { addableExtraKinds, extraKindOf, type ExtraData, type ExtraKind } from './extra-kinds'
 import {
   EXTRA_PATH,
   isInProgress,
@@ -62,7 +63,7 @@ export function showLogin(c: C) {
 }
 
 export async function startLogin(c: C) {
-  return redirectToMoodleLogin(c, safeNext(field(await readForm(c), 'next', 500)))
+  return redirectToMoodleLogin(c, safeNext((await readFields(c, 'next'))?.next ?? ''))
 }
 
 // POST の startLogin を使い回さないのは、Moodle（別オリジン）からのフォーム送信は CSRF の検証で弾かれるため
@@ -120,6 +121,8 @@ export async function logout(c: C) {
 
 const BACKCHANNEL_MAX_AGE = 5 * 60
 
+const BACKCHANNEL_NOTICE = z.object({ sid: z.string(), time: z.number() })
+
 /** Moodle でログアウトされたときにプラグインから届く通知 */
 export async function backchannelLogout(c: C) {
   const secret = config.moodle!.backchannelSecret
@@ -127,10 +130,11 @@ export async function backchannelLogout(c: C) {
   const body = await c.req.text()
   const expected = crypto.createHmac('sha256', secret).update(body).digest('hex')
   if (!sameString(expected, c.req.header('x-steplearn-signature') ?? '')) return c.notFound()
-  const { sid, time } = JSON.parse(body) as { sid?: unknown; time?: unknown }
+  // c.req.json() で読まないのは、署名を確かめるのに受け取ったままの本文が要るため
+  const notice = BACKCHANNEL_NOTICE.safeParse(JSON.parse(body))
   // 古い通知を受け付けないのは、盗み見た通知を送り直されても、あとから始めたセッションを消させないため
-  if (typeof sid !== 'string' || typeof time !== 'number' || Math.abs(Date.now() / 1000 - time) > BACKCHANNEL_MAX_AGE) return c.notFound()
-  destroyByMoodleSid(sid)
+  if (!notice.success || Math.abs(Date.now() / 1000 - notice.data.time) > BACKCHANNEL_MAX_AGE) return c.notFound()
+  destroyByMoodleSid(notice.data.sid)
   return c.body(null, 204)
 }
 
@@ -225,22 +229,17 @@ export async function tilePhoto(c: C) {
 
 // ---------------------------------------------------------------- セクション
 
-const sectionIds = (value: string) =>
-  value
-    .split(',')
-    .map(Number)
-    .filter((n) => Number.isInteger(n) && n > 0)
-
 // 表示だけの状態なのにクッキーで持たないのは、折りたたみ型トピックの開閉は Moodle にユーザーごとに記録され、旧STEP Learn の画面とそろえるため
 export async function collapseSections(c: C) {
   const id = intParam(c, 'id')
   if (!id) return c.notFound()
   const loaded = await loadCourse(c, id)
   if (loaded.layout.kind !== 'topcoll' || !loaded.layout.persistent) return c.notFound()
-  const form = await readForm(c)
+  const fields = await readFields(c, 'collapse')
+  if (!fields) return c.notFound()
   const known = new Set(loaded.sections.filter((s) => !s.parentId).map((s) => s.id))
-  const opened = sectionIds(field(form, 'open', 2000)).filter((sid) => known.has(sid))
-  const closed = sectionIds(field(form, 'closed', 2000)).filter((sid) => known.has(sid))
+  const opened = fields.open.filter((sid) => known.has(sid))
+  const closed = fields.closed.filter((sid) => known.has(sid))
   if (opened.length) await moodle(c).setSectionsCollapsed(id, opened, false)
   if (closed.length) await moodle(c).setSectionsCollapsed(id, closed, true)
   forgetSections(id, c.var.user!.id)
@@ -259,7 +258,7 @@ async function manageCourse(c: C) {
 const hiddenMessage = (title: string, hidden: boolean) => `「${title}」を${hidden ? '学生に非表示にしました' : '学生に表示しました'}。`
 
 // トグルにせず値を送らせるのは、二重送信や古い画面からの送信で意図と逆の状態になるのを避けるため
-const readHidden = async (c: C) => field(await readForm(c), 'hidden') === '1'
+const readHidden = async (c: C) => (await readFields(c, 'visibility'))?.hidden === 1
 
 async function changeCourse(
   c: C,
@@ -307,7 +306,9 @@ export async function moveSection(c: C) {
   const loaded = await manageCourse(c)
   const section = loaded && findSection(loaded, c)
   if (!loaded || !section || section.number === 0) return c.notFound()
-  const dir = field(await readForm(c), 'dir') === 'up' ? 'up' : 'down'
+  const fields = await readFields(c, 'move')
+  if (!fields) return c.notFound()
+  const { dir } = fields
   const list = topSections(loaded)
   const i = list.findIndex((s) => s.id === section.id)
   // Moodle は「このセクションの後ろへ」しか指定できないので、上へは 2 つ前の後ろに置く。一般（0 番）より前には置けない
@@ -354,10 +355,12 @@ export async function createItem(c: C) {
   if (!loaded) return c.notFound()
   const id = loaded.course.id
   const form = await readForm(c)
-  const sectionId = Number(field(form, 'section_id'))
+  const placement = validate('itemPlacement', form)
+  if (!placement.ok) return c.notFound()
+  const { section_id: sectionId, after, type: requestedType } = placement.values
   if (!loaded.sections.some((s) => s.id === sectionId)) return c.notFound()
-  const extraKind = extraKindOf(field(form, 'type', 50))
-  if (extraKind) return createExtraItem(c, loaded, sectionId, extraKind, form)
+  const extraKind = extraKindOf(requestedType)
+  if (extraKind) return createExtraItem(c, loaded, sectionId, extraKind, form, { type: requestedType, after })
   const result = validate('item', form)
   if (!result.ok) return redirectWith(c, editUrl(loaded, sectionId), firstError(result.errors), 'error')
   const { type, hidden, title, url } = result.values
@@ -376,22 +379,31 @@ export async function createItem(c: C) {
     cmid = await moodle(c).saveResource({ ...target, draftitemid: await uploadDraft(c.var.token!, file) })
   }
   forgetCourse(id)
-  const next = field(form, 'then') === 'view' ? `/courses/${id}/items/${cmid}` : editUrl(loaded, sectionId)
+  const next = after === 'view' ? `/courses/${id}/items/${cmid}` : editUrl(loaded, sectionId)
   return redirectWith(c, next, `「${title}」を追加しました。`)
 }
 
-function validateExtra(kind: ExtraKind, form: Form) {
+async function validateExtra(kind: ExtraKind, form: Form, current?: ExtraData) {
   const own = validate(kind.form, form)
   const common = validate('extraItem', form)
   if (!own.ok || !common.ok) return { ok: false as const, errors: { ...(common.ok ? {} : common.errors), ...(own.ok ? {} : own.errors) } }
-  return { ok: true as const, common: common.values, data: kind.toData(own.values) }
+  const prepared = kind.prepare ? await kind.prepare(own.values, current) : { values: own.values }
+  if ('errors' in prepared) return { ok: false as const, errors: prepared.errors }
+  return { ok: true as const, common: common.values, data: kind.toData(prepared.values) }
 }
 
 const extraUrl = (c: C, key: string) => `${config.appOrigin ?? new URL(c.req.url).origin}${EXTRA_PATH}${key}`
 
-async function createExtraItem(c: C, loaded: LoadedCourse, sectionId: number, kind: ExtraKind, form: Form) {
+async function createExtraItem(
+  c: C,
+  loaded: LoadedCourse,
+  sectionId: number,
+  kind: ExtraKind,
+  form: Form,
+  placement: { type: string; after: 'edit' | 'view' },
+) {
   const id = loaded.course.id
-  const result = validateExtra(kind, form)
+  const result = await validateExtra(kind, form)
   if (!result.ok) return redirectWith(c, editUrl(loaded, sectionId), firstError(result.errors), 'error')
   const { title, hidden } = result.common
   const completion = loaded.course.completionenabled ? (result.common.completion ?? 'none') : 'none'
@@ -405,12 +417,12 @@ async function createExtraItem(c: C, loaded: LoadedCourse, sectionId: number, ki
     // Moodle の画面で開いたときにそのまま STEP Learn に移るよう、同じウィンドウで開く（RESOURCELIB_DISPLAY_OPEN）表示方法にする。
     // 新しいタブで開く種類は、STEP Learn の一覧と同じく新しいタブ（RESOURCELIB_DISPLAY_NEW）にする
     cmid = await moodle(c).saveUrl({ ...activity, externalurl: extraUrl(c, key), display: kind.tabPath ? 'new' : 'same' })
-    insertExtra({ key, courseId: id, cmid, type: field(form, 'type', 50), data: result.data })
+    insertExtra({ key, courseId: id, cmid, type: placement.type, data: result.data })
   }
   forgetCourse(id)
   if (kind.editAfterCreate)
     return redirectWith(c, `/courses/${id}/items/${cmid}/edit`, `「${title}」を追加しました。続けて中身を設定してください。`)
-  const next = field(form, 'then') === 'view' ? `/courses/${id}/items/${cmid}` : editUrl(loaded, sectionId)
+  const next = placement.after === 'view' ? `/courses/${id}/items/${cmid}` : editUrl(loaded, sectionId)
   return redirectWith(c, next, `「${title}」を追加しました。`)
 }
 
@@ -423,6 +435,7 @@ export async function editItem(c: C) {
   const loaded = await manageCourse(c)
   const item = loaded && findItem(loaded, c)
   if (!loaded || !editable(item)) return c.notFound()
+  if (item.kind === 'extra') await extraKindOf(item.extra.type)?.preload?.()
   return c.render(<ItemEditPage access={loaded.access} item={item} sections={loaded.sections} layout={loaded.layout} />, {
     title: `編集 - ${item.title}`,
   })
@@ -434,7 +447,8 @@ export async function updateItem(c: C) {
   if (!loaded || !editable(item)) return c.notFound()
   const id = loaded.course.id
   const form = await readForm(c)
-  const requestedSection = Number(field(form, 'section_id'))
+  const placement = validate('itemPlacement', form)
+  const requestedSection = placement.ok ? placement.values.section_id : 0
   const sectionId = loaded.sections.some((s) => s.id === requestedSection) ? requestedSection : item.sectionId
   if (item.kind === 'extra') return updateExtraItem(c, loaded, item, sectionId, form)
   // 送られてきた種類を使わないのは、画面の隠し欄は書き換えられ、保存済みのアイテムの種類と違うかもしれないため
@@ -482,8 +496,9 @@ async function updateExtraItem(c: C, loaded: LoadedCourse, item: EditableItem & 
   const id = loaded.course.id
   const kind = extraKindOf(item.extra.type)
   if (!kind) return c.notFound()
-  const result = validateExtra(kind, form)
+  const result = await validateExtra(kind, form, item.extra.data)
   if (!result.ok) {
+    await kind.preload?.()
     c.status(422)
     return c.render(
       <ItemEditPage
@@ -520,7 +535,9 @@ export async function moveItem(c: C) {
   const loaded = await manageCourse(c)
   const item = loaded && findItem(loaded, c)
   if (!loaded || !item) return c.notFound()
-  const dir = field(await readForm(c), 'dir') === 'up' ? 'up' : 'down'
+  const fields = await readFields(c, 'move')
+  if (!fields) return c.notFound()
+  const { dir } = fields
   const list = loaded.items.filter((it) => it.sectionId === item.sectionId)
   const i = list.findIndex((it) => it.id === item.id)
   // Moodle は「この活動の前へ」しか指定できないので、下へは 2 つ後ろの前に置き、末尾ならセクションの最後に置く
@@ -631,8 +648,8 @@ async function saveRestriction(c: C, loaded: LoadedCourse, subject: RestrictionS
   if (!loaded.restrictable || (target.rule && !kept)) return c.notFound()
   const form = await readForm(c)
   let set: RestrictionSet | null = null
-  if (field(form, 'clear') !== '1') {
-    const result = validate('restriction', form)
+  const result = validate('restriction', form)
+  if (!result.ok || !result.values.clear) {
     const read = result.ok ? result.values.availability : readRestrictionForm(field(form, 'availability', MAX_RESTRICTION_JSON_LENGTH + 1))
     const errors = result.ok ? (read.set ? checkRestrictionChoices(read.set, choicesFor(loaded, subject), kept) : {}) : result.errors
     if (Object.keys(errors).length > 0) {
@@ -745,7 +762,9 @@ export async function toggleComplete(c: C) {
   if (!found) return c.notFound()
   const { loaded, item } = found
   if (loaded.access.role !== 'student' || !loaded.course.completionenabled) return c.notFound()
-  const on = field(await readForm(c), 'on', 10)
+  const fields = await readFields(c, 'completionToggle')
+  if (!fields) return c.notFound()
+  const { on } = fields
   // 自動の完了で on（開いた）を送らせるのは、手動の切り替えと取り違えて、自動で付いた完了を未完了に戻さないため
   if (on === 'view' && item.completion === 'view') {
     const ownModule = item.extra && extraKindOf(item.extra.type)?.module

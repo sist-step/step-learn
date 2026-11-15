@@ -251,7 +251,7 @@ CSS は 1 ファイルにまとめず、使う部品・画面の隣に置く。�
 - 選択中のタブ・メニュー・セクション番号など「今いる場所」の色は `--c-ink`（文字）/ `--c-soft`（背景）を使う。コースの外ではブランドのシアン、`AppShell` に `tone={access.course.color}` を渡したコース配下の画面ではそのコースの色になる。主ボタンは `--primary`（ライトでは黒）のまま
 - `--primary` の塗りは主ボタン（`--primary-fill` のグラデーション）とスイッチのオンだけに使う。切り替え（`SegmentedControl` / Markdown エディターの `md-modes`）は `--track` ＋ `inset` の `--track-border` のトラックに、つまみ（`--thumb` ＋ `--shadow-sm` ＋ `inset` の `--card-border`）、現在地（`Tabs` / 目次 / レール）は `--c-soft` で示す
 - ダッシュボード（`routes/dashboard/`）は、左に「あいさつ（コースを作れる人には右に「コースを作成」）→ マイコース（縦書きの見出しと、カードにせず線で区切った行。進み具合を数えているコースの学生には行の右に `Progress`）→ マスコットの遊び場（`MascotYard`）」、右に「カレンダー（進行中のコースの終了日）→ 管理の入口（管理者）→ 今日のヒント」を並べる。数字のタイルや大きなヒーローは置かない。組み替えは `@container`（AI パネルを開くと本文だけが狭くなるため、画面の幅では決めない）
-- アイテムを読む画面の目次（`.reader-outline`）はカードにせず、左の線だけで区切る
+- アイテムを読む画面の目次（`.reader-outline`）はカードにせず、左の線だけで区切る。見出しの右の `OutlineToggle`（`components/course.tsx`）で閉じると、ボタンだけを残した細い帯になり本文が広がる。閉じたかどうかはアイテムの種類ごとの端末の設定（`outlineHidden`。`.reader` の `data-outline-kind` の値を覚える。Moodle モードは extra の種類か活動名）で、`<html data-outline-closed>` で出し分ける。最初の描画前に当てるのは `lib/settings.ts` の `BOOT_SCRIPT`。幅 900px 以下では目次が本文の下に回るので、ボタンを出さず常に開いておく
 - 見出しの段は「ページタイトル `--fs-3xl` → カード・セクションの見出し `--fs-lg` → 行のタイトル `--fs-md` → 本文 `--fs-base` → メタ `--fs-sm` / `--fs-xs`」の 5 段にする。間の大きさを新しく作らない
 - 操作部品（入力欄・チェック・スイッチ）の輪郭は `--field-border`、ほかの面の上に重なる面は `--surface-raised`（輪郭は `--overlay-border`）を使い、粗いポインター（`@media (max-width: 640px), (pointer: coarse)`）でのタップ領域は `--tap` 以上にする
 - `:hover` は `@media (hover: hover)` の中に書く（タッチ端末でタップ後にホバーの見た目が残らないように）。押下（`:active`）のフィードバックは `base.css` の `@media (hover: none)` にまとめる（背景は `--press`、カード類は `scale(0.985)`）。ボタンの押下は `button.css` にある

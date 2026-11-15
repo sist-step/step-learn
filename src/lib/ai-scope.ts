@@ -15,7 +15,7 @@ const MAX_HISTORY_LENGTH = 1000
 const HISTORY_COUNT = 4
 
 const BEHAVIOR =
-  '利用者（教師）の最後の発言が、STEP Learn での教材の作業（コースの内容の確認・追加・変更、教材に載せる問題文や最初のコードやサンプルコードの作成、教材の構成の相談、STEP Learn の使い方）ではなく、教材と関係のないコードの作成・修正・デバッグ、翻訳、文章の代筆、雑談、一般的な質問を頼んでいる'
+  '利用者（教師）の最後の発言が、STEP Learn での教材の作業（コースの内容の確認・追加・変更、教材に載せる問題文や最初のコードやサンプルコードの作成、教材の構成の相談、STEP Learn の使い方）や、STEP の活動のマニュアル（STEP Docs。かけでじ、ドキュメントの書き方、Git・GitHub など）に書かれていそうなことについての質問ではなく、教材と関係のないコードの作成・修正・デバッグ、翻訳、文章の代筆、雑談、一般的な質問を頼んでいる'
 
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max)}…` : text)
 

@@ -312,6 +312,11 @@ export const ItemIcon = ({ type }: { type: ItemType }) => {
   )
 }
 
+/** アイテムを読む画面の目次（.reader-outline）の見出しに置く開閉ボタン。閉じた種類は client.ts が端末ごとの設定に覚える */
+export const OutlineToggle = () => (
+  <IconButton icon="chevronDoubleRight" label="目次を隠す" class="outline-toggle" aria-expanded="true" data-outline-toggle />
+)
+
 /** アイテムを画面いっぱいに出すとき（PDF・コード・編集画面）に、AppShell の topbar に渡す帯。icon は種類のアイコンの代わりに置くもの */
 export const ItemBar = ({
   crumbs,

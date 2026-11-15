@@ -19,6 +19,8 @@ services:
     volumes:
       - data:/app/data
       - sandbox-socket:/run/sandbox
+      # イメージに入れないのは、STEP Docs は非公開で、公開リポジトリから作るイメージに含められないため。step-docs のワークフローが書く
+      - ${AI_DOCS_HOST_DIR:-./ai-docs}:/app/ai-docs:ro
 
   # 学生が書いたコードを app のコンテナで動かさないのは、秘密情報とデータのある場所で他人のコードを動かすことになるため。
   # こちらには env_file もデータのボリュームも渡さず、乗っ取られても持ち出せるものがない状態にする

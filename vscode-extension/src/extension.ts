@@ -54,8 +54,8 @@ async function trust(context: vscode.ExtensionContext, server: URL) {
   if (trusted.includes(server.origin)) return true
   const accept = '受け取る'
   const answer = await vscode.window.showWarningMessage(
-    `${server.host} の STEP Learn からファイルを受け取りますか？`,
-    { modal: true, detail: '学校の STEP Learn の画面から開いたときだけ「受け取る」を押してください。次からは確認しません。' },
+    `${server.host} でのSTEP Learn からファイルを受け取りますか？`,
+    { modal: true, detail: '初回時のみのチェックになります。次回からは聞きません。' },
     accept,
   )
   if (answer !== accept) return false
