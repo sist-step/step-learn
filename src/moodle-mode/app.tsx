@@ -13,6 +13,7 @@ import { agentApi, agentRequestCheck, agentRoutes, createAgentHandlers } from '.
 import { aiRoutes, createAiHandlers } from '../routes/ai/handlers'
 import { bundleRoutes, createBundleHandlers, isSyncRequest, vscodeApi } from '../routes/bundle/handlers'
 import { codeRoutes, createCodeHandlers } from '../routes/code/handlers'
+import { createQuizHandlers, quizRoutes } from '../routes/quiz/handlers'
 import { agentBackend } from './agent'
 import { canUseMoodleAi, moodleAssistant } from './ai-assistant'
 import { aiLedger, usageByUser } from './ai-usage'
@@ -22,6 +23,7 @@ import { MoodleError, isAccessDenied, isNotFound, isTokenError, isUnavailable, m
 import { codeBackend } from './code'
 import { CODE_KIND } from './extra-kinds'
 import * as h from './handlers'
+import { quizBackend } from './quiz'
 import { ErrorPage, errorContent, type ErrorContent } from './views'
 
 const app = new Hono<MoodleEnv>()
@@ -119,6 +121,7 @@ auth.get('/courses/:id/items/:iid/screen', h.showScreen)
 const code = createCodeHandlers(codeBackend)
 auth.get(`/courses/:id/items/:iid/${CODE_KIND}`, code.showPage)
 auth.route('/courses', codeRoutes(code))
+auth.route('/courses', quizRoutes(createQuizHandlers(quizBackend)))
 auth.route('/courses', bundleRoutes(createBundleHandlers(bundleBackend)))
 auth.route('/courses', agentRoutes(createAgentHandlers(agentBackend)))
 auth.get('/m/:key', h.openExtra)

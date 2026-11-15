@@ -43,7 +43,7 @@ import { findLessons, lessonWhen } from '../../lib/section-date'
 import { formatBytes } from '../../lib/bytes'
 import { CODE_LANGUAGE_LABELS, type CodeLanguage } from '../../lib/code'
 import type { Availability } from '../../lib/restriction'
-import { COMPLETION_LABELS, ITEM_TYPE_LABELS, type Completion, type Item, type ItemType, type Section } from '../../lib/types'
+import { COMPLETION_LABELS, ITEM_TYPES, ITEM_TYPE_LABELS, type Completion, type Item, type ItemType, type Section } from '../../lib/types'
 
 export type ItemLite = Pick<
   Item,
@@ -308,6 +308,7 @@ const ITEM_TYPE_DESCRIPTIONS: Record<ItemType, string> = {
   file: 'PDF や画像などを配る',
   screen: '授業中に画面を配信する',
   code: 'コードを書いて提出する',
+  quiz: 'コードを読んで答える問題で理解を確かめる',
   bundle: 'プログラムのファイルを VS Code で開けるように配る',
   agent: 'VS Code で AI にコードを書いてもらう',
 }
@@ -317,8 +318,6 @@ const AddItemButton = ({ sectionId }: { sectionId: number }) => (
     <Icon name="plus" size={16} /> アイテムを追加
   </button>
 )
-
-const ITEM_TYPES = ['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent'] as const
 
 const KindOptionBody = ({ type }: { type: ItemType }) => (
   <>
@@ -397,6 +396,7 @@ const AddItemModal = ({
           <input type="hidden" name="language" value={codeLanguages[0]} />
         )}
         <p class="when-code muted small">問題文・最初のコード・採点基準は、追加したあとの編集画面で設定します。</p>
+        <p class="when-quiz muted small">問題は、追加したあとの編集画面で作ります。</p>
         <p class="when-bundle muted small">配るファイルは、追加したあとの編集画面でアップロードします。</p>
         <p class="when-agent muted small">
           使える期間と上限は、追加したあとの編集画面で設定します。学生が使えるようになるのは、管理者が API キーを入れてからです。

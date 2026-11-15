@@ -12,10 +12,15 @@ import upload from 'heroicons/24/outline/arrow-up-tray.svg?raw'
 import maximize from 'heroicons/24/outline/arrows-pointing-out.svg?raw'
 import fitWidth from 'heroicons/24/outline/arrows-right-left.svg?raw'
 import format from 'heroicons/24/outline/bars-3-bottom-left.svg?raw'
+import indent from 'heroicons/24/outline/bars-3-bottom-right.svg?raw'
+import grip from 'heroicons/24/outline/bars-2.svg?raw'
 import menu from 'heroicons/24/outline/bars-3.svg?raw'
+import sort from 'heroicons/24/outline/bars-arrow-down.svg?raw'
 import bold from 'heroicons/24/outline/bold.svg?raw'
+import bug from 'heroicons/24/outline/bug-ant.svg?raw'
 import book from 'heroicons/24/outline/book-open.svg?raw'
 import calendar from 'heroicons/24/outline/calendar.svg?raw'
+import clipboardCheck from 'heroicons/24/outline/clipboard-document-check.svg?raw'
 import clock from 'heroicons/24/outline/clock.svg?raw'
 import cpuChip from 'heroicons/24/outline/cpu-chip.svg?raw'
 import check from 'heroicons/24/outline/check.svg?raw'
@@ -39,6 +44,7 @@ import eyeSlash from 'heroicons/24/outline/eye-slash.svg?raw'
 import folder from 'heroicons/24/outline/folder.svg?raw'
 import globe from 'heroicons/24/outline/globe-alt.svg?raw'
 import heading from 'heroicons/24/outline/h2.svg?raw'
+import flag from 'heroicons/24/outline/flag.svg?raw'
 import heart from 'heroicons/24/outline/heart.svg?raw'
 import home from 'heroicons/24/outline/home.svg?raw'
 import info from 'heroicons/24/outline/information-circle.svg?raw'
@@ -63,8 +69,10 @@ import question from 'heroicons/24/outline/question-mark-circle.svg?raw'
 import pages from 'heroicons/24/outline/rectangle-stack.svg?raw'
 import shield from 'heroicons/24/outline/shield-check.svg?raw'
 import sparkles from 'heroicons/24/outline/sparkles.svg?raw'
+import star from 'heroicons/24/outline/star.svg?raw'
 import layers from 'heroicons/24/outline/square-3-stack-3d.svg?raw'
 import stop from 'heroicons/24/outline/stop.svg?raw'
+import table from 'heroicons/24/outline/table-cells.svg?raw'
 import trash from 'heroicons/24/outline/trash.svg?raw'
 import user from 'heroicons/24/outline/user.svg?raw'
 import userMinus from 'heroicons/24/outline/user-minus.svg?raw'
@@ -99,6 +107,12 @@ const svgs = {
   sparkles,
   assistant,
   cpuChip,
+  clipboardCheck,
+  bug,
+  grip,
+  sort,
+  indent,
+  table,
   pencilSquare,
   arrowDown,
   ellipsis,
@@ -140,6 +154,8 @@ const svgs = {
   folder,
   arrowPath,
   heart,
+  star,
+  flag,
   terminal,
   play,
   undo,

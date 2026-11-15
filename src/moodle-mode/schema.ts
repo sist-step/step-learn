@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { blob, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import type { CodeFiles, ConstraintResult, GradingStatus } from '../lib/code'
+import type { QuizAnswerRecord } from '../lib/quiz'
 import type { RunResult } from '../lib/sandbox'
 
 const now = sql`(unixepoch())`
@@ -107,6 +108,26 @@ export const codeSubmissions = sqliteTable(
     createdAt: integer('created_at').notNull().default(now),
   },
   (t) => [index('code_submissions_key_user').on(t.key, t.userId, t.id)],
+)
+
+/** 小テストのアイテム（extra-kinds.tsx の quiz）の受験。通常モードの quiz_attempts と同じ形。完全移行では引き継がない */
+export const quizAttempts = sqliteTable(
+  'quiz_attempts',
+  {
+    id: integer('id').primaryKey(),
+    key: text('key')
+      .notNull()
+      .references(() => extraItems.key, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    answers: text('answers', { mode: 'json' }).$type<QuizAnswerRecord[]>().notNull(),
+    correct: integer('correct').notNull(),
+    total: integer('total').notNull(),
+    passed: integer('passed').notNull().default(0),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [index('quiz_attempts_key_user').on(t.key, t.userId, t.id)],
 )
 
 /** ファイル自動配布のアイテム（extra-kinds.tsx の bundle）で配るファイル。通常モードの bundle_files と同じ形。完全移行では引き継がない */
