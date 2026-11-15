@@ -7,7 +7,15 @@ import { contextPercent, quotaProblem, SUGGEST_REPLIES, type AiAgent, type AiAge
 import { chatRevision, type AiCard, type AiChatContent } from '../../lib/ai-chat'
 import { fileKindsAccept, fileKindsLabel } from '../../lib/ai-file-kinds'
 import type { AiChange, AiTouched } from '../../lib/ai-tool-kit'
-import { MAX_VOICE_BYTES, MAX_VOICE_SECONDS, transcribe, VOICE_MODEL, voiceFormat } from '../../lib/ai-voice'
+import {
+  isVoiceTooLong,
+  MAX_VOICE_BYTES,
+  MAX_VOICE_CHARS,
+  MAX_VOICE_SECONDS,
+  transcribe,
+  VOICE_MODEL,
+  voiceFormat,
+} from '../../lib/ai-voice'
 import { formatBytes } from '../../lib/bytes'
 import { diffHunks, diffLines } from '../../lib/diff'
 import { firstError, validate } from '../../lib/forms'
@@ -107,7 +115,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     return {
       models: enabledModels().map((m) => modelOption(user, m)),
       revision: chatRevision(chat),
-      voice: voiceProblem(user) ? null : { maxSeconds: MAX_VOICE_SECONDS },
+      voice: voiceProblem(user) ? null : { maxSeconds: MAX_VOICE_SECONDS, maxChars: MAX_VOICE_CHARS },
       chat: chat && {
         id: chat.id,
         model: modelOption(user, chat.model),
@@ -232,9 +240,11 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     const problem = voiceProblem(user)
     if (problem) return c.json({ error: problem }, 429)
     try {
-      const { text, usage } = await transcribe(fields.audio, format, c.req.raw.signal)
+      const { text, seconds, usage } = await transcribe(fields.audio, format, c.req.raw.signal)
       ledger.recordUsage(user.id, VOICE_MODEL, usage)
-      return c.json({ text })
+      // 録音の長さを client.ts だけに任せないのは、画面を通さずに送られた長い音声も、1 回の上限で断るため
+      if (isVoiceTooLong(seconds)) return c.json({ error: `音声入力は 1 回 ${MAX_VOICE_SECONDS} 秒までです。` }, 400)
+      return c.json({ text: text.slice(0, MAX_VOICE_CHARS) })
     } catch (e) {
       if (e instanceof AiError) return c.json({ error: e.message }, 502)
       throw e

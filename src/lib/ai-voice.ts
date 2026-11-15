@@ -6,6 +6,15 @@ export const VOICE_MODEL: TranscriptionModel = 'openai/whisper-large-v3-turbo'
 /** 1 回の音声入力で録れる長さ（秒）。client.ts はこの長さで録音を止めて送る */
 export const MAX_VOICE_SECONDS = 60
 
+/** 1 回の音声入力で文字にできる長さ。client.ts は途中の文字起こしがこの長さに届いたら録音を止めて送る */
+export const MAX_VOICE_CHARS = 500
+
+// 少し超えるのを許すのは、client.ts が録音を止めてから最後の断片が届くまでに、数百ミリ秒ずれるため
+const VOICE_SECONDS_MARGIN = 3
+
+/** 文字起こしの提供元が数えた長さ（秒）が、1 回の上限を超えているか。usage.seconds がなければ超えていないとみなす */
+export const isVoiceTooLong = (seconds: number | null) => seconds !== null && seconds > MAX_VOICE_SECONDS + VOICE_SECONDS_MARGIN
+
 // 録った長さから決めないのは、送られてくるのは圧縮した音声で、長さを確かめるには中身を読む必要があるため。
 // iOS の AAC（128 kbps 前後）で MAX_VOICE_SECONDS を録っても収まる大きさにしている
 export const MAX_VOICE_BYTES = 4 * 1024 * 1024
@@ -33,7 +42,11 @@ type WireTranscription = {
 }
 
 /** 音声を文字にする。language は ISO-639-1（自動で判定させると、短い発話を別の言語として起こすことがあるため） */
-export async function transcribe(audio: Blob, format: string, signal?: AbortSignal): Promise<{ text: string; usage: AiUsage }> {
+export async function transcribe(
+  audio: Blob,
+  format: string,
+  signal?: AbortSignal,
+): Promise<{ text: string; seconds: number | null; usage: AiUsage }> {
   if (!config.openRouter) throw new AiError('OPENROUTER_API_KEY が設定されていないため、音声入力を利用できません')
   let res: Response
   try {
@@ -63,9 +76,10 @@ export async function transcribe(audio: Blob, format: string, signal?: AbortSign
     if (res.status === 429) throw new AiError('音声入力が混み合っています。しばらくしてからお試しください')
     throw new AiError('音声を文字にできませんでした')
   }
-  const seconds = data.usage?.seconds ?? 0
+  const seconds = typeof data.usage?.seconds === 'number' ? data.usage.seconds : null
   return {
     text: data.text.trim(),
-    usage: { promptTokens: 0, completionTokens: 0, cost: data.usage?.cost ?? seconds * FALLBACK_PRICE_PER_SECOND },
+    seconds,
+    usage: { promptTokens: 0, completionTokens: 0, cost: data.usage?.cost ?? (seconds ?? 0) * FALLBACK_PRICE_PER_SECOND },
   }
 }

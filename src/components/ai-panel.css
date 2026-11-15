@@ -178,7 +178,8 @@
 .ai-voice[hidden], .ai-voice-cancel, .ai-ghost, .ai-note-voice { display: none; }
 .ai-input[data-voice] .ai-textarea, .ai-composer:has(.ai-input[data-voice]) .ai-note-type { display: none; }
 .ai-input[data-voice] .ai-voice-cancel { display: inline-flex; }
-.ai-composer:has(.ai-input[data-voice]) .ai-note-voice { display: inline; }
+.ai-composer:has(.ai-input[data-voice]) .ai-note-voice { display: inline; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ai-note-voice [data-near] { color: var(--warning-text); font-weight: 600; }
 .ai-panel[data-busy] .ai-voice:not([aria-pressed='true']) { display: none; }
 /* 外側に広がる輪で音の大きさを見せるのは、話しているのに拾えていないことに、文字が出る前に気付けるようにするため */
 .ai-voice[aria-pressed='true'] { background: var(--danger-strong); color: var(--on-strong); box-shadow: 0 0 0 calc(var(--ai-level, 0) * 9px) color-mix(in srgb, var(--danger) 28%, transparent); transition: box-shadow 0.08s linear; }

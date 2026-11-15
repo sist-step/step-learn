@@ -11,6 +11,7 @@ import { agentModelFacts, isAgentClaudeModel, type AgentModel } from './lib/agen
 import type { AiAgentEvent, AiUsageMeter } from './lib/ai-agent'
 import type { AiTouched } from './lib/ai-tool-kit'
 import { formatBytes } from './lib/bytes'
+import { formatClock } from './lib/clock'
 import { formatDateTimeInput } from './lib/course-period'
 import { isFormName, validate, type FieldErrors, type FormInput } from './lib/forms'
 import { renderMarkdown } from './lib/markdown'
@@ -3070,6 +3071,9 @@ type AiVoice = {
   /** 声らしい大きさの音を一度でも拾ったか */
   heard: boolean
   startedAt: number
+  /** 1 回に録れる長さ（ミリ秒）と、文字にできる長さ（components/ai-panel.tsx の data-max-seconds / data-max-chars） */
+  maxMs: number
+  maxChars: number
   timer: number
   limitTimer: number
   frame: number
@@ -3082,6 +3086,9 @@ const AI_VOICE_INTERVAL = 1200
 // 短すぎる音声を送らないのは、Whisper が 1 秒に満たない音声から、話していない言葉を作ることがあるため
 const AI_VOICE_MIN_MS = 1000
 const AI_VOICE_HEARD_LEVEL = 0.02
+// 残りがこれを切ったら時間と文字数の色を変えるのは、急に止まって送られる前に、話をまとめられるようにするため
+const AI_VOICE_NEAR_MS = 10_000
+const AI_VOICE_NEAR_CHARS = 0.9
 // Safari は webm を録れないので mp4 を、Firefox は ogg も録れるので最後の候補に入れる
 const AI_VOICE_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
 
@@ -3093,10 +3100,27 @@ function showAiVoice() {
   if (button) button.hidden = !aiVoiceSupported()
 }
 
+/** 入力欄の下の、録音した時間と文字数 */
+function paintAiVoiceStatus(voice: AiVoice | null) {
+  const panel = aiPanel()
+  const time = panel?.querySelector<HTMLElement>('[data-ai-voice-time]')
+  const chars = panel?.querySelector<HTMLElement>('[data-ai-voice-chars]')
+  const elapsed = voice ? Date.now() - voice.startedAt : 0
+  if (time) {
+    time.textContent = formatClock(elapsed / 1000)
+    time.toggleAttribute('data-near', !!voice && voice.maxMs - elapsed <= AI_VOICE_NEAR_MS)
+  }
+  if (chars) {
+    chars.textContent = String(voice?.text.length ?? 0)
+    chars.toggleAttribute('data-near', !!voice && voice.text.length >= voice.maxChars * AI_VOICE_NEAR_CHARS)
+  }
+}
+
 function paintAiVoice(voice: AiVoice | null) {
   const box = aiPanel()?.querySelector<HTMLElement>('.ai-input')
   const button = aiVoiceButton()
   if (!box || !button) return
+  paintAiVoiceStatus(voice)
   if (!voice) {
     box.removeAttribute('data-voice')
     button.setAttribute('aria-pressed', 'false')
@@ -3132,6 +3156,7 @@ function meterAiVoice(voice: AiVoice) {
     const level = Math.sqrt(samples.reduce((sum, v) => sum + v * v, 0) / samples.length)
     if (level >= AI_VOICE_HEARD_LEVEL) voice.heard = true
     aiVoiceButton()?.style.setProperty('--ai-level', String(Math.min(1, level * 8)))
+    paintAiVoiceStatus(voice)
     voice.frame = requestAnimationFrame(tick)
   }
   voice.frame = requestAnimationFrame(tick)
@@ -3160,6 +3185,7 @@ function scheduleAiVoice(voice: AiVoice) {
         if (aiVoice === voice && voice.state === 'recording') {
           voice.text = text
           paintAiVoice(voice)
+          if (text.length >= voice.maxChars) void finishAiVoice(`音声入力は 1 回 ${voice.maxChars} 文字までのため、ここまでを送信します。`)
         }
       } catch {
         // 途中の失敗を知らせないのは、話し終えたときにまとめて送り直し、そこで失敗したときだけ伝えれば足りるため
@@ -3196,6 +3222,8 @@ async function startAiVoice(button: HTMLButtonElement) {
     sent: 0,
     heard: false,
     startedAt: Date.now(),
+    maxMs: Number(button.dataset.maxSeconds) * 1000,
+    maxChars: Number(button.dataset.maxChars),
     timer: 0,
     limitTimer: 0,
     frame: 0,
@@ -3208,7 +3236,10 @@ async function startAiVoice(button: HTMLButtonElement) {
   aiVoice = voice
   meterAiVoice(voice)
   scheduleAiVoice(voice)
-  voice.limitTimer = window.setTimeout(() => void finishAiVoice(), Number(button.dataset.aiVoice) * 1000)
+  voice.limitTimer = window.setTimeout(
+    () => void finishAiVoice(`音声入力は 1 回 ${voice.maxMs / 1000} 秒までのため、ここまでを送信します。`),
+    voice.maxMs,
+  )
   paintAiVoice(voice)
 }
 
@@ -3244,10 +3275,14 @@ function cancelAiVoice() {
 
 const joinAiVoice = (base: string, text: string) => (base && text ? `${base} ${text}` : base || text)
 
-/** 話し終えた音声をまとめて文字にし、入力欄にあった文に続けてそのまま送る。失敗したら、途中までの文字を入力欄に残す */
-async function finishAiVoice() {
+/**
+ * 話し終えた音声をまとめて文字にし、入力欄にあった文に続けてそのまま送る。失敗したら、途中までの文字を入力欄に残す。
+ * limit は、1 回の上限に届いて止めたときに知らせる文言
+ */
+async function finishAiVoice(limit?: string) {
   const voice = aiVoice
   if (!voice || voice.state !== 'recording') return
+  if (limit) toast(limit, 'info')
   voice.state = 'finishing'
   paintAiVoice(voice)
   await releaseAiVoice(voice)
