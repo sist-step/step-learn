@@ -112,6 +112,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `Progress` / `ProgressRing` | 進捗バー・リング（JS で更新できる `data-*` 付き） |
 | `CourseCard` | コースのカード（名前 → コード → 概要）。コース一覧で `.course-grid` に並べる（ダッシュボードのマイコースは、カードではなく線で区切った行の `routes/dashboard/views.tsx` の `CourseRow`）。期間外のコースには `data-course-ended`、参加していないコースには `data-course-unenrolled` が付き、コース一覧の「進行中 / すべて」の絞り込みで隠れる（下の「マークアップ」） |
 | `CourseIcon` | コースの頭文字のバッジ。コースアイコンが設定されていれば画像を出す。大きさと形は `class`（`course-mono` / `course-hero-mono` / `dot`）で決める |
+| `LessonBadge` / `LessonJump`（`course.tsx`） | セクション名の日付（`lib/section-date.ts` の `findLessons`）で決めた授業の回の目印。`LessonBadge` はセクションのカード・タイルに付ける「今日」「前回」「次回」のバッジ。`LessonJump` はコースページの右下に固定するボタンで、「前回」と「今回」（今日の回がなければ「次回」）を押すと、`client.ts` がそのセクションを開いてスクロールし（タイル形式ならタイルを開く）、縁を一瞬光らせる。AI のパネルを横に並べているときはパネルの左に寄る |
 | `formatDate` | UNIX 秒を「2026年10月28日」形式で表示 |
 
 ### マスコット — `src/components/mascot.tsx`
