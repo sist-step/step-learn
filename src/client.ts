@@ -1355,6 +1355,43 @@ document.addEventListener('click', (e) => {
   slide.finished.then(() => revealTilePanel(tile, panel)).catch(() => {})
 })
 
+// --- 右下のボタンで前回・今回のセクションを選ぶ
+// CSS のクラスで光らせないのは、今日の回のカードに付けた animation を上書きして止めてしまうため
+function flashSection(el: HTMLElement) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const color = getComputedStyle(el).getPropertyValue('--c1').trim() || getComputedStyle(el).getPropertyValue('--accent').trim()
+  el.animate(
+    [
+      { outline: `3px solid ${color}`, outlineOffset: '4px' },
+      { outline: '3px solid transparent', outlineOffset: '4px' },
+    ],
+    {
+      duration: 1600,
+      delay: 300,
+      easing: 'ease-in',
+      fill: 'backwards',
+    },
+  )
+}
+
+document.addEventListener('click', (e) => {
+  const button = (e.target as Element).closest<HTMLElement>('[data-lesson-jump]')
+  if (!button) return
+  const id = button.dataset.lessonJump!
+  const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+  const tile = document.querySelector<HTMLElement>(`#tile-${id} .sec-tile`)
+  if (tile) {
+    tile.scrollIntoView({ block: 'start', behavior })
+    if (tile.matches('a[data-tile]') && tile.getAttribute('aria-expanded') !== 'true') tile.click()
+    return flashSection(tile)
+  }
+  const section = document.getElementById(`section-${id}`)
+  if (!(section instanceof HTMLDetailsElement)) return
+  section.open = true
+  section.scrollIntoView({ block: 'start', behavior })
+  flashSection(section)
+})
+
 // --- ファイル選択時にタイトルが空なら自動入力
 document.addEventListener('change', (e) => {
   const input = e.target as HTMLInputElement

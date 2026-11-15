@@ -3,7 +3,7 @@ import { formatBytes } from '../lib/bytes'
 import { courseImageUrl } from '../lib/course-images'
 import type { CourseAccess } from '../lib/courses'
 import { completionChoices } from '../lib/forms'
-import type { TodaySection } from '../lib/section-date'
+import type { LessonWhen, Lessons } from '../lib/section-date'
 import { MAX_FILE_SIZE } from '../lib/storage'
 import {
   COMPLETION_LABELS,
@@ -37,9 +37,36 @@ import { useStyle } from './style'
 
 type Tab = 'content' | 'participants' | 'settings'
 
-export const TodayBadge = ({ when }: { when: TodaySection['when'] }) => {
+const LESSON_BADGE_LABELS: Record<LessonWhen, string> = { prev: '前回', today: '今日', next: '次回' }
+const LESSON_JUMP_LABELS: Record<LessonWhen, string> = { prev: '前回', today: '今回', next: '次回' }
+
+export const LessonBadge = ({ when }: { when: LessonWhen }) => {
   useStyle('/src/components/course.css')
-  return <span class={cx('today-badge', `is-${when}`)}>{when === 'today' ? '今日' : '前回'}</span>
+  return <span class={cx('today-badge', `is-${when}`)}>{LESSON_BADGE_LABELS[when]}</span>
+}
+
+/** 右下に置く、前回と今回（今日の回がなければ次回）のセクションを選ぶボタン */
+export const LessonJump = ({ lessons }: { lessons: Lessons }) => {
+  useStyle('/src/components/course.css')
+  const targets = [lessons.prev, lessons.today ?? lessons.next].filter((l) => !!l)
+  if (!targets.length) return null
+  return (
+    <nav class="lesson-jump" aria-label="授業の回へ移動">
+      {targets.map((l) => (
+        <Button
+          size="sm"
+          variant="ghost"
+          class={cx('lesson-jump-btn', `is-${l.when}`)}
+          data-lesson-jump={l.id}
+          title={l.title}
+          aria-label={`${LESSON_JUMP_LABELS[l.when]}（${l.title}）を開く`}
+        >
+          <span class="lesson-jump-label">{LESSON_JUMP_LABELS[l.when]}</span>
+          <span class="lesson-jump-date">{l.date}</span>
+        </Button>
+      ))}
+    </nav>
+  )
 }
 
 export const nextActionLabel = (done: number) => (done > 0 ? '続きから' : '学習を始める')

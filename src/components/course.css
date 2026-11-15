@@ -157,10 +157,11 @@ div.course-hero-cover { background: linear-gradient(150deg, var(--c2), var(--c1)
 .today-badge { flex: none; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px 0 8px; border-radius: 999px; font-size: var(--fs-xs); font-weight: 650; letter-spacing: 0.04em; white-space: nowrap; }
 .today-badge.is-today { background: linear-gradient(135deg, var(--c1, var(--accent)), var(--c2, var(--accent))); color: var(--c-on, var(--on-strong)); box-shadow: 0 2px 10px color-mix(in srgb, var(--c1, var(--accent)) 45%, transparent); }
 .today-badge.is-today::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.today-badge.is-recent { background: var(--surface); color: var(--c-ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c1, var(--accent)) 45%, transparent), var(--shadow-sm); }
+.today-badge.is-prev { background: var(--surface); color: var(--c-ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c1, var(--accent)) 45%, transparent), var(--shadow-sm); }
 :is(.section-card, .sec-tile).is-today { border-color: transparent; box-shadow: 0 0 0 4px color-mix(in srgb, var(--c1, var(--accent)) 16%, transparent), 0 10px 30px -6px color-mix(in srgb, var(--c1, var(--accent)) 45%, transparent); }
 .section-card.is-today:target { box-shadow: var(--ring); }
-:is(.section-card, .sec-tile).is-recent { border-color: color-mix(in srgb, var(--c1, var(--accent)) 55%, transparent); }
+:is(.section-card, .sec-tile).is-prev { border-color: color-mix(in srgb, var(--c1, var(--accent)) 55%, transparent); }
+.today-badge.is-next { background: var(--surface); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--border-strong), var(--shadow-sm); }
 /* 枠を border-image にしないのは、border-radius が効かず角が四角く出るため */
 :is(.section-card, .sec-tile).is-today::after {
   content: '';
@@ -192,3 +193,27 @@ div.course-hero-cover { background: linear-gradient(150deg, var(--c2), var(--c1)
 @keyframes today-dot { from { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 60%, transparent); } to { box-shadow: 0 0 0 6px transparent; } }
 /* 終わったら透明に戻すのは、ポップオーバーを開いて overflow: visible になったカードの外に光が残って見えるため */
 @keyframes today-shine { from { opacity: 1; translate: -100% 0; } to { opacity: 1; translate: 100% 0; } }
+
+/* ===== 前回・今回のセクションを選ぶボタン（右下。選ぶ処理は client.ts の data-lesson-jump） */
+.lesson-jump { position: fixed; right: 24px; bottom: 24px; z-index: 20; display: flex; gap: 2px; padding: 4px; border: 1px solid var(--glass-border); border-radius: 999px; background: var(--glass-raised); backdrop-filter: var(--glass-blur); box-shadow: var(--shadow); }
+.lesson-jump-btn { gap: 6px; }
+.lesson-jump-date { color: var(--muted); font-size: var(--fs-xs); font-weight: 500; font-variant-numeric: tabular-nums; }
+.lesson-jump-btn.is-today { --btn-bg: var(--c-deep, var(--accent)); --btn-fg: var(--c-on, var(--on-strong)); background: linear-gradient(135deg, var(--c1, var(--accent)), var(--c2, var(--accent))); box-shadow: 0 2px 10px color-mix(in srgb, var(--c1, var(--accent)) 40%, transparent); }
+.lesson-jump-btn.is-today::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.lesson-jump-btn.is-today .lesson-jump-date { color: inherit; opacity: 0.85; }
+@media (hover: hover) {
+  .lesson-jump-btn.is-today:hover { background: linear-gradient(135deg, var(--c1, var(--accent)), var(--c2, var(--accent))); filter: brightness(1.06); }
+}
+/* AI のパネルを開いた広い画面で画面の右端に置かないのは、本文の横に並んだパネルの上に重なるため */
+@media (min-width: 1100px) {
+  .lesson-jump { transition: right 0.25s var(--ease); }
+  :root[data-ai-open] .lesson-jump { right: calc(var(--ai-panel-w, 400px) + 24px); }
+}
+@media (max-width: 640px) {
+  .lesson-jump { right: 16px; bottom: 16px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .lesson-jump { animation: lesson-jump-in 0.4s var(--ease) 0.2s both; }
+  .lesson-jump-btn.is-today::before { animation: today-dot 1.8s ease-out infinite; }
+}
+@keyframes lesson-jump-in { from { opacity: 0; translate: 0 12px; } }
