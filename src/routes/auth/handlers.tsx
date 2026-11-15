@@ -19,7 +19,7 @@ import {
 import { config } from '../../lib/config'
 import { db } from '../../lib/db'
 import { type FieldErrors, validate } from '../../lib/forms'
-import { clientIp, field, readForm, redirectWith, safeNext } from '../../lib/http'
+import { clientIp, field, readFields, readForm, redirectWith, safeNext, type Form } from '../../lib/http'
 import { mailer } from '../../lib/mail'
 import {
   type MicrosoftIdentity,
@@ -210,9 +210,14 @@ export async function showCompleteRegister(c: Context<AppEnv>) {
   return c.render(<CompleteRegisterPage token={token} email={verification.email} />, { title: '新規登録' })
 }
 
+const linkToken = (form: Form) => {
+  const result = validate('linkToken', form)
+  return result.ok ? result.values.token : ''
+}
+
 export async function submitCompleteRegister(c: Context<AppEnv>) {
   const form = await readForm(c)
-  const token = field(form, 'token', 100)
+  const token = linkToken(form)
   const verification = await findEmailVerification(token)
   if (!verification) {
     c.status(410)
@@ -301,7 +306,7 @@ export async function showResetPassword(c: Context<AppEnv>) {
 
 export async function submitResetPassword(c: Context<AppEnv>) {
   const form = await readForm(c)
-  const token = field(form, 'token', 100)
+  const token = linkToken(form)
   const user = await findPasswordReset(token)
   if (!user) {
     c.status(410)
@@ -336,7 +341,7 @@ const MICROSOFT_FAILED = 'Microsoft アカウントでログインできませ�
 const MICROSOFT_RETRY = 'もう一度 Microsoft アカウントでログインしてください。'
 
 export async function startMicrosoft(c: Context<AppEnv>) {
-  const next = safeNext(field(await readForm(c), 'next', 500))
+  const next = safeNext((await readFields(c, 'next'))?.next ?? '')
   return c.redirect(await startMicrosoftAuth(c, { next }), 303)
 }
 

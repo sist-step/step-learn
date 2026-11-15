@@ -3,12 +3,10 @@ import type { Context } from 'hono'
 import { RequestContext } from 'hono/jsx-renderer'
 import { getCourseAccess, trackedDoneCount, trackedItemCount } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
-import { field, intParam, readForm, redirectWith } from '../../lib/http'
+import { intParam, readFields, redirectWith } from '../../lib/http'
 import { completions, enrollments, users } from '../../lib/schema'
-import { COURSE_ROLE_LABELS, type AppEnv, type CourseRole } from '../../lib/types'
+import { COURSE_ROLE_LABELS, type AppEnv } from '../../lib/types'
 import { CANDIDATE_LIMIT, Candidates, ParticipantsPage, type Candidate, type Participant } from './views'
-
-const isCourseRole = (r: string): r is CourseRole => r === 'teacher' || r === 'student'
 
 async function manageAccess(c: Context<AppEnv>) {
   const id = intParam(c, 'id')
@@ -81,15 +79,11 @@ export async function add(c: Context<AppEnv>) {
   if (!access) return c.notFound()
   const id = access.course.id
   const back = `/courses/${id}/participants`
-  const form = await readForm(c)
-  const userId = Number(field(form, 'user_id', 20))
-  const role = field(form, 'role')
-  if (!isCourseRole(role)) return c.notFound()
+  const fields = await readFields(c, 'participant')
+  if (!fields) return c.notFound()
+  const { user_id: userId, role } = fields
 
-  const user =
-    Number.isSafeInteger(userId) && userId > 0
-      ? db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, userId)).get()
-      : undefined
+  const user = db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, userId)).get()
   if (!user) return redirectWith(c, back, 'ユーザーが見つかりませんでした。', 'error')
 
   const res = db.insert(enrollments).values({ courseId: id, userId: user.id, role }).onConflictDoNothing().run()
@@ -103,8 +97,9 @@ export async function changeRole(c: Context<AppEnv>) {
   if (!access || !uid) return c.notFound()
   const id = access.course.id
   const back = `/courses/${id}/participants`
-  const role = field(await readForm(c), 'role')
-  if (!isCourseRole(role)) return c.notFound()
+  const fields = await readFields(c, 'courseRole')
+  if (!fields) return c.notFound()
+  const { role } = fields
   if (role === 'student' && (await isLastTeacher(id, uid))) {
     return redirectWith(c, back, 'コースには少なくとも1人の教師が必要です。', 'error')
   }

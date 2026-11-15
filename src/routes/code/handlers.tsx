@@ -7,7 +7,7 @@ import { gradingEnabled, submissionsOf, submitWait, type Grader } from '../../li
 import type { CodeSettings, CodeStore, StudentRow, SubmissionSummary } from '../../lib/code-store'
 import type { CourseAccess } from '../../lib/courses'
 import { firstError, validate } from '../../lib/forms'
-import { field, intParam, readForm, redirectWith, wantsJson } from '../../lib/http'
+import { intParam, readFields, readForm, redirectWith, wantsJson } from '../../lib/http'
 import { rateLimiter } from '../../lib/rate-limit'
 import { SandboxError, runCode, sandboxEnabled } from '../../lib/sandbox'
 import type { AppEnv } from '../../lib/types'
@@ -253,19 +253,16 @@ export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
     if (!ctx || !gradingEnabled) return c.notFound()
     if (!wantsJson(c)) return c.redirect(ctx.page, 303)
     const { settings, userId } = ctx
-    const form = await readForm(c)
-    const body = field(form, 'body', 100_000)
-    if (!body) return c.json({ error: '先に問題文を書いてください。' }, 422)
+    const result = validate('codeSuggest', await readForm(c))
+    if (!result.ok) return c.json({ error: firstError(result.errors) }, 422)
+    const { title, body } = result.values
     const key = String(userId)
     const wait = suggestLimit.retryAfter(key)
     if (wait) return c.json({ error: `続けて作れません。${wait} 秒ほど待ってから、もう一度お試しください。` }, 429)
     if (!grader.canGrade()) return c.json({ error: 'AI の今月の上限に達しているため、下書きを作れません。' }, 503)
     suggestLimit.hit(key)
     try {
-      const draft = await grader.draftSetup(
-        { title: field(form, 'title', 200) || settings.title, body, language: settings.language },
-        userId,
-      )
+      const draft = await grader.draftSetup({ title: title || settings.title, body, language: settings.language }, userId)
       if (draft) return c.json({ draft })
     } catch (e) {
       if (!(e instanceof AiError)) throw e
@@ -278,8 +275,8 @@ export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
     const ctx = await studentSubmissions(c)
     if (!ctx || !gradingEnabled) return c.notFound()
     const { store, courseId, itemId, student, history } = ctx
-    const wanted = Number(field(await readForm(c), 'submission', 20))
-    const target = history.find((h) => h.id === wanted)
+    const fields = await readFields(c, 'regrade')
+    const target = fields && history.find((h) => h.id === fields.submission)
     if (!target) return c.notFound()
     const url = submissionsUrl(courseId, itemId, student.id, target.id)
     if (target.status === 'pending') return redirectWith(c, url, 'すでに採点しています。', 'info')
