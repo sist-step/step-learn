@@ -11,6 +11,12 @@ export const OPENROUTER_DECISION_MODELS = ['typesafe/jev-1.14', 'respan/span-01-
 
 export type DecisionModel = (typeof OPENROUTER_DECISION_MODELS)[number]
 
+// AI_MODELS に入れないのは、文章をベクトルにするだけで、会話には使えないため
+/** ドキュメントの検索に使う埋め込みのモデル（lib/ai-docs.ts）。使用量は OpenRouter の月の上限に数える */
+export const OPENROUTER_EMBEDDING_MODELS = ['qwen/qwen3-embedding-8b'] as const
+
+export type EmbeddingModel = (typeof OPENROUTER_EMBEDDING_MODELS)[number]
+
 export type OpenRouterModel = (typeof OPENROUTER_MODELS)[number]
 export type AnthropicModel = (typeof ANTHROPIC_MODELS)[number]
 export type AiModel = (typeof AI_MODELS)[number]

@@ -13,3 +13,5 @@ moodle
 sandbox
 # 並行作業用の worktree（それぞれ node_modules と data を持つ）
 .claude/worktrees
+# STEP Docs の索引（非公開。本番ではマウントする）
+ai-docs
