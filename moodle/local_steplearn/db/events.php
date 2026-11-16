@@ -28,4 +28,17 @@ $observers = [
         'eventname' => '\core\event\user_loggedout',
         'callback' => '\local_steplearn\observer::user_loggedout',
     ],
+    ...array_map(fn(string $eventname) => [
+        'eventname' => $eventname,
+        'callback' => '\local_steplearn\observer::course_changed',
+    ], [
+        '\core\event\course_updated',
+        '\core\event\course_restored',
+        '\core\event\course_section_created',
+        '\core\event\course_section_updated',
+        '\core\event\course_section_deleted',
+        '\core\event\course_module_created',
+        '\core\event\course_module_updated',
+        '\core\event\course_module_deleted',
+    ]),
 ];

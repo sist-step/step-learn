@@ -1,5 +1,5 @@
 // 毎回 Moodle に問い合わせないのは、GET のたびにナビのコース一覧なども取り直すと、Moodle の速さがそのまま画面の速さになるため
-// TTL を長くしないのは、Moodle の画面で変えた内容（課題の追加など）が STEP Learn に出るまで待たせないため
+// TTL を長くしないのは、通知（handlers.tsx の backchannel）が届かない変更も、待たせずに STEP Learn に出すため。通知の鍵を設定していない Moodle や、プラグインの監視していない操作で変えたときがそう
 const TTL = 30_000
 const MAX_ENTRIES = 5_000
 
