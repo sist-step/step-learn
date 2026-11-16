@@ -19,7 +19,7 @@ import agent, { isAgentRequest, api as agentApi } from './routes/agent'
 import ai, { renderAiPanel } from './routes/ai'
 import auth from './routes/auth'
 import bundle, { isSyncRequest, api as vscodeApi } from './routes/bundle'
-import code from './routes/code'
+import code, { CODE_BODY_LIMIT, isCodeRequest, api as codeApi } from './routes/code'
 import content from './routes/content'
 import courses from './routes/courses'
 import dashboard from './routes/dashboard'
@@ -40,8 +40,17 @@ app.use(flashMiddleware)
 app.use(session)
 const syncBodyLimit = limitBody(SYNC_BODY_LIMIT)
 const agentBodyLimit = limitBody(AGENT_BODY_LIMIT)
+const codeBodyLimit = limitBody(CODE_BODY_LIMIT)
 app.use((c, next) =>
-  (isAgentRequest(c) ? agentBodyLimit : c.var.user ? userBodyLimit : isSyncRequest(c) ? syncBodyLimit : guestBodyLimit)(c, next),
+  (isAgentRequest(c)
+    ? agentBodyLimit
+    : c.var.user
+      ? userBodyLimit
+      : isSyncRequest(c)
+        ? syncBodyLimit
+        : isCodeRequest(c)
+          ? codeBodyLimit
+          : guestBodyLimit)(c, next),
 )
 app.use(renderer)
 // 要求ごとに描いておかず、AppShell が呼ぶまで待つのは、JSON やファイルを返す要求のたびに会話を復号することになるため
@@ -80,6 +89,7 @@ app.route('/courses', quiz)
 app.route('/courses', bundle)
 app.route('/courses', agent)
 app.route('/api/vscode/agent', agentApi)
+app.route('/api/vscode/code', codeApi)
 app.route('/api/vscode', vscodeApi)
 app.route('/account', account)
 app.route('/admin', admin)

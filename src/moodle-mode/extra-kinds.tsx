@@ -11,7 +11,7 @@ import {
 import { BundleEditPanel, BundleOpen, type BundleView } from '../components/bundle'
 import { Button } from '../components/button'
 import { LinkCard } from '../components/card'
-import { CodeGradingFields, CodePeriodFields, CodeStarterFields, type ConstraintRow } from '../components/code'
+import { CodeGradingFields, CodeOpen, CodePeriodFields, CodeStarterFields, type ConstraintRow } from '../components/code'
 import { SelectField } from '../components/form'
 import type { IconName } from '../components/icons'
 import { Markdown, MarkdownEditor } from '../components/markdown'
@@ -32,7 +32,7 @@ import { dateTimeInputToUnix, isDateTimeInput, unixToDateTimeInput } from '../li
 import { BUNDLE_KIND, bundleBase } from '../lib/bundle'
 import { BUNDLE_MODULE } from '../lib/bundle'
 import { syncStateOf } from '../lib/bundle-sync'
-import { gradingEnabled } from '../lib/code-grader'
+import { gradingEnabled, submissionsOf } from '../lib/code-grader'
 import type { CourseAccess } from '../lib/courses'
 import { readConstraints, type FieldErrors, type FormName } from '../lib/forms'
 import {
@@ -51,6 +51,7 @@ import { isSharing } from '../lib/screen-share'
 import type { AppEnv } from '../lib/types'
 import { agentModelData, agentModelOfData, agentPeriodOf, agentStore } from './agent-store'
 import { bundleStore, bundleSyncStore } from './bundle-store'
+import { codeSettingsOf, codeStore, grader } from './code-store'
 import type { Api, MoodleCourse, SaveActivity } from './client'
 import type { MItem } from './mapping'
 import { quizStore } from './quiz'
@@ -219,7 +220,7 @@ const code: ExtraKind = {
   description: 'コードを書いて提出する',
   icon: 'terminal',
   form: 'extraCode',
-  // 中身の読み取りは moodle-mode/code.ts の codeSettingsOf と codePeriodOf。タイトルも入れておくのは、採点が Moodle に問い合わせずに動くため
+  // 中身の読み取りは moodle-mode/code-store.ts の codeSettingsOf と codePeriodOf。タイトルも入れておくのは、採点が Moodle に問い合わせずに動くため
   toData(values) {
     const language = isCodeLanguage(str(values.language)) ? (values.language as (typeof CODE_LANGUAGES)[number]) : 'web'
     const edited = values.starter_set === 1
@@ -238,25 +239,35 @@ const code: ExtraKind = {
   Fields: CodeFields,
   addNote: '問題文・最初のコード・制約・提出の期間は、追加したあとの編集画面で設定します。',
   editAfterCreate: true,
-  View: ({ item, access }) => (
-    <LinkCard
-      href={`/courses/${access.course.id}/items/${item.id}/${CODE_KIND}`}
-      icon="terminal"
-      class="link-card-lg kind-extra"
-      target="_blank"
-      rel="noopener"
-      data-no-prefetch
-    >
-      <span class="file-name">
-        <span class="strong">エディターを開く</span>
-        <span class="muted small truncate">別のタブで開きます</span>
-      </span>
-      <Button as="span" variant="primary" iconEnd="external">
-        開く
-      </Button>
-    </LinkCard>
-  ),
-  tabPath: CODE_KIND,
+  View: ({ item, data, access }) => {
+    const settings = codeSettingsOf(data, item.title)
+    const grade = useCodeGrade(item, access)
+    return (
+      settings && (
+        <>
+          <CodeOpen
+            base={`/courses/${access.course.id}/items/${item.id}/${CODE_KIND}`}
+            language={settings.language}
+            goals={settings.constraints.map((c) => c.label)}
+            grade={grade}
+            canManage={access.canManage}
+          />
+          {settings.body && (
+            <div class="reader-sheet">
+              <Markdown source={settings.body} />
+            </div>
+          )}
+        </>
+      )
+    )
+  },
+}
+
+// 見ている人を引数で受け取らないのは、ほかの種類の View と Panel には要らず、種類の定義の形を変えずに済ませるため
+function useCodeGrade(item: MItem, access: CourseAccess) {
+  const c = useRequestContext<AppEnv>()
+  if (!item.extraKey || access.role !== 'student') return null
+  return submissionsOf(codeStore(item.extraKey), c.var.user!.id, grader, null).grade
 }
 
 // 見ている人を引数で受け取らないのは、ほかの種類の View と Panel には要らず、種類の定義の形を変えずに済ませるため
