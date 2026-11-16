@@ -6,7 +6,7 @@ import { AiPanelToggle } from './ai-panel'
 import { IconButton } from './button'
 import { cx } from './cx'
 import { Switch } from './form'
-import { MenuItem, Popover } from './overlay'
+import { ConfirmChip, MenuItem, Popover } from './overlay'
 import { useStyle } from './style'
 import { Avatar, CourseIcon, Person } from './ui'
 
@@ -192,6 +192,7 @@ export const AppShell = ({ children, editable, tone, topbar }: { children: Child
       <main class={cx('content', tone && `tone-${tone}`)}>{children}</main>
       {aiPanel}
       <Toast />
+      <ConfirmChip />
     </div>
   )
 }

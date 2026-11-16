@@ -368,7 +368,7 @@ export const ItemEditActions = ({ href, deleteAction, deleteConfirm }: { href: s
       保存
     </Button>
     <Popover class="row-menu" panelClass="row-menu-panel" trigger={<IconButton as="summary" icon="ellipsis" label="その他の操作" />}>
-      <form method="post" action={deleteAction} data-confirm={deleteConfirm}>
+      <form method="post" action={deleteAction} data-confirm={deleteConfirm} data-confirm-ok="削除する">
         <MenuItem type="submit" icon="trash" class="is-danger">
           アイテムを削除
         </MenuItem>

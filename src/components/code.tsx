@@ -682,7 +682,14 @@ export const CodeWorkspace = ({
           ))}
         </div>
       </form>
-      <form id={RESET_FORM} method="post" action={`${base}/reset`} data-confirm="書いたコードを消して、最初のコードに戻しますか？" hidden />
+      <form
+        id={RESET_FORM}
+        method="post"
+        action={`${base}/reset`}
+        data-confirm="書いたコードを消して、最初のコードに戻しますか？"
+        data-confirm-ok="戻す"
+        hidden
+      />
 
       <div class="code-result">
         <div class="code-pane-head">

@@ -69,7 +69,12 @@ const MicrosoftCard = ({ account, hasPassword }: { account: { email: string } | 
           : `${account.email || 'Microsoft アカウント'} と連携しています。連携を解除するには、先にパスワードを設定してください。`
       }
       actions={
-        <form method="post" action="/account/microsoft/unlink" data-confirm="Microsoft アカウントの連携を解除しますか？">
+        <form
+          method="post"
+          action="/account/microsoft/unlink"
+          data-confirm="Microsoft アカウントの連携を解除しますか？"
+          data-confirm-ok="解除する"
+        >
           <Button type="submit" variant="danger-outline" disabled={!hasPassword}>
             連携を解除
           </Button>

@@ -352,6 +352,7 @@ export const AgentEditPanel = ({
                     method="post"
                     action={`${base}/key/delete`}
                     data-confirm={`${AGENT_PROVIDER_LABELS[provider]} の API キーを削除しますか？${settings.model.provider === provider ? '学生は使えなくなります。' : ''}`}
+                    data-confirm-ok="削除する"
                   >
                     <input type="hidden" name="provider" value={provider} />
                     <Button type="submit" variant="danger-outline" size="sm" icon="trash">
