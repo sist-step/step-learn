@@ -143,7 +143,7 @@ const RowMenu = ({ base, hidden, confirm, restriction }: { base: string; hidden:
       アクセス制限
     </MenuItem>
     <div class="menu-sep" role="separator" />
-    <form method="post" action={`${base}/delete`} data-confirm={confirm}>
+    <form method="post" action={`${base}/delete`} data-confirm={confirm} data-confirm-ok="削除する">
       <MenuItem type="submit" icon="trash" class="is-danger">
         削除
       </MenuItem>

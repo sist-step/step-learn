@@ -1191,6 +1191,69 @@ function confirmDialog(message: string): Promise<boolean> {
   return openDialog(dialog, message)
 }
 
+// --- ボタンのそばに出す確認のチップ（components/overlay.tsx の ConfirmChip）
+// 画面の中央のダイアログにしないのは、押したボタンから目を離さずに続けるかを決められるようにするため。押したボタンが見えないときだけダイアログにする
+type ConfirmNearOptions = { ok?: string; tone?: 'danger' | 'primary' }
+let confirmChip: { panel: HTMLElement; anchor: HTMLElement } | null = null
+let confirmChipCount = 0
+
+function placeConfirmChip() {
+  if (!confirmChip) return
+  const { panel, anchor } = confirmChip
+  const r = anchor.getBoundingClientRect()
+  const { offsetWidth: w, offsetHeight: h } = panel
+  const margin = 12
+  const below = r.bottom + 8
+  const above = r.top - 8 - h
+  const isAbove = below + h > innerHeight - margin && above >= margin
+  panel.classList.toggle('is-above', isAbove)
+  panel.style.top = `${Math.max(margin, Math.min(isAbove ? above : below, innerHeight - h - margin))}px`
+  const left = r.left + r.width / 2 < innerWidth / 2 ? r.left : r.right - w
+  panel.style.left = `${Math.max(margin, Math.min(left, innerWidth - w - margin))}px`
+}
+
+function confirmNear(anchor: HTMLElement, messages: readonly string[], { ok = '実行する', tone = 'danger' }: ConfirmNearOptions = {}) {
+  const template = document.querySelector<HTMLTemplateElement>('template[data-confirm-chip]')
+  const panel = template?.content.firstElementChild?.cloneNode(true)
+  const text = panel instanceof HTMLElement ? panel.querySelector<HTMLElement>('[data-confirm-chip-msg]') : null
+  const cancel = panel instanceof HTMLElement ? panel.querySelector<HTMLButtonElement>('[data-confirm-chip-cancel]') : null
+  const confirm = panel instanceof HTMLElement ? panel.querySelector<HTMLButtonElement>(`[data-confirm-chip-ok="${tone}"]`) : null
+  if (!(panel instanceof HTMLElement) || !text || !cancel || !confirm || anchor.getClientRects().length === 0)
+    return confirmDialog(messages.join('\n'))
+
+  confirmChip?.panel.hidePopover()
+  text.id = `confirm-chip-${++confirmChipCount}`
+  text.append(...messages.map((m) => Object.assign(document.createElement('p'), { textContent: m })))
+  panel.setAttribute('aria-describedby', text.id)
+  confirm.textContent = ok
+  panel.querySelectorAll('[data-confirm-chip-ok]').forEach((b) => b !== confirm && b.remove())
+  let answer = false
+  const close = (value: boolean) => {
+    answer = value
+    panel.hidePopover()
+  }
+  cancel.addEventListener('click', () => close(false))
+  confirm.addEventListener('click', () => close(true))
+  // いつも body に置かないのは、モーダルの外の popover とみなされ、開いたときにモーダルが閉じるため
+  ;(anchor.closest('[popover]') ?? document.body).append(panel)
+  confirmChip = { panel, anchor }
+  panel.showPopover()
+  placeConfirmChip()
+  cancel.focus()
+  return new Promise<boolean>((resolve) => {
+    panel.addEventListener('toggle', (e) => {
+      if ((e as ToggleEvent).newState !== 'closed') return
+      if (confirmChip?.panel === panel) confirmChip = null
+      const lost = document.activeElement === document.body || panel.contains(document.activeElement)
+      panel.remove()
+      if (!answer && lost && anchor.isConnected) anchor.focus()
+      resolve(answer)
+    })
+  })
+}
+addEventListener('scroll', placeConfirmChip, { capture: true, passive: true })
+addEventListener('resize', placeConfirmChip)
+
 const formKey = (form: HTMLFormElement) =>
   JSON.stringify([form.action, ...[...new FormData(form)].map(([k, v]) => [k, typeof v === 'string' ? v : v.name])])
 
@@ -1203,7 +1266,9 @@ document.addEventListener('submit', async (e) => {
   const msg = form.dataset.confirm
   if (msg && form.dataset.confirmed !== '1') {
     e.preventDefault()
-    if (!(await confirmDialog(msg))) return
+    const submitter = (e as SubmitEvent).submitter
+    const ok = form.dataset.confirmOk
+    if (!(await (submitter ? confirmNear(submitter, [msg], { ok }) : confirmDialog(msg)))) return
     const target = currentForm(form)
     if (!target) return
     target.dataset.confirmed = '1'
@@ -2108,7 +2173,7 @@ function initCodeEditors() {
     return
   codeEditor ??= import('./code-editor')
   codeEditor
-    .then(({ mountCodeEditors }) => mountCodeEditors(toast, confirmDialog))
+    .then(({ mountCodeEditors }) => mountCodeEditors(toast, confirmNear))
     .catch(() => {
       codeEditor = null
       toast('エディターを読み込めませんでした。', 'error')
@@ -3638,8 +3703,8 @@ function setAiFocus(start: AiFocusStart | null) {
 
 const clearAiFocus = () => void setAiFocus(null)
 
-const AI_UNSAVED_CONFIRM = '保存していない変更があります。AI は保存した内容を読むので、先に保存しておくと確実です。このまま始めますか？'
-const AI_RESTART_CONFIRM = '今のチャットを閉じて、このコーディング問題の新しいチャットを始めますか？閉じた会話は開き直せません。'
+const AI_UNSAVED_CONFIRM = '保存していない変更があります。AI は保存した内容を読むので、先に保存しておくと確実です。'
+const AI_RESTART_CONFIRM = '今のチャットを閉じて、このコーディング問題の新しいチャットを始めます。閉じた会話は開き直せません。'
 
 /** パネルを開き、今のチャットを閉じてから、ボタンのアイテムを選んだ新しいチャットで最初の発言を送る */
 async function startAiFocus(button: HTMLElement) {
@@ -3647,10 +3712,11 @@ async function startAiFocus(button: HTMLElement) {
   if (!start || !aiPanel() || aiSending) return
   const form = button.closest('form')
   const drawn = form?.id ? liveBase[0]?.querySelector<HTMLFormElement>(`form#${CSS.escape(form.id)}`) : null
-  if (form && drawn && formValues(form) !== formValues(drawn) && !(await confirmDialog(AI_UNSAVED_CONFIRM))) return
+  const unsaved = !!form && !!drawn && formValues(form) !== formValues(drawn)
   await refreshAiIfOutdated()
   const chatId = aiPanel()?.dataset.chat
-  if (chatId && !(await confirmDialog(AI_RESTART_CONFIRM))) return
+  const notes = [...(unsaved ? [AI_UNSAVED_CONFIRM] : []), ...(chatId ? [AI_RESTART_CONFIRM] : [])]
+  if (notes.length > 0 && !(await confirmNear(button, notes, { ok: '始める', tone: 'primary' }))) return
   await runAiTask(async () => {
     if (chatId) {
       const body = new FormData()
