@@ -29,27 +29,18 @@ class observer {
      * @param \core\event\user_loggedout $event
      */
     public static function user_loggedout(\core\event\user_loggedout $event): void {
-        global $CFG;
         $sid = $event->other['sessionid'] ?? '';
-        $backchannel = app::backchannel();
-        if ($sid === '' || !$backchannel) {
-            return;
+        if ($sid !== '') {
+            backchannel::send(['sid' => hash('sha256', $sid), 'time' => time()]);
         }
-        require_once($CFG->libdir . '/filelib.php');
-        $body = json_encode(['sid' => hash('sha256', $sid), 'time' => time()]);
-        // 例外を外に出さないのは、STEP Learn が止まっているときに Moodle からログアウトできなくなるのを避けるため
-        try {
-            $curl = new \curl();
-            $curl->setHeader([
-                'Content-Type: application/json',
-                'X-Steplearn-Signature: ' . hash_hmac('sha256', $body, $backchannel['secret']),
-            ]);
-            $curl->post($backchannel['url'], $body, ['CURLOPT_TIMEOUT' => 3, 'CURLOPT_CONNECTTIMEOUT' => 2]);
-            if ($curl->get_errno() || ($curl->get_info()['http_code'] ?? 0) >= 300) {
-                debugging('STEP Learn logout notification failed: ' . $curl->error, DEBUG_DEVELOPER);
-            }
-        } catch (\Throwable $e) {
-            debugging('STEP Learn logout notification failed: ' . $e->getMessage(), DEBUG_DEVELOPER);
-        }
+    }
+
+    /**
+     * 開いている STEP Learn の画面に早く反映するよう、コースの内容が変わったことを知らせる。
+     *
+     * @param \core\event\base $event
+     */
+    public static function course_changed(\core\event\base $event): void {
+        backchannel::course_changed((int) $event->courseid);
     }
 }

@@ -17,15 +17,25 @@
 namespace local_steplearn;
 
 use core\hook\output\before_standard_top_of_body_html_generation;
+use core_courseformat\hook\after_course_content_updated;
 use html_writer;
 
 /**
- * 移行の期間に、ログイン画面とダッシュボードで新しい STEP Learn を案内する。
+ * 移行の期間の案内と、コースの変更の通知。
  *
  * @package    local_steplearn
  * @license    https://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class hook_callbacks {
+    /**
+     * コース画面での並べ替え・表示の切り替え・削除などを STEP Learn に知らせる。
+     *
+     * @param after_course_content_updated $hook
+     */
+    public static function after_course_content_updated(after_course_content_updated $hook): void {
+        backchannel::course_changed((int) $hook->course->id);
+    }
+
     /**
      * ログイン画面ではユーザー名の入力欄の上に出し、ダッシュボードでは通知として出す。
      *
