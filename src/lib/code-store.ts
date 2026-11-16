@@ -40,7 +40,7 @@ export type GradingResult = { status: 'graded'; feedback: string; verdicts: Cons
 
 /**
  * コードのアイテム 1 つの、書きかけのコードと提出の置き場所。通常モードは step-learn.db（lib/code-items.ts）、
- * Moodle モードは moodle-mode.db（moodle-mode/code.tsx）に置く
+ * Moodle モードは moodle-mode.db（moodle-mode/code-store.ts）に置く
  */
 export interface CodeStore {
   getDraft(userId: number): { files: CodeFiles; stdin: string } | undefined

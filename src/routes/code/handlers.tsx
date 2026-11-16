@@ -1,16 +1,20 @@
 // 通常モードと Moodle モードの両方が読み込むので、DB を開くモジュール（lib/db.ts・lib/courses.ts など）を import しない。
-// モードごとの DB と権限の確認は CodeBackend として受け取る（通常モードは ./index.ts、Moodle モードは moodle-mode/code.tsx）
+// モードごとの DB と権限の確認は CodeBackend として受け取る（通常モードは ./backend.ts、Moodle モードは moodle-mode/code.ts）
 import { Hono, type Context } from 'hono'
+import * as z from 'zod/mini'
 import { AiError } from '../../lib/ai'
-import { filesFor, submitStateOf, type CodeFiles, type SubmitPeriod, type SubmitState } from '../../lib/code'
+import { VSCODE_EXTENSION_ID } from '../../lib/bundle'
+import { LAUNCH_CLAIM, claimCodeLaunch, signCode, signCodeLaunch, verifyCode } from '../../lib/bundle-token'
+import { CODE_FILES, filesFor, submitStateOf, type CodeFiles, type SubmitPeriod, type SubmitState } from '../../lib/code'
 import { gradingEnabled, submissionsOf, submitWait, type Grader } from '../../lib/code-grader'
 import type { CodeSettings, CodeStore, StudentRow, SubmissionSummary } from '../../lib/code-store'
+import { config } from '../../lib/config'
 import type { CourseAccess } from '../../lib/courses'
 import { firstError, validate } from '../../lib/forms'
-import { intParam, readFields, readForm, redirectWith, wantsJson } from '../../lib/http'
+import { clientIp, intParam, readFields, readForm, readJson, redirectWith, wantsJson } from '../../lib/http'
 import { rateLimiter } from '../../lib/rate-limit'
 import { SandboxError, runCode, sandboxEnabled } from '../../lib/sandbox'
-import type { AppEnv } from '../../lib/types'
+import type { AppEnv, Completion } from '../../lib/types'
 import { CodePage, SubmissionPage, SubmissionsPage, submissionsUrl } from './views'
 
 type C = Context<AppEnv>
@@ -19,10 +23,23 @@ export type CodeContext = {
   access: CourseAccess
   /** URL の :iid。通常モードはアイテムの ID、Moodle モードは活動の cmid */
   itemId: number
+  /** 拡張機能に渡すアイテムの識別子。targetOf に渡すと同じアイテムが返る */
+  ref: string
   settings: CodeSettings
   /** 学生が提出できる期間。null なら期間を設けない */
   period: SubmitPeriod | null
   store: CodeStore
+  /** エディターの画面に出す、見ている学生の完了の状態。完了を STEP Learn で数えないモード（Moodle モード）や、学生でなければ渡さない */
+  completion?: { completion: Completion; done: boolean }
+}
+
+/** 拡張機能からの要求（ログインのセッションがない）で使う、アイテムの設定と置き場所 */
+export type CodeTarget = Pick<CodeContext, 'settings' | 'period' | 'store'> & {
+  course: string
+  /** 提出できる人（コースの学生）か */
+  isStudent: boolean
+  courseId: number
+  itemId: number
 }
 
 const SUBMIT_CLOSED: Record<Exclude<SubmitState, 'open'>, string> = {
@@ -34,12 +51,48 @@ const SUBMIT_CLOSED: Record<Exclude<SubmitState, 'open'>, string> = {
 export type CodeBackend = {
   /** URL のコースとアイテムを、ログインしている人が開けるなら、設定と置き場所を返す。開けなければ null */
   resolve: (c: C) => Promise<CodeContext | null>
+  /** 拡張機能からの要求で、userId の人が ref のアイテムを今も開けるなら返す。開けなければ null */
+  targetOf: (ref: string, userId: number) => Promise<CodeTarget | null>
   grader: Grader
-  /** エディターのある画面。通常モードはアイテムの画面、Moodle モードは専用の画面（showPage） */
+  /** Web エディターの画面（showPage） */
   pageUrl: (courseId: number, itemId: number) => string
+  /** アイテムの画面 */
+  itemUrl: (courseId: number, itemId: number) => string
 }
 
-export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
+/** 書きかけのコード。なければ最後の提出、それもなければ最初のコード */
+function currentCode(settings: CodeSettings, store: CodeStore, userId: number) {
+  const draft = store.getDraft(userId)
+  const saved = draft?.files ?? store.latestSubmission(userId)?.files
+  // 保存したコードに今の言語のファイルが 1 つもないとき（アイテムの言語が変えられた）に空のエディターを出さず、最初のコードから始める
+  const usable = saved && Object.keys(filesFor(settings.language, {})).some((key) => key in saved)
+  return { files: filesFor(settings.language, usable ? saved : settings.starter), stdin: draft?.stdin ?? settings.stdin }
+}
+
+type Accepted = { ok: true; graded: boolean } | { ok: false; error: string }
+
+/** 提出を受け付けて、AI で判定できるなら判定を待つ列に入れる。受け付けられなければ、その理由 */
+function acceptSubmission(
+  grader: Grader,
+  { store, period }: Pick<CodeContext, 'store' | 'period'>,
+  userId: number,
+  files: CodeFiles,
+  stdin: string,
+): Accepted {
+  const state = submitStateOf(period)
+  if (state !== 'open') return { ok: false, error: SUBMIT_CLOSED[state] }
+  // レート制限（rateLimiter）にしないのは、残りの秒数を画面のカウントダウンと合わせるため。提出の時刻から求めれば、再起動しても同じになる
+  const wait = submitWait(store.latestSubmission(userId)?.createdAt)
+  if (wait) return { ok: false, error: `続けて提出できません。${wait} 秒待ってから、もう一度お試しください。` }
+  const graded = grader.canGrade()
+  const id = store.submit(userId, files, stdin, graded ? 'pending' : 'none')
+  if (graded) grader.enqueue(id)
+  return { ok: true, graded }
+}
+
+const serverOrigin = (c: Context) => config.appOrigin ?? new URL(c.req.url).origin
+
+export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBackend) {
   // 上限なしにしないのは、sandbox が同時に 4 つまでしか実行できず、1 人が繰り返し実行するとほかの人が待たされるため
   const runLimit = rateLimiter({ limit: 20, windowSec: 60 })
   // 回数を絞るのは、押すたびに AI の利用料がかかるため
@@ -82,13 +135,8 @@ export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
   async function showState(c: C) {
     const ctx = await open(c)
     if (!ctx) return c.notFound()
-    const { settings, store, userId } = ctx
-    const draft = store.getDraft(userId)
-    const saved = draft?.files ?? store.latestSubmission(userId)?.files
-    // 保存したコードに今の言語のファイルが 1 つもないとき（アイテムの言語が変えられた）に空のエディターを出さず、最初のコードから始める
-    const usable = saved && Object.keys(filesFor(settings.language, {})).some((key) => key in saved)
     c.header('Cache-Control', 'no-store')
-    return c.json({ files: filesFor(settings.language, usable ? saved : settings.starter), stdin: draft?.stdin ?? settings.stdin })
+    return c.json(currentCode(ctx.settings, ctx.store, ctx.userId))
   }
 
   async function save(c: C) {
@@ -129,18 +177,12 @@ export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
   async function submit(c: C) {
     const ctx = await open(c)
     if (!ctx || ctx.access.role !== 'student') return c.notFound()
-    const { store, userId, page } = ctx
+    const { userId, page } = ctx
     const input = await readCode(c, ctx)
     if (!input.ok) return redirectWith(c, page, input.error, 'error')
-    const state = submitStateOf(ctx.period)
-    if (state !== 'open') return redirectWith(c, page, SUBMIT_CLOSED[state], 'error')
-    // レート制限（rateLimiter）にしないのは、残りの秒数を画面のカウントダウンと合わせるため。提出の時刻から求めれば、再起動しても同じになる
-    const wait = submitWait(store.latestSubmission(userId)?.createdAt)
-    if (wait) return redirectWith(c, page, `続けて提出できません。${wait} 秒待ってから、もう一度お試しください。`, 'error')
-    const graded = grader.canGrade()
-    const id = store.submit(userId, input.files, input.stdin, graded ? 'pending' : 'none')
-    if (graded) grader.enqueue(id)
-    return redirectWith(c, page, graded ? '提出しました。採点が終わると、結果が出ます。' : '提出しました。')
+    const accepted = acceptSubmission(grader, ctx, userId, input.files, input.stdin)
+    if (!accepted.ok) return redirectWith(c, page, accepted.error, 'error')
+    return redirectWith(c, page, accepted.graded ? '提出しました。採点が終わると、結果が出ます。' : '提出しました。')
   }
 
   async function reset(c: C) {
@@ -160,22 +202,34 @@ export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
     return c.json({ pending: gradeOf(ctx)?.status === 'pending' })
   }
 
-  /** エディターだけの画面。アイテムの画面にエディターを組み込まないモード（Moodle モード）で使う */
+  /** Web エディターの画面 */
   async function showPage(c: C) {
     const ctx = await open(c)
     if (!ctx) return c.notFound()
-    const { access, target, settings } = ctx
+    const { access, target, settings, courseId, itemId } = ctx
     return c.render(
       <CodePage
         access={access}
         item={target}
+        itemUrl={itemUrl(courseId, itemId)}
         body={settings.body}
         goals={settings.constraints.map((c) => c.label)}
         canRun={sandboxEnabled}
         submissions={access.role === 'student' ? submissionsOf(ctx.store, ctx.userId, grader, ctx.period) : null}
+        completion={ctx.completion}
       />,
-      { title: settings.title },
+      { title: `Web エディター - ${settings.title}` },
     )
+  }
+
+  /** VS Code で開くリンク。拡張機能が鍵を引き換えて、書きかけのコードを受け取る */
+  async function launch(c: C) {
+    const ctx = await open(c)
+    if (!ctx) return c.notFound()
+    const { ref, userId, courseId, itemId } = ctx
+    if (!wantsJson(c)) return c.redirect(itemUrl(courseId, itemId), 303)
+    const query = new URLSearchParams({ server: serverOrigin(c), token: signCodeLaunch({ ref, userId }) })
+    return c.json({ url: `vscode://${VSCODE_EXTENSION_ID}/code?${query}` })
   }
 
   // ---------------------------------------------------------------- 教師: 提出を見る・採点する
@@ -286,12 +340,14 @@ export function createCodeHandlers({ resolve, grader, pageUrl }: CodeBackend) {
     return redirectWith(c, url, 'AI が採点しています。少し待ってから、ページを読み込み直してください。', 'info')
   }
 
-  return { showState, save, run, submit, reset, showGrading, showPage, list, show, review, regrade, suggest }
+  return { showState, save, run, submit, reset, showGrading, showPage, launch, list, show, review, regrade, suggest }
 }
 
 /** /courses の下に組み込むルート。ログインの確認は、組み込む側で先に済ませておく */
 export function codeRoutes(h: ReturnType<typeof createCodeHandlers>) {
   const app = new Hono<AppEnv>()
+  app.get('/:id/items/:iid/code', h.showPage)
+  app.post('/:id/items/:iid/code/launch', h.launch)
   app.get('/:id/items/:iid/code/state', h.showState)
   app.post('/:id/items/:iid/code/draft', h.save)
   app.post('/:id/items/:iid/code/run', h.run)
@@ -303,5 +359,143 @@ export function codeRoutes(h: ReturnType<typeof createCodeHandlers>) {
   app.post('/:id/items/:iid/code/submissions/:uid/review', h.review)
   app.post('/:id/items/:iid/code/submissions/:uid/regrade', h.regrade)
   app.post('/:id/items/:iid/code/suggest', h.suggest)
+  return app
+}
+
+// ---------------------------------------------------------------- STEP Learn for VSCode（vscode-extension/）が呼ぶ API
+
+/** 拡張機能が送るコード。ファイル名（index.html など）ごとの中身 */
+const CODE_UPLOAD = z.object({ files: z.record(z.string(), z.string()) })
+
+/**
+ * 拡張機能からコードを受け取る要求の本文の上限。ファイルの上限（MAX_CODE_LENGTH 文字）が JSON のエスケープで
+ * 1 文字 6 バイトになっても、Web の 3 ファイルが収まる大きさ
+ */
+export const CODE_BODY_LIMIT = 512 * 1024
+
+const CODE_API = '/api/vscode/code/'
+
+const bearer = (c: Context) => c.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
+
+/** 拡張機能がコードを送る要求か。ログインのセッションがなくても、鍵で本人と確かめられるので、本文の上限を上げてよい */
+export const isCodeRequest = (c: Context) => c.req.method === 'POST' && c.req.path.startsWith(CODE_API) && !!verifyCode(bearer(c))
+
+const EXPIRED = '期限が切れたか、このアイテムを開けなくなりました。STEP Learn の画面から、もう一度 VS Code で開いてください。'
+
+/** 拡張機能に渡すファイルの一覧。ファイルの名前は Web エディターのタブと同じ */
+const fileList = (settings: CodeSettings, files: CodeFiles) =>
+  CODE_FILES[settings.language].map((f) => ({ path: f.name, content: files[f.key] ?? '' }))
+
+/** 拡張機能が送ったファイルを、アイテムの言語のファイルとして読む。ほかの名前のファイルは使わない */
+function readUpload(
+  settings: CodeSettings,
+  upload: z.output<typeof CODE_UPLOAD>,
+): { ok: true; files: CodeFiles } | { ok: false; error: string } {
+  const keys = new Map(CODE_FILES[settings.language].map((f) => [f.name, f.key]))
+  const form = Object.fromEntries(Object.entries(upload.files).flatMap(([name, text]) => (keys.has(name) ? [[keys.get(name)!, text]] : [])))
+  const result = validate('code', form)
+  if (!result.ok) return { ok: false, error: firstError(result.errors) }
+  return { ok: true, files: filesFor(settings.language, result.values) }
+}
+
+/** 拡張機能が呼ぶ API。ログインのセッションの代わりに、リンクの鍵と、それと引き換えた鍵で確かめる */
+export function codeVscodeApi({ targetOf, grader, pageUrl }: Pick<CodeBackend, 'targetOf' | 'grader' | 'pageUrl'>) {
+  // 上限を付けるのは、ログインしていなくても呼べ、鍵を総当たりで試されないようにするため
+  const claimLimit = rateLimiter({ limit: 30, windowSec: 60 })
+  // 拡張機能は保存から少し待ってまとめて送るので、普通に使っていて届く回数ではない
+  const draftLimit = rateLimiter({ limit: 60, windowSec: 60 })
+  const app = new Hono<AppEnv>()
+
+  // 送るたびにアイテムを確かめるのは、鍵が半年使え、そのあいだにコースから外れたり、アイテムが非表示になったりするため
+  async function targetFrom(c: C) {
+    const claims = verifyCode(bearer(c))
+    const target = claims && (await targetOf(claims.ref, claims.userId))
+    if (!claims || !target || !target.store.findUser(claims.userId)) return null
+    return { ...target, userId: claims.userId, limitKey: `${claims.ref} ${claims.userId}` }
+  }
+
+  /** 拡張機能がフォルダーを用意するのに使う、アイテムの名前と今のコード */
+  const stateOf = (c: C, { settings, store, isStudent, courseId, itemId }: CodeTarget, userId: number) => ({
+    title: settings.title,
+    language: settings.language,
+    files: fileList(settings, currentCode(settings, store, userId).files),
+    canSubmit: isStudent,
+    page: new URL(pageUrl(courseId, itemId), serverOrigin(c)).href,
+  })
+
+  app.post('/claim', async (c) => {
+    const ip = clientIp(c)
+    if (claimLimit.retryAfter(ip)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
+    claimLimit.hit(ip)
+    const claims = claimCodeLaunch((await readJson(c, LAUNCH_CLAIM))?.token ?? '')
+    const target = claims && (await targetOf(claims.ref, claims.userId))
+    const user = claims && target?.store.findUser(claims.userId)
+    if (!claims || !target || !user)
+      return c.json({ error: 'リンクの期限が切れているか、すでに使われています。STEP Learn の画面からもう一度開いてください。' }, 401)
+    return c.json({
+      ...stateOf(c, target, claims.userId),
+      ref: claims.ref,
+      course: target.course,
+      user: { id: user.id, name: user.name },
+      token: signCode({ ref: claims.ref, userId: claims.userId }),
+    })
+  })
+
+  // 拡張機能がフォルダーを開き直したときに、Web エディターで書き換えた分を取り込むのに使う
+  app.get('/state', async (c) => {
+    const target = await targetFrom(c)
+    if (!target) return c.json({ error: EXPIRED }, 401)
+    c.header('Cache-Control', 'no-store')
+    return c.json(stateOf(c, target, target.userId))
+  })
+
+  app.post('/draft', async (c) => {
+    const target = await targetFrom(c)
+    if (!target) return c.json({ error: EXPIRED }, 401)
+    if (draftLimit.retryAfter(target.limitKey)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
+    draftLimit.hit(target.limitKey)
+    const upload = await readJson(c, CODE_UPLOAD)
+    const read = upload && readUpload(target.settings, upload)
+    if (!read) return c.json({ error: '送られた内容が正しくありません。' }, 400)
+    if (!read.ok) return c.json({ error: read.error }, 422)
+    const { settings, store, userId } = target
+    // 入力（stdin）は VS Code にないので、Web エディターで書いたものを残す
+    store.saveDraft(userId, read.files, currentCode(settings, store, userId).stdin)
+    return c.json({ saved: true })
+  })
+
+  app.post('/submit', async (c) => {
+    const target = await targetFrom(c)
+    if (!target) return c.json({ error: EXPIRED }, 401)
+    if (!target.isStudent) return c.json({ error: '提出できるのは、コースの学生だけです。' }, 403)
+    const upload = await readJson(c, CODE_UPLOAD)
+    const read = upload && readUpload(target.settings, upload)
+    if (!read) return c.json({ error: '送られた内容が正しくありません。' }, 400)
+    if (!read.ok) return c.json({ error: read.error }, 422)
+    const { settings, store, userId } = target
+    const accepted = acceptSubmission(grader, target, userId, read.files, currentCode(settings, store, userId).stdin)
+    if (!accepted.ok) return c.json({ error: accepted.error }, 409)
+    return c.json({ submitted: true, graded: accepted.graded })
+  })
+
+  app.get('/result', async (c) => {
+    const target = await targetFrom(c)
+    if (!target) return c.json({ error: EXPIRED }, 401)
+    c.header('Cache-Control', 'no-store')
+    const latest = target.store.latestSubmission(target.userId)
+    if (!latest) return c.json({ submission: null })
+    const status = grader.statusOf(latest)
+    const graded = status === 'graded'
+    return c.json({
+      submission: {
+        status,
+        createdAt: latest.createdAt,
+        verdicts: graded ? (latest.verdicts ?? []).map(({ label, verdict, reason }) => ({ label, verdict, reason })) : [],
+        feedback: graded ? latest.feedback : '',
+        teacherComment: latest.teacherComment,
+      },
+    })
+  })
+
   return app
 }

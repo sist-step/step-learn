@@ -176,6 +176,19 @@ details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
 .code-goals li { display: flex; align-items: flex-start; gap: 8px; font-size: var(--fs-sm); }
 .code-goals li > svg { flex: none; margin-top: 2px; color: var(--muted); }
 
+/* ===== アイテムの画面の入口（Web エディター / VS Code） ===== */
+.code-open { margin-bottom: 24px; }
+.code-open > .link-card { margin-bottom: 0; }
+.code-open-help { margin: 0; }
+.code-open-help a { display: inline-flex; align-items: center; gap: 2px; }
+.code-open-goals { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.code-open-goals li { display: flex; align-items: flex-start; gap: 8px; }
+.code-open-goals li > svg { flex: none; margin-top: 3px; color: var(--muted); }
+@media (max-width: 640px) {
+  .code-open .link-card-lg > form { flex-basis: 100%; }
+  .code-open .link-card-lg > form > .btn { width: 100%; }
+}
+
 .code-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .code-pane-head {
   display: flex;

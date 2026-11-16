@@ -17,9 +17,10 @@ import {
   type SubmitState,
   type Verdict,
 } from '../lib/code'
+import { VSCODE_EXTENSION_NAME, VSCODE_MARKETPLACE_URL } from '../lib/bundle'
 import type { FieldErrors } from '../lib/forms'
 import { Button, IconButton } from './button'
-import { Card } from './card'
+import { Card, LinkCard } from './card'
 import { cx } from './cx'
 import { DateTimeField, FieldError, FormField, Input, TextAreaField, Textarea } from './form'
 import { Icon, type IconName } from './icons'
@@ -730,6 +731,87 @@ export const CodeWorkspace = ({
   )
 }
 
+/**
+ * アイテムの画面に置く、コードを書く場所の入口。Web エディターはこのアイテムの下の画面（base）で開き、
+ * VS Code は拡張機能が書きかけのコードを受け取って開く。VS Code で保存すると書きかけに反映し、VS Code からも提出できる
+ */
+export const CodeOpen = ({
+  base,
+  language,
+  goals,
+  grade,
+  canManage,
+}: {
+  /** Web エディターの画面（`/courses/1/items/2/code`） */
+  base: string
+  language: CodeLanguage
+  goals: readonly string[]
+  /** 見ている学生のいちばん新しい提出 */
+  grade?: GradeView | null
+  canManage: boolean
+}) => {
+  useStyle('/src/components/code.css', '/src/components/card.css')
+  return (
+    <div class="code-open stack">
+      <LinkCard href={base} icon="code" class="link-card-lg kind-code">
+        <span class="file-name">
+          <span class="strong">Web エディターで開く</span>
+          <span class="muted small">
+            {language === 'web' ? 'ブラウザで書いて、その場でプレビューを見られます' : 'ブラウザで書いて、その場で実行できます'}
+          </span>
+        </span>
+        <Button as="span" variant="primary" iconEnd="chevronRight">
+          開く
+        </Button>
+      </LinkCard>
+      <LinkCard icon="terminal" class="link-card-lg kind-code">
+        <span class="file-name">
+          <span class="strong">VS Code で開く</span>
+          <span class="muted small">
+            ファイルを用意して VS Code で開きます。保存した内容は Web エディターにも反映され、VS Code から提出もできます
+          </span>
+        </span>
+        <form method="post" action={`${base}/launch`} data-vscode-launch>
+          <Button type="submit" iconEnd="external">
+            VS Code で開く
+          </Button>
+        </form>
+      </LinkCard>
+      <p class="code-open-help muted small">
+        VS Code で開くには、拡張機能「{VSCODE_EXTENSION_NAME}」を入れてください。
+        <a href={VSCODE_MARKETPLACE_URL} target="_blank" rel="noopener" data-no-prefetch>
+          Marketplace で見る
+          <Icon name="external" size={12} />
+        </a>
+      </p>
+      {canManage && (
+        <div>
+          <Button href={`${base}/submissions`} size="sm" icon="users">
+            学生の提出を見る
+          </Button>
+        </div>
+      )}
+      {goals.length > 0 && (
+        <Card heading="クリアの条件" description="提出すると、AI がこの条件ごとに判定します。">
+          <ul class="code-open-goals">
+            {goals.map((goal) => (
+              <li>
+                <Icon name="checkCircle" size={16} />
+                {goal}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      {grade && (
+        <Card heading="いちばん新しい提出" description={`${formatDateTime(grade.createdAt)} に提出`} class="code-grade">
+          <GradeResult grade={grade} waiting="AI が判定しています。少し待ってから、ページを読み込み直してください。" />
+        </Card>
+      )}
+    </div>
+  )
+}
+
 /** 学生に見せる、いちばん新しい提出の判定 */
 export type GradeView = {
   status: GradingStatus
@@ -875,14 +957,21 @@ export const VerdictList = ({ verdicts, showText = false }: { verdicts: readonly
   )
 }
 
-const GradeResult = ({ grade }: { grade: GradeView }) => {
+/** waiting は判定中に出す文。結果を待って取り直さない画面（アイテムの画面）では、読み込み直すように書く */
+const GradeResult = ({
+  grade,
+  waiting = 'AI が判定しています。終わると、ここに結果が出ます。',
+}: {
+  grade: GradeView
+  waiting?: string
+}) => {
   const verdicts = grade.status === 'graded' ? grade.verdicts : null
   return (
     <>
       {grade.status === 'pending' ? (
         <p class="code-grade-waiting muted">
           <span class="code-grade-spinner" aria-hidden="true" />
-          AI が判定しています。終わると、ここに結果が出ます。
+          {waiting}
         </p>
       ) : grade.status === 'failed' ? (
         <Alert tone="warning">AI で判定できませんでした。少し待ってから出し直してください。</Alert>
