@@ -120,7 +120,7 @@ Moodle モードの種類ごとの入力欄（`moodle-mode/extra-kinds.tsx`）�
 
 - 操作はリンクか `<form method="post">`
 - 送信に時間がかかるフォームには `data-loading-form`（二重送信防止）
-- 取り消せない操作のフォームには `data-confirm="〜しますか？"`。`data-confirm-scope` を付けた要素の中では、確認がその要素の上だけを覆う
+- 取り消せない操作のフォームには `data-confirm="〜しますか？"`
 - `select` を変えたら即送信するフォームには `data-autosubmit`
 - 編集画面の保存ボタンには `data-save-shortcut`（⌘S / Ctrl+S。フォームの外に置くときは `form="<id>"`）
 - 開閉は `<details>` / `<summary>`、ボタンの下に出すパネルは `Popover`
