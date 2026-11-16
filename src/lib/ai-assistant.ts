@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import { createAiAgent } from './ai-agent'
 import { createAiChatStore } from './ai-chat'
 import { DOCS_ABILITIES, docsTools } from './ai-docs'
-import { AI_TOOLS } from './ai-tools'
+import { AI_TOOLS, readItemFile } from './ai-tools'
 import { aiUploadStore } from './ai-uploads'
 import { pageTarget } from './ai-suggestions'
 import { aiLedger } from './ai-usage'
@@ -71,6 +71,7 @@ export const assistant = createAiAgent({
   pageContext,
   canOpenPage,
   files: aiUploadStore,
+  readFile: readItemFile,
   focusOf,
   abilities: [
     '利用者が管理しているコースの内容を読めます。',

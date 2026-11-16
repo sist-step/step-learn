@@ -4,6 +4,7 @@ import {
   AI_TIMEOUT,
   AiError,
   CLAUDE_PRICES,
+  type AiFilePart,
   type AiMessage,
   type AiReply,
   type AiRequestFor,
@@ -69,6 +70,26 @@ function assistantContent(m: Extract<AiMessage, { role: 'assistant' }>): Anthrop
   ]
 }
 
+function fileBlock({ mediaType, data }: AiFilePart): Anthropic.Beta.BetaImageBlockParam | Anthropic.Beta.BetaRequestDocumentBlock {
+  if (mediaType === 'application/pdf') return { type: 'document', source: { type: 'base64', media_type: mediaType, data } }
+  return { type: 'image', source: { type: 'base64', media_type: mediaType, data } }
+}
+
+/** file を AI に見せたときの入力のトークン数。Anthropic が受け付けない（壊れている・大きすぎる）なら 'unreadable' */
+export async function countFileTokens(model: ClaudeModel, file: AiFilePart): Promise<number | 'unreadable'> {
+  const api = sharedClient()
+  try {
+    const { input_tokens } = await api.beta.messages.countTokens(
+      { model, messages: [{ role: 'user', content: [fileBlock(file)] }] },
+      { timeout: AI_TIMEOUT },
+    )
+    return input_tokens
+  } catch (e) {
+    if (e instanceof Anthropic.BadRequestError || e instanceof Anthropic.UnprocessableEntityError) return 'unreadable'
+    throw toAiError(model, e)
+  }
+}
+
 function toWire(all: AiMessage[]) {
   const first = all.findIndex((m) => m.role !== 'system')
   const head = all.slice(0, first === -1 ? all.length : first)
@@ -81,7 +102,7 @@ function toWire(all: AiMessage[]) {
       const result: Anthropic.Beta.BetaToolResultBlockParam = {
         type: 'tool_result',
         tool_use_id: toolUseId(m.toolCallId),
-        content: m.content,
+        content: m.files?.length ? [{ type: 'text', text: m.content }, ...m.files.map(fileBlock)] : m.content,
         is_error: m.isError || undefined,
       }
       const last = messages.at(-1)

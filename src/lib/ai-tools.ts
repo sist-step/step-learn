@@ -20,6 +20,7 @@ import {
   toConstraints,
   UPLOAD_NOT_FOUND,
   type AiAgentTool,
+  type AiFileReader,
   type AiToolContext,
 } from './ai-tool-kit'
 import { adoptUpload, findUpload, type AiUpload } from './ai-uploads'
@@ -40,7 +41,7 @@ import { isHttpUrl } from './forms'
 import { getQuizSettings } from './quiz-items'
 import { availableCodeLanguages } from './sandbox'
 import { bundleFiles, codeItems, courses, enrollments, items, sections } from './schema'
-import { deleteKeys, inBackground, type StoredFile } from './storage'
+import { deleteKeys, inBackground, storage, type StoredFile } from './storage'
 import { ITEM_TYPE_LABELS, LINK_TARGET_LABELS, LINK_TARGETS, type Item, type User } from './types'
 
 const MAX_LISTED_COURSES = 100
@@ -249,6 +250,17 @@ const getItem = defineTool(
     )
   },
 )
+
+/** read_file（lib/ai-agent.ts）で読む、利用者が管理しているファイルのアイテム */
+export const readItemFile: AiFileReader = async (c, itemId) => {
+  const found = await itemOf(c.var.user!, itemId)
+  if (!found) return failure(NOT_FOUND, 'ファイルを開けませんでした')
+  const { item } = found
+  if (item.type !== 'file' || !item.fileKey)
+    return failure('ファイルのアイテムではありません。', `「${item.title}」のファイルを読めませんでした`)
+  const { fileKey, fileName, fileSize } = item
+  return { title: item.title, name: fileName ?? '', size: fileSize ?? 0, read: () => storage.read(fileKey, fileSize ?? 0) }
+}
 
 // ---------------------------------------------------------------- 追加・並べ替え（すぐ実行する）
 

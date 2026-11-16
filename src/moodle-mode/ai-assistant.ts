@@ -6,7 +6,7 @@ import { DOCS_ABILITIES, docsTools } from '../lib/ai-docs'
 import { pageTarget } from '../lib/ai-suggestions'
 import type { AiToolContext } from '../lib/ai-tool-kit'
 import { aiLedger } from './ai-usage'
-import { codeKind, kindLabel, MOODLE_AI_TOOLS } from './ai-tools'
+import { codeKind, kindLabel, MOODLE_AI_TOOLS, readMoodleItemFile } from './ai-tools'
 import { moodleAiUploadStore } from './ai-uploads'
 import type { MoodleEnv } from './auth'
 import { loadCourse, myCourses, outlineOf } from './data'
@@ -71,6 +71,7 @@ export const moodleAssistant = createAiAgent({
   pageContext,
   canOpenPage,
   files: moodleAiUploadStore,
+  readFile: readMoodleItemFile,
   focusOf,
   abilities: [
     '利用者が管理しているコースの内容を読めます。教材は Moodle にあり、Moodle の活動（課題・小テストなど）は名前と種類だけが分かります。',

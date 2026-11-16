@@ -8,15 +8,24 @@ import {
   AiError,
   aiProvider,
   complete,
+  countFileInput,
   hidesPrelude,
   isAiModel,
+  readsFiles,
   replyMessage,
   type AiMessage,
   type AiModel,
   type AiToolCall,
 } from './ai'
 import { chatRevision, type AiCard, type AiCardState, type AiChat, type AiChatContent, type AiChatStore, type AiFocus } from './ai-chat'
-import { AI_FILE_KIND_HINTS, AI_FILE_KINDS, fileKindsLabel, matchesFileKinds } from './ai-file-kinds'
+import {
+  AI_FILE_KIND_HINTS,
+  AI_FILE_KINDS,
+  READABLE_EXTENSIONS,
+  fileKindsLabel,
+  matchesFileKinds,
+  readableMediaType,
+} from './ai-file-kinds'
 import type { AiLedger } from './ai-ledger'
 import type { AiQuota, AiQuotaState } from './ai-quota'
 import { judgeOffTopic } from './ai-scope'
@@ -24,15 +33,18 @@ import { createAiSuggester } from './ai-suggestions'
 import {
   describedString,
   failure,
+  id,
   isToolResult,
   success,
   toolOf,
   type AiAgentTool,
+  type AiFileReader,
   type AiFileStore,
   type AiToolContext,
   type AiToolResult,
   type AiTouched,
 } from './ai-tool-kit'
+import { formatBytes } from './bytes'
 import { ROLE_LABELS } from './types'
 
 /**
@@ -96,7 +108,8 @@ function transcript(messages: readonly AiMessage[]) {
   return messages
     .flatMap((m) => {
       if (m.role === 'user') return [`利用者: ${m.content}`]
-      if (m.role === 'tool') return [`ツールの結果: ${clip(m.content, MAX_SUMMARY_TOOL_RESULT)}`]
+      if (m.role === 'tool')
+        return [`ツールの結果: ${clip(m.content, MAX_SUMMARY_TOOL_RESULT)}${m.files?.length ? '（ファイルの中身を添えた）' : ''}`]
       if (m.role !== 'assistant') return []
       return [
         ...(m.content ? [`AI: ${m.content}${m.stopped ? '（利用者が途中で止めた）' : ''}`] : []),
@@ -210,6 +223,39 @@ const REQUEST_TOOL = toolOf(
   requestArgs,
 )
 
+/** アイテムのファイル（PDF・画像）の中身を AI に見せるツール。読み込み方を渡し、ファイルを読めるモデル（readsFiles）のときだけ AI に渡す */
+export const READ_FILE = 'read_file'
+
+const readArgs = z.object({
+  item_id: id('ファイルのアイテムの ID'),
+  course_id: z.optional(id('アイテムのあるコースの ID（分かっていれば）')),
+})
+
+const READ_TOOL = toolOf(
+  READ_FILE,
+  [
+    `ファイルのアイテムの中身を読みます。読めるのは PDF と画像（${READABLE_EXTENSIONS.join(' / ')}）だけで、Word・PowerPoint などほかの種類は読めません。PDF はページの文字と図の両方が見えます。`,
+    '教材の内容について答えるときや、資料の内容から問題やページを作るときなど、中身が必要なときだけ呼んでください。',
+    '読んだ中身はこのあとの会話でも見えるので、同じファイルを読み直さないでください。古いやり取りが要約に置き換わったあとは見えなくなるので、必要なら読み直してください。',
+  ].join(''),
+  readArgs,
+)
+
+const MAX_READ_PDF_SIZE = 20 * 1024 * 1024
+// PDF より小さくするのは、Anthropic の API が 1 枚 5MB を超える画像を受け付けないため
+const MAX_READ_IMAGE_SIZE = 5 * 1024 * 1024
+// 1 ファイルごとの上限だけにしないのは、読んだファイルは以後の要求でも毎回送り、Anthropic の API が 1 回の要求を 32MB までしか受け付けないため（base64 で 4/3 倍になる）
+/** 1 つのチャットで AI に渡しているファイルの大きさの合計の上限 */
+const MAX_CHAT_FILE_SIZE = 20 * 1024 * 1024
+// 大きさだけで決めないのは、文字の多い PDF は小さくてもページ数が多く、読むたびに会話の以後のすべての要求にその料金がかかるため
+/** 1 つのファイルを読んだときの入力のトークン数の上限 */
+const MAX_FILE_TOKENS = 100_000
+
+const fileSizeOf = (data: string) => Math.floor((data.length * 3) / 4)
+
+const sentFileSize = (content: AiChatContent) =>
+  liveMessages(content).reduce((n, m) => n + (m.role === 'tool' ? (m.files ?? []).reduce((k, f) => k + fileSizeOf(f.data), 0) : 0), 0)
+
 const isBlankStop = (m: AiMessage | undefined) => m?.role === 'assistant' && !!m.stopped && !m.content && !m.toolCalls?.length
 
 const pendingCalls = (content: AiChatContent) => Object.entries(content.cards).filter(([, card]) => card.state === 'pending')
@@ -238,6 +284,7 @@ export function createAiAgent({
   canOpenPage,
   abilities,
   files,
+  readFile,
   focusOf,
 }: {
   tools: readonly AiAgentTool[]
@@ -251,6 +298,8 @@ export function createAiAgent({
   abilities: readonly string[]
   /** request_file で受け取ったファイルの置き場所。渡さなければ、AI はファイルを受け取れない */
   files?: AiFileStore
+  /** read_file で読むファイルのアイテムの探し方。渡さなければ、AI はファイルの中身を読めない */
+  readFile?: AiFileReader
   /** 利用者が管理しているコーディング問題なら、チャットで選ぶアイテム。ほかのアイテムや開けないものは null */
   focusOf: (c: AiToolContext, courseId: number, itemId: number) => Promise<AiFocus | null>
 }) {
@@ -284,9 +333,14 @@ export function createAiAgent({
 
   const suggestRequests = createAiSuggester({ ledger, pageContext, canOpenPage, abilities })
 
+  const canRead = (model: AiModel) => !!readFile && readsFiles(model)
   const baseTools = [...tools.map((t) => t.tool), ...(files ? [REQUEST_TOOL] : [])]
   // 候補をあとから別の要求で作らないのは、候補を出すだけのために、応答をもう 1 回作らせることになるため
-  const wireTools = (model: AiModel) => (hidesPrelude(model) ? baseTools : [...baseTools, SUGGEST_TOOL])
+  const wireTools = (model: AiModel) => [
+    ...baseTools,
+    ...(canRead(model) ? [READ_TOOL] : []),
+    ...(hidesPrelude(model) ? [] : [SUGGEST_TOOL]),
+  ]
 
   // 同じ利用者の発言を並べて処理しないのは、どちらも同じ会話の続きとして保存し、片方の発言が消えるため
   const running = new Map<number, { controller: AbortController; finished: Promise<void> }>()
@@ -321,6 +375,11 @@ export function createAiAgent({
       ...(files
         ? [
             `- ${REQUEST_FILE} でファイルを選ぶカードを出したときも同じです。利用者がファイルを送るか取り消すまで、それ以上ツールを呼ばずに、選んでほしいファイルを一言伝えて終えてください。`,
+          ]
+        : []),
+      ...(canRead(model)
+        ? [
+            `- ファイルのアイテムが PDF か画像なら、${READ_FILE} で中身を読めます。資料の内容について答えるときや、資料をもとに問題やページを作るときは、読んでから答えてください。`,
           ]
         : []),
       '- 受講者の一覧や成績、提出物は扱えません。',
@@ -372,8 +431,51 @@ export function createAiAgent({
     return accepted
   }
 
+  /** read_file の結果。読めたら、ファイルを結果に添える */
+  async function readItemFile(c: AiToolContext, content: AiChatContent, model: AiModel, raw: unknown): Promise<AiToolResult> {
+    const parsed = readArgs.safeParse(raw)
+    if (!parsed.success || !readFile)
+      return failure('引数が正しくありません。説明に合わせて呼び直してください。', `${READ_FILE} の引数が正しくありません`)
+    const found = await readFile(c, parsed.data.item_id, parsed.data.course_id)
+    if (!('read' in found)) return found
+    const cannot = (message: string) => failure(message, `「${found.title}」のファイルを読めませんでした`)
+    const mediaType = readableMediaType(found.name)
+    if (!mediaType) return cannot(`読めるのは PDF と画像（${READABLE_EXTENSIONS.join(' / ')}）のファイルだけです。`)
+    const pdf = mediaType === 'application/pdf'
+    const max = pdf ? MAX_READ_PDF_SIZE : MAX_READ_IMAGE_SIZE
+    const tooLarge = (size: number) =>
+      cannot(`ファイルが大きすぎて読めません（${formatBytes(size)}。${pdf ? 'PDF' : '画像'}は ${formatBytes(max)} まで）。`)
+    if (found.size > max) return tooLarge(found.size)
+    if (sentFileSize(content) + found.size > MAX_CHAT_FILE_SIZE)
+      return cannot('このチャットで読んだファイルが多いため、これ以上は読めません。新しいチャットを始めるよう利用者に伝えてください。')
+    const bytes = await found.read()
+    if (!bytes) return cannot('ファイルを取り出せませんでした。')
+    // 先に確かめた大きさを信じないのは、アイテムに記録した大きさと、実際に取り出したファイルの大きさが食い違うことがあるため
+    if (bytes.length > max) return tooLarge(bytes.length)
+    const file = { mediaType, data: Buffer.from(bytes).toString('base64') }
+    let tokens
+    try {
+      tokens = await countFileInput(model, file)
+    } catch (e) {
+      if (!(e instanceof AiError)) throw e
+      return cannot(`${e.message}。`)
+    }
+    if (tokens === 'unreadable') return cannot('ファイルが壊れているか、AI が読めない形式です。')
+    if (tokens > MAX_FILE_TOKENS)
+      return cannot(
+        `ファイルの中身が長すぎて読めません（約 ${tokens.toLocaleString('ja-JP')} トークン。${MAX_FILE_TOKENS.toLocaleString('ja-JP')} トークンまで）。必要なページだけを抜き出した PDF にしてもらうよう利用者に伝えてください。`,
+      )
+    return {
+      ...success(
+        { item_id: parsed.data.item_id, file_name: found.name, file_size: bytes.length, note: 'ファイルの中身をこの結果に添えました。' },
+        `「${found.title}」のファイルを読みました`,
+      ),
+      files: [file],
+    }
+  }
+
   /** 確認カードを出したら true。そのツールの結果は、利用者が決めるまで会話に足さない */
-  async function callTool(c: AiToolContext, chat: AiChat, call: AiToolCall, emit: Emit) {
+  async function callTool(c: AiToolContext, chat: AiChat, call: AiToolCall, model: AiModel, emit: Emit) {
     const { messages, labels, cards, touched: touchedBy } = chat.content
     const tool = tools.find((t) => t.tool.name === call.name)
     const args = parseJson(call.arguments)
@@ -394,6 +496,8 @@ export function createAiAgent({
         return true
       }
       result = failure('引数が正しくありません。説明に合わせて呼び直してください。', `${REQUEST_FILE} の引数が正しくありません`)
+    } else if (call.name === READ_FILE && canRead(model)) {
+      result = await safely(() => readItemFile(c, chat.content, model, args), call.name)
     } else if (!tool) {
       result = failure(`${call.name} というツールはありません。`, TOOL_FAILED)
     } else if (tool.kind === 'run') {
@@ -412,7 +516,7 @@ export function createAiAgent({
     if (touched) touchedBy[call.id] = touched
     emit({ type: 'tool', label: result.label, touched })
     if (touched) emit({ type: 'applied', touched })
-    messages.push({ role: 'tool', toolCallId: call.id, content: result.content, isError: result.isError })
+    messages.push({ role: 'tool', toolCallId: call.id, content: result.content, isError: result.isError, files: result.files })
     return false
   }
 
@@ -486,7 +590,7 @@ export function createAiAgent({
       if (reply.stop !== 'tools' || suggestReplies(chat, reply.toolCalls, hidesPrelude(model) && !reply.text.trim(), emit)) return false
 
       let waiting = false
-      for (const call of reply.toolCalls) if (call.name !== SUGGEST_REPLIES && (await callTool(c, chat, call, emit))) waiting = true
+      for (const call of reply.toolCalls) if (call.name !== SUGGEST_REPLIES && (await callTool(c, chat, call, model, emit))) waiting = true
       if (waiting) return false
     }
   }
@@ -522,6 +626,8 @@ export function createAiAgent({
       if (reply.stop !== 'end' || !reply.text.trim()) return false
       content.summary = reply.text.trim()
       content.compactions = [...(content.compactions ?? []), at]
+      // 要約より前のファイルを残さないのは、AI にはもう渡さず、保存した会話の大きさだけが膨らむため
+      for (const m of content.messages.slice(0, at)) if (m.role === 'tool') delete m.files
       delete content.contextTokens
       emit({ type: 'compacted' })
       return true

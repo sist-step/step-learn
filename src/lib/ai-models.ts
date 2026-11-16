@@ -138,11 +138,23 @@ export const isReserveModel = (model: AiModel | DecisionModel) => (AI_RESERVE_MO
 /** arguments はモデルが書いた JSON の文字列。壊れていることがあるので、使う側で検証する */
 export type AiToolCall = { id: string; name: string; arguments: string }
 
+export const AI_FILE_MEDIA_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const
+
+export type AiFileMediaType = (typeof AI_FILE_MEDIA_TYPES)[number]
+
+/** ツールの結果に添えて AI に見せるファイル。data は base64 */
+export type AiFilePart = { mediaType: AiFileMediaType; data: string }
+
+// OpenRouter のモデルに渡さないのは、DeepSeek V4.1 Flash は PDF を受け取れず、OpenAI 互換の API にはツールの結果に画像を添える形がないため
+/** ツールの結果に添えたファイル（AiFilePart）を読めるモデル */
+export const readsFiles = (model: AiModel) => isAnthropicModel(model)
+
 export type AiMessage =
   | { role: 'system' | 'user'; content: string }
   /** native は AiReply の native。次の要求でもそのまま付けて送る。stopped は利用者が生成を止めたこと（content はそこまでの本文） */
   | { role: 'assistant'; content: string; toolCalls?: AiToolCall[]; native?: unknown; stopped?: boolean }
-  | { role: 'tool'; toolCallId: string; content: string; isError?: boolean }
+  /** files は結果に添えたファイル。readsFiles のモデルにだけ送る */
+  | { role: 'tool'; toolCallId: string; content: string; isError?: boolean; files?: AiFilePart[] }
 
 /** parameters は引数の JSON Schema */
 export type AiTool = { name: string; description: string; parameters: Record<string, unknown> }
