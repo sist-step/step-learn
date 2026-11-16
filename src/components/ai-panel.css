@@ -264,7 +264,6 @@
 .ai-usage-bars:has(> :only-child) .ai-usage-bar { height: 6px; }
 .ai-usage-text { white-space: nowrap; }
 .ai-context-ring { flex: none; width: 14px; height: 14px; border-radius: 50%; background: conic-gradient(var(--c-ink) var(--ai-used), var(--track) 0); -webkit-mask: radial-gradient(circle, transparent 3.5px, #000 4px); mask: radial-gradient(circle, transparent 3.5px, #000 4px); }
-.ai-context-note { margin-top: 8px; color: var(--text-2); font-size: var(--fs-sm); line-height: 1.7; }
 .ai-usage-panel { left: 0; right: auto; width: min(320px, calc(100vw - 24px)); padding: 14px 16px 12px; }
 .ai-usage-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .ai-usage-head strong { font-size: var(--fs-base); }
