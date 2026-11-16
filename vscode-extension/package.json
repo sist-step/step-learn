@@ -1,8 +1,8 @@
 {
   "name": "step-learn-for-vscode",
   "displayName": "STEP Learn for VSCode",
-  "description": "STEP Learn で配られたプログラムのファイルを、ボタン 1 つで VS Code に用意して開きます。先生が指定したアイテムでは、保存した内容を変更履歴として STEP Learn に記録します。コーディングエージェントのアイテムでは、使える期間のあいだ AI がファイルを読み書きしてプログラムを書きます。",
-  "version": "0.4.1",
+  "description": "STEP Learn で配られたプログラムのファイルを、ボタン 1 つで VS Code に用意して開きます。先生が指定したアイテムでは、保存した内容を変更履歴として STEP Learn に記録します。コードのアイテムでは、保存したコードを STEP Learn に反映し、VS Code から提出して AI の判定を受け取れます。コーディングエージェントのアイテムでは、使える期間のあいだ AI がファイルを読み書きしてプログラムを書きます。",
+  "version": "0.5.0",
   "publisher": "mint1535",
   "private": true,
   "license": "UNLICENSED",
@@ -39,6 +39,12 @@
         "command": "stepLearn.forgetServers",
         "title": "ファイルを受け取ってよいサーバーの記録を消す",
         "category": "STEP Learn"
+      },
+      {
+        "command": "stepLearn.code.submit",
+        "title": "コードを提出する",
+        "category": "STEP Learn",
+        "icon": "$(cloud-upload)"
       },
       {
         "command": "stepLearn.agent.open",
@@ -102,6 +108,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "stepLearn.code.submit",
+          "when": "stepLearn.codeOpen"
+        },
         {
           "command": "stepLearn.agent.newChat",
           "when": "stepLearn.agentAvailable"

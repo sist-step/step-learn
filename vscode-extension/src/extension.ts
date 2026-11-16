@@ -2,6 +2,8 @@ import path from 'node:path'
 import * as vscode from 'vscode'
 import { claimAgent } from './agent-core'
 import { AgentController } from './agent-view'
+import { claimCode, markSynced, planCode, readLocal, saveDraft, writeLocal, type CodeRecord, type CodeSynced } from './code-item'
+import { CodeSession, chooseSide, codeSyncedKey, codeTokenKey } from './code-session'
 import { HistorySession, confirmSync, tokenKey } from './history-session'
 import {
   SyncError,
@@ -22,13 +24,50 @@ import {
 
 const TRUSTED_KEY = 'trustedServers'
 const RECORDS_KEY = 'bundles'
+const CODE_RECORDS_KEY = 'codeItems'
 const ACCOUNTS_KEY = 'accounts'
 
 const sessions = new Map<string, HistorySession>()
+const codeSessions = new Map<string, CodeSession>()
 
 let agent: AgentController | null = null
 
 const recordsOf = (context: vscode.ExtensionContext) => context.globalState.get<Record<string, Synced>>(RECORDS_KEY, {})
+
+const codeRecordsOf = (context: vscode.ExtensionContext) => context.globalState.get<Record<string, CodeRecord>>(CODE_RECORDS_KEY, {})
+
+const openFolders = () => (vscode.workspace.workspaceFolders ?? []).filter((f) => f.uri.scheme === 'file').map((f) => f.uri.fsPath)
+
+/** 開いているフォルダーのうち、コードのアイテムとして用意したフォルダーで、STEP Learn とのやりとりを始める */
+async function startCodeSessions(context: vscode.ExtensionContext) {
+  for (const session of codeSessions.values()) session.dispose()
+  codeSessions.clear()
+  const open = openFolders()
+  for (const [key, record] of Object.entries(codeRecordsOf(context))) {
+    if (!open.some((folder) => path.relative(folder, record.folder) === '')) continue
+    const server = parseServer(key.split(' ')[0])
+    const token = await context.secrets.get(codeTokenKey(key))
+    if (!server || !token) continue
+    const session = new CodeSession(context, key, record, server, token)
+    codeSessions.set(key, session)
+    session.start()
+  }
+  await vscode.commands.executeCommand('setContext', 'stepLearn.codeOpen', codeSessions.size > 0)
+}
+
+/** 提出するアイテム。key がなければ、開いているエディターのファイルのアイテムか、1 つしかなければそれ */
+async function sessionToSubmit(key?: string) {
+  if (key) return codeSessions.get(key)
+  const all = [...codeSessions.values()]
+  const active = vscode.window.activeTextEditor?.document.uri
+  const found = active && all.find((s) => s.contains(active))
+  if (found || all.length <= 1) return found ?? all[0]
+  const picked = await vscode.window.showQuickPick(
+    all.map((s) => ({ label: s.title, session: s })),
+    { placeHolder: '提出するアイテムを選んでください' },
+  )
+  return picked?.session
+}
 
 /** 開いているフォルダーのうち、前に用意したフォルダーで変更履歴の同期を始める。鍵が新しくなっているかもしれないので、動いているものも始め直す */
 async function startSessions(context: vscode.ExtensionContext) {
@@ -161,11 +200,60 @@ async function connectAgent(context: vscode.ExtensionContext, server: URL, token
   }
 }
 
+/** STEP Learn のコードのアイテムの「VS Code で開く」から開いたとき。今のコードをファイルにして、フォルダーを開く */
+async function openCode(context: vscode.ExtensionContext, server: URL, token: string) {
+  if (!(await trust(context, server))) return
+  try {
+    const manifest = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: 'STEP Learn: コードを確認しています' },
+      () => claimCode(server, token),
+    )
+    const consequence = '保存したコードがその人の書きかけとして送られ、その人として提出できてしまいます'
+    if (!(await confirmAccount(context, server, manifest.title, manifest.user, consequence))) return
+    const key = `${server.origin} ${manifest.ref}`
+    await context.secrets.store(codeTokenKey(key), manifest.token)
+
+    const records = codeRecordsOf(context)
+    const previous = records[key]
+    const taken = new Set([
+      ...Object.values(recordsOf(context)).map((r) => r.folder),
+      ...Object.entries(records)
+        .filter(([k]) => k !== key)
+        .map(([, r]) => r.folder),
+    ])
+    const base = path.join(await configuredRoot(), folderName(manifest.course), folderName(manifest.title))
+    // 前のフォルダーがなく、同じ名前のフォルダーがあるときに使わないのは、ほかのアイテムや自分で作ったフォルダーのファイルを書き換えないため
+    const folder = previous && (await exists(previous.folder)) ? previous.folder : await freshFolder(base, taken)
+    let synced = previous?.folder === folder ? context.globalState.get<CodeSynced>(codeSyncedKey(key), {}) : {}
+
+    const plan = await planCode(folder, manifest.files, synced)
+    const side = plan.conflicts.length ? await chooseSide(manifest.title, plan.conflicts) : null
+    if (plan.conflicts.length && !side) return
+    await writeLocal(folder, [...plan.write, ...(side === 'server' ? plan.conflicts : [])])
+    const names = manifest.files.map((f) => f.path)
+    const local = await readLocal(folder, names)
+    // 開いたときに手元の分を送っておくのは、このあと Web エディターを開いても、VS Code と同じコードが入っているようにするため
+    if (plan.ahead.length || side === 'local') await saveDraft(server, manifest.token, local)
+    synced = markSynced({}, local)
+
+    const record: CodeRecord = { folder, title: manifest.title, files: names, canSubmit: manifest.canSubmit, page: manifest.page }
+    // 開く前に記録するのは、このウィンドウでフォルダーを開くと拡張機能が止まり、あとの処理が動かないため
+    await context.globalState.update(codeSyncedKey(key), synced)
+    await context.globalState.update(CODE_RECORDS_KEY, { ...codeRecordsOf(context), [key]: record })
+    await openFolder(folder)
+    await startCodeSessions(context)
+  } catch (e) {
+    const message = e instanceof SyncError ? e.message : `コードを用意できませんでした（${e instanceof Error ? e.message : String(e)}）。`
+    void vscode.window.showErrorMessage(message)
+  }
+}
+
 async function openFromLink(context: vscode.ExtensionContext, uri: vscode.Uri) {
   const query = new URLSearchParams(uri.query)
   const server = parseServer(query.get('server') ?? '')
   const token = query.get('token') ?? ''
   if (uri.path === '/agent' && server && token) return connectAgent(context, server, token)
+  if (uri.path === '/code' && server && token) return openCode(context, server, token)
   if (uri.path !== '/open' || !server || !token) {
     void vscode.window.showErrorMessage('リンクが正しくありません。STEP Learn の画面からもう一度開いてください。')
     return
@@ -184,11 +272,12 @@ async function openFromLink(context: vscode.ExtensionContext, uri: vscode.Uri) {
       await context.secrets.store(tokenKey(key), manifest.sync.token)
     }
     const records = recordsOf(context)
-    const taken = new Set(
-      Object.entries(records)
+    const taken = new Set([
+      ...Object.entries(records)
         .filter(([k]) => k !== key)
         .map(([, r]) => r.folder),
-    )
+      ...Object.values(codeRecordsOf(context)).map((r) => r.folder),
+    ])
     const choice = await choose(manifest, records[key], taken)
     if (!choice) return
     if (choice.files.length) {
@@ -212,13 +301,32 @@ async function openFromLink(context: vscode.ExtensionContext, uri: vscode.Uri) {
 
 export function activate(context: vscode.ExtensionContext) {
   void startSessions(context)
+  void startCodeSessions(context)
   const controller = new AgentController(context)
   agent = controller
   controller.start()
   context.subscriptions.push(
     vscode.window.registerUriHandler({ handleUri: (uri) => openFromLink(context, uri) }),
-    vscode.workspace.onDidChangeWorkspaceFolders(() => void startSessions(context)),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      void startSessions(context)
+      void startCodeSessions(context)
+    }),
     { dispose: () => sessions.forEach((session) => session.dispose()) },
+    { dispose: () => codeSessions.forEach((session) => session.dispose()) },
+    vscode.commands.registerCommand('stepLearn.code.submit', async (key?: unknown) => {
+      const session = await sessionToSubmit(typeof key === 'string' ? key : undefined)
+      if (!session) {
+        void vscode.window.showInformationMessage(
+          'STEP Learn のコードのアイテムを開いていません。STEP Learn の画面の「VS Code で開く」から始めてください。',
+        )
+        return
+      }
+      if (!session.record.canSubmit) {
+        void vscode.window.showInformationMessage('提出できるのは、コースの学生だけです。')
+        return
+      }
+      await session.submit()
+    }),
     vscode.commands.registerCommand('stepLearn.openRootFolder', async () => {
       const root = await configuredRoot()
       if (!(await exists(root))) {
@@ -240,5 +348,5 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export async function deactivate() {
-  await Promise.all([...sessions.values()].map((session) => session.flushNow()))
+  await Promise.all([...sessions.values(), ...codeSessions.values()].map((session) => session.flushNow()))
 }
