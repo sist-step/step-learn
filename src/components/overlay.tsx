@@ -1,5 +1,5 @@
 import type { Child, JSX } from 'hono/jsx'
-import { IconButton } from './button'
+import { Button, IconButton } from './button'
 import { cx } from './cx'
 import { Icon, type IconName } from './icons'
 import { useStyle } from './style'
@@ -51,6 +51,29 @@ export const Popover = ({
       {trigger}
       <div class={cx('popover-panel', panelClass)}>{children}</div>
     </details>
+  )
+}
+
+/**
+ * ボタンのそばに出す確認のチップ。client.ts の confirmNear がこの template を複製し、押したボタンの下（収まらなければ上）に開く。
+ * 確定のボタンは、取り消せない操作なら danger、取り消せる操作なら primary の方だけを残す
+ */
+// client.ts で組み立てないのは、ボタンのマークアップが Button と 2 か所に分かれて見た目がずれていくため
+export const ConfirmChip = () => {
+  useStyle('/src/components/overlay.css')
+  return (
+    <template data-confirm-chip>
+      <div class="confirm-chip" popover="auto" role="alertdialog">
+        <div class="confirm-chip-msg" data-confirm-chip-msg />
+        <div class="confirm-chip-actions">
+          <Button variant="ghost" size="sm" data-confirm-chip-cancel>
+            キャンセル
+          </Button>
+          <Button variant="danger" size="sm" data-confirm-chip-ok="danger" />
+          <Button variant="primary" size="sm" data-confirm-chip-ok="primary" />
+        </div>
+      </div>
+    </template>
   )
 }
 

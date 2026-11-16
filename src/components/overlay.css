@@ -17,6 +17,25 @@
 .popover-panel.is-above { top: auto; bottom: calc(100% + 6px); animation-name: popover-above; }
 @keyframes popover-above { from { opacity: 0; transform: translateY(-6px); } }
 
+.confirm-chip {
+  position: fixed;
+  inset: auto;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 24px));
+  margin: 0;
+  padding: 12px 12px 10px 16px;
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--radius-lg);
+  background: var(--glass-raised);
+  backdrop-filter: var(--glass-blur);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+}
+.confirm-chip:popover-open { animation: rise 0.15s var(--ease); }
+.confirm-chip.is-above:popover-open { animation-name: popover-above; }
+.confirm-chip-msg { display: grid; gap: 4px; padding-right: 4px; font-size: var(--fs-sm); font-weight: 500; line-height: 1.6; }
+.confirm-chip-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }
+
 .menu-item {
   display: flex;
   align-items: center;

@@ -414,7 +414,12 @@ export const RestrictionPage = ({
             <div class="stack">
               {note ? <RestrictionNote text={note} /> : <p class="muted small">制限はありません。</p>}
               {editable && note && (
-                <form method="post" action={target.action} data-confirm={`「${target.title}」のアクセス制限をなくしますか？`}>
+                <form
+                  method="post"
+                  action={target.action}
+                  data-confirm={`「${target.title}」のアクセス制限をなくしますか？`}
+                  data-confirm-ok="なくす"
+                >
                   <input type="hidden" name="clear" value="1" />
                   <Button type="submit" size="sm" icon="lockOpen">
                     制限をなくす

@@ -119,6 +119,7 @@ const ParticipantRow = ({ p, courseId, meId, manage, totalItems, progress }: Tab
               method="post"
               action={`/courses/${courseId}/participants/${p.id}/remove`}
               data-confirm={`${p.name} さんをコースから外しますか？`}
+              data-confirm-ok="外す"
             >
               <MenuItem type="submit" icon="userMinus" class="is-danger">
                 コースから外す
