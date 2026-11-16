@@ -4,10 +4,13 @@ import { createAiChatStore } from './ai-chat'
 import { DOCS_ABILITIES, docsTools } from './ai-docs'
 import { AI_TOOLS } from './ai-tools'
 import { aiUploadStore } from './ai-uploads'
+import { pageTarget } from './ai-suggestions'
 import { aiLedger } from './ai-usage'
-import { getCourseAccessFor } from './courses'
+import { courseAvailability } from './availability'
+import { getCourseAccessFor, isVisibleItem } from './courses'
 import { db } from './db'
 import { aiChats, items } from './schema'
+import { ITEM_TYPE_LABELS } from './types'
 import type { AiToolContext } from './ai-tool-kit'
 
 async function pageContext(c: AiToolContext, page: string) {
@@ -20,11 +23,33 @@ async function pageContext(c: AiToolContext, page: string) {
   const item =
     itemId &&
     db
-      .select({ title: items.title })
+      .select({ title: items.title, type: items.type })
       .from(items)
       .where(and(eq(items.id, itemId), eq(items.courseId, access.course.id)))
       .get()
-  return item ? `${course}のアイテム「${item.title}」（item_id: ${itemId}）の画面` : `${course}の画面`
+  return item ? `${course}の${ITEM_TYPE_LABELS[item.type]}のアイテム「${item.title}」（item_id: ${itemId}）の画面` : `${course}の画面`
+}
+
+const inCourse = (courseId: number, itemId: number) =>
+  !!db
+    .select({ id: items.id })
+    .from(items)
+    .where(and(eq(items.id, itemId), eq(items.courseId, courseId)))
+    .get()
+
+// コースの下の画面をすべて開けることにしないのは、参加者や編集の画面のように教師にしか開けない画面があり、学生に開けるのはコースのページとアイテムの画面だけのため
+async function canOpenPage(c: AiToolContext, page: string) {
+  const user = c.var.user!
+  const target = pageTarget(page)
+  if (target.kind === 'admin') return user.role === 'admin'
+  if (target.kind === 'other') return true
+  const access = await getCourseAccessFor(user, target.courseId)
+  if (!access) return false
+  const { itemId } = target
+  if (itemId !== null && !inCourse(access.course.id, itemId)) return false
+  if (access.canManage) return true
+  if (!target.view) return false
+  return itemId === null || (isVisibleItem(itemId) && courseAvailability(user, access).items.get(itemId)?.open !== false)
 }
 
 /** 通常モード（step-learn.db）の AI アシスタント */
@@ -33,6 +58,7 @@ export const assistant = createAiAgent({
   ledger: aiLedger,
   chats: createAiChatStore({ db, aiChats }),
   pageContext,
+  canOpenPage,
   files: aiUploadStore,
   abilities: [
     '利用者が管理しているコースの内容を読めます。',

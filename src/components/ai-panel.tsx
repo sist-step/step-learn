@@ -76,11 +76,7 @@ export type AiPanelProps = {
 
 export const AI_PANEL_ID = 'ai-panel'
 
-const SUGGESTIONS = [
-  'このコースの構成を要約して',
-  '開いているページの誤字や分かりにくい表現を直して',
-  '新しいセクションを作って、授業の流れを説明するページを追加して',
-]
+const SUGGESTION_SLOTS = 3
 
 // 差分を全部出さないのは、ページを丸ごと書き換える提案で、カードがパネルより長くなり、実行するボタンまでたどり着けないため
 const MAX_DIFF_LINES = 40
@@ -283,16 +279,21 @@ const ToolLine = ({ label, touched }: { label?: string; touched?: AiTouched }) =
   </p>
 )
 
+const SuggestionSkeletons = () => (
+  <>
+    {Array.from({ length: SUGGESTION_SLOTS }, () => (
+      <span class="ai-suggestion is-loading" aria-hidden="true" />
+    ))}
+  </>
+)
+
 const Intro = ({ models }: { models: readonly AiModelOption[] }) => (
   <div class="ai-intro" data-ai-intro>
     <Mascot act="greet" size={76} stand={false} />
     <h2 class="ai-intro-title">なにかお手伝いできますか？</h2>
-    <div class="ai-suggestions">
-      {SUGGESTIONS.map((s) => (
-        <button type="button" class="ai-suggestion" data-ai-suggest={s}>
-          {s}
-        </button>
-      ))}
+    {/* 描くときに候補を入れないのは、パネルは画面を移っても描き直さない（data-keep）ので、client.ts が開いている画面に合わせて取りに行くため */}
+    <div class="ai-suggestions" data-ai-suggestions aria-busy="true">
+      <SuggestionSkeletons />
     </div>
     {models.some((m) => m.problem) && (
       <ul class="ai-problems">
@@ -578,6 +579,14 @@ export const AiPanel = ({ models, revision, voice, chat }: AiPanelProps) => {
       </template>
       <template data-ai-template="reply">
         <ReplyButton />
+      </template>
+      <template data-ai-template="suggestion">
+        <button type="button" class="ai-suggestion" data-ai-suggest>
+          <span data-ai-text />
+        </button>
+      </template>
+      <template data-ai-template="suggestion-loading">
+        <span class="ai-suggestion is-loading" aria-hidden="true" />
       </template>
       <template data-ai-template="pending">
         <p class="ai-tool ai-pending">
