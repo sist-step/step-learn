@@ -3017,6 +3017,7 @@ function setAiOpen(open: boolean) {
   void fillAiSuggestions()
   void syncAiPanel()
   scrollAiLog(true)
+  watchAiCards()
   // 狭い画面で入力欄にフォーカスしないのは、開いただけでキーボードが出て会話が隠れるため
   if (aiDocked()) aiInput()?.focus()
 }
@@ -3101,6 +3102,7 @@ document.addEventListener('click', (e) => {
   if (focusStart) return void startAiFocus(focusStart)
   if (target.closest('[data-ai-focus-clear]')) return clearAiFocus()
   if (target.closest('[data-ai-stop]')) return void stopAi()
+  if (target.closest('[data-ai-approve-next]')) return showNextAiCard()
   const hardToggle = target.closest<HTMLElement>('[data-ai-hard]')
   const hardForm = hardToggle?.closest<HTMLFormElement>('[data-ai-form]')
   if (hardToggle && hardForm) {
@@ -3182,6 +3184,7 @@ async function refreshAiPanel(model?: string) {
   initMascots()
   void fillAiSuggestions()
   scrollAiLog(true)
+  watchAiCards()
   scheduleAiSync()
 }
 
@@ -3454,10 +3457,108 @@ async function decideAiCard(form: HTMLFormElement, submitter: HTMLElement | null
   if (outcome.retracted) for (const message of outcome.errors) noteAiProblem(message)
 }
 
+// --- AI の確認カードをまとめて承認する（components/ai-panel.tsx の data-ai-approve-all。承認するのは /ai/chat/confirm-all）
+// カードの先頭と末尾を別々に見るのは、パネルより高いカードは一度に収まらず、末尾までスクロールして読み終えたことを見るため
+type AiCardEdge = 'top' | 'bottom'
+const AI_CARD_EDGES: Record<AiCardEdge, string> = { top: '.ai-card-title', bottom: '.ai-card-actions' }
+// 取り直しのたびに忘れないのは、応答のあとや、ほかのタブの発言でパネルを取り直しても、一度見たカードは見たままにするため
+const aiCardEdgesSeen = new Map<string, Set<AiCardEdge>>()
+let aiCardObserver: IntersectionObserver | null = null
+
+const aiCardKey = (callId: string) => `${aiPanel()?.dataset.chat ?? ''}:${callId}`
+const aiCardSeen = (callId: string) => aiCardEdgesSeen.get(aiCardKey(callId))?.size === Object.keys(AI_CARD_EDGES).length
+const aiApproveAllForm = () => aiPanel()?.querySelector<HTMLFormElement>('[data-ai-approve-all]') ?? null
+const aiApproveCalls = (form: HTMLFormElement) => new FormData(form).getAll('call[]').map(String)
+
+function paintAiApproveAll() {
+  const form = aiApproveAllForm()
+  if (!form) return
+  const unseen = aiApproveCalls(form).filter((call) => !aiCardSeen(call)).length
+  if (form.dataset.unseen === String(unseen)) return
+  const nextFocused = document.activeElement?.matches('[data-ai-approve-next]')
+  form.dataset.unseen = String(unseen)
+  const count = form.querySelector('[data-ai-unseen]')
+  if (count) count.textContent = String(unseen)
+  // 承認のボタンに移すのは、押していた「次の提案を見る」が隠れてフォーカスが消え、キーボードで続けられなくなるため
+  if (nextFocused && unseen === 0) form.querySelector<HTMLButtonElement>('button[type=submit]')?.focus()
+}
+
+// パネルを開いたときにも呼ぶのは、閉じているあいだはカードを見たことにせず、開いた時点で見えているカードを数え直すため
+function watchAiCards() {
+  aiCardObserver?.disconnect()
+  aiCardObserver = null
+  const log = aiPanel()?.querySelector<HTMLElement>('[data-ai-log]')
+  const cards = log ? $$<HTMLElement>('.ai-card[data-ai-card]', log) : []
+  if (!log || !aiApproveAllForm() || cards.length === 0) return
+  aiCardObserver = new IntersectionObserver(
+    (entries) => {
+      if (document.hidden || !document.documentElement.hasAttribute('data-ai-open')) return
+      for (const entry of entries) {
+        const target = entry.target as HTMLElement
+        const callId = target.closest<HTMLElement>('[data-ai-card]')?.dataset.aiCard
+        const edge = target.dataset.aiCardEdge as AiCardEdge | undefined
+        if (!entry.isIntersecting || !callId || !edge) continue
+        const key = aiCardKey(callId)
+        aiCardEdgesSeen.set(key, (aiCardEdgesSeen.get(key) ?? new Set()).add(edge))
+      }
+      paintAiApproveAll()
+    },
+    { root: log, threshold: 0.9 },
+  )
+  for (const card of cards)
+    for (const [edge, selector] of Object.entries(AI_CARD_EDGES)) {
+      const target = card.querySelector<HTMLElement>(selector)
+      if (!target) continue
+      target.dataset.aiCardEdge = edge
+      aiCardObserver.observe(target)
+    }
+  paintAiApproveAll()
+}
+
+/** まだ見ていない最初のカードへスクロールする。先頭を見たカードなら、残りの末尾までを見せる */
+function showNextAiCard() {
+  const panel = aiPanel()
+  const form = aiApproveAllForm()
+  if (!panel || !form) return
+  const call = aiApproveCalls(form).find((c) => !aiCardSeen(c))
+  const card = call ? $$<HTMLElement>('.ai-card[data-ai-card]', panel).find((el) => el.dataset.aiCard === call) : undefined
+  if (!call || !card) return
+  const topSeen = aiCardEdgesSeen.get(aiCardKey(call))?.has('top')
+  const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+  const target = (topSeen && card.querySelector<HTMLElement>(AI_CARD_EDGES.bottom)) || card
+  target.scrollIntoView({ behavior, block: topSeen ? 'end' : 'start' })
+  card.classList.remove('is-unseen-target')
+  void card.offsetWidth
+  card.classList.add('is-unseen-target')
+  card.addEventListener('animationend', () => card.classList.remove('is-unseen-target'), { once: true })
+}
+
+/** 画面で見た確認カードをまとめて承認する。ほかのタブで決まったカードや、まだ見ていないカードがあれば送らない */
+async function approveAllAiCards(form: HTMLFormElement) {
+  const calls = aiApproveCalls(form)
+  if (await refreshAiIfOutdated()) {
+    const next = aiApproveAllForm()
+    const pending = new Set(next ? aiApproveCalls(next) : [])
+    // 取り直したパネルで残りだけを承認しないのは、ほかのタブで取り消したカードがあると、それを踏まえて決め直したいかもしれないため
+    if (!next || !calls.every((call) => pending.has(call))) return
+    form = next
+  }
+  if (calls.some((call) => !aiCardSeen(call))) return paintAiApproveAll()
+  const data = new FormData(form)
+  data.delete('call[]')
+  for (const call of calls) data.append('call[]', call)
+  const panel = aiPanel() ?? document
+  $$<HTMLButtonElement>('[data-ai-confirm] button, [data-ai-approve-all] button', panel).forEach((btn) => (btn.disabled = true))
+  $$('[data-ai-replies]', panel).forEach((el) => el.remove())
+  await streamAi(form.action, data)
+  await refreshAiPanel()
+}
+
 document.addEventListener('submit', (e) => {
   const form = e.target as HTMLFormElement
-  if (e.defaultPrevented || !form.matches('[data-ai-form], [data-ai-close], [data-ai-confirm]')) return
+  if (e.defaultPrevented || !form.matches('[data-ai-form], [data-ai-close], [data-ai-confirm], [data-ai-approve-all]')) return
   e.preventDefault()
+  if (form.matches('[data-ai-approve-all]')) return void runAiTask(() => approveAllAiCards(form))
   if (aiVoice && form.matches('[data-ai-form]')) return void finishAiVoice()
   if (form.matches('[data-ai-form], [data-ai-confirm]')) {
     const submitter = e.submitter
@@ -3494,6 +3595,7 @@ function initAiPanel() {
   $$('.ai-panel-toggle').forEach((el) => el.setAttribute('aria-expanded', String(open)))
   showAiVoice()
   void fillAiSuggestions()
+  watchAiCards()
   scheduleAiSync()
 }
 
