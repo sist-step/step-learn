@@ -10,7 +10,7 @@ import { gradingEnabled, submissionsOf, submitWait, type Grader } from '../../li
 import type { CodeSettings, CodeStore, StudentRow, SubmissionSummary } from '../../lib/code-store'
 import { config } from '../../lib/config'
 import type { CourseAccess } from '../../lib/courses'
-import { firstError, validate } from '../../lib/forms'
+import { firstError, validate, type FormValues } from '../../lib/forms'
 import { clientIp, intParam, readFields, readForm, readJson, redirectWith, wantsJson } from '../../lib/http'
 import { rateLimiter } from '../../lib/rate-limit'
 import { SandboxError, runCode, sandboxEnabled } from '../../lib/sandbox'
@@ -301,29 +301,50 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
     return redirectWith(c, submissionsUrl(courseId, itemId, student.id, target.id), 'コメントを保存しました。')
   }
 
-  /** 編集画面の問題文から、最初のコードと制約の下書きを作る（src/code-editor.ts が編集画面の欄に入れる） */
-  async function suggest(c: C) {
+  /**
+   * 編集画面から AI に作らせる要求を受ける。form のスキーマで読んだ値を make に渡し、返したものを JSON で返す。
+   * what は作るものの名前（「下書き」など）で、断るときの文言に使う
+   */
+  async function suggestWith<F extends 'codeSuggest' | 'codeConstraintsSuggest', T extends object>(
+    c: C,
+    form: F,
+    what: string,
+    make: (ctx: Opened, values: FormValues<F>) => Promise<T | null>,
+  ) {
     const ctx = await manage(c)
     if (!ctx || !gradingEnabled) return c.notFound()
     if (!wantsJson(c)) return c.redirect(ctx.page, 303)
-    const { settings, userId } = ctx
-    const result = validate('codeSuggest', await readForm(c))
+    const result = validate(form, await readForm(c))
     if (!result.ok) return c.json({ error: firstError(result.errors) }, 422)
-    const { title, body } = result.values
-    const key = String(userId)
+    const key = String(ctx.userId)
     const wait = suggestLimit.retryAfter(key)
     if (wait) return c.json({ error: `続けて作れません。${wait} 秒ほど待ってから、もう一度お試しください。` }, 429)
-    if (!grader.canGrade()) return c.json({ error: 'AI の今月の上限に達しているため、下書きを作れません。' }, 503)
+    if (!grader.canGrade()) return c.json({ error: `AI の今月の上限に達しているため、${what}を作れません。` }, 503)
     suggestLimit.hit(key)
     try {
-      const draft = await grader.draftSetup({ title: title || settings.title, body, language: settings.language }, userId)
-      if (draft) return c.json({ draft })
+      const made = await make(ctx, result.values)
+      if (made) return c.json(made)
     } catch (e) {
       if (!(e instanceof AiError)) throw e
       console.error('[grading]', e.message)
     }
-    return c.json({ error: '下書きを作れませんでした。少し待ってから、もう一度お試しください。' }, 502)
+    return c.json({ error: `${what}を作れませんでした。少し待ってから、もう一度お試しください。` }, 502)
   }
+
+  /** 編集画面の問題文から、最初のコードと制約の下書きを作る（src/code-editor.ts が編集画面の欄に入れる） */
+  const suggest = (c: C) =>
+    suggestWith(c, 'codeSuggest', '下書き', async ({ settings, userId }, { title, body }) => {
+      const draft = await grader.draftSetup({ title: title || settings.title, body, language: settings.language }, userId)
+      return draft && { draft }
+    })
+
+  /** 編集画面の問題文と最初のコードから、制約だけを作る（src/code-editor.ts が編集画面の制約の欄に入れる） */
+  const suggestConstraints = (c: C) =>
+    suggestWith(c, 'codeConstraintsSuggest', '制約', async ({ settings, userId }, { title, body, stdin: _, ...files }) => {
+      const input = { title: title || settings.title, body, language: settings.language, starter: filesFor(settings.language, files) }
+      const constraints = await grader.draftConstraints(input, userId)
+      return constraints && { constraints }
+    })
 
   async function regrade(c: C) {
     const ctx = await studentSubmissions(c)
@@ -340,7 +361,7 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
     return redirectWith(c, url, 'AI が採点しています。少し待ってから、ページを読み込み直してください。', 'info')
   }
 
-  return { showState, save, run, submit, reset, showGrading, showPage, launch, list, show, review, regrade, suggest }
+  return { showState, save, run, submit, reset, showGrading, showPage, launch, list, show, review, regrade, suggest, suggestConstraints }
 }
 
 /** /courses の下に組み込むルート。ログインの確認は、組み込む側で先に済ませておく */
@@ -359,6 +380,7 @@ export function codeRoutes(h: ReturnType<typeof createCodeHandlers>) {
   app.post('/:id/items/:iid/code/submissions/:uid/review', h.review)
   app.post('/:id/items/:iid/code/submissions/:uid/regrade', h.regrade)
   app.post('/:id/items/:iid/code/suggest', h.suggest)
+  app.post('/:id/items/:iid/code/constraints', h.suggestConstraints)
   return app
 }
 

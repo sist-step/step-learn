@@ -1,11 +1,11 @@
 import { AGENT_BODY_HINT, AgentEditPanel, AgentInstructionsField, AgentModelCard, AgentOpen, AgentPeriodCard } from '../../components/agent'
 import { BundleEditPanel, BundleOpen, type BundleView } from '../../components/bundle'
 import {
+  CodeAiHelp,
   CodeGradingCard,
   CodeOpen,
   CodePeriodCard,
   CodeStarterCard,
-  CodeSuggest,
   type ConstraintRow,
   type GradeView,
 } from '../../components/code'
@@ -209,7 +209,12 @@ export const ItemEditPage = ({
               split
             />
             {agent && <AgentInstructionsField value={v.instructions} error={errors.instructions} />}
-            {code && gradingEnabled && <CodeSuggest action={`${base}/code/suggest`} />}
+            {code && (
+              <CodeAiHelp
+                suggest={gradingEnabled ? `${base}/code/suggest` : undefined}
+                item={{ courseId, itemId: item.id, title: item.title }}
+              />
+            )}
           </Card>
           {code && <CodeStarterCard language={code.language} starter={v.starter} stdin={v.stdin} errors={errors} />}
           {code && (
@@ -217,6 +222,7 @@ export const ItemEditPage = ({
               gradingEnabled={gradingEnabled}
               criteria={v.criteria}
               constraints={v.constraints}
+              suggest={gradingEnabled ? `${base}/code/constraints` : undefined}
               judge={judge && { current: judge, form: JUDGE_FORM }}
               errors={errors}
             />

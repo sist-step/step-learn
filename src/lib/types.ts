@@ -52,7 +52,7 @@ export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   link: 'リンク',
   file: 'ファイル',
   screen: '画面共有',
-  code: 'コード',
+  code: 'コーディング問題',
   quiz: '小テスト',
   bundle: 'ファイル自動配布',
   agent: 'コーディングエージェント',
