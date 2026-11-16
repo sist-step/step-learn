@@ -3,28 +3,39 @@ import { useRequestContext } from 'hono/jsx-renderer'
 import {
   CODE_FILES,
   CODE_LANGUAGE_LABELS,
+  CONSTRAINT_KINDS,
+  CONSTRAINT_KIND_LABELS,
   JUDGES,
   JUDGE_LABELS,
+  LONG_SUBMIT_PERIOD,
   MAX_SUBMIT_PERIOD,
+  VERDICTS,
   VERDICT_LABELS,
-  clearedCount,
+  aheadText,
+  appealStateOf,
+  buildWebDocument,
+  formatPeriodLength,
   formatWait,
   isCleared,
+  verdictCounts,
   type CodeFiles,
   type CodeLanguage,
   type ConstraintResult,
+  type Goal,
   type GradingStatus,
   type Judge,
   type SubmitState,
   type Verdict,
 } from '../lib/code'
 import { VSCODE_EXTENSION_NAME, VSCODE_MARKETPLACE_URL } from '../lib/bundle'
+import type { TrialResult } from '../lib/code-grader'
+import { dateTimeInputToUnix, isDateTimeInput } from '../lib/course-period'
 import type { FieldErrors } from '../lib/forms'
 import type { AppEnv } from '../lib/types'
 import { Button, IconButton } from './button'
 import { Card, LinkCard } from './card'
 import { cx } from './cx'
-import { DateTimeField, FieldError, FormField, Input, TextAreaField, Textarea } from './form'
+import { DateTimeField, FieldError, FormField, Input, SegmentedControl, Select, TextAreaField, Textarea } from './form'
 import { Icon, type IconName } from './icons'
 import { Markdown } from './markdown'
 import { Popover } from './overlay'
@@ -211,6 +222,81 @@ export const CodeStarterFields = ({
   </fieldset>
 )
 
+const SOLUTION_DESCRIPTION =
+  'すべての制約を満たすコードの例です（任意）。AI が判定の参考にし、「試しに判定」で、制約が思ったとおりに判定されるかを確かめられます。'
+
+/** 解答例を学生に見せるかの切り替え */
+const SolutionPublicField = ({ checked }: { checked: boolean }) => (
+  <fieldset class="field">
+    <legend>学生への公開</legend>
+    <SegmentedControl
+      name="solution_public"
+      label="解答例の学生への公開"
+      options={[
+        { value: '0', label: '見せない', icon: 'eyeSlash' },
+        { value: '1', label: '提出の期間が終わったら見せる', icon: 'eye' },
+      ]}
+      value={checked ? '1' : '0'}
+    />
+  </fieldset>
+)
+
+/**
+ * 「試しに判定」のボタンと結果の置き場所。押すと src/code-editor.ts が、同じフォームの保存前の問題文・最初のコード・解答例・制約を
+ * action に送り、返ってきた結果（CodeTrialResult）をここに入れる
+ */
+const CodeTrial = ({ action }: { action: string }) => (
+  <div class="code-trial" data-code-trial>
+    <div class="code-trial-head">
+      <Button size="sm" icon="play" data-code-trial-run={action}>
+        試しに判定
+      </Button>
+      <span class="muted small" role="status" data-code-trial-status>
+        解答例と最初のコードを、学生の提出と同じように AI が判定します（30 秒ほど）。
+      </span>
+    </div>
+    <div class="code-trial-result" aria-live="polite" data-code-trial-result />
+  </div>
+)
+
+/** Moodle モードの入力欄の、解答例の欄（教師）。通常モードの CodeSolutionCard と同じものを、1 枚のカードの中に並べる */
+export const CodeSolutionFields = ({
+  language,
+  solution,
+  solutionPublic,
+  trial,
+  errors,
+  idPrefix = 'f',
+}: {
+  language: CodeLanguage
+  solution: CodeFiles
+  solutionPublic: boolean
+  /** 試しに判定する送信先（/code/trial）。AI がないときは渡さない */
+  trial?: string
+  errors: FieldErrors
+  idPrefix?: string
+}) => (
+  <fieldset class="field">
+    <legend>解答例</legend>
+    <p class="field-hint">{SOLUTION_DESCRIPTION}</p>
+    <div class="stack">
+      {CODE_FILES[language].map((f) => (
+        <CodeField
+          label={f.name}
+          name={`solution_${f.key}`}
+          id={`${idPrefix}-solution-${f.key}`}
+          syntax={f.key}
+          value={solution[f.key]}
+          rows={8}
+          error={errors[`solution_${f.key}`]}
+        />
+      ))}
+      <SolutionPublicField checked={solutionPublic} />
+      {trial && <CodeTrial action={trial} />}
+    </div>
+  </fieldset>
+)
+
 const gradingDescription = (gradingEnabled: boolean) =>
   gradingEnabled
     ? '学生が提出すると、AI が制約ごとに「できている・一部できている・できていない」を判定します。'
@@ -297,11 +383,88 @@ export const CodeAiHelp = ({ suggest, item }: { suggest?: string; item: { course
   )
 }
 
-type StarterTab = { key: string; name: string; syntax: CodeSyntax; value: string; hint?: string }
+/** key はタブの目印（data-code-file）で、ファイルなら html・css などのファイルの種類。name は送る欄の名前 */
+type FileTab = { key: string; name: string; label: string; syntax: CodeSyntax; value: string; hint?: string }
 
 /**
- * 通常モードの編集画面の「最初のコード」のカード（教師）。ファイルをタブで切り替えるエディターと、Web ならその場のプレビューを横に並べる。
- * タブの切り替え・プレビュー・ひな形に戻す操作は src/code-editor.ts が受け持つ
+ * 編集画面の、ファイルをタブで切り替えるエディター。Web なら、その場のプレビューを横に並べる。
+ * タブの切り替えとプレビューは src/code-editor.ts が受け持つ（包むカードに data-code-starter を付ける）
+ */
+const CodeFilesPane = ({
+  idPrefix,
+  tabs,
+  preview,
+  errors,
+}: {
+  /** タブと欄の id の頭に付ける名前。同じ画面に 2 つ置くので、重ならないようにする */
+  idPrefix: string
+  tabs: FileTab[]
+  /** プレビューの見出し。渡さなければプレビューを置かない */
+  preview?: string
+  errors: FieldErrors
+}) => {
+  const selected = tabs.find((t) => errors[t.name])?.key ?? tabs[0].key
+  return (
+    <div class={cx('code-starter', preview && 'has-preview')}>
+      <div class="code-starter-editor">
+        <div class="code-pane-head">
+          <div class="code-tabs" role="tablist" aria-label="ファイル">
+            {tabs.map((t) => (
+              <button
+                type="button"
+                role="tab"
+                id={`${idPrefix}-tab-${t.key}`}
+                class={cx(errors[t.name] && 'has-error')}
+                aria-selected={t.key === selected ? 'true' : 'false'}
+                aria-controls={`${idPrefix}-file-${t.key}`}
+                tabindex={t.key === selected ? 0 : -1}
+                data-code-tab={t.key}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {tabs.map((t) => (
+          <div
+            class={cx('field code-file', errors[t.name] && 'has-error')}
+            role="tabpanel"
+            id={`${idPrefix}-file-${t.key}`}
+            aria-labelledby={`${idPrefix}-tab-${t.key}`}
+            hidden={t.key !== selected}
+            data-code-file={t.key}
+          >
+            <CodeInput
+              syntax={t.syntax}
+              id={`f-${idPrefix}-${t.key}`}
+              name={t.name}
+              value={t.value}
+              invalid={!!errors[t.name]}
+              aria-label={t.label}
+              aria-describedby={`f-${idPrefix}-${t.key}-error`}
+              fill
+            />
+            <FieldError id={`f-${idPrefix}-${t.key}`} error={errors[t.name]} />
+            {t.hint && <p class="field-hint">{t.hint}</p>}
+          </div>
+        ))}
+      </div>
+      {preview && (
+        <div class="code-starter-preview">
+          <div class="code-pane-head">
+            <span class="code-pane-title">
+              <Icon name="eye" size={16} /> {preview}
+            </span>
+          </div>
+          <iframe class="code-preview" title={preview} sandbox="allow-scripts allow-forms allow-modals" data-code-preview />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * 通常モードの編集画面の「最初のコード」のカード（教師）。ひな形に戻す操作は src/code-editor.ts が受け持つ
  */
 export const CodeStarterCard = ({
   language,
@@ -315,11 +478,12 @@ export const CodeStarterCard = ({
   errors: FieldErrors
 }) => {
   useStyle('/src/components/code.css')
-  const tabs: StarterTab[] = [
-    ...CODE_FILES[language].map((f) => ({ key: f.key, name: f.name, syntax: f.key, value: starter[f.key] ?? '' })),
-    ...(language === 'python' ? [{ key: 'stdin', name: '入力の例', syntax: 'text' as const, value: stdin, hint: STDIN_HINT }] : []),
+  const tabs: FileTab[] = [
+    ...CODE_FILES[language].map((f) => ({ key: f.key, name: f.key, label: f.name, syntax: f.key, value: starter[f.key] ?? '' })),
+    ...(language === 'python'
+      ? [{ key: 'stdin', name: 'stdin', label: '入力の例', syntax: 'text' as const, value: stdin, hint: STDIN_HINT }]
+      : []),
   ]
-  const selected = tabs.find((t) => errors[t.key])?.key ?? tabs[0].key
   return (
     <Card
       class="editor-extra code-section"
@@ -335,72 +499,63 @@ export const CodeStarterCard = ({
       }
       data-code-starter
     >
-      <div class={cx('code-starter', language === 'web' && 'has-preview')}>
-        <div class="code-starter-editor">
-          <div class="code-pane-head">
-            <div class="code-tabs" role="tablist" aria-label="ファイル">
-              {tabs.map((t) => (
-                <button
-                  type="button"
-                  role="tab"
-                  id={`starter-tab-${t.key}`}
-                  class={cx(errors[t.key] && 'has-error')}
-                  aria-selected={t.key === selected ? 'true' : 'false'}
-                  aria-controls={`starter-file-${t.key}`}
-                  tabindex={t.key === selected ? 0 : -1}
-                  data-code-tab={t.key}
-                >
-                  {t.name}
-                </button>
-              ))}
-            </div>
-          </div>
-          {tabs.map((t) => (
-            <div
-              class={cx('field code-file', errors[t.key] && 'has-error')}
-              role="tabpanel"
-              id={`starter-file-${t.key}`}
-              aria-labelledby={`starter-tab-${t.key}`}
-              hidden={t.key !== selected}
-              data-code-file={t.key}
-            >
-              <CodeInput
-                syntax={t.syntax}
-                id={`f-starter-${t.key}`}
-                name={t.key}
-                value={t.value}
-                invalid={!!errors[t.key]}
-                aria-label={t.name}
-                aria-describedby={`f-starter-${t.key}-error`}
-                fill
-              />
-              <FieldError id={`f-starter-${t.key}`} error={errors[t.key]} />
-              {t.hint && <p class="field-hint">{t.hint}</p>}
-            </div>
-          ))}
-        </div>
-        {language === 'web' && (
-          <div class="code-starter-preview">
-            <div class="code-pane-head">
-              <span class="code-pane-title">
-                <Icon name="eye" size={16} /> 学生に見えるページ
-              </span>
-            </div>
-            <iframe
-              class="code-preview"
-              title="最初のコードのプレビュー"
-              sandbox="allow-scripts allow-forms allow-modals"
-              data-code-preview
-            />
-          </div>
-        )}
+      <CodeFilesPane idPrefix="starter" tabs={tabs} preview={language === 'web' ? '学生に見えるページ' : undefined} errors={errors} />
+    </Card>
+  )
+}
+
+/**
+ * 通常モードの編集画面の「解答例」のカード（教師）。最初のコードを写す操作と「試しに判定」は src/code-editor.ts が受け持つ
+ */
+export const CodeSolutionCard = ({
+  language,
+  solution,
+  solutionPublic,
+  trial,
+  errors,
+}: {
+  language: CodeLanguage
+  solution: CodeFiles
+  solutionPublic: boolean
+  /** 試しに判定する送信先（/code/trial）。AI がないときは渡さない */
+  trial?: string
+  errors: FieldErrors
+}) => {
+  useStyle('/src/components/code.css')
+  const tabs: FileTab[] = CODE_FILES[language].map((f) => ({
+    key: f.key,
+    name: `solution_${f.key}`,
+    label: f.name,
+    syntax: f.key,
+    value: solution[f.key] ?? '',
+  }))
+  return (
+    <Card
+      class="editor-extra code-section"
+      heading="解答例"
+      description={SOLUTION_DESCRIPTION}
+      actions={
+        <>
+          <CodeEditorTools language={language} />
+          <Button size="sm" variant="ghost" icon="copy" aria-label="最初のコードを写す" data-code-solution-copy>
+            <span class="hide-sm">最初のコードを写す</span>
+          </Button>
+        </>
+      }
+      data-code-starter
+      data-code-solution
+    >
+      <div class="stack">
+        <CodeFilesPane idPrefix="solution" tabs={tabs} preview={language === 'web' ? '解答例のページ' : undefined} errors={errors} />
+        <SolutionPublicField checked={solutionPublic} />
+        {trial && <CodeTrial action={trial} />}
       </div>
     </Card>
   )
 }
 
 /** 編集画面の制約の 1 行の、入力中の値 */
-export type ConstraintRow = { label: string; text: string }
+export type ConstraintRow = { label: string; text: string; optional?: boolean }
 
 const ConstraintRowView = ({ row }: { row: ConstraintRow }) => (
   <li class="code-constraint" data-code-constraint>
@@ -417,18 +572,57 @@ const ConstraintRowView = ({ row }: { row: ConstraintRow }) => (
       placeholder="判定の内容（例：h1 要素に自分の名前が書かれている）"
       aria-label="判定の内容（学生には見えない）"
     />
+    <Select
+      name="constraint_kind[]"
+      options={CONSTRAINT_KINDS.map((kind) => ({ value: kind, label: CONSTRAINT_KIND_LABELS[kind] }))}
+      value={row.optional ? 'optional' : 'required'}
+      aria-label="必須か発展か"
+      class="code-constraint-kind"
+      compact
+    />
     <IconButton icon="x" label="この制約を消す" data-code-constraint-remove />
   </li>
 )
 
 type PeriodProps = { opensAt: string; closesAt: string; errors: FieldErrors; idPrefix?: string }
 
-const PERIOD_DESCRIPTION = `学生はこの期間だけ提出できます。長さは ${MAX_SUBMIT_PERIOD / 3600} 時間までです。期間の外でも、問題を見てコードを書くことはできます。`
+const PERIOD_DESCRIPTION = `学生はこの期間だけ提出できます。長さは ${MAX_SUBMIT_PERIOD / 86_400} 日までです。期間の外でも、問題を見てコードを書くことはできます。`
+
+const LONG_PERIOD_LABEL = `${LONG_SUBMIT_PERIOD / 86_400} 日以上`
+
+/**
+ * 提出の期間の長さ。LONG_SUBMIT_PERIOD 以上なら、長いことが分かるように色を変えて注意を添える。
+ * 日時を選び直したときは、src/code-editor.ts が同じ規則（data-code-period-long の秒数）で書き換える
+ */
+const PeriodLength = ({ opensAt, closesAt }: Pick<PeriodProps, 'opensAt' | 'closesAt'>) => {
+  const length = isDateTimeInput(opensAt) && isDateTimeInput(closesAt) ? dateTimeInputToUnix(closesAt) - dateTimeInputToUnix(opensAt) : 0
+  return (
+    <div
+      class={cx('code-period-length', length >= LONG_SUBMIT_PERIOD && 'is-long')}
+      role="status"
+      hidden={length <= 0}
+      data-code-period-length
+      data-code-period-long={LONG_SUBMIT_PERIOD}
+    >
+      <p class="code-period-length-line">
+        <Icon name="clock" size={16} />
+        <span>
+          期間の長さ：<strong data-code-period-length-text>{formatPeriodLength(Math.max(0, length))}</strong>
+        </span>
+        <Chip class="code-period-long">{LONG_PERIOD_LABEL}</Chip>
+      </p>
+      <p class="code-period-long muted small">
+        受け付けているあいだは、提出のたびに AI の利用料がかかります。授業の中だけで使うなら、短くしてください。
+      </p>
+    </div>
+  )
+}
 
 const PeriodInputs = ({ opensAt, closesAt, errors, idPrefix = 'f' }: PeriodProps) => (
-  <div class="stack">
+  <div class="stack" data-code-period>
     <DateTimeField label="開始日時" name="opens_at" id={`${idPrefix}-opens_at`} value={opensAt} error={errors.opens_at} />
     <DateTimeField label="終了日時" name="closes_at" id={`${idPrefix}-closes_at`} value={closesAt} error={errors.closes_at} />
+    <PeriodLength opensAt={opensAt} closesAt={closesAt} />
   </div>
 )
 
@@ -481,8 +675,9 @@ const CodeConstraintsField = ({
       <legend>制約</legend>
       <p class="field-hint">
         問題文の要件を 1 行ずつ書きます。ラベルは「クリアの条件」として学生にも見え、判定の内容は AI
-        だけが使います（空ならラベルで判定します）。
-        {mode === 'normal' && '完了の条件を「制約をすべてクリアしたら完了」にすると、すべて「できている」になったときに完了します。'}
+        だけが使います（空ならラベルで判定します）。「発展」にした制約は、判定はしますが、クリアには数えません。
+        {mode === 'normal' &&
+          '完了の条件を「制約をすべてクリアしたら完了」にすると、必須の制約がすべて「できている」になったときに完了します。'}
       </p>
       <ol class="code-constraint-list" data-code-constraint-list>
         {constraints.map((row) => (
@@ -507,7 +702,7 @@ const CodeConstraintsField = ({
       </div>
       <FieldError id={id} error={errors.constraints} />
       <template data-code-constraint-template>
-        <ConstraintRowView row={{ label: '', text: '' }} />
+        <ConstraintRowView row={{ label: '', text: '', optional: false }} />
       </template>
     </fieldset>
   )
@@ -606,8 +801,8 @@ export const CodeWorkspace = ({
   language: CodeLanguage
   /** 問題文（Markdown） */
   body: string
-  /** クリアの条件（制約のラベル）。問題文の下に並べる */
-  goals: readonly string[]
+  /** クリアの条件（制約のラベル）。問題文の上に並べ、いちばん新しい提出の判定を重ねる */
+  goals: readonly Goal[]
   /** Python を実行できるか（sandbox が設定されているか） */
   canRun: boolean
   /** 見ている学生の提出。渡すと、右の枠に「提出」のタブを出す */
@@ -632,16 +827,9 @@ export const CodeWorkspace = ({
               <Icon name="chevronDown" size={14} class="code-task-arrow" />
             </summary>
             {goals.length > 0 && (
-              <div class="code-goals">
+              <div class="code-goals" id="code-goals">
                 <h3>クリアの条件</h3>
-                <ul>
-                  {goals.map((goal) => (
-                    <li>
-                      <Icon name="checkCircle" size={16} />
-                      {goal}
-                    </li>
-                  ))}
-                </ul>
+                <GoalList goals={goals} grade={submissions?.grade} />
               </div>
             )}
             {body && <Markdown source={body} />}
@@ -772,7 +960,7 @@ export const CodeWorkspace = ({
         </div>
         {submissions && (
           <div class="code-view" {...viewAttrs('submissions')} data-code-view-panel="submissions">
-            <CodeSubmissions view={submissions} pollUrl={`${base}/grading`} completion={completion} />
+            <CodeSubmissions view={submissions} base={base} completion={completion} />
           </div>
         )}
       </div>
@@ -782,21 +970,26 @@ export const CodeWorkspace = ({
 
 /**
  * アイテムの画面に置く、コードを書く場所の入口。Web エディターはこのアイテムの下の画面（base）で開き、
- * VS Code は拡張機能が書きかけのコードを受け取って開く。VS Code で保存すると書きかけに反映し、VS Code からも提出できる
+ * VS Code は拡張機能が書きかけのコードを受け取って開く。VS Code で保存すると書きかけに反映し、VS Code からも提出できる。
+ * 判定中は、いちばん新しい提出のカードに data-code-grade（確かめる先の URL）を付け、src/code-editor.ts が判定の終わりを待って、
+ * カードとクリアの条件（data-code-grade-with の id）を取り直す
  */
 export const CodeOpen = ({
   base,
   language,
   goals,
   grade,
+  solution,
   canManage,
 }: {
   /** Web エディターの画面（`/courses/1/items/2/code`） */
   base: string
   language: CodeLanguage
-  goals: readonly string[]
+  goals: readonly Goal[]
   /** 見ている学生のいちばん新しい提出 */
   grade?: GradeView | null
+  /** 学生に見せる解答例（lib/code.ts の publicSolutionOf）。見せないあいだは渡さない */
+  solution?: CodeFiles | null
   canManage: boolean
 }) => {
   useStyle('/src/components/code.css', '/src/components/card.css')
@@ -841,33 +1034,94 @@ export const CodeOpen = ({
         </div>
       )}
       {goals.length > 0 && (
-        <Card heading="クリアの条件" description="提出すると、AI がこの条件ごとに判定します。">
-          <ul class="code-open-goals">
-            {goals.map((goal) => (
-              <li>
-                <Icon name="checkCircle" size={16} />
-                {goal}
-              </li>
-            ))}
-          </ul>
+        <Card heading="クリアの条件" description="提出すると、AI がこの条件ごとに判定します。" id="code-open-goals">
+          <GoalList goals={goals} grade={grade} />
         </Card>
       )}
       {grade && (
-        <Card heading="いちばん新しい提出" description={`${formatDateTime(grade.createdAt)} に提出`} class="code-grade">
-          <GradeResult grade={grade} waiting="AI が判定しています。少し待ってから、ページを読み込み直してください。" />
+        <Card
+          heading="いちばん新しい提出"
+          description={`${formatDateTime(grade.createdAt)} に提出`}
+          class="code-grade"
+          id="code-open-grade"
+          data-code-grade={grade.status === 'pending' ? `${base}/grading` : undefined}
+          data-code-grade-with="code-open-goals"
+        >
+          <GradeResult grade={grade} appeal={`${base}/appeal`} />
+        </Card>
+      )}
+      {solution && (
+        <Card heading="解答例" description="提出の受付が終わったので、教師の解答例を見られます。自分のコードと比べてみましょう。">
+          <div class="stack">
+            {language === 'web' && (
+              // allow-same-origin を付けないのは、解答例のコードが STEP Learn と同じオリジンで動き、Cookie や画面に触れられるようになるため
+              <iframe
+                class="code-solution-preview"
+                title="解答例のプレビュー"
+                sandbox="allow-scripts"
+                srcdoc={buildWebDocument(solution)}
+              />
+            )}
+            {CODE_FILES[language].map((f) => (
+              <details class="code-solution-file">
+                <summary>
+                  {f.name}
+                  <Icon name="chevronDown" size={14} class="code-task-arrow" />
+                </summary>
+                {solution[f.key] ? <pre>{solution[f.key]}</pre> : <p class="muted small">空です。</p>}
+              </details>
+            ))}
+          </div>
         </Card>
       )}
     </div>
   )
 }
 
-/** 学生に見せる、いちばん新しい提出の判定 */
+/** 学生に見せる、いちばん新しい提出の判定。ahead は、判定を待っているあいだの、前にある提出の数 */
 export type GradeView = {
   status: GradingStatus
   feedback: string
   verdicts: ConstraintResult[] | null
   teacherComment: string
+  appealedAt: number | null
+  appealClosedAt: number | null
+  ahead: number
   createdAt: number
+}
+
+const GOAL_ICONS: Record<Verdict, IconName> = { pass: 'checkCircle', partial: 'alert', fail: 'x' }
+
+/**
+ * クリアの条件の一覧。いちばん新しい提出が判定済みなら、条件ごとに判定を重ねる（ラベルで突き合わせる）。
+ * まだ判定のない条件には、空の丸を出す
+ */
+const GoalList = ({ goals, grade }: { goals: readonly Goal[]; grade?: GradeView | null }) => {
+  const verdicts = grade?.status === 'graded' ? (grade.verdicts ?? []) : []
+  return (
+    <ul class="code-goal-list">
+      {goals.map((goal) => {
+        const result = verdicts.find((v) => v.label === goal.label)
+        return (
+          <li class={cx('code-goal', result && `is-${result.verdict}`)}>
+            {result ? (
+              <Icon name={GOAL_ICONS[result.verdict]} size={16} class="code-goal-mark" />
+            ) : (
+              <span class="code-goal-mark code-goal-dot" aria-hidden="true" />
+            )}
+            <span class="code-goal-text">
+              <span>
+                {result && <span class="sr-only">{VERDICT_LABELS[result.verdict]}：</span>}
+                {goal.label}
+                {goal.optional && <Chip class="code-goal-kind">{CONSTRAINT_KIND_LABELS.optional}</Chip>}
+              </span>
+              {result && result.verdict !== 'pass' && result.reason && <span class="muted small">{result.reason}</span>}
+            </span>
+          </li>
+        )
+      })}
+    </ul>
+  )
 }
 
 /** 提出の履歴の 1 件 */
@@ -884,9 +1138,12 @@ export type SubmissionsView = {
   period: { state: SubmitState; opensAt: number | null; closesAt: number | null; closesIn: number | null }
 }
 
-/** 制約ごとの判定の短いまとめ（「クリア」「3 / 4 クリア」）。判定がなければ null */
-export const verdictSummary = (verdicts: readonly ConstraintResult[] | null) =>
-  !verdicts?.length ? null : isCleared(verdicts) ? 'クリア' : `${clearedCount(verdicts)} / ${verdicts.length} クリア`
+/** 制約ごとの判定の短いまとめ（「クリア」「3 / 4 クリア」）。発展の制約は数えない。判定がなければ null */
+export function verdictSummary(verdicts: readonly ConstraintResult[] | null) {
+  if (!verdicts?.length) return null
+  const { required } = verdictCounts(verdicts)
+  return isCleared(verdicts) ? 'クリア' : `${required.passed} / ${required.total} クリア`
+}
 
 const submissionLabel = (s: SubmissionRow) =>
   s.status === 'pending'
@@ -976,18 +1233,112 @@ export const CodeBarActions = ({
 
 const VERDICT_ICONS: Record<Verdict, IconName> = { pass: 'checkCircle', partial: 'alert', fail: 'x' }
 
-/** 制約ごとの判定の一覧。学生にはラベルだけを、showText（教師）なら判定の内容も出す。confidence（Jev の判定の確からしさ）があれば、理由の代わりに出す */
-export const VerdictList = ({ verdicts, showText = false }: { verdicts: readonly ConstraintResult[]; showText?: boolean }) => {
+/** 判定を選び直す欄の表示。言葉にしないのは、提出の画面の右の列が狭く、3 つが 1 行に収まらないため */
+const VERDICT_MARKS: Record<Verdict, string> = { pass: '○', partial: '△', fail: '×' }
+
+/**
+ * 「試しに判定」の結果（教師）。解答例はすべて「できている」、最初のコードはどれも「できている」にならないのが、意図どおりの制約。
+ * そうでない制約を先に知らせ、制約ごとの判定は下に並べる
+ */
+export const CodeTrialResult = ({ result: { solution, starter } }: { result: TrialResult }) => {
+  useStyle('/src/components/code.css')
+  const missed = solution?.filter((v) => v.verdict !== 'pass' && !v.optional) ?? []
+  const missedOptional = solution?.filter((v) => v.verdict !== 'pass' && v.optional) ?? []
+  const given = starter.filter((v) => v.verdict === 'pass')
+  const names = (verdicts: readonly ConstraintResult[]) => verdicts.map((v) => `「${v.label}」`).join('')
+  return (
+    <div class="stack">
+      {!solution ? (
+        <Alert tone="info">
+          解答例が空なので、最初のコードだけを判定しました。解答例を書くと、制約をすべて満たせるかも確かめられます。
+        </Alert>
+      ) : missed.length === 0 ? (
+        <Alert tone="success">
+          {missedOptional.length === 0
+            ? '解答例は、すべての制約で「できている」と判定されました。'
+            : `解答例は、必須の制約がすべて「できている」と判定されました。発展の ${names(missedOptional)} は、解答例ではできていません。`}
+        </Alert>
+      ) : (
+        <Alert tone="warning">
+          解答例が「できている」にならない制約があります：{names(missed)}。制約の書き方があいまいか、解答例が足りていないかもしれません。
+        </Alert>
+      )}
+      {given.length === 0 ? (
+        <Alert tone="success">最初のコードのままでは、どの制約も「できている」になりません。</Alert>
+      ) : (
+        <Alert tone="warning">
+          最初のコードのままで「できている」になる制約があります：{names(given)}
+          。何も書かなくても満たせるので、制約か最初のコードを見直してください。
+        </Alert>
+      )}
+      {solution && (
+        <details class="code-trial-detail" open={missed.length > 0}>
+          <summary>
+            解答例の判定
+            <Icon name="chevronDown" size={14} class="code-task-arrow" />
+          </summary>
+          <VerdictList verdicts={solution} />
+        </details>
+      )}
+      <details class="code-trial-detail" open={given.length > 0}>
+        <summary>
+          最初のコードの判定
+          <Icon name="chevronDown" size={14} class="code-task-arrow" />
+        </summary>
+        <VerdictList verdicts={starter} />
+      </details>
+    </div>
+  )
+}
+
+/** 判定の根拠になった、提出したコードの場所と抜粋 */
+const EvidenceQuote = ({ result }: { result: ConstraintResult }) => {
+  const { evidence } = result
+  const file =
+    evidence &&
+    Object.values(CODE_FILES)
+      .flat()
+      .find((f) => f.key === evidence.file)
+  if (!evidence || !file) return null
+  return (
+    <span class="code-evidence">
+      <span class="muted small">
+        根拠：{file.name} の {evidence.line} 行目
+      </span>
+      <code>{evidence.quote}</code>
+    </span>
+  )
+}
+
+/**
+ * 制約ごとの判定の一覧。学生にはラベルだけを、showText（教師）なら判定の内容も出す。confidence（Jev の判定の確からしさ）があれば、理由の代わりに出す。
+ * editable（教師の提出の画面）なら、制約ごとに判定を選び直す欄（verdict_0・verdict_1…）を出す。送るフォームは呼ぶ側が包む
+ */
+export const VerdictList = ({
+  verdicts,
+  showText = false,
+  editable = false,
+}: {
+  verdicts: readonly ConstraintResult[]
+  showText?: boolean
+  editable?: boolean
+}) => {
   useStyle('/src/components/code.css')
   return (
     <ul class="code-verdicts">
-      {verdicts.map((v) => (
+      {verdicts.map((v, i) => (
         <li class={`code-verdict is-${v.verdict}`}>
           <Icon name={VERDICT_ICONS[v.verdict]} size={18} class="code-verdict-icon" />
           <div class="code-verdict-text">
             <span>
               <span class="sr-only">{VERDICT_LABELS[v.verdict]}：</span>
               {v.label}
+              {v.optional && <Chip class="code-goal-kind">{CONSTRAINT_KIND_LABELS.optional}</Chip>}
+              {v.aiVerdict && (
+                <Chip tone="accent" class="code-goal-kind">
+                  教師が変更
+                </Chip>
+              )}
             </span>
             {showText && v.text && <span class="muted small">判定の内容：{v.text}</span>}
             {v.reason ? (
@@ -999,6 +1350,17 @@ export const VerdictList = ({ verdicts, showText = false }: { verdicts: readonly
                 </span>
               )
             )}
+            {showText && v.aiVerdict && <span class="muted small">AI の判定：{VERDICT_LABELS[v.aiVerdict]}</span>}
+            <EvidenceQuote result={v} />
+            {editable && (
+              <SegmentedControl
+                name={`verdict_${i}`}
+                label={`「${v.label}」の判定`}
+                options={VERDICTS.map((verdict) => ({ value: verdict, label: VERDICT_MARKS[verdict] }))}
+                value={v.verdict}
+                class="code-verdict-edit"
+              />
+            )}
           </div>
         </li>
       ))}
@@ -1006,25 +1368,51 @@ export const VerdictList = ({ verdicts, showText = false }: { verdicts: readonly
   )
 }
 
-/** waiting は判定中に出す文。結果を待って取り直さない画面（アイテムの画面）では、読み込み直すように書く */
-const GradeResult = ({
-  grade,
-  waiting = 'AI が判定しています。終わると、ここに結果が出ます。',
-}: {
-  grade: GradeView
-  waiting?: string
-}) => {
+/** 学生が、判定の確認を教師に頼む欄。判定済みで、制約ごとの判定がある提出にだけ出す */
+const AppealRow = ({ grade, action }: { grade: GradeView; action: string }) => {
+  const state = appealStateOf(grade)
+  return (
+    <div class="code-appeal">
+      {state === 'none' ? (
+        <form
+          method="post"
+          action={action}
+          data-confirm="この判定を、教師に確かめてもらいますか？"
+          data-confirm-ok="知らせる"
+          data-loading-form
+        >
+          <span class="muted small">判定がおかしいと思ったら</span>
+          <Button type="submit" size="sm" variant="ghost" icon="flag">
+            教師に知らせる
+          </Button>
+        </form>
+      ) : (
+        <p class="muted small">
+          <Icon name="flag" size={14} />
+          {state === 'open' ? '教師に知らせました。教師が判定を確かめるまで、お待ちください。' : '教師が判定を確かめました。'}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/** appeal は、判定の確認を教師に頼む送信先（/code/appeal） */
+const GradeResult = ({ grade, appeal }: { grade: GradeView; appeal: string }) => {
   const verdicts = grade.status === 'graded' ? grade.verdicts : null
+  const counts = verdicts && verdictCounts(verdicts)
   return (
     <>
       {grade.status === 'pending' ? (
         <p class="code-grade-waiting muted">
           <span class="code-grade-spinner" aria-hidden="true" />
-          {waiting}
+          <span>
+            AI が判定しています。終わると、ここに結果が出ます。
+            <span data-code-grade-ahead>{aheadText(grade.ahead)}</span>
+          </span>
         </p>
       ) : grade.status === 'failed' ? (
         <Alert tone="warning">AI で判定できませんでした。少し待ってから出し直してください。</Alert>
-      ) : verdicts?.length ? (
+      ) : verdicts?.length && counts ? (
         <div class="stack">
           <p class="code-grade-summary">
             {isCleared(verdicts) ? (
@@ -1032,18 +1420,21 @@ const GradeResult = ({
                 <Chip tone="success" icon="check">
                   クリア
                 </Chip>
-                すべての制約ができています。
+                {counts.optional.total === 0
+                  ? 'すべての制約ができています。'
+                  : `必須の制約がすべてできています。発展は ${counts.optional.passed} / ${counts.optional.total} できています。`}
               </>
             ) : (
               <>
                 <strong>
-                  {clearedCount(verdicts)} / {verdicts.length}
+                  {counts.required.passed} / {counts.required.total}
                 </strong>
-                の制約ができています。足りないところを直して、出し直しましょう。
+                の{counts.optional.total > 0 && '必須の'}制約ができています。足りないところを直して、出し直しましょう。
               </>
             )}
           </p>
           <VerdictList verdicts={verdicts} />
+          <AppealRow grade={grade} action={appeal} />
         </div>
       ) : grade.status === 'none' ? (
         <p class="muted">提出を受け付けました。教師が確認します。</p>
@@ -1066,15 +1457,31 @@ const GradeResult = ({
 
 /**
  * 学生の提出のタブの中身。次に提出できるまでの残り・完了の状態・いちばん新しい提出の判定・これまでの提出を並べる。
- * 判定中は data-code-grade（確かめる先の URL）を付け、src/code-editor.ts が判定の終わりを待って、この中身とヘッダーの帯の表示（data-code-grade-chip）を取り直す
+ * 判定中は data-code-grade（確かめる先の URL）を付け、src/code-editor.ts が判定の終わりを待って、この中身と、
+ * 判定を重ねているクリアの条件（data-code-grade-with の id）、ヘッダーの帯の表示（data-code-grade-chip）を取り直す
  */
-export const CodeSubmissions = ({ view, pollUrl, completion }: { view: SubmissionsView; pollUrl: string; completion?: Child }) => {
+export const CodeSubmissions = ({
+  view,
+  base,
+  completion,
+}: {
+  view: SubmissionsView
+  /** 判定の終わりを確かめる先と、判定の確認を頼む先の共通部分（`/courses/1/items/2/code`） */
+  base: string
+  completion?: Child
+}) => {
   useStyle('/src/components/code.css')
   const { grade, history, period } = view
   const status = submitStatus(view)
   const older = history.slice(1)
+  const length = period.opensAt !== null && period.closesAt !== null ? period.closesAt - period.opensAt : 0
   return (
-    <div id="code-submissions" class="code-submissions" data-code-grade={grade?.status === 'pending' ? pollUrl : undefined}>
+    <div
+      id="code-submissions"
+      class="code-submissions"
+      data-code-grade={grade?.status === 'pending' ? `${base}/grading` : undefined}
+      data-code-grade-with="code-goals"
+    >
       <div class="code-submissions-status">
         <p
           class="code-countdown"
@@ -1091,12 +1498,13 @@ export const CodeSubmissions = ({ view, pollUrl, completion }: { view: Submissio
           <p class="code-period muted small">
             <Icon name="calendar" size={14} />
             提出の期間 {formatDateTime(period.opensAt)} 〜 {formatDateTime(period.closesAt)}
+            {length >= LONG_SUBMIT_PERIOD && `（${formatPeriodLength(length)}）`}
           </p>
         )}
       </div>
       {grade ? (
         <Card heading="いちばん新しい提出" description={`${formatDateTime(grade.createdAt)} に提出`} class="code-grade">
-          <GradeResult grade={grade} />
+          <GradeResult grade={grade} appeal={`${base}/appeal`} />
         </Card>
       ) : (
         <div class="code-submissions-empty">

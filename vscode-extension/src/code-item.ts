@@ -25,7 +25,8 @@ export type Verdict = 'pass' | 'partial' | 'fail'
 export type CodeResult = {
   status: 'none' | 'pending' | 'graded' | 'failed'
   createdAt: number
-  verdicts: { label: string; verdict: Verdict; reason: string }[]
+  /** optional は発展の制約で、クリアには数えない */
+  verdicts: { label: string; verdict: Verdict; reason: string; optional: boolean }[]
   feedback: string
   teacherComment: string
 }
@@ -120,7 +121,7 @@ export async function fetchResult(server: URL, token: string): Promise<CodeResul
   if (!isObject(s) || !isStatus(s.status) || !Array.isArray(s.verdicts)) throw invalid()
   const verdicts = s.verdicts.map((v: unknown) => {
     if (!isObject(v) || typeof v.label !== 'string' || !isVerdict(v.verdict)) throw invalid()
-    return { label: v.label, verdict: v.verdict, reason: typeof v.reason === 'string' ? v.reason : '' }
+    return { label: v.label, verdict: v.verdict, reason: typeof v.reason === 'string' ? v.reason : '', optional: v.optional === true }
   })
   return {
     status: s.status,

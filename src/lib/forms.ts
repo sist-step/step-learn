@@ -11,6 +11,7 @@ import {
   MAX_SUBMIT_PERIOD,
   JUDGES,
   type CodeConstraint,
+  type CodeFiles,
 } from './code'
 import { dateInputToUnix, dateTimeInputToUnix, isDateInput, isDateTimeInput } from './course-period'
 import { checkPassword } from './password'
@@ -198,22 +199,48 @@ const codeFields = {
   stdin: source('入力', MAX_STDIN_LENGTH),
 }
 
+/** コードのアイテムの編集画面の、解答例の欄。最初のコードの欄（codeFields）と名前がぶつからないよう、頭に solution_ を付ける */
+const solutionFields = {
+  solution_html: source('解答例の HTML', MAX_CODE_LENGTH),
+  solution_css: source('解答例の CSS', MAX_CODE_LENGTH),
+  solution_js: source('解答例の JavaScript', MAX_CODE_LENGTH),
+  solution_py: source('解答例の Python', MAX_CODE_LENGTH),
+  solution_public: flag(),
+}
+
+/** 解答例の欄の値を、ファイルごとの中身にまとめる */
+export const solutionOf = (v: {
+  solution_html?: string
+  solution_css?: string
+  solution_js?: string
+  solution_py?: string
+}): CodeFiles => ({
+  html: v.solution_html ?? '',
+  css: v.solution_css ?? '',
+  js: v.solution_js ?? '',
+  py: v.solution_py ?? '',
+})
+
 const many = (v: unknown): unknown[] => (Array.isArray(v) ? v : v === undefined ? [] : [v])
 
 const list = () => z.transform((v: unknown) => many(v).map((s) => (typeof s === 'string' ? s.trim() : '')))
 
 /**
- * 編集画面の制約の行（constraint_label[] と constraint_text[] を同じ順に送る）を、制約の一覧にする。ラベルも内容も空の行は捨てる。
+ * 編集画面の制約の行（constraint_label[]・constraint_text[]・constraint_kind[] を同じ順に送る）を、制約の一覧にする。ラベルも内容も空の行は捨てる。
  * error は最初に見つかった誤りで、何番目の行かを含める
  */
 export function readConstraints({
   'constraint_label[]': labels = [],
   'constraint_text[]': texts = [],
+  'constraint_kind[]': kinds = [],
 }: {
   'constraint_label[]'?: string[]
   'constraint_text[]'?: string[]
+  'constraint_kind[]'?: string[]
 }): { constraints: CodeConstraint[]; error: string | null } {
-  const rows = labels.map((label, i) => ({ no: i + 1, label, text: texts[i] ?? '' })).filter((r) => r.label || r.text)
+  const rows = labels
+    .map((label, i) => ({ no: i + 1, label, text: texts[i] ?? '', optional: kinds[i] === 'optional' }))
+    .filter((r) => r.label || r.text)
   const fail = (error: string) => ({ constraints: [], error })
   if (rows.length === 0) return fail('制約を 1 つ以上入れてください。')
   if (rows.length > MAX_CONSTRAINTS) return fail(`制約は ${MAX_CONSTRAINTS} 個までにしてください。`)
@@ -223,7 +250,8 @@ export function readConstraints({
       return fail(`${no} 番目の制約のラベルは${MAX_CONSTRAINT_LABEL_LENGTH}文字以内で入力してください。`)
     if (text.length > MAX_CONSTRAINT_LENGTH) return fail(`${no} 番目の制約の内容は${MAX_CONSTRAINT_LENGTH}文字以内で入力してください。`)
   }
-  return { constraints: rows.map(({ label, text }) => ({ label, text })), error: null }
+  if (rows.every((r) => r.optional)) return fail('必須の制約を 1 つ以上入れてください。発展の制約だけでは、クリアを判定できません。')
+  return { constraints: rows.map(({ label, text, optional }) => ({ label, text, ...(optional && { optional }) })), error: null }
 }
 
 /** コードのアイテムで、実行・下書きの保存・提出のときに送るコード */
@@ -233,7 +261,6 @@ const codeReview = z.object({
   submission: hidden(20),
   comment: text('コメント', 2000),
 })
-
 const usd = (label: string, max: number) =>
   z.pipe(
     z.pipe(
@@ -294,9 +321,11 @@ const itemEdit = z
   .object({
     ...itemFields,
     ...codeFields,
+    ...solutionFields,
     criteria: z.optional(text('採点基準', 5000)),
     'constraint_label[]': list(),
     'constraint_text[]': list(),
+    'constraint_kind[]': list(),
     opens_at: z.optional(dateTime('開始日時')),
     closes_at: z.optional(dateTime('終了日時')),
     user_limit: z.optional(usd('1 人あたりの上限', MAX_AGENT_LIMIT)),
@@ -355,7 +384,7 @@ function codeItemIssues(v: Parameters<typeof readConstraints>[0] & { opens_at?: 
 
 /** コードのアイテムの提出の期間（日時の入力欄の値）の誤り。形の誤りは欄ごとのスキーマ（dateTime）が出すので、ここでは見ない */
 const submitPeriodIssues = (opensAt: string, closesAt: string) =>
-  periodIssues(opensAt, closesAt, MAX_SUBMIT_PERIOD, `提出の期間は ${MAX_SUBMIT_PERIOD / 3600} 時間以内にしてください。`)
+  periodIssues(opensAt, closesAt, MAX_SUBMIT_PERIOD, `提出の期間は ${MAX_SUBMIT_PERIOD / 86_400} 日以内にしてください。`)
 
 function periodIssues(opensAt: string, closesAt: string, maxLength: number, tooLong: string) {
   const issues: { message: string; path: string[] }[] = []
@@ -382,12 +411,14 @@ const extraCode = z
   .object({
     ...extraItemFields,
     ...codeFields,
+    ...solutionFields,
     body: text('問題文', 100_000),
     language: choice(CODE_LANGUAGES, 'web'),
     starter_set: flag(),
     criteria: text('補足', 5000),
     'constraint_label[]': list(),
     'constraint_text[]': list(),
+    'constraint_kind[]': list(),
     opens_at: z.optional(dateTime('開始日時')),
     closes_at: z.optional(dateTime('終了日時')),
   })
@@ -517,7 +548,21 @@ const codeSuggest = z.object({
 /** 編集画面の問題文と最初のコードから、制約だけを作るときに送るもの */
 const codeConstraintsSuggest = z.object({ ...codeSuggest.shape, ...codeFields })
 
+/** 編集画面の「試しに判定」で送るもの。保存する前の問題文・最初のコード・解答例・制約・補足 */
+const codeTrial = z.object({
+  ...codeSuggest.shape,
+  ...codeFields,
+  ...solutionFields,
+  criteria: text('補足', 5000),
+  'constraint_label[]': list(),
+  'constraint_text[]': list(),
+  'constraint_kind[]': list(),
+})
+
 const regrade = z.object({ submission: id() })
+
+/** 教師が判定を変えるフォーム。制約ごとの判定は verdict_0・verdict_1… の名前で送られ、数が提出ごとに違うので、ハンドラで読む */
+const codeVerdicts = z.looseObject({ submission: id() })
 
 // 空のファイルも受け付けるのは、中身のない __init__.py や .gitkeep も配るため
 const files = () => z.transform((v: unknown) => many(v).filter((f): f is File => f instanceof File))
@@ -568,6 +613,7 @@ export const FORMS = {
   itemEdit,
   code,
   codeReview,
+  codeVerdicts,
   extraItem,
   extraCode,
   extraAgent,
@@ -590,6 +636,7 @@ export const FORMS = {
   siteRole,
   codeSuggest,
   codeConstraintsSuggest,
+  codeTrial,
   regrade,
   bundleUpload,
   bundleRemove,

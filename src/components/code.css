@@ -115,6 +115,20 @@
 .code-constraint::before { content: counter(constraint); flex: none; min-width: 20px; color: var(--muted); font-size: var(--fs-sm); text-align: right; font-variant-numeric: tabular-nums; }
 .code-constraint > .input { flex: 2 1 0; min-width: 0; }
 .code-constraint > .code-constraint-label { flex: 1 1 0; }
+.code-constraint > .code-constraint-kind { flex: none; width: auto; }
+
+.code-trial { display: flex; flex-direction: column; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border); }
+.code-trial-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.code-trial-result:empty { display: none; }
+.code-trial-detail > .code-verdicts { padding: 4px 14px 14px; }
+
+.code-period-length { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: var(--radius); background: var(--surface-2); }
+.code-period-length[hidden] { display: none; }
+.code-period-length p { margin: 0; }
+.code-period-length-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.code-period-length:not(.is-long) .code-period-long { display: none; }
+.code-period-length.is-long { background: var(--warning-soft); }
+.code-period-length.is-long .code-period-length-line { color: var(--warning-text); }
 .code-dev-judge { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 14px; border: 1px dashed var(--border-strong); border-radius: var(--radius); }
 .code-dev-judge-text { display: flex; flex-direction: column; gap: 2px; flex: 1 1 280px; min-width: 0; }
 .code-dev-judge-options { display: flex; gap: 6px; flex: none; }
@@ -136,6 +150,8 @@
   .code-constraint { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px 8px; }
   .code-constraint::before { grid-row: 1 / span 2; align-self: center; }
   .code-constraint > .input { grid-column: 2; }
+  .code-constraint > .code-constraint-kind { justify-self: start; }
+  .code-constraint::before, .code-constraint > .icon-btn { grid-row: 1 / span 3; }
   .code-constraint > .icon-btn { grid-column: 3; grid-row: 1 / span 2; align-self: center; }
 }
 
@@ -174,18 +190,29 @@ details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
 .code-task > .prose { max-width: 80ch; padding: 0 16px 16px; }
 .code-goals { max-width: 80ch; margin: 0 16px 16px; padding: 12px 14px; border-radius: var(--radius); background: var(--surface-2); }
 .code-goals h3 { margin: 0 0 8px; font-size: var(--fs-sm); font-weight: 650; }
-.code-goals ul { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.code-goals li { display: flex; align-items: flex-start; gap: 8px; font-size: var(--fs-sm); }
-.code-goals li > svg { flex: none; margin-top: 2px; color: var(--muted); }
+.code-goals .code-goal { font-size: var(--fs-sm); }
+.code-goal-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.code-goal { display: flex; align-items: flex-start; gap: 8px; }
+.code-goal-mark { flex: none; margin-top: 3px; color: var(--muted); }
+.code-goal-dot { width: 14px; height: 14px; margin: 4px 1px 0; border: 1.5px solid var(--border-strong); border-radius: 50%; }
+.code-goal.is-pass .code-goal-mark { color: var(--success-text); }
+.code-goal.is-partial .code-goal-mark { color: var(--warning-text); }
+.code-goal.is-fail .code-goal-mark { color: var(--danger-text); }
+.code-goal-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.code-goal-kind { margin-left: 6px; }
 
 /* ===== アイテムの画面の入口（Web エディター / VS Code） ===== */
 .code-open { margin-bottom: 24px; }
 .code-open > .link-card { margin-bottom: 0; }
 .code-open-help { margin: 0; }
 .code-open-help a { display: inline-flex; align-items: center; gap: 2px; }
-.code-open-goals { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.code-open-goals li { display: flex; align-items: flex-start; gap: 8px; }
-.code-open-goals li > svg { flex: none; margin-top: 3px; color: var(--muted); }
+/* 背景をトークンにしないのは、解答例のページが背景を指定していないとき、ダークモードでも白地に黒い文字というブラウザの既定で見せるため */
+.code-solution-preview { display: block; width: 100%; height: 320px; border: 1px solid var(--card-border); border-radius: var(--radius); background: Canvas; color-scheme: light; }
+.code-solution-file, .code-trial-detail { border: 1px solid var(--card-border); border-radius: var(--radius); }
+.code-solution-file summary, .code-trial-detail summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 14px; cursor: pointer; list-style: none; font-size: var(--fs-sm); font-weight: 600; }
+.code-solution-file summary::-webkit-details-marker, .code-trial-detail summary::-webkit-details-marker { display: none; }
+.code-solution-file pre { max-height: 60vh; margin: 0; padding: 12px 14px; border-top: 1px solid var(--border); overflow: auto; font: var(--fs-sm)/1.6 var(--mono); white-space: pre; tab-size: 4; }
+.code-solution-file p { margin: 0; padding: 0 14px 12px; }
 @media (max-width: 640px) {
   .code-open .link-card-lg > form { flex-basis: 100%; }
   .code-open .link-card-lg > form > .btn { width: 100%; }
@@ -303,6 +330,10 @@ details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
 .code-verdict.is-partial .code-verdict-icon { color: var(--warning-text); }
 .code-verdict.is-fail .code-verdict-icon { color: var(--danger-text); }
 .code-verdict-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.code-evidence { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.code-evidence code { display: block; padding: 6px 10px; border-radius: var(--radius-sm); background: var(--surface-2); font: var(--fs-xs)/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.code-verdict-edit { margin-top: 6px; }
+.code-appeal form, .code-appeal p { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; }
 .code-grade-waiting { display: flex; align-items: center; gap: 10px; margin: 0; }
 .code-grade-spinner { flex: none; width: 16px; height: 16px; border: 2px solid var(--border-strong); border-top-color: var(--c-ink); border-radius: 50%; animation: code-spin 0.8s linear infinite; }
 @keyframes code-spin { to { transform: rotate(360deg); } }

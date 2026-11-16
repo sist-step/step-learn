@@ -109,14 +109,21 @@ export const constraintsSchema = (description: string) =>
             MAX_CONSTRAINT_LENGTH,
           ),
         ),
+        optional: z.optional(
+          z.boolean().check(z.describe('true なら発展の制約で、判定はするがクリアには数えない。省略すると必須。必須の制約が 1 つ以上要る')),
+        ),
       }),
     )
     .check(z.minLength(1), z.maxLength(MAX_CONSTRAINTS), z.describe(description))
 
-export const toConstraints = (args: { label: string; text?: string }[]) =>
-  args.map((c) => ({ label: c.label.trim(), text: c.text?.trim() ?? '' }))
+export function toConstraints(args: { label: string; text?: string; optional?: boolean }[]): CodeConstraint[] {
+  // すべて発展のまま保存しないのは、必須の制約がないと、どの提出もクリアにならないため。断らずに必須として扱う
+  const keepOptional = args.some((c) => !c.optional)
+  return args.map((c) => ({ label: c.label.trim(), text: c.text?.trim() ?? '', ...(keepOptional && c.optional && { optional: true }) }))
+}
 
-export const constraintLines = (constraints: CodeConstraint[]) => constraints.map(describeConstraint).join('\n')
+export const constraintLines = (constraints: CodeConstraint[]) =>
+  constraints.map((c) => `${describeConstraint(c)}${c.optional ? '［発展］' : ''}`).join('\n')
 
 export function toolOf<S extends z.ZodMiniObject>(name: string, description: string, schema: S): AiTool {
   const { $schema: _, ...parameters } = z.toJSONSchema(schema) as Record<string, unknown>
