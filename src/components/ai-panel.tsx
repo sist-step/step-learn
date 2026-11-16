@@ -480,7 +480,6 @@ export const AiPanel = ({ models, revision, voice, chat }: AiPanelProps) => {
       aria-label="AI アシスタント"
       data-persist
       data-keep
-      data-confirm-scope
       data-ai-panel
       data-chat={chat?.id}
       data-model={chat?.model.value}
@@ -498,9 +497,11 @@ export const AiPanel = ({ models, revision, voice, chat }: AiPanelProps) => {
           )}
         </div>
         {chat && (
-          <form method="post" action="/ai/chat/close" data-ai-close data-confirm="このチャットを閉じますか？閉じた会話は開き直せません。">
+          <form method="post" action="/ai/chat/close" class="ai-close" data-ai-close>
             <input type="hidden" name="chat" value={String(chat.id)} />
-            <IconButton type="submit" icon="pencilSquare" label="チャットを閉じて新しく始める" />
+            {/* title を空にするのは、ブラウザ標準のツールチップが CSS のチップと重なって 2 つ出るため */}
+            <IconButton icon="pencilSquare" label="新しいチャット" title="" data-ai-close-arm />
+            <IconButton type="submit" icon="check" label="もう一度押すと、今の会話を閉じます" title="" danger hidden data-ai-close-armed />
           </form>
         )}
         <IconButton icon="x" label="パネルを閉じる" data-ai-toggle aria-controls={AI_PANEL_ID} />

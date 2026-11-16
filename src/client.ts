@@ -1171,11 +1171,10 @@ const DIALOG_HTML = `<form method="dialog"><p class="dialog-msg"></p><div class=
   <button value="cancel" class="btn btn-ghost">キャンセル</button>
   <button value="ok" class="btn btn-danger">実行する</button></div></form>`
 
-function openDialog(dialog: HTMLDialogElement, message: string, modal: boolean): Promise<boolean> {
+function openDialog(dialog: HTMLDialogElement, message: string): Promise<boolean> {
   dialog.querySelector('.dialog-msg')!.textContent = message
   dialog.returnValue = ''
-  if (modal) dialog.showModal()
-  else dialog.show()
+  dialog.showModal()
   ;(dialog.querySelector('[value=cancel]') as HTMLButtonElement).focus()
   return new Promise((resolve) => dialog.addEventListener('close', () => resolve(dialog.returnValue === 'ok'), { once: true }))
 }
@@ -1189,26 +1188,7 @@ function confirmDialog(message: string): Promise<boolean> {
     document.body.appendChild(dialog)
     dialog.addEventListener('click', (e) => e.target === dialog && dialog!.close('cancel'))
   }
-  return openDialog(dialog, message, true)
-}
-
-/** scope の上だけを覆って聞く。showModal を使わないのは、scope の外（本文）を操作できるまま残すため */
-async function confirmInScope(scope: HTMLElement, message: string) {
-  const layer = document.createElement('div')
-  layer.className = 'dialog-layer'
-  layer.innerHTML = `<dialog class="dialog">${DIALOG_HTML}</dialog>`
-  const dialog = layer.querySelector('dialog')!
-  layer.addEventListener('click', (e) => e.target === layer && dialog.close('cancel'))
-  // stopPropagation するのは、パネルの中の Esc でパネルごと閉じる処理（keydown の委譲）まで届かないようにするため
-  layer.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return
-    e.stopPropagation()
-    dialog.close('cancel')
-  })
-  scope.append(layer)
-  const ok = await openDialog(dialog, message, false)
-  layer.remove()
-  return ok
+  return openDialog(dialog, message)
 }
 
 const formKey = (form: HTMLFormElement) =>
@@ -1223,8 +1203,7 @@ document.addEventListener('submit', async (e) => {
   const msg = form.dataset.confirm
   if (msg && form.dataset.confirmed !== '1') {
     e.preventDefault()
-    const scope = form.closest<HTMLElement>('[data-confirm-scope]')
-    if (!(await (scope ? confirmInScope(scope, msg) : confirmDialog(msg)))) return
+    if (!(await confirmDialog(msg))) return
     const target = currentForm(form)
     if (!target) return
     target.dataset.confirmed = '1'
@@ -3156,8 +3135,6 @@ async function refreshAiPanel(model?: string) {
   const focused = document.activeElement === aiInput()
   const chosen = model ?? current.querySelector<HTMLInputElement>('input[name=model]:checked')?.value
   const hard = current.querySelector('[data-ai-hard]')?.getAttribute('aria-pressed')
-  const asking = current.querySelector(':scope > .dialog-layer')
-  const askingFocused = !!asking?.contains(document.activeElement)
   const focus = aiFocusField(current)?.value ? current.querySelector('[data-ai-focus]') : null
   current.replaceWith(document.adoptNode(next))
   // 選ぼうとしているアイテムを持ち越すのは、最初の発言を断られて入力欄に戻ったとき、送り直すとアイテムを選ばずに始まるため
@@ -3167,8 +3144,6 @@ async function refreshAiPanel(model?: string) {
     focusField.value = aiFocusField(current)!.value
     nextFocus.replaceWith(focus)
   }
-  if (asking) next.append(asking)
-  if (askingFocused) asking?.querySelector<HTMLButtonElement>('[value=cancel]')?.focus()
   const option = $$<HTMLInputElement>('input[type=radio][name=model]', next).find((r) => r.value === chosen)
   if (option) option.checked = true
   const form = next.querySelector<HTMLFormElement>('[data-ai-form]')
@@ -3554,6 +3529,30 @@ async function approveAllAiCards(form: HTMLFormElement) {
   await refreshAiPanel()
 }
 
+const AI_CLOSE_ARMED_MS = 3000
+let aiCloseTimer = 0
+
+function setAiCloseArmed(form: HTMLFormElement, armed: boolean) {
+  const arm = form.querySelector<HTMLButtonElement>('[data-ai-close-arm]')
+  const armedButton = form.querySelector<HTMLButtonElement>('[data-ai-close-armed]')
+  if (!arm || !armedButton) return
+  const refocus = document.activeElement === (armed ? arm : armedButton)
+  arm.hidden = armed
+  armedButton.hidden = !armed
+  if (refocus) (armed ? armedButton : arm).focus()
+}
+
+document.addEventListener('click', (e) => {
+  const target = e.target as Element
+  // ダブルクリックの 2 回目で閉じないのは、1 回押したつもりの人の会話まで消えるため
+  if (e.detail > 1 && target.closest('[data-ai-close-armed]')) return e.preventDefault()
+  const form = target.closest<HTMLButtonElement>('[data-ai-close-arm]')?.form
+  if (!form) return
+  setAiCloseArmed(form, true)
+  window.clearTimeout(aiCloseTimer)
+  aiCloseTimer = window.setTimeout(() => setAiCloseArmed(form, false), AI_CLOSE_ARMED_MS)
+})
+
 document.addEventListener('submit', (e) => {
   const form = e.target as HTMLFormElement
   if (e.defaultPrevented || !form.matches('[data-ai-form], [data-ai-close], [data-ai-confirm], [data-ai-approve-all]')) return
@@ -3565,7 +3564,7 @@ document.addEventListener('submit', (e) => {
     void runAiTask(() => (form.matches('[data-ai-form]') ? sendAiMessage() : decideAiCard(form, submitter)))
     return
   }
-  delete form.dataset.confirmed
+  window.clearTimeout(aiCloseTimer)
   fetch(form.action, { method: 'POST', body: new FormData(form), headers: { Accept: 'application/json' } })
     .then((res) => {
       if (!res.ok) throw new Error(`status ${res.status}`)
@@ -3573,7 +3572,10 @@ document.addEventListener('submit', (e) => {
       return refreshAiPanel()
     })
     .then(() => aiDocked() && aiInput()?.focus())
-    .catch(() => toast('チャットを閉じられませんでした。', 'error'))
+    .catch(() => {
+      setAiCloseArmed(form, false)
+      toast('チャットを閉じられませんでした。', 'error')
+    })
 })
 
 async function runAiTask(task: () => Promise<void>) {
