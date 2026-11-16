@@ -220,6 +220,22 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     })
   }
 
+  /** 画面で見た確認カードをまとめて承認する */
+  async function approveAll(c: Context<AppEnv>) {
+    const user = c.var.user!
+    if (!(await canUse(c))) return c.notFound()
+    const fields = await readFields(c, 'aiApproveAll')
+    if (!fields) return c.notFound()
+    return streamEvents(c, async (emit) => {
+      const chat = chats.currentChat(user.id)
+      if (!chat || String(chat.id) !== fields.chat) {
+        emit({ type: 'error', message: 'このチャットは閉じられています。' })
+        return emit({ type: 'closed' })
+      }
+      await agent.approveAll({ c, chat, callIds: fields['call[]'], page: fields.page }, emit)
+    })
+  }
+
   /** パネルの最初に出す、開いている画面に合わせた依頼の候補。client.ts が画面を開くたびに取りに来る */
   async function suggestions(c: Context<AppEnv>) {
     if (!(await canUse(c))) return c.notFound()
@@ -270,7 +286,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     return c.redirect(sameOriginReferer(c, '/dashboard'), 303)
   }
 
-  return { renderPanel, show, state, suggestions, send, decide, stop, voice, close }
+  return { renderPanel, show, state, suggestions, send, decide, approveAll, stop, voice, close }
 }
 
 export type AiHandlers = ReturnType<typeof createAiHandlers>
@@ -282,6 +298,7 @@ export function aiRoutes(h: AiHandlers) {
   app.get('/suggestions', h.suggestions)
   app.post('/chat', h.send)
   app.post('/chat/confirm', h.decide)
+  app.post('/chat/confirm-all', h.approveAll)
   app.post('/chat/stop', h.stop)
   app.post('/chat/close', h.close)
   app.post('/voice', h.voice)
