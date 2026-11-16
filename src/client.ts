@@ -2948,7 +2948,18 @@ const AI_THINKING_AFTER_TEXT = 1500
 const aiChannel = new BroadcastChannel('ai-panel')
 
 function aiTemplate(
-  kind: 'user' | 'assistant' | 'tool' | 'replies' | 'reply' | 'pending' | 'stopped' | 'compacted' | 'error',
+  kind:
+    | 'user'
+    | 'assistant'
+    | 'tool'
+    | 'replies'
+    | 'reply'
+    | 'suggestion'
+    | 'suggestion-loading'
+    | 'pending'
+    | 'stopped'
+    | 'compacted'
+    | 'error',
   text?: string,
 ) {
   const template = aiPanel()?.querySelector<HTMLTemplateElement>(`template[data-ai-template="${kind}"]`)
@@ -3003,6 +3014,7 @@ function setAiOpen(open: boolean) {
     cancelAiVoice()
     return scheduleAiSync()
   }
+  void fillAiSuggestions()
   void syncAiPanel()
   scrollAiLog(true)
   // 狭い画面で入力欄にフォーカスしないのは、開いただけでキーボードが出て会話が隠れるため
@@ -3157,6 +3169,7 @@ async function refreshAiPanel(model?: string) {
   if (input && focused) input.focus()
   showAiVoice()
   initMascots()
+  void fillAiSuggestions()
   scrollAiLog(true)
   scheduleAiSync()
 }
@@ -3469,7 +3482,61 @@ function initAiPanel() {
   const open = document.documentElement.hasAttribute('data-ai-open')
   $$('.ai-panel-toggle').forEach((el) => el.setAttribute('aria-expanded', String(open)))
   showAiVoice()
+  void fillAiSuggestions()
   scheduleAiSync()
+}
+
+// --- AI のパネルの最初の候補（components/ai-panel.tsx の data-ai-suggestions。作るのは /ai/suggestions）
+const AI_SUGGESTION_SLOTS = 3
+// 画面ごとに覚えておくのは、同じ画面に戻るたびにサーバーへ問い合わせて、読み込み中の表示を挟まないため
+const aiSuggestionCache = new Map<string, string[]>()
+const aiSuggesting = new Set<string>()
+
+const aiSuggestionBox = () => aiPanel()?.querySelector<HTMLElement>('[data-ai-suggestions]') ?? null
+
+function paintAiSuggestions(box: HTMLElement, page: string, suggestions: string[]) {
+  box.replaceChildren(
+    ...suggestions.map((text) => {
+      const button = aiTemplate('suggestion', text)
+      button.dataset.aiSuggest = text
+      return button
+    }),
+  )
+  box.dataset.page = page
+  box.removeAttribute('aria-busy')
+}
+
+// パネルを閉じているあいだに取りに行かないのは、開かない画面のために AI に候補を作らせることになるため
+async function fillAiSuggestions() {
+  const box = aiSuggestionBox()
+  const page = location.pathname
+  if (!box || box.dataset.page === page || !document.documentElement.hasAttribute('data-ai-open')) return
+  const known = aiSuggestionCache.get(page)
+  if (known) return paintAiSuggestions(box, page, known)
+  if (!box.hasAttribute('aria-busy')) {
+    box.replaceChildren(...Array.from({ length: AI_SUGGESTION_SLOTS }, () => aiTemplate('suggestion-loading')))
+    box.setAttribute('aria-busy', 'true')
+  }
+  if (aiSuggesting.has(page)) return
+  aiSuggesting.add(page)
+  let suggestions: string[] | null = null
+  try {
+    const res = await fetch(`/ai/suggestions?${new URLSearchParams({ page })}`, { headers: { Accept: 'application/json' } })
+    // 開けない画面（404）を失敗として取り直さないのは、パネルを開き直すたびに、候補を見せない画面へ問い合わせ直すことになるため
+    if (res.status === 404) suggestions = []
+    else if (res.ok) suggestions = ((await res.json()) as { suggestions: string[] }).suggestions
+  } catch {
+    // 失敗を知らせないのは、候補が出ないだけで、入力欄からは頼めるため
+  } finally {
+    aiSuggesting.delete(page)
+  }
+  if (suggestions) aiSuggestionCache.set(page, suggestions)
+  const current = aiSuggestionBox()
+  if (!current || location.pathname !== page) return
+  if (suggestions) return paintAiSuggestions(current, page, suggestions)
+  // 失敗したときに data-page を付けないのは、次にパネルを開いたときに取り直すため
+  current.replaceChildren()
+  current.removeAttribute('aria-busy')
 }
 
 // --- AI のパネルの音声入力（components/ai-panel.tsx の data-ai-voice。文字起こしは /ai/voice）

@@ -20,6 +20,7 @@ import { AI_FILE_KIND_HINTS, AI_FILE_KINDS, fileKindsLabel, matchesFileKinds } f
 import type { AiLedger } from './ai-ledger'
 import type { AiQuota, AiQuotaState } from './ai-quota'
 import { judgeOffTopic } from './ai-scope'
+import { createAiSuggester } from './ai-suggestions'
 import {
   describedString,
   failure,
@@ -220,6 +221,7 @@ export function createAiAgent({
   ledger,
   chats,
   pageContext,
+  canOpenPage,
   abilities,
   files,
 }: {
@@ -228,6 +230,8 @@ export function createAiAgent({
   chats: AiChatStore
   /** 利用者が開いている画面の説明 */
   pageContext: (c: AiToolContext, page: string) => Promise<string>
+  /** 利用者がその画面を開けるか（lib/ai-suggestions.ts の pageTarget で読んだパスを、画面の表示と同じ条件で確かめる） */
+  canOpenPage: (c: AiToolContext, page: string) => Promise<boolean>
   /** システムプロンプトに入れる、できること・できないことの箇条書き */
   abilities: readonly string[]
   /** request_file で受け取ったファイルの置き場所。渡さなければ、AI はファイルを受け取れない */
@@ -260,6 +264,8 @@ export function createAiAgent({
     const { state } = ledger.getQuota(userId, hard)
     return state === 'ok' ? null : QUOTA_SHORT[state]
   }
+
+  const suggestRequests = createAiSuggester({ ledger, pageContext, canOpenPage, abilities })
 
   const baseTools = [...tools.map((t) => t.tool), ...(files ? [REQUEST_TOOL] : [])]
   // 候補をあとから別の要求で作らないのは、候補を出すだけのために、応答をもう 1 回作らせることになるため
@@ -681,6 +687,7 @@ export function createAiAgent({
     hardTaskModel,
     usageOf,
     hardOff,
+    suggestRequests,
     isRunning: (userId: number) => running.has(userId),
     chats,
     ledger,
