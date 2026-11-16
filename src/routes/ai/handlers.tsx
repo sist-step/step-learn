@@ -220,6 +220,15 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     })
   }
 
+  /** パネルの最初に出す、開いている画面に合わせた依頼の候補。client.ts が画面を開くたびに取りに来る */
+  async function suggestions(c: Context<AppEnv>) {
+    if (!(await canUse(c))) return c.notFound()
+    const result = validate('aiSuggestions', c.req.query())
+    const suggestions = result.ok ? await agent.suggestRequests(c, result.values.page) : null
+    if (!suggestions) return c.notFound()
+    return c.json({ suggestions })
+  }
+
   /** 作成中の応答を止める。ほかのタブで始めた応答も止められるように、チャットではなく利用者で探し、保存し終えてから返す */
   async function stop(c: Context<AppEnv>) {
     const user = c.var.user!
@@ -261,7 +270,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     return c.redirect(sameOriginReferer(c, '/dashboard'), 303)
   }
 
-  return { renderPanel, show, state, send, decide, stop, voice, close }
+  return { renderPanel, show, state, suggestions, send, decide, stop, voice, close }
 }
 
 export type AiHandlers = ReturnType<typeof createAiHandlers>
@@ -270,6 +279,7 @@ export function aiRoutes(h: AiHandlers) {
   const app = new Hono<AppEnv>()
   app.get('/chat', h.show)
   app.get('/chat/state', h.state)
+  app.get('/suggestions', h.suggestions)
   app.post('/chat', h.send)
   app.post('/chat/confirm', h.decide)
   app.post('/chat/stop', h.stop)

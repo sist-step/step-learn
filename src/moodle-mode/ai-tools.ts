@@ -109,7 +109,7 @@ const outline = (loaded: LoadedCourse) =>
       .map((it) => ({ id: it.id, kind: it.kind, kind_label: kindLabel(it), title: it.title, hidden: it.hidden })),
   }))
 
-const kindLabel = (it: MItem) =>
+export const kindLabel = (it: MItem) =>
   codeKind(it)
     ? 'コード'
     : it.kind === 'extra'
