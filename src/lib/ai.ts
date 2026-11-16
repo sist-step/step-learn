@@ -1,4 +1,4 @@
-import { completeAnthropic } from './ai-anthropic'
+import { completeAnthropic, countFileTokens } from './ai-anthropic'
 import {
   AI_MODEL_LABELS,
   AI_PROVIDERS,
@@ -6,6 +6,8 @@ import {
   isAiModel,
   isAnthropicModel,
   isModelPaused,
+  type AiFilePart,
+  type AiModel,
   type AiProvider,
   type AiReply,
   type AiRequest,
@@ -35,4 +37,10 @@ export async function generateText(request: Omit<AiRequest, 'tools' | 'onText'>)
   if (stop === 'refusal') throw new AiError('AI がこの依頼には応答できませんでした')
   if (!text) throw new AiError('AI の応答が空でした')
   return text
+}
+
+/** file を model に見せたときの入力のトークン数。readsFiles のモデルだけで呼ぶ。読めないファイルなら 'unreadable' */
+export async function countFileInput(model: AiModel, file: AiFilePart) {
+  if (!isAnthropicModel(model)) throw new AiError(`${AI_MODEL_LABELS[model]} はファイルを読めません`)
+  return countFileTokens(model, file)
 }
