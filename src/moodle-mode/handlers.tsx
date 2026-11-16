@@ -121,10 +121,16 @@ export async function logout(c: C) {
 
 const BACKCHANNEL_MAX_AGE = 5 * 60
 
-const BACKCHANNEL_NOTICE = z.object({ sid: z.string(), time: z.number() })
+const MAX_CHANGED_COURSES = 1_000
 
-/** Moodle でログアウトされたときにプラグインから届く通知 */
-export async function backchannelLogout(c: C) {
+const BACKCHANNEL_NOTICE = z.union([
+  z.object({ sid: z.string(), time: z.number() }),
+  z.object({ courses: z.array(z.int().check(z.positive())).check(z.maxLength(MAX_CHANGED_COURSES)), time: z.number() }),
+])
+
+// 通知の種類ごとに URL を分けないのは、プラグインの通知先の設定が 1 つで、ログアウトの通知先として設定済みの URL をそのまま使えるようにするため
+/** プラグインから届く通知。Moodle でログアウトされたときと、Moodle の画面でコースの内容が変わったとき */
+export async function backchannel(c: C) {
   const secret = config.moodle!.backchannelSecret
   if (!secret) return c.notFound()
   const body = await c.req.text()
@@ -134,7 +140,8 @@ export async function backchannelLogout(c: C) {
   const notice = BACKCHANNEL_NOTICE.safeParse(JSON.parse(body))
   // 古い通知を受け付けないのは、盗み見た通知を送り直されても、あとから始めたセッションを消させないため
   if (!notice.success || Math.abs(Date.now() / 1000 - notice.data.time) > BACKCHANNEL_MAX_AGE) return c.notFound()
-  destroyByMoodleSid(notice.data.sid)
+  if ('sid' in notice.data) destroyByMoodleSid(notice.data.sid)
+  else notice.data.courses.forEach(forgetCourse)
   return c.body(null, 204)
 }
 

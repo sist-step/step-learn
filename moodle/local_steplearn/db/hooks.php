@@ -28,4 +28,9 @@ $callbacks = [
         'hook' => \core\hook\output\before_standard_top_of_body_html_generation::class,
         'callback' => [\local_steplearn\hook_callbacks::class, 'before_standard_top_of_body_html_generation'],
     ],
+    // イベントだけで済ませないのは、コース画面での並べ替えではイベントが起きないため
+    [
+        'hook' => \core_courseformat\hook\after_course_content_updated::class,
+        'callback' => [\local_steplearn\hook_callbacks::class, 'after_course_content_updated'],
+    ],
 ];
