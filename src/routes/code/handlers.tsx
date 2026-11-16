@@ -1,21 +1,45 @@
 // 通常モードと Moodle モードの両方が読み込むので、DB を開くモジュール（lib/db.ts・lib/courses.ts など）を import しない。
 // モードごとの DB と権限の確認は CodeBackend として受け取る（通常モードは ./backend.ts、Moodle モードは moodle-mode/code.ts）
 import { Hono, type Context } from 'hono'
+import { RequestContext } from 'hono/jsx-renderer'
 import * as z from 'zod/mini'
+import { CodeTrialResult } from '../../components/code'
 import { AiError } from '../../lib/ai'
 import { VSCODE_EXTENSION_ID } from '../../lib/bundle'
 import { LAUNCH_CLAIM, claimCodeLaunch, signCode, signCodeLaunch, verifyCode } from '../../lib/bundle-token'
-import { CODE_FILES, filesFor, submitStateOf, type CodeFiles, type SubmitPeriod, type SubmitState } from '../../lib/code'
+import {
+  CODE_FILES,
+  appealStateOf,
+  filesFor,
+  goalsOf,
+  isCleared,
+  isVerdict,
+  sameFiles,
+  submitStateOf,
+  type CodeConstraint,
+  type CodeFiles,
+  type ConstraintResult,
+  type SubmitPeriod,
+  type SubmitState,
+} from '../../lib/code'
 import { gradingEnabled, submissionsOf, submitWait, type Grader } from '../../lib/code-grader'
-import type { CodeSettings, CodeStore, StudentRow, SubmissionSummary } from '../../lib/code-store'
+import type { CodeSettings, CodeStore, StudentRow, Submission, SubmissionSummary } from '../../lib/code-store'
 import { config } from '../../lib/config'
 import type { CourseAccess } from '../../lib/courses'
-import { firstError, validate, type FormValues } from '../../lib/forms'
-import { clientIp, intParam, readFields, readForm, readJson, redirectWith, wantsJson } from '../../lib/http'
+import { firstError, readConstraints, solutionOf, validate, type FormValues } from '../../lib/forms'
+import { clientIp, field, intParam, readFields, readForm, readJson, redirectWith, wantsJson } from '../../lib/http'
 import { rateLimiter } from '../../lib/rate-limit'
 import { SandboxError, runCode, sandboxEnabled } from '../../lib/sandbox'
 import type { AppEnv, Completion } from '../../lib/types'
-import { CodePage, SubmissionPage, SubmissionsPage, submissionsUrl } from './views'
+import {
+  CodePage,
+  SUBMISSION_FILTERS,
+  SubmissionPage,
+  SubmissionsPage,
+  submissionsUrl,
+  type ConstraintStat,
+  type SubmissionFilter,
+} from './views'
 
 type C = Context<AppEnv>
 
@@ -69,26 +93,61 @@ function currentCode(settings: CodeSettings, store: CodeStore, userId: number) {
   return { files: filesFor(settings.language, usable ? saved : settings.starter), stdin: draft?.stdin ?? settings.stdin }
 }
 
-type Accepted = { ok: true; graded: boolean } | { ok: false; error: string }
+/** reused は、前に判定した提出と同じコードで、AI を呼ばずにその判定を写した */
+type Accepted = { ok: true; graded: boolean; reused: boolean } | { ok: false; error: string }
+
+const sameConstraints = (verdicts: readonly ConstraintResult[], constraints: readonly CodeConstraint[]) =>
+  verdicts.length === constraints.length &&
+  constraints.every((c, i) => c.label === verdicts[i].label && c.text === verdicts[i].text && !c.optional === !verdicts[i].optional)
+
+/** 同じコードを判定していないか確かめる、さかのぼる提出の数 */
+const REUSE_LOOKBACK = 10
+
+/** 同じコードを、今と同じ制約で判定した提出。いちばん新しい提出だけを見ないのは、別のコードを 1 回挟めば、同じコードをもう一度 AI に判定させられるため */
+function judgedBefore(
+  { settings, store }: Pick<CodeContext, 'settings' | 'store'>,
+  userId: number,
+  files: CodeFiles,
+): Submission | undefined {
+  for (const s of store.listUserSubmissions(userId).slice(0, REUSE_LOOKBACK)) {
+    if (s.status !== 'graded' || !s.verdicts || !sameConstraints(s.verdicts, settings.constraints)) continue
+    const submission = store.getSubmission(s.id)
+    if (submission && sameFiles(settings.language, submission.files, files)) return submission
+  }
+  return undefined
+}
 
 /** 提出を受け付けて、AI で判定できるなら判定を待つ列に入れる。受け付けられなければ、その理由 */
 function acceptSubmission(
   grader: Grader,
-  { store, period }: Pick<CodeContext, 'store' | 'period'>,
+  ctx: Pick<CodeContext, 'settings' | 'store' | 'period'>,
   userId: number,
   files: CodeFiles,
   stdin: string,
 ): Accepted {
+  const { settings, store, period } = ctx
   const state = submitStateOf(period)
   if (state !== 'open') return { ok: false, error: SUBMIT_CLOSED[state] }
+  if (sameFiles(settings.language, files, filesFor(settings.language, settings.starter)))
+    return { ok: false, error: '最初のコードから変わっていません。コードを書いてから提出してください。' }
   // レート制限（rateLimiter）にしないのは、残りの秒数を画面のカウントダウンと合わせるため。提出の時刻から求めれば、再起動しても同じになる
   const wait = submitWait(store.latestSubmission(userId)?.createdAt)
   if (wait) return { ok: false, error: `続けて提出できません。${wait} 秒待ってから、もう一度お試しください。` }
-  const graded = grader.canGrade()
+  // 同じコードをもう一度 AI に判定させないのは、判定が揺れたときに、通るまで出し直せばクリアにできてしまうため
+  const previous = judgedBefore(ctx, userId, files)
+  const graded = !!previous || grader.canGrade()
   const id = store.submit(userId, files, stdin, graded ? 'pending' : 'none')
-  if (graded) grader.enqueue(id)
-  return { ok: true, graded }
+  if (previous) grader.reuse(id, previous)
+  else if (graded) grader.enqueue(id)
+  return { ok: true, graded, reused: !!previous }
 }
+
+const submittedMessage = (accepted: Extract<Accepted, { ok: true }>) =>
+  accepted.reused
+    ? '提出しました。前に判定したコードと同じなので、そのときの判定を出しています。'
+    : accepted.graded
+      ? '提出しました。採点が終わると、結果が出ます。'
+      : '提出しました。'
 
 const serverOrigin = (c: Context) => config.appOrigin ?? new URL(c.req.url).origin
 
@@ -182,7 +241,17 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
     if (!input.ok) return redirectWith(c, page, input.error, 'error')
     const accepted = acceptSubmission(grader, ctx, userId, input.files, input.stdin)
     if (!accepted.ok) return redirectWith(c, page, accepted.error, 'error')
-    return redirectWith(c, page, accepted.graded ? '提出しました。採点が終わると、結果が出ます。' : '提出しました。')
+    return redirectWith(c, page, submittedMessage(accepted))
+  }
+
+  /** 学生が、自分のいちばん新しい提出の判定を、教師に確かめてもらうよう頼む */
+  async function appeal(c: C) {
+    const ctx = await open(c)
+    if (!ctx || ctx.access.role !== 'student') return c.notFound()
+    const latest = gradeOf(ctx)
+    if (latest?.status !== 'graded' || !latest.verdicts?.length) return c.notFound()
+    if (appealStateOf(latest) === 'none') ctx.store.appeal(latest.id)
+    return redirectWith(c, c.req.header('referer') ?? ctx.page, '教師に知らせました。教師が判定を確かめます。')
   }
 
   async function reset(c: C) {
@@ -199,7 +268,8 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
     const ctx = await open(c)
     if (!ctx) return c.notFound()
     c.header('Cache-Control', 'no-store')
-    return c.json({ pending: gradeOf(ctx)?.status === 'pending' })
+    const latest = gradeOf(ctx)
+    return c.json({ pending: latest?.status === 'pending', ahead: latest ? grader.aheadOf(latest.id) : 0 })
   }
 
   /** Web エディターの画面 */
@@ -213,7 +283,7 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
         item={target}
         itemUrl={itemUrl(courseId, itemId)}
         body={settings.body}
-        goals={settings.constraints.map((c) => c.label)}
+        goals={goalsOf(settings.constraints)}
         canRun={sandboxEnabled}
         submissions={access.role === 'student' ? submissionsOf(ctx.store, ctx.userId, grader, ctx.period) : null}
         completion={ctx.completion}
@@ -239,20 +309,102 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
     return ctx && ctx.access.canManage ? ctx : null
   }
 
+  /** 学生ごとの、提出の回数・いちばん新しい提出・どれかの提出でクリアしたか */
+  function studentRows(store: CodeStore): StudentRow[] {
+    const byStudent = new Map<number, Omit<StudentRow, 'student'>>()
+    for (const s of store.listSubmissions()) {
+      const cleared = s.status === 'graded' && isCleared(s.verdicts)
+      const appealed = appealStateOf(s) === 'open' ? s.id : null
+      const entry = byStudent.get(s.userId)
+      if (entry) {
+        entry.count++
+        entry.cleared ||= cleared
+        entry.appealed ??= appealed
+      } else byStudent.set(s.userId, { count: 1, latest: summary(s), cleared, appealed })
+    }
+    const none = { count: 0, latest: null, cleared: false, appealed: null }
+    return store.listStudents().map((student) => ({ student, ...(byStudent.get(student.id) ?? none) }))
+  }
+
+  /** 今の制約ごとに、いちばん新しい提出でできている学生の数。judged は、その制約を判定した提出のある学生の数 */
+  function constraintStats(constraints: readonly CodeConstraint[], rows: readonly StudentRow[]): ConstraintStat[] {
+    const judged = rows.flatMap((r) => (r.latest?.status === 'graded' && r.latest.verdicts ? [r.latest.verdicts] : []))
+    return constraints.map(({ label, optional }) => {
+      const verdicts = judged.flatMap((list) => list.find((v) => v.label === label) ?? [])
+      return { label, optional: !!optional, passed: verdicts.filter((v) => v.verdict === 'pass').length, judged: verdicts.length }
+    })
+  }
+
+  const FILTERS: Record<SubmissionFilter, (row: StudentRow) => boolean> = {
+    all: () => true,
+    unsubmitted: (r) => !r.latest,
+    uncleared: (r) => !!r.latest && !r.cleared,
+    appeal: (r) => r.appealed !== null,
+  }
+
+  /** 提出の一覧が変わったかを見分ける値。提出・採点の終わり・確認の依頼のどれでも変わる */
+  function listRevision(store: CodeStore) {
+    const all = store.listSubmissions()
+    const count = (test: (s: SubmissionSummary) => boolean) => all.filter(test).length
+    return [all.length, all[0]?.id ?? 0, count((s) => s.status === 'graded'), count((s) => appealStateOf(s) === 'open')].join('-')
+  }
+
   async function list(c: C) {
     const ctx = await manage(c)
     if (!ctx) return c.notFound()
-    const { access, store, target, page } = ctx
-    const byStudent = new Map<number, { count: number; latest: SubmissionSummary }>()
-    for (const s of store.listSubmissions()) {
-      const entry = byStudent.get(s.userId)
-      if (entry) entry.count++
-      else byStudent.set(s.userId, { count: 1, latest: summary(s) })
+    const { access, store, target, page, settings, courseId, itemId } = ctx
+    // 一覧を読む前に求めるのは、あとで求めると、そのあいだの変更を取りこぼすため
+    const revision = listRevision(store)
+    const rows = studentRows(store)
+    const wanted = c.req.query('show')
+    const filter = SUBMISSION_FILTERS.find((f) => f === wanted) ?? 'all'
+    return c.render(
+      <SubmissionsPage
+        access={access}
+        item={target}
+        pageUrl={page}
+        rows={rows.filter(FILTERS[filter])}
+        counts={{
+          students: rows.length,
+          submitted: rows.filter((r) => r.latest).length,
+          cleared: rows.filter((r) => r.cleared).length,
+          unsubmitted: rows.filter(FILTERS.unsubmitted).length,
+          uncleared: rows.filter(FILTERS.uncleared).length,
+          appeal: rows.filter(FILTERS.appeal).length,
+        }}
+        filter={filter}
+        stats={constraintStats(settings.constraints, rows)}
+        live={{ url: `${submissionsUrl(courseId, itemId)}/revision`, revision }}
+        gradingEnabled={gradingEnabled}
+      />,
+      { title: `提出 - ${target.title}` },
+    )
+  }
+
+  async function showListRevision(c: C) {
+    const ctx = await manage(c)
+    if (!ctx) return c.notFound()
+    c.header('Cache-Control', 'no-store')
+    return c.json({ revision: listRevision(ctx.store) })
+  }
+
+  /** 制約を直したあとなどに、学生ごとのいちばん新しい提出を、まとめて AI に判定し直させる */
+  async function regradeAll(c: C) {
+    const ctx = await manage(c)
+    if (!ctx || !gradingEnabled) return c.notFound()
+    const { store, courseId, itemId } = ctx
+    const url = submissionsUrl(courseId, itemId)
+    if (!grader.canGrade()) return redirectWith(c, url, 'AI の今月の上限に達しているため、判定できません。', 'error')
+    // 教師が判定を変えた提出を除くのは、教師が確かめて直した判定を、AI の判定で消してしまうため
+    const targets = studentRows(store).flatMap((r) =>
+      r.latest && r.latest.status !== 'pending' && !r.latest.verdicts?.some((v) => v.aiVerdict) ? [r.latest] : [],
+    )
+    for (const target of targets) {
+      store.setStatus(target.id, 'pending')
+      grader.enqueue(target.id)
     }
-    const rows: StudentRow[] = store
-      .listStudents()
-      .map((student) => ({ student, ...(byStudent.get(student.id) ?? { count: 0, latest: null }) }))
-    return c.render(<SubmissionsPage access={access} item={target} pageUrl={page} rows={rows} />, { title: `提出 - ${target.title}` })
+    const message = targets.length ? `${targets.length} 件の提出を、AI が判定し直しています。` : '判定し直す提出はありません。'
+    return redirectWith(c, url, message, 'info')
   }
 
   async function studentSubmissions(c: C) {
@@ -301,15 +453,52 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
     return redirectWith(c, submissionsUrl(courseId, itemId, student.id, target.id), 'コメントを保存しました。')
   }
 
+  /** 教師が、AI の判定を制約ごとに変える。学生が頼んでいた確認も済んだことにする */
+  async function override(c: C) {
+    const ctx = await studentSubmissions(c)
+    if (!ctx) return c.notFound()
+    const { store, courseId, itemId, student, history } = ctx
+    const form = await readForm(c)
+    const fields = validate('codeVerdicts', form)
+    const target = fields.ok ? history.find((h) => h.id === fields.values.submission) : undefined
+    const submission = target?.status === 'graded' ? store.getSubmission(target.id) : undefined
+    if (!submission?.verdicts?.length) return c.notFound()
+    const verdicts = submission.verdicts.map((v, i): ConstraintResult => {
+      const chosen = field(form, `verdict_${i}`, 10)
+      if (!isVerdict(chosen) || chosen === v.verdict) return v
+      const { aiVerdict = v.verdict, ...rest } = v
+      return chosen === aiVerdict ? { ...rest, verdict: chosen } : { ...rest, verdict: chosen, aiVerdict }
+    })
+    store.overrideVerdicts(submission.id, verdicts)
+    if (appealStateOf(submission) === 'open') store.closeAppeal(submission.id)
+    return redirectWith(c, submissionsUrl(courseId, itemId, student.id, submission.id), '判定を保存しました。')
+  }
+
+  /** 教師が、学生に頼まれた判定の確認を、判定を変えずに済ませる */
+  async function closeAppeal(c: C) {
+    const ctx = await studentSubmissions(c)
+    if (!ctx) return c.notFound()
+    const { store, courseId, itemId, student, history } = ctx
+    const fields = await readFields(c, 'regrade')
+    const target = fields && history.find((h) => h.id === fields.submission)
+    if (!target || appealStateOf(target) !== 'open') return c.notFound()
+    store.closeAppeal(target.id)
+    return redirectWith(c, submissionsUrl(courseId, itemId, student.id, target.id), '確認済みにしました。')
+  }
+
   /**
    * 編集画面から AI に作らせる要求を受ける。form のスキーマで読んだ値を make に渡し、返したものを JSON で返す。
    * what は作るものの名前（「下書き」など）で、断るときの文言に使う
    */
-  async function suggestWith<F extends 'codeSuggest' | 'codeConstraintsSuggest', T extends object>(
+  /** 断るときの文言に使う、頼まれたこと。what は作るもの（「下書き」など）、did は「〜できません」の形 */
+  type Asked = { what: string; did: string }
+
+  async function suggestWith<F extends 'codeSuggest' | 'codeConstraintsSuggest' | 'codeTrial', T extends object>(
     c: C,
     form: F,
-    what: string,
-    make: (ctx: Opened, values: FormValues<F>) => Promise<T | null>,
+    { what, did }: Asked,
+    make: (ctx: Opened, values: FormValues<F>) => Promise<T | { error: string } | null>,
+    respond: (made: T) => Response | Promise<Response> = (made) => c.json(made),
   ) {
     const ctx = await manage(c)
     if (!ctx || !gradingEnabled) return c.notFound()
@@ -318,33 +507,76 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
     if (!result.ok) return c.json({ error: firstError(result.errors) }, 422)
     const key = String(ctx.userId)
     const wait = suggestLimit.retryAfter(key)
-    if (wait) return c.json({ error: `続けて作れません。${wait} 秒ほど待ってから、もう一度お試しください。` }, 429)
-    if (!grader.canGrade()) return c.json({ error: `AI の今月の上限に達しているため、${what}を作れません。` }, 503)
+    if (wait) return c.json({ error: `続けて${did}。${wait} 秒ほど待ってから、もう一度お試しください。` }, 429)
+    if (!grader.canGrade()) return c.json({ error: `AI の今月の上限に達しているため、${what}を${did}。` }, 503)
     suggestLimit.hit(key)
     try {
       const made = await make(ctx, result.values)
-      if (made) return c.json(made)
+      if (made && 'error' in made) return c.json(made, 422)
+      if (made) return await respond(made)
     } catch (e) {
       if (!(e instanceof AiError)) throw e
       console.error('[grading]', e.message)
     }
-    return c.json({ error: `${what}を作れませんでした。少し待ってから、もう一度お試しください。` }, 502)
+    return c.json({ error: `${what}を${did}でした。少し待ってから、もう一度お試しください。` }, 502)
   }
 
-  /** 編集画面の問題文から、最初のコードと制約の下書きを作る（src/code-editor.ts が編集画面の欄に入れる） */
+  const MAKE = '作れません'
+
+  /** 編集画面の問題文から、最初のコード・解答例・制約の下書きを作る（src/code-editor.ts が編集画面の欄に入れる） */
   const suggest = (c: C) =>
-    suggestWith(c, 'codeSuggest', '下書き', async ({ settings, userId }, { title, body }) => {
+    suggestWith(c, 'codeSuggest', { what: '下書き', did: MAKE }, async ({ settings, userId }, { title, body }) => {
       const draft = await grader.draftSetup({ title: title || settings.title, body, language: settings.language }, userId)
       return draft && { draft }
     })
 
   /** 編集画面の問題文と最初のコードから、制約だけを作る（src/code-editor.ts が編集画面の制約の欄に入れる） */
   const suggestConstraints = (c: C) =>
-    suggestWith(c, 'codeConstraintsSuggest', '制約', async ({ settings, userId }, { title, body, stdin: _, ...files }) => {
-      const input = { title: title || settings.title, body, language: settings.language, starter: filesFor(settings.language, files) }
-      const constraints = await grader.draftConstraints(input, userId)
-      return constraints && { constraints }
-    })
+    suggestWith(
+      c,
+      'codeConstraintsSuggest',
+      { what: '制約', did: MAKE },
+      async ({ settings, userId }, { title, body, stdin: _, ...files }) => {
+        const input = { title: title || settings.title, body, language: settings.language, starter: filesFor(settings.language, files) }
+        const constraints = await grader.draftConstraints(input, userId)
+        return constraints && { constraints }
+      },
+    )
+
+  /**
+   * 編集画面に入っている保存前の問題で、解答例と最初のコードを試しに判定する（src/code-editor.ts が、返した HTML を解答例のカードに入れる）。
+   * c.render で返さないのは、カードの中身だけを差し替えるのにページ全体のレイアウトは要らないため
+   */
+  const trial = (c: C) =>
+    suggestWith(
+      c,
+      'codeTrial',
+      { what: '制約', did: '判定できません' },
+      async ({ settings, userId }, values) => {
+        const { constraints, error } = readConstraints(values)
+        if (error) return { error }
+        const { language } = settings
+        return grader.trial(
+          {
+            ...settings,
+            title: values.title || settings.title,
+            body: values.body,
+            starter: filesFor(language, values),
+            stdin: language === 'python' ? values.stdin : '',
+            criteria: values.criteria,
+            constraints,
+            solution: filesFor(language, solutionOf(values)),
+          },
+          userId,
+        )
+      },
+      (result) =>
+        c.html(
+          <RequestContext.Provider value={c}>
+            <CodeTrialResult result={result} />
+          </RequestContext.Provider>,
+        ),
+    )
 
   async function regrade(c: C) {
     const ctx = await studentSubmissions(c)
@@ -361,7 +593,28 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
     return redirectWith(c, url, 'AI が採点しています。少し待ってから、ページを読み込み直してください。', 'info')
   }
 
-  return { showState, save, run, submit, reset, showGrading, showPage, launch, list, show, review, regrade, suggest, suggestConstraints }
+  return {
+    showState,
+    save,
+    run,
+    submit,
+    appeal,
+    reset,
+    showGrading,
+    showPage,
+    launch,
+    list,
+    showListRevision,
+    regradeAll,
+    show,
+    review,
+    override,
+    closeAppeal,
+    regrade,
+    suggest,
+    suggestConstraints,
+    trial,
+  }
 }
 
 /** /courses の下に組み込むルート。ログインの確認は、組み込む側で先に済ませておく */
@@ -373,14 +626,20 @@ export function codeRoutes(h: ReturnType<typeof createCodeHandlers>) {
   app.post('/:id/items/:iid/code/draft', h.save)
   app.post('/:id/items/:iid/code/run', h.run)
   app.post('/:id/items/:iid/code/submit', h.submit)
+  app.post('/:id/items/:iid/code/appeal', h.appeal)
   app.post('/:id/items/:iid/code/reset', h.reset)
   app.get('/:id/items/:iid/code/grading', h.showGrading)
   app.get('/:id/items/:iid/code/submissions', h.list)
+  app.get('/:id/items/:iid/code/submissions/revision', h.showListRevision)
+  app.post('/:id/items/:iid/code/submissions/regrade', h.regradeAll)
   app.get('/:id/items/:iid/code/submissions/:uid', h.show)
   app.post('/:id/items/:iid/code/submissions/:uid/review', h.review)
+  app.post('/:id/items/:iid/code/submissions/:uid/verdicts', h.override)
+  app.post('/:id/items/:iid/code/submissions/:uid/appeal/close', h.closeAppeal)
   app.post('/:id/items/:iid/code/submissions/:uid/regrade', h.regrade)
   app.post('/:id/items/:iid/code/suggest', h.suggest)
   app.post('/:id/items/:iid/code/constraints', h.suggestConstraints)
+  app.post('/:id/items/:iid/code/trial', h.trial)
   return app
 }
 
@@ -512,7 +771,9 @@ export function codeVscodeApi({ targetOf, grader, pageUrl }: Pick<CodeBackend, '
       submission: {
         status,
         createdAt: latest.createdAt,
-        verdicts: graded ? (latest.verdicts ?? []).map(({ label, verdict, reason }) => ({ label, verdict, reason })) : [],
+        verdicts: graded
+          ? (latest.verdicts ?? []).map(({ label, verdict, reason, optional }) => ({ label, verdict, reason, optional: !!optional }))
+          : [],
         feedback: graded ? latest.feedback : '',
         teacherComment: latest.teacherComment,
       },

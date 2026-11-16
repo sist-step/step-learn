@@ -2,11 +2,34 @@ import { Button } from '../../components/button'
 import { Card, Stat, Stats, Table } from '../../components/card'
 import { CodeBarActions, CodeWorkspace, VerdictList, verdictSummary, type SubmissionsView } from '../../components/code'
 import { CompletionStatus, ItemBar } from '../../components/course'
+import { Icon } from '../../components/icons'
 import { TextAreaField, validateWith } from '../../components/form'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
-import { Alert, Avatar, Breadcrumbs, Chip, EmptyState, PageHeader, Person, formatDateTime, userMeta } from '../../components/ui'
-import { CODE_FILES, GRADING_STATUS_LABELS, buildWebDocument, isCleared, type CodeLanguage, type GradingStatus } from '../../lib/code'
+import {
+  Alert,
+  Avatar,
+  Breadcrumbs,
+  Chip,
+  EmptyState,
+  PageHeader,
+  Person,
+  Progress,
+  TabPanel,
+  Tabs,
+  formatDateTime,
+  userMeta,
+} from '../../components/ui'
+import {
+  CODE_FILES,
+  GRADING_STATUS_LABELS,
+  appealStateOf,
+  buildWebDocument,
+  isCleared,
+  type CodeLanguage,
+  type Goal,
+  type GradingStatus,
+} from '../../lib/code'
 import type { Student, StudentRow, Submission, SubmissionSummary } from '../../lib/code-store'
 import type { CourseAccess } from '../../lib/courses'
 import type { RunResult } from '../../lib/sandbox'
@@ -41,7 +64,7 @@ export const CodePage = ({
   itemUrl: string
   body: string
   /** 学生に見せるクリアの条件（制約のラベル） */
-  goals: string[]
+  goals: Goal[]
   canRun: boolean
   /** 見ている学生の提出 */
   submissions: SubmissionsView | null
@@ -105,89 +128,209 @@ const Cleared = ({ submission }: { submission: SubmissionSummary }) => {
   )
 }
 
+export const SUBMISSION_FILTERS = ['all', 'unsubmitted', 'uncleared', 'appeal'] as const
+
+/** 提出の一覧の絞り込み。uncleared は提出したがまだクリアしていない学生、appeal は判定の確認を頼んでいる学生 */
+export type SubmissionFilter = (typeof SUBMISSION_FILTERS)[number]
+
+const FILTER_LABELS: Record<SubmissionFilter, string> = {
+  all: 'すべて',
+  unsubmitted: '未提出',
+  uncleared: '未クリア',
+  appeal: '確認の依頼',
+}
+
+const FILTER_EMPTY: Record<SubmissionFilter, { title: string; text: string }> = {
+  all: { title: 'まだ提出がありません', text: '学生が提出すると、ここに並びます。' },
+  unsubmitted: { title: '未提出の学生はいません', text: '全員が提出しています。' },
+  uncleared: { title: '未クリアの学生はいません', text: '提出した学生は、全員クリアしています。' },
+  appeal: { title: '確認の依頼はありません', text: '学生が判定の確認を頼むと、ここに並びます。' },
+}
+
+/** 制約 1 つの状況。passed はいちばん新しい提出でできている学生の数、judged はその制約を判定した提出のある学生の数 */
+export type ConstraintStat = { label: string; optional: boolean; passed: number; judged: number }
+
+/** 学生の数。絞り込む前の全員から数える */
+export type SubmissionCounts = {
+  students: number
+  submitted: number
+  cleared: number
+  unsubmitted: number
+  uncleared: number
+  appeal: number
+}
+
 export const SubmissionsPage = ({
   access,
   item,
   pageUrl,
   rows,
+  counts,
+  filter,
+  stats,
+  live,
+  gradingEnabled,
 }: {
   access: CourseAccess
   item: CodeTarget
   /** エディターのある画面（戻る先） */
   pageUrl: string
+  /** filter で絞り込んだ学生 */
   rows: StudentRow[]
+  counts: SubmissionCounts
+  filter: SubmissionFilter
+  stats: ConstraintStat[]
+  /** 一覧が変わったかを確かめる先と、描いた時点の値。変わると client.ts が画面を取り直す */
+  live: { url: string; revision: string }
+  gradingEnabled: boolean
 }) => {
-  const submitted = rows.filter((r) => r.latest)
-  const cleared = submitted.filter((r) => r.latest!.status === 'graded' && isCleared(r.latest!.verdicts))
+  const base = submissionsUrl(access.course.id, item.id)
+  const judged = Math.max(0, ...stats.map((s) => s.judged))
   return (
     <AppShell tone={access.course.color}>
       <Styles use={['/src/routes/code/code.css']} />
+      <span hidden data-live={live.url} data-live-rev={live.revision} />
       <Breadcrumbs items={crumbs(access, item, pageUrl)} />
       <PageHeader
         title="提出"
-        description="学生ごとに、いちばん新しい提出を表示しています。"
+        description="学生ごとに、いちばん新しい提出を表示しています。新しい提出や判定は、開いたままでも反映されます。"
         actions={
-          <Button href={pageUrl} variant="ghost" icon="chevronLeft">
-            アイテムへ戻る
-          </Button>
+          <>
+            {gradingEnabled && counts.submitted > 0 && (
+              <form
+                method="post"
+                action={`${base}/regrade`}
+                data-confirm="学生ごとのいちばん新しい提出を、AI に判定し直させますか？ 教師が判定を変えた提出は、そのままにします。"
+                data-confirm-ok="判定し直す"
+                data-loading-form
+              >
+                <Button type="submit" icon="arrowPath">
+                  まとめて判定し直す
+                </Button>
+              </form>
+            )}
+            <Button href={pageUrl} variant="ghost" icon="chevronLeft">
+              アイテムへ戻る
+            </Button>
+          </>
         }
       />
       <Stats compact>
-        <Stat label="提出" value={`${submitted.length}/${rows.length}`} />
-        <Stat label="クリア" value={`${cleared.length}/${rows.length}`} />
+        <Stat label="提出" value={`${counts.submitted}/${counts.students}`} />
+        <Stat label="クリア" value={`${counts.cleared}/${counts.students}`} />
       </Stats>
-      {rows.length === 0 ? (
-        <EmptyState icon="users" title="まだ提出がありません" text="学生が提出すると、ここに並びます。" />
-      ) : (
-        <Table
-          columns={[
-            { label: '学生' },
-            { label: '提出', class: 'hide-sm col-submitted' },
-            { label: '判定', class: 'col-score' },
-            { label: '操作', class: 'hide-sm', srOnly: true },
-          ]}
+      {stats.length > 0 && judged > 0 && (
+        <Card
+          heading="制約ごとの状況"
+          description="いちばん新しい提出で「できている」と判定された学生の数です。"
+          class="constraint-stats-card"
         >
-          {rows.map(({ student, count, latest }) => (
-            <tr>
-              <td>
-                <Person
-                  avatar={<Avatar name={student.name} />}
-                  name={student.name}
-                  meta={userMeta(student)}
-                  href={latest ? submissionsUrl(access.course.id, item.id, student.id) : undefined}
-                />
-              </td>
-              <td class="hide-sm col-submitted">
-                {latest && (
-                  <>
-                    {formatDateTime(latest.createdAt)}
-                    {count > 1 && <span class="muted small">（{count} 回目）</span>}
-                  </>
-                )}
-              </td>
-              <td class="col-score">
-                {latest ? (
-                  <>
-                    <Cleared submission={latest} /> <StatusChip status={latest.status} />
-                  </>
-                ) : (
-                  <span class="muted">未提出</span>
-                )}
-              </td>
-              <td class="hide-sm col-open">
-                {latest && (
-                  <Button href={submissionsUrl(access.course.id, item.id, student.id)} size="sm" iconEnd="chevronRight">
-                    開く
-                  </Button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </Table>
+          <ul class="constraint-stats">
+            {stats.map((s) => (
+              <li>
+                <span class="constraint-stat-label">
+                  {s.label}
+                  {s.optional && <Chip>発展</Chip>}
+                </span>
+                <Progress done={s.passed} total={s.judged} label={false} />
+                <span class="constraint-stat-count">
+                  {s.passed} / {s.judged} 人
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
+      <Tabs
+        label="絞り込み"
+        items={SUBMISSION_FILTERS.map((f) => ({
+          href: f === 'all' ? base : `${base}?show=${f}`,
+          label: f === 'all' ? FILTER_LABELS[f] : `${FILTER_LABELS[f]} ${counts[f]}`,
+          active: f === filter,
+        }))}
+      />
+      <TabPanel>
+        <SubmissionRows access={access} item={item} rows={rows} filter={filter} />
+      </TabPanel>
     </AppShell>
   )
 }
+
+const SubmissionRows = ({
+  access,
+  item,
+  rows,
+  filter,
+}: {
+  access: CourseAccess
+  item: CodeTarget
+  rows: StudentRow[]
+  filter: SubmissionFilter
+}) => (
+  <>
+    {rows.length === 0 ? (
+      <EmptyState icon="users" {...FILTER_EMPTY[filter]} />
+    ) : (
+      <Table
+        columns={[
+          { label: '学生' },
+          { label: '提出', class: 'hide-sm col-submitted' },
+          { label: '判定', class: 'col-score' },
+          { label: '操作', class: 'hide-sm', srOnly: true },
+        ]}
+      >
+        {rows.map(({ student, count, latest, cleared, appealed }) => (
+          <tr>
+            <td>
+              <Person
+                avatar={<Avatar name={student.name} />}
+                name={student.name}
+                meta={userMeta(student)}
+                href={latest ? submissionsUrl(access.course.id, item.id, student.id) : undefined}
+              />
+            </td>
+            <td class="hide-sm col-submitted">
+              {latest && (
+                <>
+                  {formatDateTime(latest.createdAt)}
+                  {count > 1 && <span class="muted small">（{count} 回目）</span>}
+                </>
+              )}
+            </td>
+            <td class="col-score">
+              {latest ? (
+                <>
+                  <Cleared submission={latest} /> <StatusChip status={latest.status} />
+                  {cleared && !(latest.status === 'graded' && isCleared(latest.verdicts)) && (
+                    <Chip tone="success" icon="check" title="前の提出でクリアしています">
+                      クリア済み
+                    </Chip>
+                  )}
+                  {appealed !== null && (
+                    <a href={submissionsUrl(access.course.id, item.id, student.id, appealed)} class="appeal-link">
+                      <Chip tone="accent" icon="flag">
+                        確認の依頼
+                      </Chip>
+                    </a>
+                  )}
+                </>
+              ) : (
+                <span class="muted">未提出</span>
+              )}
+            </td>
+            <td class="hide-sm col-open">
+              {latest && (
+                <Button href={submissionsUrl(access.course.id, item.id, student.id)} size="sm" iconEnd="chevronRight">
+                  開く
+                </Button>
+              )}
+            </td>
+          </tr>
+        ))}
+      </Table>
+    )}
+  </>
+)
 
 const RUN_STATUS_LABELS: Record<RunResult['status'], string> = {
   exited: '終了',
@@ -215,6 +358,7 @@ export const SubmissionPage = ({
 }) => {
   const base = submissionsUrl(access.course.id, item.id, student.id)
   const { output } = submission
+  const appeal = appealStateOf(submission)
   return (
     <AppShell tone={access.course.color}>
       <Styles use={['/src/routes/code/code.css']} />
@@ -280,14 +424,37 @@ export const SubmissionPage = ({
           >
             {submission.status === 'graded' ? (
               <div class="stack">
+                {appeal === 'open' && (
+                  <Alert tone="info">
+                    学生が、この判定の確認を頼んでいます。判定を変えて保存するか、このままでよければ「確認済みにする」を押してください。
+                  </Alert>
+                )}
                 {submission.verdicts?.length ? (
-                  <>
+                  <form method="post" action={`${base}/verdicts`} class="stack" data-loading-form>
+                    <input type="hidden" name="submission" value={submission.id} />
                     <p class="submission-score">
                       <Cleared submission={submission} />
                     </p>
-                    <VerdictList verdicts={submission.verdicts} showText />
-                  </>
+                    <VerdictList verdicts={submission.verdicts} showText editable />
+                    <p class="muted small">
+                      AI の判定が違っていたら、制約ごとに「○ できている・△ 一部できている・×
+                      できていない」を選び直して保存します。変えた判定は、学生の画面に「教師が変更」と出ます。
+                    </p>
+                    <div class="form-actions">
+                      <Button type="submit" variant="primary">
+                        判定を保存
+                      </Button>
+                    </div>
+                  </form>
                 ) : null}
+                {appeal === 'open' && (
+                  <form method="post" action={`${base}/appeal/close`} data-loading-form>
+                    <input type="hidden" name="submission" value={submission.id} />
+                    <Button type="submit" size="sm" icon="check">
+                      確認済みにする
+                    </Button>
+                  </form>
+                )}
                 {submission.feedback && <p class="submission-note">{submission.feedback}</p>}
               </div>
             ) : submission.status === 'pending' ? (
@@ -330,6 +497,7 @@ export const SubmissionPage = ({
                     >
                       <span>
                         {history.length - i} 回目<span class="muted small"> {formatDateTime(h.createdAt)}</span>
+                        {appealStateOf(h) === 'open' && <Icon name="flag" size={14} class="appeal-flag" aria-label="確認の依頼" />}
                       </span>
                       <Cleared submission={h} />
                     </a>

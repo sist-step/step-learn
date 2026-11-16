@@ -63,12 +63,15 @@ async function showResult(result: CodeResult, title: string, page: string) {
     await show(`「${title}」を提出しました。`, notes.filter(Boolean).join('\n\n') || '教師が確認します。')
     return
   }
-  const cleared = result.verdicts.filter((v) => v.verdict === 'pass').length
-  const lines = result.verdicts.map((v) => `${MARKS[v.verdict]} ${v.label}${v.reason ? `\n　${v.reason}` : ''}`)
+  const required = result.verdicts.filter((v) => !v.optional)
+  const cleared = required.filter((v) => v.verdict === 'pass').length
+  const lines = result.verdicts.map(
+    (v) => `${MARKS[v.verdict]} ${v.label}${v.optional ? '（発展）' : ''}${v.reason ? `\n　${v.reason}` : ''}`,
+  )
   const message =
-    cleared === result.verdicts.length
-      ? `クリア！「${title}」はすべての条件ができています。`
-      : `「${title}」は ${cleared} / ${result.verdicts.length} の条件ができています。`
+    cleared === required.length
+      ? `クリア！「${title}」は${required.length < result.verdicts.length ? '必須の' : 'すべての'}条件ができています。`
+      : `「${title}」は ${cleared} / ${required.length} の条件ができています。`
   await show(message, [lines.join('\n'), ...notes].filter(Boolean).join('\n\n'))
 }
 
