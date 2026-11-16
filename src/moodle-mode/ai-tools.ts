@@ -20,6 +20,7 @@ import {
   toConstraints,
   UPLOAD_NOT_FOUND,
   type AiAgentTool,
+  type AiFileReader,
   type AiToolContext,
 } from '../lib/ai-tool-kit'
 import { CODE_FILES, CODE_LANGUAGES, CODE_LANGUAGE_LABELS, DEFAULT_STARTER, MAX_CODE_LENGTH, MAX_STDIN_LENGTH, filesFor } from '../lib/code'
@@ -30,6 +31,7 @@ import { LINK_TARGET_LABELS, LINK_TARGETS } from '../lib/types'
 import { consumeUpload, findUpload, type MoodleAiUpload } from './ai-uploads'
 import type { MoodleEnv } from './auth'
 import { forgetCourse } from './cache'
+import { fetchFile } from './client'
 import { codeSettingsOf } from './code-store'
 import { loadCourse, moodle, myCourses, otherCourses, type LoadedCourse } from './data'
 import { insertExtra, newExtraKey, updateExtraData } from './extra'
@@ -183,6 +185,20 @@ const getItem = defineTool(
     )
   },
 )
+
+/** read_file（lib/ai-agent.ts）で読む、利用者が管理しているファイルのアイテム（Moodle のファイルの活動） */
+export const readMoodleItemFile: AiFileReader = async (c, itemId, courseId) => {
+  const found = await courseOfItem(c, itemId, courseId)
+  if (!found) return failure(NOT_FOUND, 'ファイルを開けませんでした')
+  const { item } = found
+  if (item.kind !== 'file' || !item.fileUrl)
+    return failure('ファイルのアイテムではありません。', `「${item.title}」のファイルを読めませんでした`)
+  const read = async () => {
+    const res = await fetchFile(moodleContext(c).var.token!, item.fileUrl)
+    return res?.ok ? new Uint8Array(await res.arrayBuffer()) : null
+  }
+  return { title: item.title, name: item.fileName, size: item.fileSize, read }
+}
 
 // ---------------------------------------------------------------- 追加・並べ替え（すぐ実行する）
 

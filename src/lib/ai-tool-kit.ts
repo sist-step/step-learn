@@ -1,6 +1,6 @@
 // DB を読み込まないのは、通常モード（lib/ai-tools.ts）と Moodle モード（moodle-mode/ai-tools.ts）の両方のツールをこの形で作るため
 import * as z from 'zod/mini'
-import type { AiTool } from './ai'
+import type { AiFilePart, AiTool } from './ai'
 import type { Context } from 'hono'
 import { MAX_CONSTRAINT_LABEL_LENGTH, MAX_CONSTRAINT_LENGTH, MAX_CONSTRAINTS, describeConstraint, type CodeConstraint } from './code'
 import { formatBytes } from './bytes'
@@ -15,8 +15,8 @@ export type AiToolContext = Context<AppEnv>
  */
 export type AiTouched = { course: number; section?: number; item?: number; href: string }
 
-/** label は画面の会話に出す、ツールで何をしたかの説明。touched は内容を変えたときだけ渡す */
-export type AiToolResult = { content: string; label: string; isError?: boolean; touched?: AiTouched }
+/** label は画面の会話に出す、ツールで何をしたかの説明。touched は内容を変えたときだけ渡す。files は結果に添えて AI に見せるファイル */
+export type AiToolResult = { content: string; label: string; isError?: boolean; touched?: AiTouched; files?: AiFilePart[] }
 
 /** 確認カードの 1 行。long は差分で見せる複数行の文章 */
 export type AiChange = { label: string; before: string; after: string; long?: boolean }
@@ -35,6 +35,15 @@ export type AiAgentTool =
 
 /** request_file で受け取ったファイルの置き場所（通常モードは lib/ai-uploads.ts、Moodle モードは moodle-mode/ai-uploads.ts）。receive は AI に渡す file_id を返す */
 export type AiFileStore = { receive: (c: AiToolContext, file: File) => Promise<number> }
+
+/** read_file で読むファイルのアイテム。title はアイテムの名前、read はファイルの中身で、取り出せなければ null */
+export type AiReadableFile = { title: string; name: string; size: number; read: () => Promise<Uint8Array | null> }
+
+/**
+ * read_file で、利用者が管理しているファイルのアイテムを探す（通常モードは lib/ai-tools.ts、Moodle モードは moodle-mode/ai-tools.ts）。
+ * 見つからないか、ファイルのアイテムでなければ failure の結果を返す
+ */
+export type AiFileReader = (c: AiToolContext, itemId: number, courseId?: number) => Promise<AiReadableFile | AiToolResult>
 
 /** request_file で受け取ったファイルを使うツールの引数 */
 export const fileId = (description: string) => id(`${description}。request_file で受け取った file_id`)
