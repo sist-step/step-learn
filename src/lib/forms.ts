@@ -538,6 +538,8 @@ const aiDecision = z.object({
   file: z.transform((v: unknown) => (isFile(v) ? v : null)),
 })
 
+const aiApproveAll = z.object({ 'call[]': list(), page: hidden(500), chat: hidden(20) })
+
 const aiChat = z.object({ chat: hidden(20) })
 
 const aiSuggestions = z.object({ page: hidden(500) })
@@ -587,6 +589,7 @@ export const FORMS = {
   bundleRemove,
   bundleSync,
   aiDecision,
+  aiApproveAll,
   aiChat,
   aiSuggestions,
   aiVoice,

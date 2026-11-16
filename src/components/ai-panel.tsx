@@ -116,7 +116,7 @@ const CARD_STATE_LABELS: Record<AiCardState, string> = {
 }
 
 const Card = ({ entry, chatId }: { entry: Extract<AiChatEntry, { kind: 'card' }>; chatId: number }) => (
-  <div class="ai-card" data-state={entry.state}>
+  <div class="ai-card" data-state={entry.state} data-ai-card={entry.state === 'pending' ? entry.callId : undefined}>
     <p class="ai-card-title">
       <Icon name="pencil" size={15} />
       <strong>{entry.title}</strong>
@@ -212,6 +212,28 @@ const FileRequest = ({ entry, chatId }: { entry: AiFileEntry; chatId: number }) 
       </>
     )}
   </div>
+)
+
+/** 確認を待つカードがあるときに出す。すべて見終えるまでは承認のボタンを出さず、まだ見ていないカードへ移るボタンを出す（client.ts の paintAiApproveAll） */
+const ApproveAll = ({ chatId, calls }: { chatId: number; calls: string[] }) => (
+  <form method="post" action="/ai/chat/confirm-all" class="ai-approve-all" data-ai-approve-all data-unseen={String(calls.length)}>
+    <input type="hidden" name="chat" value={String(chatId)} />
+    {calls.map((call) => (
+      <input type="hidden" name="call[]" value={call} />
+    ))}
+    <p class="ai-approve-all-text" aria-live="polite">
+      <span class="ai-approve-all-unseen">
+        まだ見ていない提案があと <strong data-ai-unseen>{calls.length}</strong> 件
+      </span>
+      <span class="ai-approve-all-seen">{calls.length} 件の提案をすべて見ました</span>
+    </p>
+    <Button size="sm" icon="eye" class="ai-approve-all-next" data-ai-approve-next>
+      次の提案を見る
+    </Button>
+    <Button type="submit" size="sm" variant="primary" icon="check" class="ai-approve-all-submit">
+      すべて承認する
+    </Button>
+  </form>
 )
 
 const Entry = ({ entry, chatId }: { entry: AiChatEntry; chatId: number }) => {
@@ -434,6 +456,7 @@ export const AiPanel = ({ models, revision, voice, chat }: AiPanelProps) => {
   const choices = chat ? [chat.model] : usable
   // 選べるモデルごとの名前を渡すのは、モデルや「難しい依頼」を切り替えたとき、client.ts がヘッダーの名前を書き換えるため
   const labels = Object.fromEntries(choices.map((m) => [m.value, { label: m.label, hard: m.hardLabel, hardOff: m.hardOff }]))
+  const pendingCards = (chat?.entries ?? []).flatMap((e) => (e.kind === 'card' && e.state === 'pending' ? [e.callId] : []))
   return (
     <aside
       id={AI_PANEL_ID}
@@ -477,6 +500,7 @@ export const AiPanel = ({ models, revision, voice, chat }: AiPanelProps) => {
           </p>
         )}
       </div>
+      {chat && !chat.busy && pendingCards.length > 0 && <ApproveAll chatId={chat.id} calls={pendingCards} />}
 
       <form
         method="post"

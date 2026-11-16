@@ -132,6 +132,18 @@
 .ai-file-card .file-drop-zone { min-height: 96px; padding: 16px 12px; }
 .ai-file-card .file-drop-body { gap: 8px; font-size: var(--fs-sm); }
 
+.ai-approve-all { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 8px; padding: 10px 12px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--warning) 8%, transparent); animation: rise 0.2s var(--ease); }
+.ai-approve-all-text { flex: 1; min-width: 0; font-size: var(--fs-xs); color: var(--warning-text); }
+.ai-approve-all-text strong { font-variant-numeric: tabular-nums; }
+.ai-approve-all-seen, .ai-approve-all-submit { display: none; }
+.ai-approve-all[data-unseen='0'] .ai-approve-all-text { color: var(--text-2); }
+.ai-approve-all[data-unseen='0'] .ai-approve-all-unseen, .ai-approve-all[data-unseen='0'] .ai-approve-all-next { display: none; }
+.ai-approve-all[data-unseen='0'] .ai-approve-all-seen { display: inline; }
+.ai-approve-all[data-unseen='0'] .ai-approve-all-submit { display: inline-flex; }
+.ai-panel[data-busy] .ai-approve-all .btn { opacity: 0.5; pointer-events: none; }
+.ai-card.is-unseen-target { animation: ai-card-call 1.2s var(--ease); }
+@keyframes ai-card-call { 0%, 100% { box-shadow: var(--shadow-card); } 30% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 45%, transparent), var(--shadow-card); } }
+
 .ai-pending[hidden] { display: none; }
 .ai-dots { flex: none; width: 24px; height: 8px; background: radial-gradient(circle, currentColor 2.5px, transparent 3px) 0 50% / 8px 8px repeat-x; animation: pulse 1.2s ease-in-out infinite; }
 

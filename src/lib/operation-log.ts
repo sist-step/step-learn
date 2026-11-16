@@ -100,6 +100,7 @@ const RULES: Rule[] = [
 
   post('/ai/chat', 'ai.send', 'AI に依頼', 'change'),
   post('/ai/chat/confirm', 'ai.confirm', 'AI の確認カードに回答', 'change'),
+  post('/ai/chat/confirm-all', 'ai.confirm.all', 'AI の確認カードをすべて承認', 'change'),
 
   // 自動保存・実行・チャットを閉じる操作を残さないのは、数が多いわりに、あとから確かめる必要のない操作のため
   skip('/courses/:id/items/:iid/code/draft'),
