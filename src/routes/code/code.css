@@ -7,6 +7,14 @@
 .col-score .chip { margin-left: 6px; }
 .col-open { width: 1%; text-align: right; }
 
+.appeal-link { text-decoration: none; }
+.appeal-flag { margin-left: 6px; color: var(--c-ink); vertical-align: -2px; }
+.constraint-stats-card { margin-bottom: 20px; }
+.constraint-stats { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.constraint-stats li { display: grid; grid-template-columns: minmax(0, 2fr) minmax(80px, 3fr) auto; align-items: center; gap: 12px; }
+.constraint-stat-label { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.constraint-stat-count { color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
 .submission { display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 28vw, 360px); gap: 24px; align-items: start; }
 .submission-main, .submission-side { min-width: 0; }
 /* 背景をトークンにしないのは、学生のページが背景を指定していないとき、ダークモードでも白地に黒い文字というブラウザの既定で見せるため */
@@ -35,6 +43,10 @@
 
 @media (max-width: 900px) {
   .submission { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .constraint-stats li { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; }
+  .constraint-stats .progress { grid-column: 1 / -1; grid-row: 2; }
 }
 @media (max-width: 640px), (pointer: coarse) {
   .submission-history a { min-height: var(--tap); }

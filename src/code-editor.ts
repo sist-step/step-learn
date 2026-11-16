@@ -54,7 +54,9 @@ import {
   CODE_FILES,
   CODE_FILE_KEYS,
   DEFAULT_STARTER,
+  aheadText,
   buildWebDocument,
+  formatPeriodLength,
   formatWait,
   isPreviewMessage,
   type CodeConstraint,
@@ -62,6 +64,7 @@ import {
   type CodeFiles,
   type PreviewMessage,
 } from './lib/code'
+import { dateTimeInputToUnix, isDateTimeInput } from './lib/course-period'
 import { diffLines } from './lib/diff'
 import type { RunResult } from './lib/sandbox'
 
@@ -514,7 +517,7 @@ type ConfirmNear = (
   options: { ok: string; tone: 'danger' | 'primary' },
 ) => Promise<boolean>
 
-type SuggestReply = { draft?: { starter: CodeFiles; stdin: string; constraints: CodeConstraint[] }; error?: string }
+type SuggestReply = { draft?: { starter: CodeFiles; solution: CodeFiles; stdin: string; constraints: CodeConstraint[] }; error?: string }
 
 const DEFAULT_FILES: CodeFiles = { ...DEFAULT_STARTER.web, ...DEFAULT_STARTER.python }
 
@@ -566,7 +569,10 @@ function mountSuggest(button: HTMLButtonElement, toast: Toast, confirmNear: Conf
       })
     if (
       edited &&
-      !(await confirmNear(button, ['今の最初のコードと制約を、AI が作った下書きで置き換えます。'], { ok: '置き換える', tone: 'primary' }))
+      !(await confirmNear(button, ['今の最初のコード・解答例・制約を、AI が作った下書きで置き換えます。'], {
+        ok: '置き換える',
+        tone: 'primary',
+      }))
     )
       return
 
@@ -579,10 +585,12 @@ function mountSuggest(button: HTMLButtonElement, toast: Toast, confirmNear: Conf
         const data = (await res.json().catch(() => null)) as SuggestReply | null
         if (!data?.draft) return toast(data?.error ?? '下書きを作れませんでした。', 'error')
         if (!button.isConnected) return
-        const { starter, stdin, constraints } = data.draft
+        const { starter, solution, stdin, constraints } = data.draft
         for (const key of CODE_FILE_KEYS) {
           const field = fieldOf(key)
           if (field && typeof starter[key] === 'string') setFieldValue(field, starter[key])
+          const solutionField = fieldOf(`solution_${key}`)
+          if (solutionField && typeof solution[key] === 'string') setFieldValue(solutionField, solution[key])
         }
         const stdinField = fieldOf('stdin')
         if (stdinField) setFieldValue(stdinField, stdin)
@@ -629,14 +637,16 @@ async function suggestConstraints(root: HTMLElement, button: HTMLButtonElement, 
 }
 
 // --- 編集画面の制約（components/code.tsx の CodeGradingCard）
-function addConstraintRow(root: HTMLElement, { label, text }: CodeConstraint) {
+function addConstraintRow(root: HTMLElement, { label, text, optional }: CodeConstraint) {
   const template = root.querySelector<HTMLTemplateElement>('[data-code-constraint-template]')
   const row = template?.content.firstElementChild?.cloneNode(true)
   const labelInput = row instanceof HTMLElement ? row.querySelector<HTMLInputElement>('input[name="constraint_label[]"]') : null
   const textInput = row instanceof HTMLElement ? row.querySelector<HTMLInputElement>('input[name="constraint_text[]"]') : null
+  const kindSelect = row instanceof HTMLElement ? row.querySelector<HTMLSelectElement>('select[name="constraint_kind[]"]') : null
   if (!(row instanceof HTMLElement) || !labelInput || !textInput) return null
   labelInput.value = label
   textInput.value = text
+  if (kindSelect) kindSelect.value = optional ? 'optional' : 'required'
   root.querySelector('[data-code-constraint-list]')?.append(row)
   return labelInput
 }
@@ -676,7 +686,8 @@ const fileTabSelectors = new WeakMap<HTMLElement, (key: string) => void>()
 /** root の中のコードの入力欄をエディターにし、ファイルのタブ（data-code-tab）で、対応する欄（data-code-file）を切り替えられるようにする */
 function mountFileTabs(root: HTMLElement, options: Omit<CodeInputOptions, 'peers'>) {
   const views = new Map<string, EditorView>()
-  const peers: Peers = (key) => root.querySelector<HTMLTextAreaElement>(`textarea[name="${key}"]`)?.value ?? ''
+  // 欄の名前で探さないのは、解答例の欄の名前が solution_html のように、ファイルの種類と違うため
+  const peers: Peers = (key) => root.querySelector<HTMLTextAreaElement>(`[data-code-file="${key}"] textarea`)?.value ?? ''
   for (const input of root.querySelectorAll<HTMLElement>('[data-code-input]')) {
     const view = mountCodeInput(input, { ...options, peers })
     const key = input.closest<HTMLElement>('[data-code-file]')?.dataset.codeFile
@@ -720,13 +731,13 @@ function mountFileTabs(root: HTMLElement, options: Omit<CodeInputOptions, 'peers
   }
 }
 
-// --- 編集画面の最初のコード（components/code.tsx の CodeStarterCard）
+// --- 編集画面の最初のコードと解答例（components/code.tsx の CodeStarterCard / CodeSolutionCard）
 function mountStarter(root: HTMLElement, toast: Toast, confirmNear: ConfirmNear) {
   if (root.hasAttribute('data-code-ready')) return
   root.setAttribute('data-code-ready', '')
   mountFileTabs(root, { toast })
 
-  const fieldOf = (key: string) => root.querySelector<HTMLTextAreaElement>(`textarea[name="${key}"]`)
+  const fieldOf = (key: string) => root.querySelector<HTMLTextAreaElement>(`[data-code-file="${key}"] textarea`)
   const preview = root.querySelector<HTMLIFrameElement>('[data-code-preview]')
   let previewTimer = 0
   const renderPreview = () => {
@@ -753,7 +764,82 @@ function mountStarter(root: HTMLElement, toast: Toast, confirmNear: ConfirmNear)
     const stdin = fieldOf('stdin')
     if (stdin) setFieldValue(stdin, '')
   })
+
+  const copy = root.querySelector<HTMLButtonElement>('[data-code-solution-copy]')
+  copy?.addEventListener('click', async () => {
+    const form = copy.form
+    if (!form) return
+    const written = CODE_FILE_KEYS.some((key) => !!fieldOf(key)?.value.trim())
+    if (written && !(await confirmNear(copy, ['今の解答例を消して、最初のコードを写します。'], { ok: '写す', tone: 'danger' }))) return
+    for (const key of CODE_FILE_KEYS) {
+      const field = fieldOf(key)
+      if (field) setFieldValue(field, formField(form, key)?.value ?? '')
+    }
+    toast('最初のコードを写しました。書き足して、解答例に仕上げてください。')
+  })
   mounted.add({ root, release: () => clearTimeout(previewTimer) })
+}
+
+// --- 編集画面の「試しに判定」（components/code.tsx の CodeTrial）
+const TRIAL_FIELDS = [
+  'title',
+  'body',
+  'stdin',
+  'criteria',
+  ...CODE_FILE_KEYS,
+  ...CODE_FILE_KEYS.map((key) => `solution_${key}`),
+  'constraint_label[]',
+  'constraint_text[]',
+  'constraint_kind[]',
+]
+
+function mountTrial(root: HTMLElement, toast: Toast) {
+  const button = root.querySelector<HTMLButtonElement>('[data-code-trial-run]')
+  const result = root.querySelector<HTMLElement>('[data-code-trial-result]')
+  const action = button?.dataset.codeTrialRun
+  if (!button || !result || !action || root.hasAttribute('data-code-ready')) return
+  root.setAttribute('data-code-ready', '')
+  button.addEventListener('click', async () => {
+    const form = button.form
+    if (!form || button.disabled) return
+    if (!formField(form, 'body')?.value.trim()) return toast('先に問題文を書いてください。', 'error')
+    const all = new FormData(form)
+    const body = new FormData()
+    for (const name of TRIAL_FIELDS) for (const value of all.getAll(name)) body.append(name, value)
+    const status = root.querySelector<HTMLElement>('[data-code-trial-status]')
+    await whileSuggesting(button, status, 'AI が解答例と最初のコードを判定しています。30 秒ほどお待ちください…', async () => {
+      try {
+        const res = await fetch(action, { method: 'POST', body, headers: { Accept: 'application/json' } })
+        // 結果を JSON で受け取って組み立てないのは、サーバーが描く判定の一覧と同じ見た目を、ここでもう一度作ることになるため
+        if (!res.ok || !res.headers.get('content-type')?.includes('text/html')) {
+          const data = (await res.json().catch(() => null)) as { error?: string } | null
+          return toast(data?.error ?? '判定できませんでした。', 'error')
+        }
+        const doc = new DOMParser().parseFromString(await res.text(), 'text/html')
+        if (!root.isConnected) return
+        result.replaceChildren(...[...doc.body.childNodes].map((node) => document.importNode(node, true)))
+        result.scrollIntoView({ behavior: scrollBehavior(), block: 'nearest' })
+      } catch {
+        toast('判定できませんでした。通信の状態を確かめて、もう一度お試しください。', 'error')
+      }
+    })
+  })
+}
+
+// --- 編集画面の提出の期間の長さ（components/code.tsx の PeriodLength）
+function mountPeriod(root: HTMLElement) {
+  const length = root.querySelector<HTMLElement>('[data-code-period-length]')
+  const text = length?.querySelector<HTMLElement>('[data-code-period-length-text]')
+  if (!length || !text || root.hasAttribute('data-code-ready')) return
+  root.setAttribute('data-code-ready', '')
+  const valueOf = (name: string) => root.querySelector<HTMLInputElement>(`input[name="${name}"]`)?.value ?? ''
+  root.addEventListener('input', () => {
+    const [opensAt, closesAt] = [valueOf('opens_at'), valueOf('closes_at')]
+    const seconds = isDateTimeInput(opensAt) && isDateTimeInput(closesAt) ? dateTimeInputToUnix(closesAt) - dateTimeInputToUnix(opensAt) : 0
+    length.hidden = seconds <= 0
+    length.classList.toggle('is-long', seconds >= Number(length.dataset.codePeriodLong))
+    text.textContent = formatPeriodLength(Math.max(0, seconds))
+  })
 }
 
 // --- エディターと結果の画面（components/code.tsx の CodeWorkspace）
@@ -1030,6 +1116,8 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
   // 確認ダイアログの前の送信（client.ts が止める）では取り消さない
   root.addEventListener('submit', (e) => {
     const target = e.target as HTMLFormElement
+    // 提出のタブの中のフォーム（判定の確認を頼む）では取り消さないのは、書きかけのコードを書き換えず、保存を待っている分が消えるため
+    if (target.closest('[data-code-view-panel]')) return
     if (!target.dataset.confirm || target.dataset.confirmed === '1') discardPending()
   })
 
@@ -1102,8 +1190,10 @@ function watchGrading(card: HTMLElement, toast: Toast) {
     if (!card.isConnected) return
     try {
       const res = await fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' })
-      const { pending } = (await res.json()) as { pending: boolean }
+      const { pending, ahead } = (await res.json()) as { pending: boolean; ahead: number }
       if (!pending) return await showGrade(card, toast)
+      const waiting = card.querySelector('[data-code-grade-ahead]')
+      if (waiting) waiting.textContent = aheadText(ahead)
     } catch {}
     window.setTimeout(() => void check(), GRADING_INTERVAL)
   }
@@ -1117,6 +1207,10 @@ async function showGrade(card: HTMLElement, toast: Toast) {
   const next = doc.getElementById(card.id)
   if (!card.isConnected || !next) return
   card.replaceWith(document.importNode(next, true))
+  // カードだけを取り直さないのは、クリアの条件（data-code-grade-with の id）にも判定を重ねていて、前の判定のまま残るため
+  const goals = document.getElementById(card.dataset.codeGradeWith ?? '')
+  const nextGoals = doc.getElementById(card.dataset.codeGradeWith ?? '')
+  if (goals && nextGoals) goals.replaceWith(document.importNode(nextGoals, true))
   const chip = document.querySelector('[data-code-grade-chip]')
   const nextChip = doc.querySelector('[data-code-grade-chip]')
   if (chip && nextChip) chip.replaceWith(document.importNode(nextChip, true))
@@ -1144,6 +1238,8 @@ export function mountCodeEditors(toast: Toast, confirmNear: ConfirmNear) {
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-code-suggest]')) mountSuggest(button, toast, confirmNear)
   for (const root of document.querySelectorAll<HTMLElement>('[data-code-starter]')) mountStarter(root, toast, confirmNear)
   for (const root of document.querySelectorAll<HTMLElement>('[data-code-constraints]')) mountConstraints(root, toast, confirmNear)
+  for (const root of document.querySelectorAll<HTMLElement>('[data-code-trial]')) mountTrial(root, toast)
+  for (const root of document.querySelectorAll<HTMLElement>('[data-code-period]')) mountPeriod(root)
   for (const root of document.querySelectorAll<HTMLElement>('[data-code-workspace]:not([data-code-ready])'))
     void mountCodeWorkspace(root, toast)
   for (const input of document.querySelectorAll<HTMLElement>('[data-code-input]:not([data-code-ready])')) {

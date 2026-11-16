@@ -31,8 +31,8 @@ export function setJudge(judge: Judge) {
 
 /** 通常モード（step-learn.db）の提出を採点する */
 export const grader = createGrader({
-  load: (id) =>
-    db
+  load(id) {
+    const row = db
       .select({
         files: codeSubmissions.files,
         title: items.title,
@@ -42,12 +42,16 @@ export const grader = createGrader({
         stdin: codeItems.stdin,
         criteria: codeItems.criteria,
         constraints: codeItems.constraints,
+        solution: codeItems.solution,
+        solutionPublic: codeItems.solutionPublic,
       })
       .from(codeSubmissions)
       .innerJoin(codeItems, eq(codeItems.itemId, codeSubmissions.itemId))
       .innerJoin(items, eq(items.id, codeSubmissions.itemId))
       .where(eq(codeSubmissions.id, id))
-      .get() ?? null,
+      .get()
+    return row ? { ...row, solutionPublic: row.solutionPublic === 1 } : null
+  },
   save: (id, result, output) =>
     db.transaction((tx) => {
       tx.update(codeSubmissions)
@@ -75,6 +79,17 @@ export const grader = createGrader({
           .onConflictDoNothing()
           .run()
     }),
+  pendingIds: () =>
+    db
+      .select({ id: codeSubmissions.id })
+      .from(codeSubmissions)
+      .where(eq(codeSubmissions.status, 'pending'))
+      .limit(1000)
+      .all()
+      .map((s) => s.id),
   ledger: aiLedger,
   judgeOf: currentJudge,
 })
+
+// 開発サーバーで戻さないのは、モジュールを読み込み直すたびに、前のモジュールが採点している提出をもう一度採点してしまうため
+if (!import.meta.env.DEV) grader.resume()

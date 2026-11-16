@@ -5,6 +5,7 @@ import {
   CodeGradingCard,
   CodeOpen,
   CodePeriodCard,
+  CodeSolutionCard,
   CodeStarterCard,
   type ConstraintRow,
   type GradeView,
@@ -38,7 +39,7 @@ import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import { agentBase, type AgentView } from '../../lib/agent'
 import type { OpenRouterModelInfo } from '../../lib/ai-models'
 import { bundleBase } from '../../lib/bundle'
-import type { CodeFiles, CodeLanguage, Judge } from '../../lib/code'
+import type { CodeFiles, CodeLanguage, Goal, Judge } from '../../lib/code'
 import { unixToDateTimeInput } from '../../lib/course-period'
 import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
@@ -58,6 +59,9 @@ export type ItemInput = {
   stdin: string
   criteria: string
   constraints: ConstraintRow[]
+  /** コードのアイテムの解答例と、提出の期間が終わったあと学生に見せるか */
+  solution: CodeFiles
+  solutionPublic: boolean
   /** 提出の期間（コード）・使える期間（コーディングエージェント）の、日時の入力欄の値 */
   opensAt: string
   closesAt: string
@@ -75,7 +79,7 @@ export type ItemInput = {
 }
 
 /** コードのアイテムの言語と、見ている学生のいちばん新しい提出。goals は学生に見せるクリアの条件（制約のラベル） */
-export type CodeView = { language: CodeLanguage; goals: string[]; grade: GradeView | null }
+export type CodeView = { language: CodeLanguage; goals: Goal[]; grade: GradeView | null; solution: CodeFiles | null }
 
 export type OutlineItem = Pick<
   Item,
@@ -149,7 +153,9 @@ export const ItemEditPage = ({
     starter: code?.starter ?? {},
     stdin: code?.stdin ?? '',
     criteria: code?.criteria ?? '',
-    constraints: (code?.constraints ?? []).map((c) => ({ label: c.label, text: c.text })),
+    constraints: (code?.constraints ?? []).map((c) => ({ label: c.label, text: c.text, optional: !!c.optional })),
+    solution: code?.solution ?? {},
+    solutionPublic: code?.solutionPublic === 1,
     opensAt: unixToDateTimeInput(code?.opensAt ?? agent?.settings.opensAt ?? undefined),
     closesAt: unixToDateTimeInput(code?.closesAt ?? agent?.settings.closesAt ?? undefined),
     userLimit: agent ? String(agent.settings.userLimit) : '',
@@ -217,6 +223,15 @@ export const ItemEditPage = ({
             )}
           </Card>
           {code && <CodeStarterCard language={code.language} starter={v.starter} stdin={v.stdin} errors={errors} />}
+          {code && (
+            <CodeSolutionCard
+              language={code.language}
+              solution={v.solution}
+              solutionPublic={v.solutionPublic}
+              trial={gradingEnabled ? `${base}/code/trial` : undefined}
+              errors={errors}
+            />
+          )}
           {code && (
             <CodeGradingCard
               gradingEnabled={gradingEnabled}
@@ -439,6 +454,7 @@ export const ItemPage = ({
               language={code.language}
               goals={code.goals}
               grade={code.grade}
+              solution={code.solution}
               canManage={access.canManage}
             />
           )}

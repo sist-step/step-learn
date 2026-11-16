@@ -1,6 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import type { CourseAccess } from './courses'
-import { isCleared } from './code'
+import { isCleared, verdictCounts } from './code'
 import { db } from './db'
 import { quizGradesOf } from './quiz-items'
 import {
@@ -137,8 +137,9 @@ export function courseAvailability(user: User, access: CourseAccess): CourseAvai
   const cleared = new Set(graded.filter((g) => isCleared(g.verdicts)).map((g) => g.itemId))
   const scores = new Map<number, number>()
   for (const g of graded) {
-    if (!g.verdicts?.length) continue
-    const score = (g.verdicts.filter((v) => v.verdict === 'pass').length / g.verdicts.length) * 100
+    const { required } = verdictCounts(g.verdicts ?? [])
+    if (!required.total) continue
+    const score = (required.passed / required.total) * 100
     scores.set(g.itemId, Math.max(score, scores.get(g.itemId) ?? 0))
   }
   const gradedIds = new Set(graded.map((g) => g.itemId))

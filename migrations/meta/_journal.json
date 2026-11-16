@@ -267,6 +267,13 @@
       "when": 1794728061278,
       "tag": "0037_quiz_look_check",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1794844657450,
+      "tag": "0038_code_solution_appeal",
+      "breakpoints": true
     }
   ]
 }
