@@ -274,14 +274,18 @@ const LANGUAGE_RULES: Record<CodeLanguage, string> = {
     '- ファイルは main.py の 1 つで、標準ライブラリだけを使います。input() で読む問題なら、動作を確かめるための標準入力の例（stdin）も作ります。読まない問題なら stdin は空にします。',
 }
 
+const CONSTRAINT_RULES = [
+  '- 制約は問題文の要件を 1 つずつにしたもので、3〜8 個にします。問題文にない要件は足さず、最初のコードにはじめから書いてある部分は制約にしません。',
+  '- 制約ごとに label と text を作ります。label は学生にも見せる、何ができればよいかの短い名前（15 字程度。例:「名前を見出しにする」）です。text は学生には見せず、AI が判定に使う詳しい内容で、コードを読めば満たしているか判定できる文（40 字程度。例:「h1 要素に自分の名前が書かれている」）にします。',
+]
+
 export function buildSetupMessages({ title, body, language }: SetupInput): AiMessage[] {
   const keys = [...CODE_FILES[language].map((f) => f.key), ...(language === 'python' ? ['stdin'] : [])]
   const system = [
     'あなたは、プログラミングの授業の教師が課題を準備するのを手伝うアシスタントです。教師が書いた課題のタイトルと問題文から、学生が最初に開いたときに入っている「最初のコード」と、AI が提出を採点するときに使う「制約（採点の観点）」の下書きを作ります。',
     '- 最初のコードは、そのまま動く土台にします。どこに何を書くかを日本語のコメントで示し、課題の答えになる部分は書きません。',
     LANGUAGE_RULES[language],
-    '- 制約は問題文の要件を 1 つずつにしたもので、3〜8 個にします。問題文にない要件は足さず、最初のコードにはじめから書いてある部分は制約にしません。',
-    '- 制約ごとに label と text を作ります。label は学生にも見せる、何ができればよいかの短い名前（15 字程度。例:「名前を見出しにする」）です。text は学生には見せず、AI が判定に使う詳しい内容で、コードを読めば満たしているか判定できる文（40 字程度。例:「h1 要素に自分の名前が書かれている」）にします。',
+    ...CONSTRAINT_RULES,
     `- 出力は JSON だけにします。${keys.map((k) => `"${k}"`).join('・')} の値は文字列、"constraints" の値は [{"label": "ラベル", "text": "内容"}] の配列です。前後に説明やコードブロックの記号を付けません。`,
   ].join('\n')
   return [
@@ -290,16 +294,9 @@ export function buildSetupMessages({ title, body, language }: SetupInput): AiMes
   ]
 }
 
-export function parseSetup(text: string, language: CodeLanguage): SetupDraft | null {
-  const data = parseJson(text)
-  if (!data) return null
-  const str = (key: string, max: number) => {
-    const v = data[key]
-    return typeof v === 'string' ? v.slice(0, max) : null
-  }
-  const files = CODE_FILES[language].map((f) => [f.key, str(f.key, MAX_CODE_LENGTH)] as const)
-  if (files.some(([, code]) => code === null) || !Array.isArray(data.constraints)) return null
-  const constraints = (data.constraints as unknown[])
+/** AI が返した制約の配列から、ラベルのある行だけを上限の長さと数に切り詰めて取り出す */
+const constraintsOf = (value: unknown): CodeConstraint[] =>
+  (Array.isArray(value) ? (value as unknown[]) : [])
     .map((c): CodeConstraint | null => {
       const { label, text } = (typeof c === 'object' && c !== null ? c : {}) as Record<string, unknown>
       return typeof label === 'string' && label.trim()
@@ -311,12 +308,44 @@ export function parseSetup(text: string, language: CodeLanguage): SetupDraft | n
     })
     .filter((c): c is CodeConstraint => !!c)
     .slice(0, MAX_CONSTRAINTS)
+
+export function parseSetup(text: string, language: CodeLanguage): SetupDraft | null {
+  const data = parseJson(text)
+  if (!data) return null
+  const str = (key: string, max: number) => {
+    const v = data[key]
+    return typeof v === 'string' ? v.slice(0, max) : null
+  }
+  const files = CODE_FILES[language].map((f) => [f.key, str(f.key, MAX_CODE_LENGTH)] as const)
+  if (files.some(([, code]) => code === null) || !Array.isArray(data.constraints)) return null
+  const constraints = constraintsOf(data.constraints)
   if (constraints.length === 0) return null
   return {
     starter: Object.fromEntries(files),
     stdin: language === 'python' ? (str('stdin', MAX_STDIN_LENGTH) ?? '') : '',
     constraints,
   }
+}
+
+/** 制約だけを作るのに使うもの。最初のコードも編集画面に入っている保存前の値で、はじめから書いてある部分を制約にしないために渡す */
+export type ConstraintsInput = SetupInput & { starter: CodeFiles }
+
+export function buildConstraintsMessages({ title, body, language, starter }: ConstraintsInput): AiMessage[] {
+  const system = [
+    'あなたは、プログラミングの授業の教師が課題を準備するのを手伝うアシスタントです。教師が書いた課題のタイトル・問題文・最初のコードから、AI が提出を判定するときに使う「制約」を作ります。',
+    ...CONSTRAINT_RULES,
+    '- 出力は JSON だけにします。"constraints" の値は [{"label": "ラベル", "text": "内容"}] の配列です。前後に説明やコードブロックの記号を付けません。',
+  ].join('\n')
+  const files = CODE_FILES[language].map((f) => `【最初のコードの ${f.name}】\n${starter[f.key] || '（空）'}`)
+  return [
+    { role: 'system', content: system },
+    { role: 'user', content: [`【タイトル】\n${title}`, `【問題文】\n${body}`, ...files].join('\n\n') },
+  ]
+}
+
+export function parseConstraints(text: string): CodeConstraint[] | null {
+  const constraints = constraintsOf(parseJson(text)?.constraints)
+  return constraints.length > 0 ? constraints : null
 }
 
 // ---------------------------------------------------------------- 順番待ち
@@ -375,6 +404,15 @@ export function createGrader({
       const draft = parseSetup(reply.text, input.language)
       if (!draft) console.error('[grading] 下書きを読み取れません', reply.stop, reply.text.slice(0, 300))
       return draft
+    },
+    /** 問題文と最初のコードから、制約だけを作る。応答を読み取れなければ null。使用量は draftSetup と同じく頼んだ教師に付ける */
+    async draftConstraints(input: ConstraintsInput, userId: number) {
+      const model = gradingModel(ledger)
+      const reply = await complete({ model, messages: buildConstraintsMessages(input), maxTokens: MAX_TOKENS, temperature: 0.3 })
+      ledger.recordUsage(userId, model, reply.usage)
+      const constraints = parseConstraints(reply.text)
+      if (!constraints) console.error('[grading] 制約を読み取れません', reply.stop, reply.text.slice(0, 300))
+      return constraints
     },
     enqueue(submissionId: number) {
       grading.add(submissionId)
