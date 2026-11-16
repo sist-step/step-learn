@@ -1,4 +1,5 @@
 import type { Child, JSX } from 'hono/jsx'
+import { useRequestContext } from 'hono/jsx-renderer'
 import {
   CODE_FILES,
   CODE_LANGUAGE_LABELS,
@@ -19,6 +20,7 @@ import {
 } from '../lib/code'
 import { VSCODE_EXTENSION_NAME, VSCODE_MARKETPLACE_URL } from '../lib/bundle'
 import type { FieldErrors } from '../lib/forms'
+import type { AppEnv } from '../lib/types'
 import { Button, IconButton } from './button'
 import { Card, LinkCard } from './card'
 import { cx } from './cx'
@@ -221,6 +223,7 @@ export const CodeGradingFields = ({
   gradingEnabled,
   criteria,
   constraints,
+  suggest,
   errors,
   idPrefix = 'f',
 }: {
@@ -228,6 +231,8 @@ export const CodeGradingFields = ({
   gradingEnabled: boolean
   criteria: string
   constraints: ConstraintRow[]
+  /** 制約を AI で作る送信先（/code/constraints）。AI がないときと、追加の画面では渡さない */
+  suggest?: string
   errors: FieldErrors
   idPrefix?: string
 }) => (
@@ -235,7 +240,7 @@ export const CodeGradingFields = ({
     <legend>判定</legend>
     <p class="field-hint">{gradingDescription(gradingEnabled)}</p>
     <div class="stack">
-      <CodeConstraintsField constraints={constraints} errors={errors} idPrefix={idPrefix} mode="moodle" />
+      <CodeConstraintsField constraints={constraints} suggest={suggest} errors={errors} idPrefix={idPrefix} mode="moodle" />
       <TextAreaField
         label="補足（任意）"
         name="criteria"
@@ -249,20 +254,45 @@ export const CodeGradingFields = ({
   </fieldset>
 )
 
+/** AI アシスタントに送る、コーディング問題を整え始める最初の発言 */
+const ASSIST_MESSAGE = 'このコーディング問題の問題文と制約を、一緒に整えてください。'
+
 /**
- * アイテムの編集画面の、問題文から最初のコードと採点基準の下書きを AI に作らせるボタン（教師）。
- * 押すと src/code-editor.ts が action に問題文を送り、返ってきた下書きを同じフォームの欄に入れる
+ * アイテムの編集画面の、AI に手伝わせるボタンの帯（教師）。
+ * suggest を渡すと「下書きを作る」を出し、押すと src/code-editor.ts が問題文を送って、返ってきた最初のコードと制約を同じフォームの欄に入れる。
+ * AI のパネルを使える人には「AI と相談する」を出し、押すと client.ts が、このアイテムを選んだ新しいチャットをパネルで始める
  */
-export const CodeSuggest = ({ action }: { action: string }) => {
+export const CodeAiHelp = ({ suggest, item }: { suggest?: string; item: { courseId: number; itemId: number; title: string } }) => {
   useStyle('/src/components/code.css')
+  const canAsk = !!useRequestContext<AppEnv>().var.aiPanel
+  if (!suggest && !canAsk) return null
+  const start = {
+    focus: `${item.courseId}/${item.itemId}`,
+    title: item.title,
+    href: `/courses/${item.courseId}/items/${item.itemId}/edit`,
+    message: ASSIST_MESSAGE,
+  }
   return (
     <div class="code-suggest">
       <p class="muted small" role="status" data-code-suggest-status>
-        問題文から、最初のコードと採点基準の下書きを AI で作れます（30 秒ほど）。
+        {suggest && canAsk
+          ? '問題文から最初のコードと制約の下書きを AI で作るか、AI アシスタントと相談しながら問題文と制約を整えられます。'
+          : suggest
+            ? '問題文から、最初のコードと制約の下書きを AI で作れます（30 秒ほど）。'
+            : 'AI アシスタントと相談しながら、問題文と制約を整えられます。足りないところは、質問に答えながら一緒に埋めます。'}
       </p>
-      <Button size="sm" icon="sparkles" data-code-suggest={action}>
-        下書きを作る
-      </Button>
+      <div class="code-suggest-actions">
+        {suggest && (
+          <Button size="sm" icon="sparkles" data-code-suggest={suggest}>
+            下書きを作る
+          </Button>
+        )}
+        {canAsk && (
+          <Button size="sm" icon="assistant" data-ai-focus-start={JSON.stringify(start)}>
+            AI と相談する
+          </Button>
+        )}
+      </div>
     </div>
   )
 }
@@ -424,14 +454,17 @@ export const CodePeriodFields = (props: PeriodProps) => (
  */
 const CodeConstraintsField = ({
   constraints,
+  suggest,
   errors,
   idPrefix,
   mode,
 }: {
   constraints: ConstraintRow[]
+  /** 渡すと「AI で作る」を出す。押すと src/code-editor.ts が、問題文と最初のコードをここに送る */
+  suggest?: string
   errors: FieldErrors
   idPrefix: string
-  /** moodle では、ない機能（AI の下書き・「制約をすべてクリアしたら完了」）の案内を出さない */
+  /** moodle では、ない機能（「制約をすべてクリアしたら完了」）の案内を出さない */
   mode: 'normal' | 'moodle'
 }) => {
   useStyle('/src/components/code.css')
@@ -458,13 +491,19 @@ const CodeConstraintsField = ({
       </ol>
       <p class="code-constraint-empty muted small">
         制約はまだありません。
-        {mode === 'normal' ? '問題文から AI で作るか、「制約を追加」で書き足します。' : '「制約を追加」で書き足します。'}
+        {suggest ? '「AI で作る」で問題文から作るか、「制約を追加」で書き足します。' : '「制約を追加」で書き足します。'}
         保存するには 1 つ以上必要です。
       </p>
       <div class="code-constraint-foot">
         <Button size="sm" icon="plus" data-code-constraint-add>
           制約を追加
         </Button>
+        {suggest && (
+          <Button size="sm" icon="sparkles" data-code-constraints-suggest={suggest}>
+            AI で作る
+          </Button>
+        )}
+        {suggest && <span class="muted small" role="status" data-code-constraints-status />}
       </div>
       <FieldError id={id} error={errors.constraints} />
       <template data-code-constraint-template>
@@ -480,12 +519,15 @@ export const CodeGradingCard = ({
   gradingEnabled,
   criteria,
   constraints,
+  suggest,
   judge,
   errors,
 }: {
   gradingEnabled: boolean
   criteria: string
   constraints: ConstraintRow[]
+  /** 制約を AI で作る送信先（/code/constraints）。AI がないときは渡さない */
+  suggest?: string
   /** 制約ごとの判定をするものの切り替え（開発サーバーだけ）。form は切り替えを送るフォームの id */
   judge?: { current: Judge; form: string }
   errors: FieldErrors
@@ -521,7 +563,7 @@ export const CodeGradingCard = ({
             </div>
           </div>
         )}
-        <CodeConstraintsField constraints={constraints} errors={errors} idPrefix="f" mode="normal" />
+        <CodeConstraintsField constraints={constraints} suggest={suggest} errors={errors} idPrefix="f" mode="normal" />
         <TextAreaField
           label="補足（任意）"
           name="criteria"

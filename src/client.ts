@@ -3098,6 +3098,9 @@ document.addEventListener('change', (e) => {
 document.addEventListener('click', (e) => {
   const target = e.target as Element
   if (target.closest('[data-ai-toggle]')) return setAiOpen(!document.documentElement.hasAttribute('data-ai-open'))
+  const focusStart = target.closest<HTMLElement>('[data-ai-focus-start]')
+  if (focusStart) return void startAiFocus(focusStart)
+  if (target.closest('[data-ai-focus-clear]')) return clearAiFocus()
   if (target.closest('[data-ai-stop]')) return void stopAi()
   if (target.closest('[data-ai-approve-next]')) return showNextAiCard()
   const hardToggle = target.closest<HTMLElement>('[data-ai-hard]')
@@ -3155,7 +3158,15 @@ async function refreshAiPanel(model?: string) {
   const hard = current.querySelector('[data-ai-hard]')?.getAttribute('aria-pressed')
   const asking = current.querySelector(':scope > .dialog-layer')
   const askingFocused = !!asking?.contains(document.activeElement)
+  const focus = aiFocusField(current)?.value ? current.querySelector('[data-ai-focus]') : null
   current.replaceWith(document.adoptNode(next))
+  // 選ぼうとしているアイテムを持ち越すのは、最初の発言を断られて入力欄に戻ったとき、送り直すとアイテムを選ばずに始まるため
+  const nextFocus = next.querySelector('[data-ai-focus]')
+  const focusField = aiFocusField(next)
+  if (focus && nextFocus && focusField) {
+    focusField.value = aiFocusField(current)!.value
+    nextFocus.replaceWith(focus)
+  }
   if (asking) next.append(asking)
   if (askingFocused) asking?.querySelector<HTMLButtonElement>('[value=cancel]')?.focus()
   const option = $$<HTMLInputElement>('input[type=radio][name=model]', next).find((r) => r.value === chosen)
@@ -3586,6 +3597,62 @@ function initAiPanel() {
   void fillAiSuggestions()
   watchAiCards()
   scheduleAiSync()
+}
+
+// --- コーディング問題の編集画面から、そのアイテムを選んだ新しいチャットを始める（components/code.tsx の CodeAiHelp）
+type AiFocusStart = { focus: string; title: string; href: string; message: string }
+
+/** 新しいチャットで選ぶアイテムの欄。チャットがあるときは描かれない */
+const aiFocusField = (panel: HTMLElement) => panel.querySelector<HTMLInputElement>('[data-ai-form] input[name="focus"]')
+
+function setAiFocus(start: AiFocusStart | null) {
+  const panel = aiPanel()
+  const field = panel && aiFocusField(panel)
+  const chip = panel?.querySelector<HTMLElement>('[data-ai-focus]')
+  const title = chip?.querySelector<HTMLAnchorElement>('[data-ai-focus-title]')
+  if (!field || !chip || !title) return false
+  field.value = start?.focus ?? ''
+  title.textContent = start?.title ?? ''
+  title.href = start?.href ?? '#'
+  chip.hidden = !start
+  return true
+}
+
+const clearAiFocus = () => void setAiFocus(null)
+
+const AI_UNSAVED_CONFIRM = '保存していない変更があります。AI は保存した内容を読むので、先に保存しておくと確実です。このまま始めますか？'
+const AI_RESTART_CONFIRM = '今のチャットを閉じて、このコーディング問題の新しいチャットを始めますか？閉じた会話は開き直せません。'
+
+/** パネルを開き、今のチャットを閉じてから、ボタンのアイテムを選んだ新しいチャットで最初の発言を送る */
+async function startAiFocus(button: HTMLElement) {
+  const start = JSON.parse(button.dataset.aiFocusStart ?? 'null') as AiFocusStart | null
+  if (!start || !aiPanel() || aiSending) return
+  const form = button.closest('form')
+  const drawn = form?.id ? liveBase[0]?.querySelector<HTMLFormElement>(`form#${CSS.escape(form.id)}`) : null
+  if (form && drawn && formValues(form) !== formValues(drawn) && !(await confirmDialog(AI_UNSAVED_CONFIRM))) return
+  await refreshAiIfOutdated()
+  const chatId = aiPanel()?.dataset.chat
+  if (chatId && !(await confirmDialog(AI_RESTART_CONFIRM))) return
+  await runAiTask(async () => {
+    if (chatId) {
+      const body = new FormData()
+      body.set('chat', chatId)
+      const res = await fetch('/ai/chat/close', { method: 'POST', body, headers: { Accept: 'application/json' } }).catch(() => null)
+      if (!res?.ok) return toast('チャットを閉じられませんでした。', 'error')
+      await refreshAiPanel()
+    }
+    if (!document.documentElement.hasAttribute('data-ai-open')) setAiOpen(true)
+    const input = aiInput()
+    if (!input || input.disabled) return toast('今は AI を使えません。', 'error')
+    if (!setAiFocus(start)) return
+    // 「難しい依頼」を外すのは、Sonnet では続きの依頼のボタンが出ず、質問に答える候補を出せないため
+    const composer = input.form
+    composer?.querySelector('[data-ai-hard]')?.setAttribute('aria-pressed', 'false')
+    if (composer) syncAiModel(composer)
+    input.value = start.message
+    fitAiInput(input)
+    await sendAiMessage()
+  })
 }
 
 // --- AI のパネルの最初の候補（components/ai-panel.tsx の data-ai-suggestions。作るのは /ai/suggestions）

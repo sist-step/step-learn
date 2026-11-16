@@ -514,21 +514,48 @@ type SuggestReply = { draft?: { starter: CodeFiles; stdin: string; constraints: 
 
 const DEFAULT_FILES: CodeFiles = { ...DEFAULT_STARTER.web, ...DEFAULT_STARTER.python }
 
+const scrollBehavior = (): ScrollBehavior => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth')
+
+function formField(form: HTMLFormElement, name: string) {
+  const control = form.elements.namedItem(name)
+  return control instanceof HTMLTextAreaElement || control instanceof HTMLInputElement ? control : null
+}
+
+const hasConstraintInput = (root: ParentNode) =>
+  [...root.querySelectorAll<HTMLInputElement>('[data-code-constraint] input')].some((input) => !!input.value.trim())
+
+/** AI に作らせているあいだ、ボタンを押せなくし、status に待っていることを出す。終わったら元に戻す */
+async function whileSuggesting(
+  button: HTMLButtonElement,
+  status: HTMLElement | null | undefined,
+  waiting: string,
+  task: () => Promise<void>,
+) {
+  const idleText = status?.textContent ?? ''
+  if (status) status.textContent = waiting
+  button.disabled = true
+  button.classList.add('loading')
+  try {
+    await task()
+  } finally {
+    if (status) status.textContent = idleText
+    button.disabled = false
+    button.classList.remove('loading')
+  }
+}
+
 function mountSuggest(button: HTMLButtonElement, toast: Toast, confirm: Confirm) {
   const action = button.dataset.codeSuggest
   const form = button.form
   if (!action || !form || button.hasAttribute('data-code-ready')) return
   button.setAttribute('data-code-ready', '')
-  const fieldOf = (name: string) => {
-    const control = form.elements.namedItem(name)
-    return control instanceof HTMLTextAreaElement || control instanceof HTMLInputElement ? control : null
-  }
+  const fieldOf = (name: string) => formField(form, name)
 
   button.addEventListener('click', async () => {
     if (button.disabled) return
     if (!fieldOf('body')?.value.trim()) return toast('先に問題文を書いてください。', 'error')
     const edited =
-      [...form.querySelectorAll<HTMLInputElement>('[data-code-constraint] input')].some((input) => !!input.value.trim()) ||
+      hasConstraintInput(form) ||
       CODE_FILE_KEYS.some((key) => {
         const field = fieldOf(key)
         return !!field && field.value.trim() !== (DEFAULT_FILES[key] ?? '').trim()
@@ -538,34 +565,53 @@ function mountSuggest(button: HTMLButtonElement, toast: Toast, confirm: Confirm)
     const body = new FormData()
     for (const name of ['title', 'body']) body.set(name, fieldOf(name)?.value ?? '')
     const status = button.closest('.code-suggest')?.querySelector<HTMLElement>('[data-code-suggest-status]')
-    const idleText = status?.textContent ?? ''
-    if (status) status.textContent = 'AI が下書きを作っています。30 秒ほどお待ちください…'
-    button.disabled = true
-    button.classList.add('loading')
+    await whileSuggesting(button, status, 'AI が下書きを作っています。30 秒ほどお待ちください…', async () => {
+      try {
+        const res = await fetch(action, { method: 'POST', body, headers: { Accept: 'application/json' } })
+        const data = (await res.json().catch(() => null)) as SuggestReply | null
+        if (!data?.draft) return toast(data?.error ?? '下書きを作れませんでした。', 'error')
+        if (!button.isConnected) return
+        const { starter, stdin, constraints } = data.draft
+        for (const key of CODE_FILE_KEYS) {
+          const field = fieldOf(key)
+          if (field && typeof starter[key] === 'string') setFieldValue(field, starter[key])
+        }
+        const stdinField = fieldOf('stdin')
+        if (stdinField) setFieldValue(stdinField, stdin)
+        const constraintsRoot = form.querySelector<HTMLElement>('[data-code-constraints]')
+        if (constraintsRoot) setConstraints(constraintsRoot, constraints)
+        form.querySelector('.code-section')?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' })
+        toast('下書きを入れました。内容を確かめてから保存してください。')
+      } catch {
+        toast('下書きを作れませんでした。通信の状態を確かめて、もう一度お試しください。', 'error')
+      }
+    })
+  })
+}
+
+type ConstraintsReply = { constraints?: CodeConstraint[]; error?: string }
+
+/** 制約の欄の「AI で作る」。同じフォームの問題文と最初のコードを送り、返ってきた制約で欄を入れ替える */
+async function suggestConstraints(root: HTMLElement, button: HTMLButtonElement, toast: Toast, confirm: Confirm) {
+  const action = button.dataset.codeConstraintsSuggest
+  const form = button.form
+  if (!action || !form || button.disabled) return
+  if (!formField(form, 'body')?.value.trim()) return toast('先に問題文を書いてください。', 'error')
+  if (hasConstraintInput(root) && !(await confirm('今の制約を、AI が作った制約で置き換えますか？'))) return
+  const body = new FormData()
+  for (const name of ['title', 'body', ...CODE_FILE_KEYS]) body.set(name, formField(form, name)?.value ?? '')
+  const status = root.querySelector<HTMLElement>('[data-code-constraints-status]')
+  await whileSuggesting(button, status, 'AI が問題文と最初のコードから制約を作っています…', async () => {
     try {
       const res = await fetch(action, { method: 'POST', body, headers: { Accept: 'application/json' } })
-      const data = (await res.json().catch(() => null)) as SuggestReply | null
-      if (!data?.draft) return toast(data?.error ?? '下書きを作れませんでした。', 'error')
-      if (!button.isConnected) return
-      const { starter, stdin, constraints } = data.draft
-      for (const key of CODE_FILE_KEYS) {
-        const field = fieldOf(key)
-        if (field && typeof starter[key] === 'string') setFieldValue(field, starter[key])
-      }
-      const stdinField = fieldOf('stdin')
-      if (stdinField) setFieldValue(stdinField, stdin)
-      const constraintsRoot = form.querySelector<HTMLElement>('[data-code-constraints]')
-      if (constraintsRoot) setConstraints(constraintsRoot, constraints)
-      form
-        .querySelector('.code-section')
-        ?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' })
-      toast('下書きを入れました。内容を確かめてから保存してください。')
+      const data = (await res.json().catch(() => null)) as ConstraintsReply | null
+      if (!data?.constraints) return toast(data?.error ?? '制約を作れませんでした。', 'error')
+      if (!root.isConnected) return
+      setConstraints(root, data.constraints)
+      root.scrollIntoView({ behavior: scrollBehavior(), block: 'nearest' })
+      toast('制約を入れました。内容を確かめてから保存してください。')
     } catch {
-      toast('下書きを作れませんでした。通信の状態を確かめて、もう一度お試しください。', 'error')
-    } finally {
-      if (status) status.textContent = idleText
-      button.disabled = false
-      button.classList.remove('loading')
+      toast('制約を作れませんでした。通信の状態を確かめて、もう一度お試しください。', 'error')
     }
   })
 }
@@ -590,11 +636,13 @@ function setConstraints(root: HTMLElement, constraints: readonly CodeConstraint[
   root.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
-function mountConstraints(root: HTMLElement) {
+function mountConstraints(root: HTMLElement, toast: Toast, confirm: Confirm) {
   if (root.hasAttribute('data-code-ready')) return
   root.setAttribute('data-code-ready', '')
   root.addEventListener('click', (e) => {
     const target = e.target as Element
+    const suggest = target.closest<HTMLButtonElement>('[data-code-constraints-suggest]')
+    if (suggest) return void suggestConstraints(root, suggest, toast, confirm)
     if (target.closest('[data-code-constraint-add]')) {
       addConstraintRow(root, { label: '', text: '' })?.focus()
       root.dispatchEvent(new Event('input', { bubbles: true }))
@@ -1083,7 +1131,7 @@ export function mountCodeEditors(toast: Toast, confirm: Confirm) {
   for (const card of document.querySelectorAll<HTMLElement>('[data-code-grade]')) watchGrading(card, toast)
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-code-suggest]')) mountSuggest(button, toast, confirm)
   for (const root of document.querySelectorAll<HTMLElement>('[data-code-starter]')) mountStarter(root, toast, confirm)
-  for (const root of document.querySelectorAll<HTMLElement>('[data-code-constraints]')) mountConstraints(root)
+  for (const root of document.querySelectorAll<HTMLElement>('[data-code-constraints]')) mountConstraints(root, toast, confirm)
   for (const root of document.querySelectorAll<HTMLElement>('[data-code-workspace]:not([data-code-ready])'))
     void mountCodeWorkspace(root, toast)
   for (const input of document.querySelectorAll<HTMLElement>('[data-code-input]:not([data-code-ready])')) {

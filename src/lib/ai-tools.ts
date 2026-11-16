@@ -219,7 +219,7 @@ function itemDetail(item: Item) {
 
 const getItem = defineTool(
   'get_item',
-  'アイテムの中身を返す。ページは本文（Markdown）、リンクは URL、コードは問題文・最初のコード・制約・補足、ファイル自動配布は配るファイルの一覧、小テストは問題と正解。',
+  'アイテムの中身を返す。ページは本文（Markdown）、リンクは URL、コーディング問題は問題文・最初のコード・制約・補足、ファイル自動配布は配るファイルの一覧、小テストは問題と正解。',
   z.object({ item_id: id('アイテムの ID') }),
   async (c, { item_id }) => {
     const found = await itemOf(c.var.user!, item_id)
@@ -288,10 +288,12 @@ const fileColumns = (stored: StoredFile | null | undefined) =>
 
 const createItem = defineTool(
   'create_item',
-  'セクションの末尾にアイテムを追加する。作れるのはページ・リンク・ファイル（request_file で受け取ったもの）・コード（学生がブラウザでコードを書いて提出し、AI が制約ごとに判定する課題）。学生には非表示の状態で作られる。',
+  'セクションの末尾にアイテムを追加する。作れるのはページ・リンク・ファイル（request_file で受け取ったもの）・コーディング問題（学生がブラウザでコードを書いて提出し、AI が制約ごとに判定する課題）。学生には非表示の状態で作られる。',
   z.object({
     section_id: id('追加先のセクションの ID'),
-    type: z.enum(CREATABLE_TYPES).check(z.describe('page: ページ（Markdown の本文） / link: リンク / file: ファイル / code: コード')),
+    type: z
+      .enum(CREATABLE_TYPES)
+      .check(z.describe('page: ページ（Markdown の本文） / link: リンク / file: ファイル / code: コーディング問題')),
     title: describedString('タイトル', 200, 1),
     body: z.optional(describedString('ページは本文、コードは問題文、リンクとファイルは説明（いずれも Markdown）', 100_000)),
     file_id: z.optional(fileId('ファイルのアイテムに置くファイル。ファイルでは必須')),
@@ -306,8 +308,12 @@ const createItem = defineTool(
           z.describe(`コードの言語。web: HTML / CSS / JavaScript、python: Python。今作れるのは ${availableCodeLanguages.join('・')} だけ`),
         ),
     ),
-    constraints: z.optional(constraintsSchema('コードの制約。AI が提出を制約ごとに判定し、すべてできていればクリアになる。コードでは必須')),
-    criteria: z.optional(describedString('コードの補足。制約にしにくい観点（読みやすさなど）。AI の判定に使い、学生には見せない', 5000)),
+    constraints: z.optional(
+      constraintsSchema('コーディング問題の制約。AI が提出を制約ごとに判定し、すべてできていればクリアになる。コーディング問題では必須'),
+    ),
+    criteria: z.optional(
+      describedString('コーディング問題の補足。制約にしにくい観点（読みやすさなど）。AI の判定に使い、学生には見せない', 5000),
+    ),
   }),
   async (c, args) => {
     const found = await sectionOf(c.var.user!, args.section_id)
@@ -319,7 +325,7 @@ const createItem = defineTool(
     const url = args.url?.trim() ?? ''
     if (args.type === 'link' && !isHttpUrl(url)) return fail('リンクには http:// か https:// で始まる URL が必要です。')
     const language = args.language ?? 'web'
-    if (args.type === 'code' && !args.constraints?.length) return fail('コードには制約（constraints）を 1 つ以上渡してください。')
+    if (args.type === 'code' && !args.constraints?.length) return fail('コーディング問題には制約（constraints）を 1 つ以上渡してください。')
     if (args.type === 'code' && !availableCodeLanguages.includes(language))
       return fail(
         `${CODE_LANGUAGE_LABELS[language]} のコードは作れません。今は ${availableCodeLanguages.map((l) => CODE_LANGUAGE_LABELS[l]).join('・')} だけ作れます。`,
@@ -512,14 +518,14 @@ const updateItemArgs = z.object({
   link_target: z.optional(z.enum(LINK_TARGETS).check(z.describe('リンクの開き方（リンクだけ）'))),
   section_id: z.optional(id('移し先のセクションの ID（同じコースの中だけ）。移すと末尾に入る')),
   file_id: z.optional(fileId('差し替える新しいファイル（ファイルだけ）')),
-  constraints: z.optional(constraintsSchema('新しい制約の一覧（コードだけ）。一部だけでなくすべての制約を書く')),
-  criteria: z.optional(describedString('新しい補足（コードだけ）', 5000)),
+  constraints: z.optional(constraintsSchema('新しい制約の一覧（コーディング問題だけ）。一部だけでなくすべての制約を書く')),
+  criteria: z.optional(describedString('新しい補足（コーディング問題だけ）', 5000)),
   starter: z.optional(
     starterSchema.check(
-      z.describe('最初に入れておくコード（コードだけ）。変えるファイルだけを全文で書く。web は html / css / js、python は py'),
+      z.describe('最初に入れておくコード（コーディング問題だけ）。変えるファイルだけを全文で書く。web は html / css / js、python は py'),
     ),
   ),
-  stdin: z.optional(describedString('Python の入力の例（コードの python だけ）', MAX_STDIN_LENGTH)),
+  stdin: z.optional(describedString('Python の入力の例（コーディング問題の python だけ）', MAX_STDIN_LENGTH)),
 })
 
 type UpdateItemArgs = z.output<typeof updateItemArgs>
@@ -532,7 +538,7 @@ function checkItemArgs(item: Item, args: UpdateItemArgs, sectionCourse: number |
   if (args.url !== undefined && !isHttpUrl(args.url.trim())) return 'URL は http:// か https:// で始めてください。'
   const codeArgs = [args.constraints, args.criteria, args.starter, args.stdin]
   if (codeArgs.some((v) => v !== undefined) && item.type !== 'code')
-    return '制約・補足・最初のコード・入力の例は、コードのアイテムでだけ変えられます。'
+    return '制約・補足・最初のコード・入力の例は、コーディング問題でだけ変えられます。'
   if (args.section_id !== undefined && sectionCourse !== item.courseId) return '移し先のセクションが、同じコースにありません。'
   return null
 }
@@ -570,7 +576,7 @@ function itemChanges(item: Item, args: UpdateItemArgs, upload: AiUpload | undefi
 
 const updateItem = defineConfirmTool(
   'update_item',
-  'アイテムのタイトル・本文・URL・セクション、ファイルのアイテムのファイル、コードの制約・補足・最初のコードを変える。利用者が確認カードで承認してから実行される。変えない欄は省く。',
+  'アイテムのタイトル・本文・URL・セクション、ファイルのアイテムのファイル、コーディング問題の制約・補足・最初のコードを変える。利用者が確認カードで承認してから実行される。変えない欄は省く。',
   updateItemArgs,
   async (c, args) => {
     const found = await itemOf(c.var.user!, args.item_id)

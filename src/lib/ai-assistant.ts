@@ -52,6 +52,17 @@ async function canOpenPage(c: AiToolContext, page: string) {
   return itemId === null || (isVisibleItem(itemId) && courseAvailability(user, access).items.get(itemId)?.open !== false)
 }
 
+async function focusOf(c: AiToolContext, courseId: number, itemId: number) {
+  const access = await getCourseAccessFor(c.var.user!, courseId)
+  if (!access?.canManage) return null
+  const item = db
+    .select({ title: items.title })
+    .from(items)
+    .where(and(eq(items.id, itemId), eq(items.courseId, access.course.id), eq(items.type, 'code')))
+    .get()
+  return item ? { courseId: access.course.id, itemId, title: item.title } : null
+}
+
 /** 通常モード（step-learn.db）の AI アシスタント */
 export const assistant = createAiAgent({
   tools: [...AI_TOOLS, ...docsTools(aiLedger)],
@@ -60,9 +71,10 @@ export const assistant = createAiAgent({
   pageContext,
   canOpenPage,
   files: aiUploadStore,
+  focusOf,
   abilities: [
     '利用者が管理しているコースの内容を読めます。',
-    'セクションとアイテム（ページ・リンク・ファイル・コード）の追加と並べ替えは、すぐに実行されます。追加したものは学生に非表示の状態で作られるので、そのことを伝えてください。',
+    'セクションとアイテム（ページ・リンク・ファイル・コーディング問題）の追加と並べ替えは、すぐに実行されます。追加したものは学生に非表示の状態で作られるので、そのことを伝えてください。',
     '既存の内容の変更（update_section・update_item）と、学生への表示・非表示の切り替え（set_visibility）は、確認カードを出し、利用者が承認してから実行されます。',
     '書き換えるときは、先に get_item などで今の内容を読み、変える欄だけを全文で渡してください。',
     'ファイルのアイテムを追加するときと、ファイルを差し替えるときは、request_file で利用者にファイルを選んでもらい、返ってきた file_id を create_item・update_item に渡してください。受け取る種類は用途に合わせて絞ってください（配る資料なら pdf だけ、など）。受け取ったファイルの中身は読めません。',

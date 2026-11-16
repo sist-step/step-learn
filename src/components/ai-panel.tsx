@@ -61,7 +61,7 @@ export type AiPanelProps = {
   voice: { maxSeconds: number; maxChars: number } | null
   /**
    * hard は最後の発言で「難しい依頼」を選んでいたこと、replies は最後の応答のあとに出す、押して送れる続きの依頼、
-   * context は会話の大きさ（lib/ai-agent.ts の contextPercent）
+   * context は会話の大きさ（lib/ai-agent.ts の contextPercent）、focus は選んでいるアイテム（lib/ai-chat.ts の AiFocus）と、その編集画面
    */
   chat: {
     id: number
@@ -71,6 +71,7 @@ export type AiPanelProps = {
     replies: string[]
     busy: boolean
     context: number
+    focus: { title: string; href: string } | null
   } | null
 }
 
@@ -435,6 +436,21 @@ const Usage = ({ option, hidden }: { option: AiModelOption; hidden: boolean }) =
   )
 }
 
+/**
+ * 選んでいるアイテム。チャットがないときも隠して描いておき、client.ts がコーディング問題の編集画面のボタン（data-ai-focus-start）で
+ * 新しいチャットを始めるときに、名前を入れて出す
+ */
+const FocusChip = ({ focus, removable }: { focus: { title: string; href: string } | null; removable: boolean }) => (
+  <div class="ai-focus" data-ai-focus hidden={!focus}>
+    <Icon name="terminal" size={14} />
+    <span class="ai-focus-label">選択中</span>
+    <a class="ai-focus-title truncate" href={focus?.href ?? '#'} data-ai-focus-title>
+      {focus?.title}
+    </a>
+    {removable && <IconButton icon="x" label="選ぶのをやめる" iconSize={14} class="ai-focus-clear" data-ai-focus-clear />}
+  </div>
+)
+
 export const AiPanelToggle = () => (
   <IconButton
     icon="assistant"
@@ -522,6 +538,8 @@ export const AiPanel = ({ models, revision, voice, chat }: AiPanelProps) => {
           />
         )}
         {!chat && usable.length === 1 && <input type="hidden" name="model" value={usable[0].value} />}
+        {!chat && <input type="hidden" name="focus" value="" />}
+        <FocusChip focus={chat?.focus ?? null} removable={!chat} />
         <div class="field ai-input">
           {/* title を空にするのは、ブラウザ標準のツールチップが CSS のチップと重なって 2 つ出るため */}
           <IconButton

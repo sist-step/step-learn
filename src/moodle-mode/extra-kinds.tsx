@@ -11,7 +11,7 @@ import {
 import { BundleEditPanel, BundleOpen, type BundleView } from '../components/bundle'
 import { Button } from '../components/button'
 import { LinkCard } from '../components/card'
-import { CodeGradingFields, CodeOpen, CodePeriodFields, CodeStarterFields, type ConstraintRow } from '../components/code'
+import { CodeAiHelp, CodeGradingFields, CodeOpen, CodePeriodFields, CodeStarterFields, type ConstraintRow } from '../components/code'
 import { SelectField } from '../components/form'
 import type { IconName } from '../components/icons'
 import { Markdown, MarkdownEditor } from '../components/markdown'
@@ -63,6 +63,9 @@ export type ExtraData = Record<string, unknown>
  * Moodle には、その位置に /m/<key> へ移る URL の活動か、種類ごとの専用の活動（module）を置く。
  * 種類を足すときは EXTRA_KINDS に定義を足し、forms.ts に extraItemFields を含むスキーマを登録する
  */
+/** 編集画面で開いているアイテム。itemId は活動の cmid */
+export type ExtraTarget = { courseId: number; itemId: number; title: string }
+
 export type ExtraKind = {
   label: string
   /** アイテムを追加するときの種類の説明 */
@@ -74,9 +77,9 @@ export type ExtraKind = {
   toData: (values: Record<string, unknown>) => ExtraData
   /**
    * 追加・編集の画面の、種類ごとの入力欄。values は保存済みの中身か、検証で弾かれたときに送られてきたままの値。
-   * saved は保存済みの中身（追加の画面では渡さない）
+   * saved は保存済みの中身、target は編集しているアイテム。どちらも追加の画面では渡さない
    */
-  Fields: FC<{ values: Record<string, unknown>; errors: FieldErrors; idPrefix: string; saved?: ExtraData }>
+  Fields: FC<{ values: Record<string, unknown>; errors: FieldErrors; idPrefix: string; saved?: ExtraData; target?: ExtraTarget }>
   /**
    * 検証を通った値を、保存する前に外部に問い合わせて確かめる（toData は同期なので、ここで済ませる）。
    * 返した values を toData に渡す。current は保存済みの中身（追加のときは渡さない）
@@ -173,7 +176,7 @@ const periodInputOf = (values: Record<string, unknown>, field: 'opens_at' | 'clo
 
 const unixOf = (input: string) => (isDateTimeInput(input) ? dateTimeInputToUnix(input) : null)
 
-const CodeFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
+const CodeFields: ExtraKind['Fields'] = ({ values, errors, idPrefix, target }) => {
   const language = str(values.language)
   // 言語が決まっていないのは、追加するとき。問題文・最初のコード・採点基準は、言語が決まったあとの編集画面で設定する
   if (!isCodeLanguage(language)) {
@@ -189,6 +192,7 @@ const CodeFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
     )
   }
   // 保存済みの中身では starter にまとまっていて、検証で弾かれて送られてきたままの値では html・css などが直に入っている
+  const base = target && `/courses/${target.courseId}/items/${target.itemId}`
   const starter = codeFilesOf(
     typeof values.starter === 'object' && values.starter !== null ? (values.starter as Record<string, unknown>) : values,
   )
@@ -197,11 +201,13 @@ const CodeFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
       <input type="hidden" name="language" value={language} />
       <input type="hidden" name="starter_set" value="1" />
       <MarkdownEditor label="問題文" name="body" id={`${idPrefix}-body`} value={str(values.body)} error={errors.body} rows={10} split />
+      {target && <CodeAiHelp item={target} />}
       <CodeStarterFields language={language} starter={starter} stdin={str(values.stdin)} errors={errors} idPrefix={idPrefix} />
       <CodeGradingFields
         gradingEnabled={gradingEnabled}
         criteria={str(values.criteria)}
         constraints={constraintRowsOf(values)}
+        suggest={gradingEnabled && base ? `${base}/code/constraints` : undefined}
         errors={errors}
         idPrefix={idPrefix}
       />
@@ -216,7 +222,7 @@ const CodeFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
 }
 
 const code: ExtraKind = {
-  label: 'コード',
+  label: 'コーディング問題',
   description: 'コードを書いて提出する',
   icon: 'terminal',
   form: 'extraCode',

@@ -29,12 +29,15 @@ export type AiCard = {
   received?: { name: string; size: number }
 }
 
+/** チャットで選んでいるアイテム。コーディング問題の編集画面のボタンから始めたチャットにだけあり、AI はこのアイテムの作業として扱う */
+export type AiFocus = { courseId: number; itemId: number; title: string }
+
 /**
  * labels・cards・touched はツール呼び出しの id ごとの、画面に出す説明・確認カード・変えたもの。
  * turnModel は最後の発言に答えているモデルで、チャットのモデルと違うのは難しい依頼を任せたとき（lib/ai-models.ts の AI_HARD_TASK_MODELS）。
  * replies は最後の応答で AI が出した、押して送れる続きの依頼（lib/ai-agent.ts の SUGGEST_REPLIES）。
  * summary は古いやり取りの要約、compactions は要約した位置（messages の添字）で、AI には summary と最後の位置からの messages だけを渡す。
- * contextTokens は最後に AI を呼んだときの入力と出力のトークン数
+ * contextTokens は最後に AI を呼んだときの入力と出力のトークン数、focus は選んでいるアイテム
  */
 export type AiChatContent = {
   messages: AiMessage[]
@@ -46,6 +49,7 @@ export type AiChatContent = {
   summary?: string
   compactions?: number[]
   contextTokens?: number
+  focus?: AiFocus
 }
 
 export type AiChat = { id: number; model: AiModel; content: AiChatContent }
@@ -135,8 +139,8 @@ export function createAiChatStore<S extends Record<string, unknown>>({
     return { id: row.id, model: row.model, content }
   }
 
-  function startChat(userId: number, model: AiModel): AiChat {
-    const content = emptyContent()
+  function startChat(userId: number, model: AiModel, focus?: AiFocus): AiChat {
+    const content: AiChatContent = { ...emptyContent(), ...(focus && { focus }) }
     return db.transaction((tx) => {
       tx.delete(aiChats).where(eq(aiChats.userId, userId)).run()
       const { id } = tx
