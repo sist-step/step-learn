@@ -20,6 +20,14 @@ function inline(text: string) {
     .join('')
 }
 
+const listItem = (text: string) => {
+  const task = text.match(/^\[([ xX])\](?:\s+(.*))?$/)
+  if (!task) return `<li>${inline(text)}</li>`
+  // チェックを保存しないのは、問題文を読みながら手元で印を付けるためのもので、再読み込みで消えてよいため
+  const checked = task[1] === ' ' ? '' : ' checked'
+  return `<li class="task-item"><label><input type="checkbox" class="task-check"${checked}><span>${inline(task[2] ?? '')}</span></label></li>`
+}
+
 export function renderMarkdown(src: string) {
   const lines = src.replace(/\r\n?/g, '\n').split('\n')
   const out: string[] = []
@@ -31,7 +39,7 @@ export function renderMarkdown(src: string) {
     para = []
   }
   const flushList = () => {
-    if (list) out.push(`<${list.tag}>${list.items.map((i) => `<li>${inline(i)}</li>`).join('')}</${list.tag}>`)
+    if (list) out.push(`<${list.tag}>${list.items.map(listItem).join('')}</${list.tag}>`)
     list = null
   }
   const flush = () => {
