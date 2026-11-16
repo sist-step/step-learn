@@ -41,7 +41,7 @@ import { previewKind } from '../../lib/preview'
 import { DEFAULT_PASS_PERCENT, MAX_QUIZ_JSON_LENGTH, isQuizLook, readQuizForm } from '../../lib/quiz'
 import { getQuizSettings, quizStore, saveQuizSettings } from '../../lib/quiz-items'
 import { quizViewOf } from '../../lib/quiz-store'
-import { availableCodeLanguages, sandboxEnabled } from '../../lib/sandbox'
+import { availableCodeLanguages } from '../../lib/sandbox'
 import { codeItems, completions, items, sections } from '../../lib/schema'
 import { isSharing } from '../../lib/screen-share'
 import {
@@ -661,11 +661,10 @@ export async function showItem(c: Context<AppEnv>) {
   const codeItem = item.type === 'code' ? getCodeItem(iid) : undefined
   const code = codeItem && {
     language: codeItem.language,
-    canRun: sandboxEnabled,
     goals: codeItem.constraints.map((c) => c.label),
-    submissions:
+    grade:
       access.role === 'student'
-        ? submissionsOf(codeStore(id, iid), userId, grader, { opensAt: codeItem.opensAt, closesAt: codeItem.closesAt })
+        ? submissionsOf(codeStore(id, iid), userId, grader, { opensAt: codeItem.opensAt, closesAt: codeItem.closesAt }).grade
         : null,
   }
   const textPreview =
