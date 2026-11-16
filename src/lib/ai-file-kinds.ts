@@ -1,4 +1,5 @@
 // DB やストレージを読み込まないのは、AI のパネル（components/ai-panel.tsx）も、受け取れる種類の名前と accept を作るのに使うため
+import type { AiFileMediaType } from './ai-models'
 
 /** AI が request_file で受け取れるファイルの種類。any はすべて（実行ファイルはどの種類でも受け取らない） */
 export const AI_FILE_KINDS = ['pdf', 'image', 'video', 'audio', 'word', 'excel', 'powerpoint', 'text', 'code', 'zip', 'any'] as const
@@ -52,3 +53,19 @@ const extensionOf = (name: string) => name.match(/\.([^./\\]+)$/)?.[1]?.toLowerC
 
 export const matchesFileKinds = (name: string, kinds: readonly AiFileKind[]) =>
   !restricts(kinds) || kinds.some((k) => k !== 'any' && EXTENSIONS[k].includes(extensionOf(name)))
+
+// EXTENSIONS の image をそのまま使わないのは、AVIF と SVG は Claude が画像として受け取らないため
+/** read_file で AI が中身を読めるファイルの拡張子と、AI に渡す種類 */
+const READABLE_TYPES = new Map<string, AiFileMediaType>([
+  ['pdf', 'application/pdf'],
+  ['png', 'image/png'],
+  ['jpg', 'image/jpeg'],
+  ['jpeg', 'image/jpeg'],
+  ['gif', 'image/gif'],
+  ['webp', 'image/webp'],
+])
+
+export const READABLE_EXTENSIONS = [...READABLE_TYPES.keys()]
+
+/** AI が中身を読めるファイルなら、AI に渡す種類。読めなければ null */
+export const readableMediaType = (name: string) => READABLE_TYPES.get(extensionOf(name)) ?? null
