@@ -72,7 +72,7 @@ function choicesOf(course: Pick<Course, 'completionEnabled'>, { sectionRows, ord
   const unavailable: RestrictionChoices['unavailable'] = {}
   if (!course.completionEnabled) unavailable.completion = 'このコースでは完了ステータスを使っていません。'
   else if (tracked.length === 0) unavailable.completion = '完了の条件があるアイテムがありません。'
-  if (graded.length === 0) unavailable.grade = '評点が付くアイテム（コード・小テスト）がありません。'
+  if (graded.length === 0) unavailable.grade = '評点が付くアイテム（コーディング問題・小テスト）がありません。'
   return {
     kinds: RESTRICTION_KINDS.filter((k) => !unavailable[k]),
     unavailable,

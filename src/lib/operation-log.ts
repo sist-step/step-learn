@@ -85,6 +85,7 @@ const RULES: Rule[] = [
   post('/courses/:id/items/:iid/code/submit', 'code.submit', 'コードを提出', 'change', 'item'),
   post('/courses/:id/items/:iid/code/reset', 'code.reset', 'コードを最初に戻した', 'change', 'item'),
   post('/courses/:id/items/:iid/code/suggest', 'code.suggest', 'AI で最初のコードと制約を作成', 'change', 'item'),
+  post('/courses/:id/items/:iid/code/constraints', 'code.constraints', 'AI で制約を作成', 'change', 'item'),
   post('/courses/:id/items/:iid/code/submissions/:uid/review', 'code.review', '提出に点数・コメントを付けた', 'change', 'user'),
   post('/courses/:id/items/:iid/code/submissions/:uid/regrade', 'code.regrade', '提出を AI で採点し直した', 'change', 'user'),
 
