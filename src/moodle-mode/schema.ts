@@ -105,6 +105,8 @@ export const codeSubmissions = sqliteTable(
     output: text('output', { mode: 'json' }).$type<RunResult>(),
     verdicts: text('verdicts', { mode: 'json' }).$type<ConstraintResult[]>(),
     teacherComment: text('teacher_comment').notNull().default(''),
+    appealedAt: integer('appealed_at'),
+    appealClosedAt: integer('appeal_closed_at'),
     createdAt: integer('created_at').notNull().default(now),
   },
   (t) => [index('code_submissions_key_user').on(t.key, t.userId, t.id)],

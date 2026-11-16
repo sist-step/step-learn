@@ -11,7 +11,15 @@ import {
 import { BundleEditPanel, BundleOpen, type BundleView } from '../components/bundle'
 import { Button } from '../components/button'
 import { LinkCard } from '../components/card'
-import { CodeAiHelp, CodeGradingFields, CodeOpen, CodePeriodFields, CodeStarterFields, type ConstraintRow } from '../components/code'
+import {
+  CodeAiHelp,
+  CodeGradingFields,
+  CodeOpen,
+  CodePeriodFields,
+  CodeSolutionFields,
+  CodeStarterFields,
+  type ConstraintRow,
+} from '../components/code'
 import { SelectField } from '../components/form'
 import type { IconName } from '../components/icons'
 import { Markdown, MarkdownEditor } from '../components/markdown'
@@ -25,7 +33,9 @@ import {
   CODE_LANGUAGE_LABELS,
   DEFAULT_STARTER,
   filesFor,
+  goalsOf,
   isCodeLanguage,
+  publicSolutionOf,
   type CodeFiles,
 } from '../lib/code'
 import { dateTimeInputToUnix, isDateTimeInput, unixToDateTimeInput } from '../lib/course-period'
@@ -51,7 +61,7 @@ import { isSharing } from '../lib/screen-share'
 import type { AppEnv } from '../lib/types'
 import { agentModelData, agentModelOfData, agentPeriodOf, agentStore } from './agent-store'
 import { bundleStore, bundleSyncStore } from './bundle-store'
-import { codeSettingsOf, codeStore, grader } from './code-store'
+import { codePeriodOf, codeSettingsOf, codeStore, grader } from './code-store'
 import type { Api, MoodleCourse, SaveActivity } from './client'
 import type { MItem } from './mapping'
 import { quizStore } from './quiz'
@@ -159,16 +169,30 @@ const codeFilesOf = (source: Record<string, unknown>): CodeFiles => Object.fromE
 const listOf = (v: unknown) => (Array.isArray(v) ? v : v === undefined ? [] : [v]).map(str)
 
 const constraintsOfForm = (values: Record<string, unknown>) =>
-  readConstraints({ 'constraint_label[]': listOf(values['constraint_label[]']), 'constraint_text[]': listOf(values['constraint_text[]']) })
-    .constraints
+  readConstraints({
+    'constraint_label[]': listOf(values['constraint_label[]']),
+    'constraint_text[]': listOf(values['constraint_text[]']),
+    'constraint_kind[]': listOf(values['constraint_kind[]']),
+  }).constraints
 
 /** 入力欄に入れる制約の行。保存済みの中身では constraints にまとまっていて、送られてきたままの値では行ごとの欄の値が並んでいる */
 function constraintRowsOf(values: Record<string, unknown>): ConstraintRow[] {
   if (Array.isArray(values.constraints))
-    return values.constraints.map((c: Record<string, unknown>) => ({ label: str(c.label), text: str(c.text) }))
+    return values.constraints.map((c: Record<string, unknown>) => ({
+      label: str(c.label),
+      text: str(c.text),
+      optional: c.optional === true,
+    }))
   const texts = listOf(values['constraint_text[]'])
-  return listOf(values['constraint_label[]']).map((label, i) => ({ label, text: texts[i] ?? '' }))
+  const kinds = listOf(values['constraint_kind[]'])
+  return listOf(values['constraint_label[]']).map((label, i) => ({ label, text: texts[i] ?? '', optional: kinds[i] === 'optional' }))
 }
+
+/** 入力欄に入れる解答例。保存済みの中身では solution にまとまっていて、送られてきたままの値では solution_html などが直に入っている */
+const solutionInputOf = (values: Record<string, unknown>): CodeFiles =>
+  typeof values.solution === 'object' && values.solution !== null
+    ? codeFilesOf(values.solution as Record<string, unknown>)
+    : Object.fromEntries(CODE_FILE_KEYS.map((key) => [key, str(values[`solution_${key}`])]))
 
 /** 入力欄に入れる提出の期間。保存済みの中身では UNIX 秒、送られてきたままの値では日時の入力欄の値 */
 const periodInputOf = (values: Record<string, unknown>, field: 'opens_at' | 'closes_at', saved: 'opensAt' | 'closesAt') =>
@@ -203,6 +227,14 @@ const CodeFields: ExtraKind['Fields'] = ({ values, errors, idPrefix, target }) =
       <MarkdownEditor label="問題文" name="body" id={`${idPrefix}-body`} value={str(values.body)} error={errors.body} rows={10} split />
       {target && <CodeAiHelp item={target} />}
       <CodeStarterFields language={language} starter={starter} stdin={str(values.stdin)} errors={errors} idPrefix={idPrefix} />
+      <CodeSolutionFields
+        language={language}
+        solution={solutionInputOf(values)}
+        solutionPublic={values.solutionPublic === true || values.solution_public === '1'}
+        trial={gradingEnabled && base ? `${base}/code/trial` : undefined}
+        errors={errors}
+        idPrefix={idPrefix}
+      />
       <CodeGradingFields
         gradingEnabled={gradingEnabled}
         criteria={str(values.criteria)}
@@ -238,6 +270,8 @@ const code: ExtraKind = {
       stdin: language === 'python' ? str(values.stdin) : '',
       criteria: str(values.criteria),
       constraints: edited ? constraintsOfForm(values) : [],
+      solution: edited ? filesFor(language, solutionInputOf(values)) : {},
+      solutionPublic: edited && values.solution_public === 1,
       opensAt: edited ? unixOf(str(values.opens_at)) : null,
       closesAt: edited ? unixOf(str(values.closes_at)) : null,
     }
@@ -254,8 +288,9 @@ const code: ExtraKind = {
           <CodeOpen
             base={`/courses/${access.course.id}/items/${item.id}/${CODE_KIND}`}
             language={settings.language}
-            goals={settings.constraints.map((c) => c.label)}
+            goals={goalsOf(settings.constraints)}
             grade={grade}
+            solution={publicSolutionOf(settings, codePeriodOf(data))}
             canManage={access.canManage}
           />
           {settings.body && (

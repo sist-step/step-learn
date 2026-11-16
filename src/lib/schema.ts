@@ -290,6 +290,10 @@ export const codeItems = sqliteTable(
     /** 学生が提出できる期間（長さは MAX_SUBMIT_PERIOD まで）。決まっていない（NULL）あいだは提出を受け付けない */
     opensAt: integer('opens_at'),
     closesAt: integer('closes_at'),
+    /** 教師が用意した解答例。AI の判定の参考にし、編集画面で制約の判定を試すのにも使う。なければ空 */
+    solution: text('solution', { mode: 'json' }).$type<CodeFiles>().notNull().default({}),
+    /** 提出の期間が終わったあと、解答例を学生に見せるか */
+    solutionPublic: integer('solution_public').notNull().default(0),
   },
   (t) => [check('code_items_language', sql`${t.language} IN ('web', 'python')`)],
 )
@@ -457,6 +461,9 @@ export const codeSubmissions = sqliteTable(
     verdicts: text('verdicts', { mode: 'json' }).$type<ConstraintResult[]>(),
     /** 教師から学生へのコメント */
     teacherComment: text('teacher_comment').notNull().default(''),
+    /** 学生が判定の確認を教師に頼んだ時刻と、教師が確認した時刻。頼んでいなければ NULL */
+    appealedAt: integer('appealed_at'),
+    appealClosedAt: integer('appeal_closed_at'),
     createdAt: integer('created_at').notNull().default(now),
   },
   (t) => [

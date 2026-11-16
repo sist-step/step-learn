@@ -25,6 +25,9 @@ export function codeSettingsOf(data: Record<string, unknown>, title = text(data.
     criteria: text(data.criteria),
     // 制約の欄ができる前に作ったアイテムは constraints を持たず、講評だけを返す
     constraints: Array.isArray(data.constraints) ? (data.constraints as CodeConstraint[]) : [],
+    // 解答例の欄ができる前に作ったアイテムは solution を持たない
+    solution: typeof data.solution === 'object' && data.solution !== null ? (data.solution as CodeFiles) : {},
+    solutionPublic: data.solutionPublic === true,
   }
 }
 
@@ -41,6 +44,8 @@ const SUMMARY = {
   userId: codeSubmissions.userId,
   status: codeSubmissions.status,
   verdicts: codeSubmissions.verdicts,
+  appealedAt: codeSubmissions.appealedAt,
+  appealClosedAt: codeSubmissions.appealClosedAt,
   createdAt: codeSubmissions.createdAt,
 }
 
@@ -81,6 +86,19 @@ export function codeStore(key: string): CodeStore {
       db.select(SUMMARY).from(codeSubmissions).where(ofUser(userId)).orderBy(desc(codeSubmissions.id)).limit(100).all(),
     review: (id, teacherComment) => void db.update(codeSubmissions).set({ teacherComment }).where(byId(id)).run(),
     setStatus: (id, status) => void db.update(codeSubmissions).set({ status }).where(byId(id)).run(),
+    overrideVerdicts: (id, verdicts) => void db.update(codeSubmissions).set({ verdicts }).where(byId(id)).run(),
+    appeal: (id) =>
+      void db
+        .update(codeSubmissions)
+        .set({ appealedAt: sql`(unixepoch())`, appealClosedAt: null })
+        .where(byId(id))
+        .run(),
+    closeAppeal: (id) =>
+      void db
+        .update(codeSubmissions)
+        .set({ appealClosedAt: sql`(unixepoch())` })
+        .where(byId(id))
+        .run(),
     // コースの学生を並べないのは、参加者が Moodle にあり、STEP Learn は自分にログインした人しか知らないため。提出した人だけを並べる
     listStudents: () =>
       db
@@ -113,5 +131,16 @@ export const grader = createGrader({
       .set({ ...result, verdicts: result.status === 'graded' ? result.verdicts : null, output })
       .where(eq(codeSubmissions.id, id))
       .run(),
+  pendingIds: () =>
+    db
+      .select({ id: codeSubmissions.id })
+      .from(codeSubmissions)
+      .where(eq(codeSubmissions.status, 'pending'))
+      .limit(1000)
+      .all()
+      .map((s) => s.id),
   ledger: aiLedger,
 })
+
+// 開発サーバーで戻さないのは、モジュールを読み込み直すたびに、前のモジュールが採点している提出をもう一度採点してしまうため
+if (!import.meta.env.DEV) grader.resume()

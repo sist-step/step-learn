@@ -4,12 +4,14 @@ import type { RunResult } from './sandbox'
 
 export type Student = { id: number; name: string; username: string | null; email: string }
 
-/** 提出の一覧に出す項目。中身のコードは含めない */
+/** 提出の一覧に出す項目。中身のコードは含めない。appealedAt は学生が判定の確認を頼んだ時刻、appealClosedAt は教師が確認した時刻 */
 export type SubmissionSummary = {
   id: number
   userId: number
   status: GradingStatus
   verdicts: ConstraintResult[] | null
+  appealedAt: number | null
+  appealClosedAt: number | null
   createdAt: number
 }
 
@@ -20,8 +22,11 @@ export type Submission = SubmissionSummary & {
   teacherComment: string
 }
 
-/** 提出の一覧の 1 行。count は提出の回数、latest はいちばん新しい提出 */
-export type StudentRow = { student: Student; count: number; latest: SubmissionSummary | null }
+/**
+ * 提出の一覧の 1 行。count は提出の回数、latest はいちばん新しい提出、cleared はどれかの提出でクリアしたか、
+ * appealed は、判定の確認を頼まれたまま教師が見ていない提出（あれば、そのうちいちばん新しいものの ID）
+ */
+export type StudentRow = { student: Student; count: number; latest: SubmissionSummary | null; cleared: boolean; appealed: number | null }
 
 /** コードのアイテムの設定 */
 export type CodeSettings = {
@@ -33,6 +38,10 @@ export type CodeSettings = {
   stdin: string
   criteria: string
   constraints: CodeConstraint[]
+  /** 教師が用意した解答例。なければ、どのファイルも空 */
+  solution: CodeFiles
+  /** 提出の期間が終わったあと、解答例を学生に見せるか */
+  solutionPublic: boolean
 }
 
 /** AI の採点の結果。verdicts は制約ごとの判定で、制約のないアイテムでは null。採点できなかったときは status が failed */
@@ -54,6 +63,12 @@ export interface CodeStore {
   listUserSubmissions(userId: number): SubmissionSummary[]
   review(id: number, teacherComment: string): void
   setStatus(id: number, status: GradingStatus): void
+  /** 教師が変えた判定で書き換える。完了を数えるモードでは、その学生の完了も判定に合わせ直す */
+  overrideVerdicts(id: number, verdicts: ConstraintResult[]): void
+  /** 学生が、判定の確認を教師に頼む */
+  appeal(id: number): void
+  /** 教師が、頼まれた判定の確認を済ませる */
+  closeAppeal(id: number): void
   /** 提出の一覧に並べる学生 */
   listStudents(): Student[]
   findUser(userId: number): Student | undefined

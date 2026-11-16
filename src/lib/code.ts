@@ -24,13 +24,26 @@ export const GRADING_STATUS_LABELS: Record<GradingStatus, string> = {
 
 /**
  * 判定の観点の 1 つ。label は学生にも見せる短い名前（「クリアの条件」として並べる）、
- * text は AI が判定に使う詳しい内容で、学生には見せない。text が空なら label で判定する
+ * text は AI が判定に使う詳しい内容で、学生には見せない。text が空なら label で判定する。
+ * optional は発展の制約で、判定はするがクリアには数えない
  */
-export type CodeConstraint = { label: string; text: string }
+export type CodeConstraint = { label: string; text: string; optional?: boolean }
+
+export const CONSTRAINT_KINDS = ['required', 'optional'] as const
+
+export type ConstraintKind = (typeof CONSTRAINT_KINDS)[number]
+
+export const CONSTRAINT_KIND_LABELS: Record<ConstraintKind, string> = { required: '必須', optional: '発展' }
 
 export const MAX_CONSTRAINTS = 30
 export const MAX_CONSTRAINT_LABEL_LENGTH = 60
 export const MAX_CONSTRAINT_LENGTH = 300
+
+/** 学生に見せるクリアの条件。制約のうち、ラベルと、発展かどうかだけを持つ */
+export type Goal = { label: string; optional: boolean }
+
+export const goalsOf = (constraints: readonly CodeConstraint[]): Goal[] =>
+  constraints.map(({ label, optional }) => ({ label, optional: !!optional }))
 
 /** AI に渡す制約の書き方。内容があれば、ラベルと内容を並べる */
 export const describeConstraint = ({ label, text }: CodeConstraint) => (text ? `${label}（${text}）` : label)
@@ -52,7 +65,14 @@ export type ConstraintResult = CodeConstraint & {
   reason: string
   /** 判定の確からしさ（0〜1）。判定だけを返すモデル（Jev）で判定したときだけ入る */
   confidence?: number
+  /** 判定の根拠になった、提出したコードの一部。提出の中にあることを確かめたものだけが入る */
+  evidence?: Evidence
+  /** 教師が判定を変えたときの、AI の元の判定 */
+  aiVerdict?: Verdict
 }
+
+/** 判定の根拠。line は file の中で quote が始まる行（1 から数える） */
+export type Evidence = { file: CodeFileKey; line: number; quote: string }
 
 /** 制約ごとの判定をするもの。llm は文章を作る AI（理由と講評も書く）、jev は判定だけを返す Jev */
 export const JUDGES = ['llm', 'jev'] as const
@@ -63,15 +83,34 @@ export const isJudge = (s: unknown): s is Judge => (JUDGES as readonly unknown[]
 
 export const JUDGE_LABELS: Record<Judge, string> = { llm: 'AI', jev: 'Jev' }
 
-/** 判定のうち、できている（pass）の数 */
-export const clearedCount = (verdicts: readonly ConstraintResult[]) => verdicts.filter((v) => v.verdict === 'pass').length
+/** 必須の制約と発展の制約それぞれの、判定の数（total）と、そのうちできている（pass）の数（passed） */
+export function verdictCounts(verdicts: readonly ConstraintResult[]) {
+  const count = (list: readonly ConstraintResult[]) => ({ passed: list.filter((v) => v.verdict === 'pass').length, total: list.length })
+  return { required: count(verdicts.filter((v) => !v.optional)), optional: count(verdicts.filter((v) => v.optional)) }
+}
 
-/** すべての制約ができている。制約のない提出（判定がない）はクリアにしない */
-export const isCleared = (verdicts: readonly ConstraintResult[] | null): boolean =>
-  !!verdicts?.length && clearedCount(verdicts) === verdicts.length
+/** 必須の制約がすべてできている。発展の制約は数えない。制約のない提出（判定がない）はクリアにしない */
+export function isCleared(verdicts: readonly ConstraintResult[] | null): boolean {
+  const { required } = verdictCounts(verdicts ?? [])
+  return required.total > 0 && required.passed === required.total
+}
 
 /** 提出の期間の長さの上限（秒）。提出のたびに AI の利用料がかかるので、受け付ける時間を区切る */
-export const MAX_SUBMIT_PERIOD = 24 * 60 * 60
+export const MAX_SUBMIT_PERIOD = 7 * 24 * 60 * 60
+
+/** これ以上の長さの提出の期間は、編集画面と学生の画面で、長いことが分かるように出す */
+export const LONG_SUBMIT_PERIOD = 24 * 60 * 60
+
+/** 期間の長さの表示（「45 分」「5 時間 30 分」「2 日 3 時間」）。分の端数は切り捨てる */
+export function formatPeriodLength(seconds: number) {
+  const minutes = Math.floor(seconds / 60)
+  const parts = [
+    { value: Math.floor(minutes / (24 * 60)), unit: '日' },
+    { value: Math.floor(minutes / 60) % 24, unit: '時間' },
+    { value: minutes % 60, unit: '分' },
+  ].filter((p) => p.value > 0)
+  return parts.length ? parts.map((p) => `${p.value} ${p.unit}`).join(' ') : '0 分'
+}
 
 /** 学生が提出できる期間。どちらかが null なら、まだ決まっていない */
 export type SubmitPeriod = { opensAt: number | null; closesAt: number | null }
@@ -85,6 +124,19 @@ export function submitStateOf(period: SubmitPeriod | null, now = Math.floor(Date
   if (period.opensAt == null || period.closesAt == null) return 'unset'
   return now < period.opensAt ? 'upcoming' : now >= period.closesAt ? 'closed' : 'open'
 }
+
+/**
+ * 学生に見せる解答例。教師が見せると決めていて、提出の期間が終わったあとだけ返す。
+ * 期間を設けないモードで見せないのは、提出の受付が終わらず、解答例を見てから提出できてしまうため
+ */
+export const publicSolutionOf = (
+  { language, solution, solutionPublic }: { language: CodeLanguage; solution: CodeFiles; solutionPublic: boolean },
+  period: SubmitPeriod | null,
+): CodeFiles | null =>
+  solutionPublic && hasCode(solution) && period !== null && submitStateOf(period) === 'closed' ? filesFor(language, solution) : null
+
+/** 判定を待っている提出の、前にある提出の数の表示 */
+export const aheadText = (ahead: number) => (ahead > 0 ? `（前に ${ahead} 件の提出が待っています）` : '')
 
 /** 残りの秒数の表示（「42 秒」「15 分」「2 時間 5 分」）。1 分以上は分の端数を切り上げる */
 export function formatWait(seconds: number) {
@@ -141,6 +193,19 @@ export const DEFAULT_STARTER: Record<CodeLanguage, CodeFiles> = {
 /** その言語のファイルだけを取り出す。ないファイルは空にする */
 export const filesFor = (language: CodeLanguage, files: CodeFiles): CodeFiles =>
   Object.fromEntries(CODE_FILES[language].map((f) => [f.key, files[f.key] ?? '']))
+
+/** その言語のファイルの中身が、どれも同じ */
+export const sameFiles = (language: CodeLanguage, a: CodeFiles, b: CodeFiles) =>
+  CODE_FILES[language].every((f) => (a[f.key] ?? '') === (b[f.key] ?? ''))
+
+/** どれかのファイルに中身がある */
+export const hasCode = (files: CodeFiles) => Object.values(files).some((code) => !!code?.trim())
+
+/** 学生が判定の確認を教師に頼んだ状態。open は教師がまだ見ていない、closed は教師が確認した */
+export type AppealState = 'none' | 'open' | 'closed'
+
+export const appealStateOf = (s: { appealedAt: number | null; appealClosedAt: number | null }): AppealState =>
+  s.appealedAt == null ? 'none' : s.appealClosedAt == null ? 'open' : 'closed'
 
 export const PREVIEW_SOURCE = 'step-learn-preview'
 

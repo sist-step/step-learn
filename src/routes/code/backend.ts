@@ -32,7 +32,7 @@ async function openable(user: User, itemId: number, access?: CourseAccess | null
   return {
     access: granted,
     completion: item.completion,
-    settings: { title: item.title, body: item.body, ...code },
+    settings: { title: item.title, body: item.body, ...code, solutionPublic: code.solutionPublic === 1 },
     period: { opensAt: code.opensAt, closesAt: code.closesAt },
     store: codeStore(item.courseId, itemId),
   }

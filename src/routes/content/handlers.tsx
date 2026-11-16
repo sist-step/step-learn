@@ -29,13 +29,15 @@ import {
   MAX_CONSTRAINTS,
   MAX_STDIN_LENGTH,
   JUDGE_LABELS,
+  goalsOf,
+  publicSolutionOf,
 } from '../../lib/code'
 import { gradingEnabled, submissionsOf } from '../../lib/code-grader'
 import { currentJudge, grader, judgeSwitchable, setJudge } from '../../lib/code-grading'
 import { codeStore, getCodeItem, updateCodeItem } from '../../lib/code-items'
 import { dateTimeInputToUnix } from '../../lib/course-period'
 import { db } from '../../lib/db'
-import { completionError, firstError, isFile, readConstraints, validate, type FieldErrors } from '../../lib/forms'
+import { completionError, firstError, isFile, readConstraints, solutionOf, validate, type FieldErrors } from '../../lib/forms'
 import { field, fileField, intParam, readFields, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
 import { previewKind } from '../../lib/preview'
 import { DEFAULT_PASS_PERCENT, MAX_QUIZ_JSON_LENGTH, isQuizLook, readQuizForm } from '../../lib/quiz'
@@ -227,7 +229,15 @@ function readItemInput(form: Form): ItemInput {
     constraints: listField(form, 'constraint_label[]', MAX_CONSTRAINTS * 2).map((label, i) => ({
       label: label.slice(0, MAX_CONSTRAINT_LABEL_LENGTH * 2),
       text: (listField(form, 'constraint_text[]', MAX_CONSTRAINTS * 2)[i] ?? '').slice(0, MAX_CONSTRAINT_LENGTH * 2),
+      optional: listField(form, 'constraint_kind[]', MAX_CONSTRAINTS * 2)[i] === 'optional',
     })),
+    solution: {
+      html: sourceField(form, 'solution_html', MAX_CODE_LENGTH),
+      css: sourceField(form, 'solution_css', MAX_CODE_LENGTH),
+      js: sourceField(form, 'solution_js', MAX_CODE_LENGTH),
+      py: sourceField(form, 'solution_py', MAX_CODE_LENGTH),
+    },
+    solutionPublic: field(form, 'solution_public', 1) === '1',
     opensAt: field(form, 'opens_at', 16),
     closesAt: field(form, 'closes_at', 16),
     userLimit: field(form, 'user_limit', 20),
@@ -420,6 +430,8 @@ export async function updateItem(c: Context<AppEnv>) {
       stdin: input.stdin,
       criteria: input.criteria ?? '',
       constraints: readConstraints(input).constraints,
+      solution: solutionOf(input),
+      solutionPublic: input.solution_public,
       opensAt: dateTimeInputToUnix(input.opens_at ?? ''),
       closesAt: dateTimeInputToUnix(input.closes_at ?? ''),
     })
@@ -659,13 +671,12 @@ export async function showItem(c: Context<AppEnv>) {
   const next = ordered[idx + 1]
   const section = sectionList.find((s) => s.id === item.sectionId)
   const codeItem = item.type === 'code' ? getCodeItem(iid) : undefined
+  const codePeriod = codeItem && { opensAt: codeItem.opensAt, closesAt: codeItem.closesAt }
   const code = codeItem && {
     language: codeItem.language,
-    goals: codeItem.constraints.map((c) => c.label),
-    grade:
-      access.role === 'student'
-        ? submissionsOf(codeStore(id, iid), userId, grader, { opensAt: codeItem.opensAt, closesAt: codeItem.closesAt }).grade
-        : null,
+    goals: goalsOf(codeItem.constraints),
+    grade: access.role === 'student' ? submissionsOf(codeStore(id, iid), userId, grader, codePeriod!).grade : null,
+    solution: publicSolutionOf({ ...codeItem, solutionPublic: codeItem.solutionPublic === 1 }, codePeriod!),
   }
   const textPreview =
     item.type === 'file' && item.fileKey && item.fileSize && previewKind(item.fileType ?? '', item.fileName ?? '') === 'text'
