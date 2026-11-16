@@ -65,6 +65,10 @@
 @media (hover: hover) {
   .ai-suggestion:hover, .ai-reply:hover { border-color: var(--border-strong); background: var(--surface-2); }
 }
+.ai-suggestion { animation: rise 0.2s var(--ease); }
+.ai-suggestion.is-loading { height: calc(var(--fs-sm) * 1.5 + 20px); background: var(--surface-2); pointer-events: none; animation: pulse 1.4s ease-in-out infinite; }
+.ai-suggestion.is-loading:nth-child(2) { width: 82%; animation-delay: 0.15s; }
+.ai-suggestion.is-loading:nth-child(3) { width: 64%; animation-delay: 0.3s; }
 
 /* AI の発言の下に左寄せで並べないのは、AI の発言の続きではなく、利用者が送る発言の候補だと分かるようにするため */
 .ai-replies { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-top: -4px; animation: rise 0.2s var(--ease); }

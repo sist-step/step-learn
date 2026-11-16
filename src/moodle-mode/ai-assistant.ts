@@ -3,12 +3,13 @@ import { AI_PROVIDERS, hasAiEmail, isProviderEnabled } from '../lib/ai'
 import { createAiAgent } from '../lib/ai-agent'
 import { createAiChatStore } from '../lib/ai-chat'
 import { DOCS_ABILITIES, docsTools } from '../lib/ai-docs'
+import { pageTarget } from '../lib/ai-suggestions'
 import type { AiToolContext } from '../lib/ai-tool-kit'
 import { aiLedger } from './ai-usage'
-import { MOODLE_AI_TOOLS } from './ai-tools'
+import { kindLabel, MOODLE_AI_TOOLS } from './ai-tools'
 import { moodleAiUploadStore } from './ai-uploads'
 import type { MoodleEnv } from './auth'
-import { loadCourse, myCourses } from './data'
+import { loadCourse, myCourses, outlineOf } from './data'
 import { db } from './db'
 import { aiChats } from './schema'
 
@@ -28,9 +29,27 @@ async function pageContext(c: AiToolContext, page: string) {
     if (!loaded.access.canManage) return `「${page}」の画面`
     const course = `コース「${loaded.course.fullname}」（course_id: ${loaded.course.id}）`
     const item = match[2] ? loaded.items.find((it) => it.id === Number(match[2])) : undefined
-    return item ? `${course}のアイテム「${item.title}」（item_id: ${item.id}）の画面` : `${course}の画面`
+    return item ? `${course}の${kindLabel(item)}のアイテム「${item.title}」（item_id: ${item.id}）の画面` : `${course}の画面`
   } catch {
     return `「${page}」の画面`
+  }
+}
+
+// コースの下の画面をすべて開けることにしないのは、編集の画面のように教師にしか開けない画面があり、学生に開けるのはコースのページとアイテムの画面だけのため
+async function canOpenPage(c: AiToolContext, page: string) {
+  const target = pageTarget(page)
+  if (target.kind === 'admin') return c.var.user!.role === 'admin'
+  if (target.kind === 'other') return true
+  try {
+    const loaded = await loadCourse(c as Context<MoodleEnv>, target.courseId)
+    const item = target.itemId === null ? null : loaded.items.find((it) => it.id === target.itemId)
+    if (item === undefined) return false
+    if (loaded.access.canManage) return true
+    if (!target.view) return false
+    return !item || (!item.locked && outlineOf(loaded).some((o) => o.id === item.id))
+  } catch {
+    // 開けないことにするのは、参加していないコースでは Moodle がエラーを返し、つながらないときと見分けられないため
+    return false
   }
 }
 
@@ -40,6 +59,7 @@ export const moodleAssistant = createAiAgent({
   ledger: aiLedger,
   chats: createAiChatStore({ db, aiChats }),
   pageContext,
+  canOpenPage,
   files: moodleAiUploadStore,
   abilities: [
     '利用者が管理しているコースの内容を読めます。教材は Moodle にあり、Moodle の活動（課題・小テストなど）は名前と種類だけが分かります。',
