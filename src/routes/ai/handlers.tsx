@@ -78,6 +78,9 @@ function entriesOf({ messages, labels, cards, touched, compactions = [] }: AiCha
   })
 }
 
+const focusChip = ({ focus }: AiChatContent) =>
+  focus ? { title: focus.title, href: `/courses/${focus.courseId}/items/${focus.itemId}/edit` } : null
+
 const NDJSON_HEADERS = {
   'Content-Type': 'application/x-ndjson; charset=utf-8',
   'Cache-Control': 'no-store',
@@ -124,6 +127,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
         replies: chat.content.replies ?? [],
         busy: agent.isRunning(user.id),
         context: contextPercent(chat.content),
+        focus: focusChip(chat.content),
       },
     }
   }
@@ -152,7 +156,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     const result = validate('aiMessage', await readForm(c))
     return streamEvents(c, async (emit) => {
       if (!result.ok) return emit({ type: 'error', message: firstError(result.errors), retract: true })
-      const { message, model, chat: chatId, page, hard, revision } = result.values
+      const { message, model, chat: chatId, page, hard, revision, focus: focusField } = result.values
 
       let chat = chats.currentChat(user.id)
       // 古い画面からの発言を今のチャットに足さないのは、利用者が読んでいない発言を踏まえた応答になり、チャットがないと思って送ると、ほかのタブのチャットを消して始めてしまうため
@@ -179,7 +183,10 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
         // チャットを作る前に確かめるのは、使えないモデルで始めたチャットが残ると、モデルを選び直せなくなるため
         const problem = quotaProblem(ledger.getQuota(user.id, model))
         if (problem) return emit({ type: 'error', message: problem, retract: true })
-        chat = chats.startChat(user.id, model)
+        const focusIds = focusField.match(/^(\d+)\/(\d+)$/)
+        const focus = focusIds ? await agent.focusOf(c, Number(focusIds[1]), Number(focusIds[2])) : null
+        if (focusField && !focus) return emit({ type: 'error', message: 'このコーディング問題は選べません。', retract: true })
+        chat = chats.startChat(user.id, model, focus ?? undefined)
         emit({ type: 'chat', id: chat.id })
       }
       await agent.send({ c, chat, message, page, hard: hard === 1 }, emit)

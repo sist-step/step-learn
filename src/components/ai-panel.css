@@ -139,6 +139,13 @@
 .ai-models { align-self: stretch; }
 .ai-models label { flex: 1; text-align: center; }
 .ai-models span { justify-content: center; font-size: var(--fs-xs); }
+.ai-focus { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 4px 10px; border-radius: 999px; background: var(--c-soft); color: var(--c-ink); font-size: var(--fs-xs); }
+.ai-focus[hidden] { display: none; }
+.ai-focus .icon { flex: none; }
+.ai-focus-label { flex: none; font-weight: 600; }
+.ai-focus-title { min-width: 0; color: inherit; text-decoration: none; }
+.ai-focus-clear { flex: none; width: 22px; height: 22px; margin: -2px -6px -2px auto; color: inherit; }
+@media (hover: hover) { .ai-focus-title:hover { text-decoration: underline; } }
 .ai-input { position: relative; display: flex; flex-direction: row; align-items: flex-end; gap: 6px; padding: 6px; border: 1px solid var(--field-border); border-radius: var(--radius-field); background: var(--surface); transition: border-color 0.15s, box-shadow 0.15s; }
 .ai-input:focus-within { border-color: var(--focus); box-shadow: var(--ring-field); }
 .ai-input.has-error { border-color: var(--danger); }
