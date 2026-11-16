@@ -1,7 +1,7 @@
 import { Button } from '../../components/button'
 import { Card, Stat, Stats, Table } from '../../components/card'
 import { CodeBarActions, CodeWorkspace, VerdictList, verdictSummary, type SubmissionsView } from '../../components/code'
-import { ItemBar } from '../../components/course'
+import { CompletionStatus, ItemBar } from '../../components/course'
 import { TextAreaField, validateWith } from '../../components/form'
 import { AppShell } from '../../components/layout'
 import { Styles } from '../../components/style'
@@ -10,6 +10,7 @@ import { CODE_FILES, GRADING_STATUS_LABELS, buildWebDocument, isCleared, type Co
 import type { Student, StudentRow, Submission, SubmissionSummary } from '../../lib/code-store'
 import type { CourseAccess } from '../../lib/courses'
 import type { RunResult } from '../../lib/sandbox'
+import type { Completion } from '../../lib/types'
 
 type CodeTarget = { id: number; title: string; language: CodeLanguage }
 
@@ -23,26 +24,31 @@ const crumbs = (access: CourseAccess, item: CodeTarget, pageUrl: string, student
   ...(student ? [{ href: submissionsUrl(access.course.id, item.id), label: '提出' }] : []),
 ]
 
-/** エディターだけの画面。Moodle モードのように、アイテムの画面にエディターを組み込まないときに使う */
+/** Web エディターの画面。アイテムの画面の「Web エディターで開く」から開く */
 export const CodePage = ({
   access,
   item,
+  itemUrl,
   body,
   goals,
   canRun,
   submissions,
+  completion,
 }: {
   access: CourseAccess
   item: CodeTarget
+  /** アイテムの画面（戻る先） */
+  itemUrl: string
   body: string
   /** 学生に見せるクリアの条件（制約のラベル） */
   goals: string[]
   canRun: boolean
   /** 見ている学生の提出 */
   submissions: SubmissionsView | null
+  /** 見ている学生の完了の状態。完了を数えないときは渡さない */
+  completion?: { completion: Completion; done: boolean }
 }) => {
-  const itemUrl = `/courses/${access.course.id}/items/${item.id}`
-  const base = `${itemUrl}/code`
+  const base = `/courses/${access.course.id}/items/${item.id}/code`
   return (
     <AppShell
       tone={access.course.color}
@@ -52,8 +58,9 @@ export const CodePage = ({
           crumbs={[
             { href: '/courses', label: 'コース一覧' },
             { href: `/courses/${access.course.id}`, label: access.course.title },
+            { href: itemUrl, label: item.title },
           ]}
-          title={item.title}
+          title="Web エディター"
         >
           {access.canManage && (
             <Button href={`${itemUrl}/edit`} variant="ghost" size="sm" icon="pencil" aria-label="編集">
@@ -72,6 +79,7 @@ export const CodePage = ({
         goals={goals}
         canRun={canRun}
         submissions={submissions}
+        completion={completion && <CompletionStatus itemId={item.id} type="code" {...completion} />}
       />
     </AppShell>
   )

@@ -1,14 +1,13 @@
 import { AGENT_BODY_HINT, AgentEditPanel, AgentInstructionsField, AgentModelCard, AgentOpen, AgentPeriodCard } from '../../components/agent'
 import { BundleEditPanel, BundleOpen, type BundleView } from '../../components/bundle'
 import {
-  CodeBarActions,
   CodeGradingCard,
+  CodeOpen,
   CodePeriodCard,
   CodeStarterCard,
   CodeSuggest,
-  CodeWorkspace,
   type ConstraintRow,
-  type SubmissionsView,
+  type GradeView,
 } from '../../components/code'
 import {
   CompletionField,
@@ -75,8 +74,8 @@ export type ItemInput = {
   model: string
 }
 
-/** コードのアイテムの言語と、見ている学生の提出。goals は学生に見せるクリアの条件（制約のラベル） */
-export type CodeView = { language: CodeLanguage; canRun: boolean; goals: string[]; submissions: SubmissionsView | null }
+/** コードのアイテムの言語と、見ている学生のいちばん新しい提出。goals は学生に見せるクリアの条件（制約のラベル） */
+export type CodeView = { language: CodeLanguage; goals: string[]; grade: GradeView | null }
 
 export type OutlineItem = Pick<
   Item,
@@ -399,253 +398,234 @@ export const ItemPage = ({
     </PdfBar>
   ) : undefined
 
-  const codeBar = code ? (
-    <ItemBar type="code" crumbs={barCrumbs} title={item.title} hiddenNote={hiddenNote}>
-      {editButton}
-      <CodeBarActions base={`${base}/${item.id}/code`} canManage={access.canManage} submissions={code.submissions} />
-    </ItemBar>
-  ) : undefined
-
   return (
-    <AppShell tone={access.course.color} topbar={pdfBar ?? codeBar}>
+    <AppShell tone={access.course.color} topbar={pdfBar}>
       <Styles
         use={['/src/routes/content/content.css', ...(restricted.locked.size > 0 ? (['/src/components/restriction.css'] as const) : [])]}
       />
-      {pdf ? (
-        <PdfStage src={previewUrl} title={item.fileName ?? 'プレビュー'} />
-      ) : code ? (
-        <CodeWorkspace
-          itemId={item.id}
-          base={`${base}/${item.id}/code`}
-          language={code.language}
-          body={item.body}
-          goals={code.goals}
-          canRun={code.canRun}
-          submissions={code.submissions}
-          completion={
-            isStudent &&
-            isTracked(item) && <CompletionStatus itemId={item.id} type={item.type} completion={item.completion} done={isDone} />
-          }
-        />
-      ) : (
-        crumbs
-      )}
-      {/* コードのアイテムで本文の欄を出さないのは、エディターを画面いっぱいに置き、ページをスクロールさせないため */}
-      {code && waitsFor(item, 'view') && <span hidden data-complete-on-view={completeUrl(item)} />}
-      {!code && (
-        <div class="reader" data-outline-kind={item.type}>
-          <article class="reader-main" data-ai-watch={`item:${item.id}`}>
-            {!pdf && head}
+      {pdf ? <PdfStage src={previewUrl} title={item.fileName ?? 'プレビュー'} /> : crumbs}
+      <div class="reader" data-outline-kind={item.type}>
+        <article class="reader-main" data-ai-watch={`item:${item.id}`}>
+          {!pdf && head}
 
-            {item.type === 'link' && embedded && <LinkEmbed url={item.url} title={item.title} />}
+          {item.type === 'link' && embedded && <LinkEmbed url={item.url} title={item.title} />}
 
-            {item.type === 'link' && !embedded && (
-              <LinkCard
-                icon="link"
-                class={`link-card-lg kind-${item.type}`}
-                {...linkOpenAttrs(item.url, item.linkTarget, navHref(item))}
-                {...onOpen(item)}
-              >
+          {item.type === 'link' && !embedded && (
+            <LinkCard
+              icon="link"
+              class={`link-card-lg kind-${item.type}`}
+              {...linkOpenAttrs(item.url, item.linkTarget, navHref(item))}
+              {...onOpen(item)}
+            >
+              <span class="file-name">
+                <span class="strong">外部サイトを開く</span>
+                <span class="muted small truncate">{hostName(item.url)}</span>
+              </span>
+              <Button as="span" variant="primary" iconEnd="external">
+                開く
+              </Button>
+            </LinkCard>
+          )}
+
+          {code && (
+            <CodeOpen
+              base={`${base}/${item.id}/code`}
+              language={code.language}
+              goals={code.goals}
+              grade={code.grade}
+              canManage={access.canManage}
+            />
+          )}
+
+          {bundle && (
+            <BundleOpen base={bundleBase(id, item.id)} {...bundle} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />
+          )}
+
+          {agent && (
+            <AgentOpen base={agentBase(id, item.id)} {...agent} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />
+          )}
+
+          {item.type === 'screen' && (
+            <LinkCard
+              href={`${base}/${item.id}/screen`}
+              icon="monitor"
+              class={`link-card-lg kind-${item.type}`}
+              target="_blank"
+              rel="noopener"
+              data-no-prefetch
+            >
+              <span class="file-name">
+                <span class="strong">画面共有を開く</span>
+                <span class="muted small truncate">別のタブで開きます</span>
+              </span>
+              {sharing && <Chip tone="live">配信中</Chip>}
+              <Button as="span" variant="primary" iconEnd="external">
+                開く
+              </Button>
+            </LinkCard>
+          )}
+
+          {item.type === 'file' && !pdf && (
+            <>
+              <LinkCard icon="file" class={`link-card-lg kind-${item.type}`}>
                 <span class="file-name">
-                  <span class="strong">外部サイトを開く</span>
-                  <span class="muted small truncate">{hostName(item.url)}</span>
+                  <span class="strong">ファイルをダウンロード</span>
+                  <span class="file-meta muted small">
+                    <span class="truncate">{item.fileName}</span>
+                    <span>{formatBytes(item.fileSize ?? 0)}</span>
+                  </span>
                 </span>
-                <Button as="span" variant="primary" iconEnd="external">
-                  開く
+                <Button href={fileUrl} variant="primary" icon="download" data-no-prefetch download {...onOpen(item)}>
+                  ダウンロード
                 </Button>
               </LinkCard>
-            )}
-
-            {bundle && (
-              <BundleOpen base={bundleBase(id, item.id)} {...bundle} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />
-            )}
-
-            {agent && (
-              <AgentOpen base={agentBase(id, item.id)} {...agent} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />
-            )}
-
-            {item.type === 'screen' && (
-              <LinkCard
-                href={`${base}/${item.id}/screen`}
-                icon="monitor"
-                class={`link-card-lg kind-${item.type}`}
-                target="_blank"
-                rel="noopener"
-                data-no-prefetch
-              >
-                <span class="file-name">
-                  <span class="strong">画面共有を開く</span>
-                  <span class="muted small truncate">別のタブで開きます</span>
-                </span>
-                {sharing && <Chip tone="live">配信中</Chip>}
-                <Button as="span" variant="primary" iconEnd="external">
-                  開く
-                </Button>
-              </LinkCard>
-            )}
-
-            {item.type === 'file' && !pdf && (
-              <>
-                <LinkCard icon="file" class={`link-card-lg kind-${item.type}`}>
-                  <span class="file-name">
-                    <span class="strong">ファイルをダウンロード</span>
-                    <span class="file-meta muted small">
-                      <span class="truncate">{item.fileName}</span>
-                      <span>{formatBytes(item.fileSize ?? 0)}</span>
-                    </span>
-                  </span>
-                  <Button href={fileUrl} variant="primary" icon="download" data-no-prefetch download {...onOpen(item)}>
-                    ダウンロード
-                  </Button>
-                </LinkCard>
-                {textPreview !== null && (
-                  <div class="file-preview-text">
-                    <pre>{textPreview}</pre>
-                    {(item.fileSize ?? 0) > TEXT_PREVIEW_MAX && (
-                      <p class="muted small">
-                        先頭の {formatBytes(TEXT_PREVIEW_MAX)} だけを表示しています。全体はダウンロードして確認してください。
-                      </p>
-                    )}
-                  </div>
-                )}
-                {preview === 'image' && <img class="file-preview-img" src={previewUrl} alt={item.title} loading="lazy" />}
-                {preview === 'video' && (
-                  <video
-                    class="file-preview-video"
-                    src={previewUrl}
-                    controls
-                    preload="metadata"
-                    data-complete-on-ended={waitsFor(item, 'play') ? completeUrl(item) : undefined}
-                  />
-                )}
-                {preview === 'audio' && (
-                  <audio
-                    class="file-preview-audio"
-                    src={previewUrl}
-                    controls
-                    preload="metadata"
-                    data-complete-on-ended={waitsFor(item, 'play') ? completeUrl(item) : undefined}
-                  />
-                )}
-              </>
-            )}
-
-            {(item.body || item.type === 'page') && (
-              <div class="reader-sheet">{item.body ? <Markdown source={item.body} /> : <p class="muted">本文はまだありません。</p>}</div>
-            )}
-
-            {quiz && <QuizPanel quiz={quiz} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />}
-
-            {waitsFor(item, 'view') && opensOnView && <span hidden data-complete-on-view={completeUrl(item)} />}
-
-            {isStudent && isTracked(item) && item.completion !== 'manual' && (
-              <div class="complete-bar">
-                <CompletionStatus itemId={item.id} type={item.type} completion={item.completion} done={isDone} />
-              </div>
-            )}
-
-            {isStudent && isTracked(item) && item.completion === 'manual' && (
-              <form method="post" action={completeUrl(item)} class="complete-bar" data-complete>
-                <Button
-                  type="submit"
-                  variant={isDone ? 'success' : next ? 'default' : 'primary'}
-                  size="lg"
-                  icon="check"
-                  aria-pressed={isDone ? 'true' : 'false'}
-                  data-complete-secondary={!isDone && next ? '' : undefined}
-                >
-                  <span data-complete-label>{isDone ? '完了済み' : '完了にする'}</span>
-                </Button>
-                {!isDone && next && (
-                  <Button type="submit" variant="primary" size="lg" iconEnd="chevronRight" data-complete-then={navHref(next)}>
-                    完了して次へ
-                  </Button>
-                )}
-              </form>
-            )}
-
-            <nav class="pager" aria-label="前後のアイテム">
-              {prev && (
-                <a href={navHref(prev)} class="pager-link pager-prev">
-                  <span class="pager-arrow">
-                    <Icon name="chevronLeft" size={18} />
-                  </span>
-                  <span class="pager-text">
-                    <span class="pager-label muted small">前へ</span>
-                    <span class="pager-title truncate">{prev.title}</span>
-                  </span>
-                </a>
-              )}
-              <a href={next ? navHref(next) : `/courses/${id}`} class="pager-link pager-next">
-                <span class="pager-text">
-                  <span class="pager-label muted small">{next ? '次へ' : 'コースへ'}</span>
-                  <span class="pager-title truncate">{next ? next.title : access.course.title}</span>
-                </span>
-                <span class="pager-arrow">
-                  <Icon name="chevronRight" size={18} />
-                </span>
-              </a>
-            </nav>
-          </article>
-
-          <aside class="reader-outline" aria-label="コースの目次">
-            <div class="outline-head">
-              <a href={`/courses/${id}`} class="strong truncate">
-                {access.course.title}
-              </a>
-              {isStudent && tracked.length > 0 && (
-                <span class="muted small">
-                  <span data-progress-done>{tracked.filter((o) => done.has(o.id)).length}</span> / {tracked.length} 完了
-                </span>
-              )}
-              <OutlineToggle />
-            </div>
-            {outlineSections.map(({ section: s, items }) => (
-              <div class={cx('outline-section', items.length === 0 && 'is-empty')}>
-                <div class={cx('outline-title', !!s.hidden && 'is-hidden')}>
-                  {s.title}
-                  {!!s.hidden && <Icon name="eyeSlash" size={12} />}
-                  {items.length === 0 && <span class="outline-count">0</span>}
+              {textPreview !== null && (
+                <div class="file-preview-text">
+                  <pre>{textPreview}</pre>
+                  {(item.fileSize ?? 0) > TEXT_PREVIEW_MAX && (
+                    <p class="muted small">
+                      先頭の {formatBytes(TEXT_PREVIEW_MAX)} だけを表示しています。全体はダウンロードして確認してください。
+                    </p>
+                  )}
                 </div>
-                {items.length > 0 && (
-                  <ul>
-                    {items.map((o) => (
-                      <li>
-                        {restricted.locked.has(o.id) ? (
-                          <span class="outline-link is-locked" data-item={o.id}>
-                            <Icon name="lock" size={14} class="outline-kind" />
-                            <span class="truncate">{o.title}</span>
-                          </span>
-                        ) : (
-                          <a
-                            href={o.type === 'screen' ? `${navHref(o)}/screen` : navHref(o)}
-                            class={cx('outline-link', o.id === item.id && 'active', isHidden(o) && 'is-hidden')}
-                            data-item={o.id}
-                            {...(opensNewTab(o) ? { target: '_blank', rel: 'noopener', 'data-no-prefetch': '' } : {})}
-                            {...(o.type === 'link' ? linkOpenAttrs(o.url, o.linkTarget, navHref(o)) : {})}
-                            aria-current={o.id === item.id ? 'page' : undefined}
-                            {...(o.type === 'link' && o.linkTarget !== 'embed' ? onOpen(o) : {})}
-                          >
-                            {isTracked(o) ? (
-                              <span class={cx('outline-dot', done.has(o.id) && 'done')} data-outline-dot={o.id}>
-                                {done.has(o.id) && <Icon name="check" size={10} />}
-                              </span>
-                            ) : (
-                              <Icon name={ITEM_ICONS[o.type]} size={14} class="outline-kind" />
-                            )}
-                            <span class="truncate">{o.title}</span>
-                            {!!o.hidden && <Icon name="eyeSlash" size={12} class="outline-hidden" />}
-                          </a>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
+              )}
+              {preview === 'image' && <img class="file-preview-img" src={previewUrl} alt={item.title} loading="lazy" />}
+              {preview === 'video' && (
+                <video
+                  class="file-preview-video"
+                  src={previewUrl}
+                  controls
+                  preload="metadata"
+                  data-complete-on-ended={waitsFor(item, 'play') ? completeUrl(item) : undefined}
+                />
+              )}
+              {preview === 'audio' && (
+                <audio
+                  class="file-preview-audio"
+                  src={previewUrl}
+                  controls
+                  preload="metadata"
+                  data-complete-on-ended={waitsFor(item, 'play') ? completeUrl(item) : undefined}
+                />
+              )}
+            </>
+          )}
+
+          {(item.body || item.type === 'page') && (
+            <div class="reader-sheet">{item.body ? <Markdown source={item.body} /> : <p class="muted">本文はまだありません。</p>}</div>
+          )}
+
+          {quiz && <QuizPanel quiz={quiz} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />}
+
+          {waitsFor(item, 'view') && opensOnView && <span hidden data-complete-on-view={completeUrl(item)} />}
+
+          {isStudent && isTracked(item) && item.completion !== 'manual' && (
+            <div class="complete-bar">
+              <CompletionStatus itemId={item.id} type={item.type} completion={item.completion} done={isDone} />
+            </div>
+          )}
+
+          {isStudent && isTracked(item) && item.completion === 'manual' && (
+            <form method="post" action={completeUrl(item)} class="complete-bar" data-complete>
+              <Button
+                type="submit"
+                variant={isDone ? 'success' : next ? 'default' : 'primary'}
+                size="lg"
+                icon="check"
+                aria-pressed={isDone ? 'true' : 'false'}
+                data-complete-secondary={!isDone && next ? '' : undefined}
+              >
+                <span data-complete-label>{isDone ? '完了済み' : '完了にする'}</span>
+              </Button>
+              {!isDone && next && (
+                <Button type="submit" variant="primary" size="lg" iconEnd="chevronRight" data-complete-then={navHref(next)}>
+                  完了して次へ
+                </Button>
+              )}
+            </form>
+          )}
+
+          <nav class="pager" aria-label="前後のアイテム">
+            {prev && (
+              <a href={navHref(prev)} class="pager-link pager-prev">
+                <span class="pager-arrow">
+                  <Icon name="chevronLeft" size={18} />
+                </span>
+                <span class="pager-text">
+                  <span class="pager-label muted small">前へ</span>
+                  <span class="pager-title truncate">{prev.title}</span>
+                </span>
+              </a>
+            )}
+            <a href={next ? navHref(next) : `/courses/${id}`} class="pager-link pager-next">
+              <span class="pager-text">
+                <span class="pager-label muted small">{next ? '次へ' : 'コースへ'}</span>
+                <span class="pager-title truncate">{next ? next.title : access.course.title}</span>
+              </span>
+              <span class="pager-arrow">
+                <Icon name="chevronRight" size={18} />
+              </span>
+            </a>
+          </nav>
+        </article>
+
+        <aside class="reader-outline" aria-label="コースの目次">
+          <div class="outline-head">
+            <a href={`/courses/${id}`} class="strong truncate">
+              {access.course.title}
+            </a>
+            {isStudent && tracked.length > 0 && (
+              <span class="muted small">
+                <span data-progress-done>{tracked.filter((o) => done.has(o.id)).length}</span> / {tracked.length} 完了
+              </span>
+            )}
+            <OutlineToggle />
+          </div>
+          {outlineSections.map(({ section: s, items }) => (
+            <div class={cx('outline-section', items.length === 0 && 'is-empty')}>
+              <div class={cx('outline-title', !!s.hidden && 'is-hidden')}>
+                {s.title}
+                {!!s.hidden && <Icon name="eyeSlash" size={12} />}
+                {items.length === 0 && <span class="outline-count">0</span>}
               </div>
-            ))}
-          </aside>
-        </div>
-      )}
+              {items.length > 0 && (
+                <ul>
+                  {items.map((o) => (
+                    <li>
+                      {restricted.locked.has(o.id) ? (
+                        <span class="outline-link is-locked" data-item={o.id}>
+                          <Icon name="lock" size={14} class="outline-kind" />
+                          <span class="truncate">{o.title}</span>
+                        </span>
+                      ) : (
+                        <a
+                          href={o.type === 'screen' ? `${navHref(o)}/screen` : navHref(o)}
+                          class={cx('outline-link', o.id === item.id && 'active', isHidden(o) && 'is-hidden')}
+                          data-item={o.id}
+                          {...(opensNewTab(o) ? { target: '_blank', rel: 'noopener', 'data-no-prefetch': '' } : {})}
+                          {...(o.type === 'link' ? linkOpenAttrs(o.url, o.linkTarget, navHref(o)) : {})}
+                          aria-current={o.id === item.id ? 'page' : undefined}
+                          {...(o.type === 'link' && o.linkTarget !== 'embed' ? onOpen(o) : {})}
+                        >
+                          {isTracked(o) ? (
+                            <span class={cx('outline-dot', done.has(o.id) && 'done')} data-outline-dot={o.id}>
+                              {done.has(o.id) && <Icon name="check" size={10} />}
+                            </span>
+                          ) : (
+                            <Icon name={ITEM_ICONS[o.type]} size={14} class="outline-kind" />
+                          )}
+                          <span class="truncate">{o.title}</span>
+                          {!!o.hidden && <Icon name="eyeSlash" size={12} class="outline-hidden" />}
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </aside>
+      </div>
       <CourseLiveSync courseId={id} revision={revision} />
     </AppShell>
   )

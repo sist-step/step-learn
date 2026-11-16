@@ -16,7 +16,11 @@ export const SYNC_TTL = 180 * 24 * 60 * 60
 export type LaunchClaims = { kind: 'launch'; ref: string; userId: number; course: string; title: string; nonce: string; exp: number }
 export type GrantClaims = { kind: 'grant'; ref: string; userId: number; exp: number }
 export type SyncClaims = { kind: 'sync'; ref: string; userId: number; exp: number }
-type Claims = LaunchClaims | GrantClaims | SyncClaims
+/** コードのアイテムを VS Code で開くリンクの鍵。ファイル自動配布の鍵と kind を分け、取り違えて引き換えられないようにする */
+export type CodeLaunchClaims = { kind: 'code-launch'; ref: string; userId: number; nonce: string; exp: number }
+/** 拡張機能が書きかけのコードを送る・提出するための鍵 */
+export type CodeClaims = { kind: 'code'; ref: string; userId: number; exp: number }
+type Claims = LaunchClaims | GrantClaims | SyncClaims | CodeLaunchClaims | CodeClaims
 
 const mac = (body: string) => crypto.createHmac('sha256', key).update(body).digest('base64url')
 
@@ -55,12 +59,16 @@ export const LAUNCH_CLAIM = z.object({ token: z.string() })
 /** リンクの鍵を 1 回だけ使えるように確かめる。使い済み・期限切れ・改ざんされた鍵なら null */
 export function claimLaunch(token: string): LaunchClaims | null {
   const claims = verify(token)
-  if (claims?.kind !== 'launch') return null
+  return claims?.kind === 'launch' && useNonce(claims.nonce, claims.exp) ? claims : null
+}
+
+/** nonce をまだ使っていなければ、使ったことにして true を返す */
+function useNonce(nonce: string, exp: number) {
   const now = nowSec()
-  for (const [nonce, exp] of usedNonces) if (exp <= now) usedNonces.delete(nonce)
-  if (usedNonces.has(claims.nonce)) return null
-  usedNonces.set(claims.nonce, claims.exp)
-  return claims
+  for (const [used, until] of usedNonces) if (until <= now) usedNonces.delete(used)
+  if (usedNonces.has(nonce)) return false
+  usedNonces.set(nonce, exp)
+  return true
 }
 
 export const signGrant = (claims: Omit<GrantClaims, 'kind' | 'exp'>) => sign({ kind: 'grant', ...claims, exp: nowSec() + GRANT_TTL })
@@ -75,4 +83,21 @@ export const signSync = (claims: Omit<SyncClaims, 'kind' | 'exp'>) => sign({ kin
 export function verifySync(token: string): SyncClaims | null {
   const claims = verify(token)
   return claims?.kind === 'sync' ? claims : null
+}
+
+export const signCodeLaunch = (claims: Omit<CodeLaunchClaims, 'kind' | 'nonce' | 'exp'>) =>
+  sign({ kind: 'code-launch', ...claims, nonce: crypto.randomBytes(12).toString('base64url'), exp: nowSec() + LAUNCH_TTL })
+
+/** コードのアイテムのリンクの鍵を 1 回だけ使えるように確かめる */
+export function claimCodeLaunch(token: string): CodeLaunchClaims | null {
+  const claims = verify(token)
+  return claims?.kind === 'code-launch' && useNonce(claims.nonce, claims.exp) ? claims : null
+}
+
+// 変更履歴の鍵と同じ長さにするのは、学期のあいだ STEP Learn の画面から開き直さなくても、保存と提出を続けられるようにするため
+export const signCode = (claims: Omit<CodeClaims, 'kind' | 'exp'>) => sign({ kind: 'code', ...claims, exp: nowSec() + SYNC_TTL })
+
+export function verifyCode(token: string): CodeClaims | null {
+  const claims = verify(token)
+  return claims?.kind === 'code' ? claims : null
 }
