@@ -28,7 +28,7 @@ export type BundleView = { files: Listed[]; sync: BundleSyncState }
 const countFiles = (node: BundleTreeNode): number => (node.file ? 1 : node.children.reduce((n, c) => n + countFiles(c), 0))
 
 const DeleteButton = ({ action, name, value, label }: { action: string; name: 'path' | 'folder'; value: string; label: string }) => (
-  <form method="post" action={action} data-confirm={`「${value}」を削除しますか？`}>
+  <form method="post" action={action} data-confirm={`「${value}」を削除しますか？`} data-confirm-ok="削除する">
     <input type="hidden" name={name} value={value} />
     <IconButton type="submit" icon="trash" label={label} danger />
   </form>
@@ -217,7 +217,12 @@ const BundleFilesCard = ({ base, files, class: cls }: { base: string; files: Lis
       class={cls}
       actions={
         files.length > 0 && (
-          <form method="post" action={`${base}/files/delete`} data-confirm="すべてのファイルを削除しますか？">
+          <form
+            method="post"
+            action={`${base}/files/delete`}
+            data-confirm="すべてのファイルを削除しますか？"
+            data-confirm-ok="すべて削除する"
+          >
             <input type="hidden" name="all" value="1" />
             <Button type="submit" size="sm" variant="danger-outline" icon="trash">
               すべて削除

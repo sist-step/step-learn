@@ -19,7 +19,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `components/form.tsx` | `TextField` / `SelectField` / `TextAreaField` / `FileField` / `DateTimeField` / `ImageField` / `FormField` / `Input` / `Select` / `Textarea` / `FileInput` / `FileChip` / `SearchBox` / `SegmentedControl` / `Switch` | 日時はブラウザ標準の `datetime-local` / `date` ではなく `DateTimeField`。ファイルは `FileInput`（`id` 必須）、画像は `ImageField` で受けて `lib/images.ts` の `putImage` / `serveImage`。ラベルなしの部品には `aria-label` |
 | `components/markdown.tsx` | `MarkdownEditor` / `Markdown` | Markdown を受け取る欄は `TextAreaField` ではなく `MarkdownEditor`。表示は `Markdown`（生の HTML は通らない） |
 | `components/card.tsx` | `Card` / `DangerRow` / `Block` / `Table` / `Stats` / `Stat` / `LinkCard` | 危険な操作は `Card tone="danger"` と `DangerRow` |
-| `components/overlay.tsx` | `Modal` / `Popover` / `MenuItem` | 行の「その他の操作」は `Popover class="row-menu"` に `MenuItem` を並べ、危険な操作は `class="is-danger"` |
+| `components/overlay.tsx` | `Modal` / `Popover` / `MenuItem` / `ConfirmChip` | 行の「その他の操作」は `Popover class="row-menu"` に `MenuItem` を並べ、危険な操作は `class="is-danger"`。`ConfirmChip` は `AppShell` が置いていて、自分では置かない |
 | `components/ui.tsx` | `PageHeader` / `Tabs` / `TabPanel` / `Chip` / `Alert` / `Breadcrumbs` / `Person` / `EmptyState` / `Avatar` / `Progress` / `ProgressRing` / `formatDate` | `Tabs` を置いた画面では中身を必ず `TabPanel` で包む。一覧が空なら `EmptyState` |
 | `components/course.tsx` | `CourseCard` / `CourseIcon` / `CourseHeader` / `CourseLiveSync` / `ItemBar` / `ItemEditActions` / `LessonBadge` / `LessonJump` / `OutlineToggle` など | コース配下の画面は `CourseHeader` でタブを出す |
 | `components/code.tsx` | `CodeInput` / `CodeField` / `CodeWorkspace` と編集画面のカード | コードを受け取る欄は `TextAreaField` ではなく `CodeField` |
@@ -120,7 +120,7 @@ Moodle モードの種類ごとの入力欄（`moodle-mode/extra-kinds.tsx`）�
 
 - 操作はリンクか `<form method="post">`
 - 送信に時間がかかるフォームには `data-loading-form`（二重送信防止）
-- 取り消せない操作のフォームには `data-confirm="〜しますか？"`
+- 取り消せない操作のフォームには `data-confirm="〜しますか？"` と、確定のボタンの文言 `data-confirm-ok="削除する"`（押したボタンのそばに確認のチップが出る）
 - `select` を変えたら即送信するフォームには `data-autosubmit`
 - 編集画面の保存ボタンには `data-save-shortcut`（⌘S / Ctrl+S。フォームの外に置くときは `form="<id>"`）
 - 開閉は `<details>` / `<summary>`、ボタンの下に出すパネルは `Popover`
@@ -141,7 +141,7 @@ Moodle モードの種類ごとの入力欄（`moodle-mode/extra-kinds.tsx`）�
 - `fetch` するときは `Accept: application/json` を付け、サーバーは `wantsJson(c)` で分ける
 - 失敗したら元の状態に戻し、`toast('〜できませんでした。', 'error')` を出す
 - 端末ごとの設定は `lib/settings.ts` の `getSetting` / `setSetting` / `updateSetting` で読み書きし、項目は `SETTINGS` のスキーマに `.catch(既定値)` 付きで足す。localStorage を直接触るキーを新しく作らない。それ以外で `localStorage` を使うときは try/catch で包む
-- `alert` / `confirm` は使わず、確認は `data-confirm` の独自ダイアログを使う
+- `alert` / `confirm` は使わない。フォーム送信の確認は `data-confirm`、フォームでない操作の確認は `confirmNear`（押したボタンのそばのチップ）を使い、画面の中央のダイアログは新しく使わない
 
 ## 確認
 

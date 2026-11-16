@@ -508,7 +508,11 @@ function setFieldValue(field: HTMLTextAreaElement | HTMLInputElement, value: str
 }
 
 // --- 問題文から下書きを作る（components/code.tsx の CodeSuggest）
-type Confirm = (message: string) => Promise<boolean>
+type ConfirmNear = (
+  anchor: HTMLElement,
+  messages: readonly string[],
+  options: { ok: string; tone: 'danger' | 'primary' },
+) => Promise<boolean>
 
 type SuggestReply = { draft?: { starter: CodeFiles; stdin: string; constraints: CodeConstraint[] }; error?: string }
 
@@ -544,7 +548,7 @@ async function whileSuggesting(
   }
 }
 
-function mountSuggest(button: HTMLButtonElement, toast: Toast, confirm: Confirm) {
+function mountSuggest(button: HTMLButtonElement, toast: Toast, confirmNear: ConfirmNear) {
   const action = button.dataset.codeSuggest
   const form = button.form
   if (!action || !form || button.hasAttribute('data-code-ready')) return
@@ -560,7 +564,11 @@ function mountSuggest(button: HTMLButtonElement, toast: Toast, confirm: Confirm)
         const field = fieldOf(key)
         return !!field && field.value.trim() !== (DEFAULT_FILES[key] ?? '').trim()
       })
-    if (edited && !(await confirm('今の最初のコードと制約を、AI が作った下書きで置き換えますか？'))) return
+    if (
+      edited &&
+      !(await confirmNear(button, ['今の最初のコードと制約を、AI が作った下書きで置き換えます。'], { ok: '置き換える', tone: 'primary' }))
+    )
+      return
 
     const body = new FormData()
     for (const name of ['title', 'body']) body.set(name, fieldOf(name)?.value ?? '')
@@ -592,12 +600,16 @@ function mountSuggest(button: HTMLButtonElement, toast: Toast, confirm: Confirm)
 type ConstraintsReply = { constraints?: CodeConstraint[]; error?: string }
 
 /** 制約の欄の「AI で作る」。同じフォームの問題文と最初のコードを送り、返ってきた制約で欄を入れ替える */
-async function suggestConstraints(root: HTMLElement, button: HTMLButtonElement, toast: Toast, confirm: Confirm) {
+async function suggestConstraints(root: HTMLElement, button: HTMLButtonElement, toast: Toast, confirmNear: ConfirmNear) {
   const action = button.dataset.codeConstraintsSuggest
   const form = button.form
   if (!action || !form || button.disabled) return
   if (!formField(form, 'body')?.value.trim()) return toast('先に問題文を書いてください。', 'error')
-  if (hasConstraintInput(root) && !(await confirm('今の制約を、AI が作った制約で置き換えますか？'))) return
+  if (
+    hasConstraintInput(root) &&
+    !(await confirmNear(button, ['今の制約を、AI が作った制約で置き換えます。'], { ok: '置き換える', tone: 'primary' }))
+  )
+    return
   const body = new FormData()
   for (const name of ['title', 'body', ...CODE_FILE_KEYS]) body.set(name, formField(form, name)?.value ?? '')
   const status = root.querySelector<HTMLElement>('[data-code-constraints-status]')
@@ -636,13 +648,13 @@ function setConstraints(root: HTMLElement, constraints: readonly CodeConstraint[
   root.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
-function mountConstraints(root: HTMLElement, toast: Toast, confirm: Confirm) {
+function mountConstraints(root: HTMLElement, toast: Toast, confirmNear: ConfirmNear) {
   if (root.hasAttribute('data-code-ready')) return
   root.setAttribute('data-code-ready', '')
   root.addEventListener('click', (e) => {
     const target = e.target as Element
     const suggest = target.closest<HTMLButtonElement>('[data-code-constraints-suggest]')
-    if (suggest) return void suggestConstraints(root, suggest, toast, confirm)
+    if (suggest) return void suggestConstraints(root, suggest, toast, confirmNear)
     if (target.closest('[data-code-constraint-add]')) {
       addConstraintRow(root, { label: '', text: '' })?.focus()
       root.dispatchEvent(new Event('input', { bubbles: true }))
@@ -709,7 +721,7 @@ function mountFileTabs(root: HTMLElement, options: Omit<CodeInputOptions, 'peers
 }
 
 // --- 編集画面の最初のコード（components/code.tsx の CodeStarterCard）
-function mountStarter(root: HTMLElement, toast: Toast, confirm: Confirm) {
+function mountStarter(root: HTMLElement, toast: Toast, confirmNear: ConfirmNear) {
   if (root.hasAttribute('data-code-ready')) return
   root.setAttribute('data-code-ready', '')
   mountFileTabs(root, { toast })
@@ -733,7 +745,7 @@ function mountStarter(root: HTMLElement, toast: Toast, confirm: Confirm) {
   const language = reset?.dataset.codeStarterReset
   reset?.addEventListener('click', async () => {
     if (language !== 'web' && language !== 'python') return
-    if (!(await confirm('最初のコードを消して、ひな形に戻しますか？'))) return
+    if (!(await confirmNear(reset, ['最初のコードを消して、ひな形に戻します。'], { ok: '戻す', tone: 'danger' }))) return
     for (const key of CODE_FILE_KEYS) {
       const field = fieldOf(key)
       if (field) setFieldValue(field, DEFAULT_STARTER[language][key] ?? '')
@@ -1122,16 +1134,16 @@ export function releaseDetachedCodeEditors() {
 
 const MAC_KEY_LABELS: Record<string, string> = { mod: '⌘', alt: '⌥', shift: '⇧', ctrl: '⌃' }
 
-export function mountCodeEditors(toast: Toast, confirm: Confirm) {
+export function mountCodeEditors(toast: Toast, confirmNear: ConfirmNear) {
   listenShowView()
   if (/Mac|iPhone|iPad/.test(navigator.userAgent))
     for (const key of document.querySelectorAll<HTMLElement>('[data-code-key]'))
       key.textContent = MAC_KEY_LABELS[key.dataset.codeKey ?? ''] ?? key.textContent
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-code-submit-timer]')) mountSubmitCountdown(button)
   for (const card of document.querySelectorAll<HTMLElement>('[data-code-grade]')) watchGrading(card, toast)
-  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-code-suggest]')) mountSuggest(button, toast, confirm)
-  for (const root of document.querySelectorAll<HTMLElement>('[data-code-starter]')) mountStarter(root, toast, confirm)
-  for (const root of document.querySelectorAll<HTMLElement>('[data-code-constraints]')) mountConstraints(root, toast, confirm)
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-code-suggest]')) mountSuggest(button, toast, confirmNear)
+  for (const root of document.querySelectorAll<HTMLElement>('[data-code-starter]')) mountStarter(root, toast, confirmNear)
+  for (const root of document.querySelectorAll<HTMLElement>('[data-code-constraints]')) mountConstraints(root, toast, confirmNear)
   for (const root of document.querySelectorAll<HTMLElement>('[data-code-workspace]:not([data-code-ready])'))
     void mountCodeWorkspace(root, toast)
   for (const input of document.querySelectorAll<HTMLElement>('[data-code-input]:not([data-code-ready])')) {

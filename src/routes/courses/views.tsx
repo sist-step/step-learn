@@ -292,7 +292,7 @@ const RowMenu = ({ base, moveAction, hidden, confirm }: { base: string; moveActi
       アクセス制限
     </MenuItem>
     <div class="menu-sep" role="separator" />
-    <form method="post" action={`${base}/delete`} data-confirm={confirm}>
+    <form method="post" action={`${base}/delete`} data-confirm={confirm} data-confirm-ok="削除する">
       <MenuItem type="submit" icon="trash" class="is-danger">
         削除
       </MenuItem>
@@ -740,7 +740,14 @@ const CourseImageCard = ({ courseId, kind, imageKey }: { courseId: number; kind:
         </form>
       </Card>
       {imageKey && (
-        <form id={`${kind}-delete`} method="post" action={`${action}/delete`} data-confirm={`${f.heading}を削除しますか？`} hidden />
+        <form
+          id={`${kind}-delete`}
+          method="post"
+          action={`${action}/delete`}
+          data-confirm={`${f.heading}を削除しますか？`}
+          data-confirm-ok="削除する"
+          hidden
+        />
       )}
     </>
   )
@@ -788,7 +795,12 @@ export const SettingsPage = ({ access, values, errors }: { access: CourseAccess;
             <Card id="settings-danger" tone="danger" heading="危険な操作" description="これらの操作は取り消せません。">
               {access.role && (
                 <DangerRow heading="コースから退出" description="自分の登録と進捗を削除します。">
-                  <form method="post" action={`/courses/${id}/leave`} data-confirm="このコースから退出しますか？">
+                  <form
+                    method="post"
+                    action={`/courses/${id}/leave`}
+                    data-confirm="このコースから退出しますか？"
+                    data-confirm-ok="退出する"
+                  >
                     <Button type="submit" variant="danger-outline">
                       退出
                     </Button>
@@ -796,7 +808,12 @@ export const SettingsPage = ({ access, values, errors }: { access: CourseAccess;
                 </DangerRow>
               )}
               <DangerRow heading="コースを削除" description="セクション・教材・ファイル・参加者の登録がすべて削除されます。">
-                <form method="post" action={`/courses/${id}/delete`} data-confirm={`「${access.course.title}」を完全に削除しますか？`}>
+                <form
+                  method="post"
+                  action={`/courses/${id}/delete`}
+                  data-confirm={`「${access.course.title}」を完全に削除しますか？`}
+                  data-confirm-ok="完全に削除する"
+                >
                   <Button type="submit" variant="danger">
                     コースを削除
                   </Button>
