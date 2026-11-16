@@ -2,7 +2,7 @@ import { count, desc, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { canCreateCourse } from '../../lib/auth'
 import { isInPeriod } from '../../lib/course-period'
-import { memberCount, trackedDoneCount, trackedItemCount } from '../../lib/courses'
+import { trackedDoneCount, trackedItemCount } from '../../lib/courses'
 import { db } from '../../lib/db'
 import { courses, enrollments, users } from '../../lib/schema'
 import type { AppEnv } from '../../lib/types'
@@ -24,7 +24,6 @@ export async function show(c: Context<AppEnv>) {
       role: enrollments.role,
       total: trackedItemCount(courses.id),
       done: trackedDoneCount(user.id, courses.id),
-      members: memberCount(),
       startAt: courses.startAt,
       endAt: courses.endAt,
     })

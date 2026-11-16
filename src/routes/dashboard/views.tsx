@@ -7,7 +7,6 @@ import { Styles } from '../../components/style'
 import { CourseIcon, Progress, courseInitials, type CourseCardData } from '../../components/ui'
 import { dateInputToUnix, unixToDateInput } from '../../lib/course-period'
 import { randomTip } from '../../lib/tips'
-import { COURSE_ROLE_LABELS } from '../../lib/types'
 
 export type DashboardCourse = CourseCardData & { endAt?: number | null }
 
@@ -22,7 +21,6 @@ const greeting = () => {
 const LONG_DATE = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'long', day: 'numeric', weekday: 'long' })
 const SHORT_DATE = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', weekday: 'short' })
 
-const roleLabel = (course: DashboardCourse) => (course.role === 'teacher' ? COURSE_ROLE_LABELS.teacher : COURSE_ROLE_LABELS.student)
 const isTracked = (course: DashboardCourse) => course.role === 'student' && (course.total ?? 0) > 0
 
 // ---------------------------------------------------------------- マイコース
@@ -32,11 +30,6 @@ const CourseRow = ({ course }: { course: DashboardCourse }) => (
     <CourseIcon course={course} text={courseInitials(course)} class="dot" />
     <span class="dash-row-text">
       <strong class="dash-row-title">{course.title}</strong>
-      <span class="dash-row-sub">
-        {course.code && <span class="truncate">{course.code}</span>}
-        <span>{roleLabel(course)}</span>
-        <span>{course.members ?? 0}人</span>
-      </span>
     </span>
     {isTracked(course) && (
       <span class="dash-row-progress">
