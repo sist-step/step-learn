@@ -15,7 +15,7 @@ import {
   type AiModel,
   type AiToolCall,
 } from './ai'
-import { chatRevision, type AiCardState, type AiChat, type AiChatContent, type AiChatStore, type AiFocus } from './ai-chat'
+import { chatRevision, type AiCard, type AiCardState, type AiChat, type AiChatContent, type AiChatStore, type AiFocus } from './ai-chat'
 import { AI_FILE_KIND_HINTS, AI_FILE_KINDS, fileKindsLabel, matchesFileKinds } from './ai-file-kinds'
 import type { AiLedger } from './ai-ledger'
 import type { AiQuota, AiQuotaState } from './ai-quota'
@@ -613,10 +613,9 @@ export function createAiAgent({
       return compacted || messages.length > before
     })
 
-  type Settle = { c: AiToolContext; chat: AiChat; callId: string; page: string; emit: Emit; signal: AbortSignal }
+  type Settle = { c: AiToolContext; chat: AiChat; page: string; emit: Emit; signal: AbortSignal }
 
-  /** カードを result で閉じる。待っているカードがなくなったら、AI に続きを答えさせる */
-  async function settle({ c, chat, callId, page, emit, signal }: Settle, state: AiCardState, result: AiToolResult) {
+  function closeCard(chat: AiChat, callId: string, emit: Emit, state: AiCardState, result: AiToolResult) {
     const card = chat.content.cards[callId]
     card.state = state
     card.note = state === 'failed' ? (parseJson(result.content) as { error?: string } | null)?.error : result.label
@@ -626,11 +625,22 @@ export function createAiAgent({
       emit({ type: 'applied', touched })
     }
     chat.content.messages.push({ role: 'tool', toolCallId: callId, content: result.content, isError: result.isError })
+  }
+
+  /** 待っているカードがなくなったら、AI に続きを答えさせる */
+  async function proceed({ c, chat, page, emit, signal }: Settle) {
     if (
       pendingCalls(chat.content).length === 0 &&
       (await converse(c, chat, page, emit, (message) => emit({ type: 'error', message }), signal))
     )
       emit({ type: 'stopped', retract: false })
+  }
+
+  async function approveCard(c: AiToolContext, card: AiCard): Promise<AiToolResult> {
+    const tool = tools.find((t) => t.tool.name === card.name)
+    return tool?.kind === 'confirm'
+      ? await safely(() => tool.apply(c, parseJson(card.args), card.snapshot), card.name)
+      : failure(`${card.name} というツールはありません。`, TOOL_FAILED)
   }
 
   /** 確認カードを承認か取り消しで閉じる。ファイルを選ぶカードは取り消しだけで、送るのは receive */
@@ -649,15 +659,35 @@ export function createAiAgent({
         return false
       }
       delete chat.content.replies
-      const tool = tools.find((t) => t.tool.name === card.name)
       const result: AiToolResult = !approve
         ? card.request
           ? failure('利用者がファイルを選ばずに取り消しました。受け取っていません。', '取り消しました')
           : failure('利用者が取り消しました。実行していません。', '取り消しました')
-        : tool?.kind === 'confirm'
-          ? await safely(() => tool.apply(c, parseJson(card.args), card.snapshot), card.name)
-          : failure(`${card.name} というツールはありません。`, TOOL_FAILED)
-      await settle({ c, chat, callId, page, emit, signal }, !approve ? 'rejected' : result.isError ? 'failed' : 'approved', result)
+        : await approveCard(c, card)
+      closeCard(chat, callId, emit, !approve ? 'rejected' : result.isError ? 'failed' : 'approved', result)
+      await proceed({ c, chat, page, emit, signal })
+      return true
+    })
+
+  /**
+   * callIds の確認カードを並んだ順にすべて承認し、終えてから AI に続きを答えさせる。ファイルを選ぶカードは含めない。
+   * 待っているカードを全部ではなく callIds で受けるのは、利用者が画面で見たカードだけを承認し、ほかのタブで増えたカードを見ずに実行しないため
+   */
+  const approveAll = ({ c, chat, callIds, page }: { c: AiToolContext; chat: AiChat; callIds: string[]; page: string }, emit: Emit) =>
+    exclusive(c, chat, emit, async (signal) => {
+      const chosen = new Set(callIds)
+      const targets = pendingCalls(chat.content).filter(([callId, card]) => chosen.has(callId) && !card.request)
+      if (targets.length === 0) {
+        emit({ type: 'error', message: 'この確認はもう終わっています。' })
+        return false
+      }
+      delete chat.content.replies
+      // 1 つ失敗しても残りを実行するのは、利用者がすべてを見たうえで承認していて、失敗したカードだけを結果で伝えれば足りるため
+      for (const [callId, card] of targets) {
+        const result = await approveCard(c, card)
+        closeCard(chat, callId, emit, result.isError ? 'failed' : 'approved', result)
+      }
+      await proceed({ c, chat, page, emit, signal })
       return true
     })
 
@@ -693,13 +723,15 @@ export function createAiAgent({
         { file_id: fileId, file_name: file.name, file_size: file.size, file_type: file.type || 'application/octet-stream' },
         `「${file.name}」を受け取りました`,
       )
-      await settle({ c, chat, callId, page, emit, signal }, 'approved', result)
+      closeCard(chat, callId, emit, 'approved', result)
+      await proceed({ c, chat, page, emit, signal })
       return true
     })
 
   return {
     send,
     decide,
+    approveAll,
     receive,
     stop,
     hardTaskModel,
