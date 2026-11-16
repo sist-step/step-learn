@@ -38,15 +38,16 @@ export const Popover = ({
   class: cls,
   panelClass,
   children,
+  ...rest
 }: {
   trigger: Child
   class?: string
   panelClass?: string
   children: Child
-}) => {
+} & JSX.IntrinsicElements['details']) => {
   useStyle('/src/components/overlay.css')
   return (
-    <details class={cx('popover', cls)}>
+    <details class={cx('popover', cls)} {...rest}>
       {trigger}
       <div class={cx('popover-panel', panelClass)}>{children}</div>
     </details>

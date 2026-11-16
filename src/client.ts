@@ -1551,10 +1551,26 @@ function placePopoverPanel(d: HTMLDetailsElement) {
 }
 document.addEventListener('click', (e) => {
   const d = (e.target as Element).closest('details.popover > summary')?.parentElement
-  if (!(d instanceof HTMLDetailsElement) || d.open) return
+  if (!(d instanceof HTMLDetailsElement)) return
+  if (d.matches('[data-hover-open]') && (e as PointerEvent).pointerType === 'mouse') return e.preventDefault()
+  if (d.open) return
   e.preventDefault()
   d.open = true
   placePopoverPanel(d)
+})
+
+// --- data-hover-open のポップオーバーは、マウスが乗っている間だけ開く。タッチとキーボードではクリックで開閉する
+document.addEventListener('pointerover', (e) => {
+  if (e.pointerType !== 'mouse') return
+  const d = (e.target as Element).closest('details.popover[data-hover-open] > summary')?.parentElement
+  if (!(d instanceof HTMLDetailsElement) || d.open) return
+  d.open = true
+  placePopoverPanel(d)
+})
+document.addEventListener('pointerout', (e) => {
+  if (e.pointerType !== 'mouse') return
+  const d = (e.target as Element).closest<HTMLDetailsElement>('details.popover[data-hover-open]')
+  if (d?.open && !d.contains(e.relatedTarget as Node | null)) d.open = false
 })
 
 // --- ポップオーバーは外側クリックと Esc で閉じる
@@ -3061,12 +3077,12 @@ function paintAiUsage(panel: HTMLElement, usage: AiUsageMeter[], hardOff: string
 }
 
 function paintAiContext(panel: HTMLElement, percent: number) {
-  const trigger = panel.querySelector<HTMLElement>('[data-ai-context]')
-  if (!trigger) return
-  trigger.style.setProperty('--ai-used', `${percent}%`)
-  trigger.setAttribute('aria-label', `会話の長さ（${percent}%）`)
-  const text = trigger.querySelector('[data-ai-context-percent]')
-  if (text) text.textContent = String(percent)
+  const meter = panel.querySelector<HTMLElement>('[data-ai-context]')
+  if (!meter) return
+  meter.style.setProperty('--ai-used', `${percent}%`)
+  meter.querySelector('summary')?.setAttribute('aria-label', `会話の長さ（${percent}%）`)
+  meter.querySelector('[role=progressbar]')?.setAttribute('aria-valuenow', String(percent))
+  $$('[data-ai-context-percent]', meter).forEach((text) => (text.textContent = String(percent)))
 }
 
 document.addEventListener('change', (e) => {

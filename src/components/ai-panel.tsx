@@ -376,8 +376,11 @@ const ContextMeter = ({ percent }: { percent: number }) => (
   <Popover
     class="ai-usage-pop ai-context-pop"
     panelClass="ai-usage-panel"
+    data-hover-open
+    data-ai-context
+    style={`--ai-used:${percent}%`}
     trigger={
-      <summary class="ai-usage-trigger" aria-label={contextLabel(percent)} data-ai-context style={`--ai-used:${percent}%`}>
+      <summary class="ai-usage-trigger" aria-label={contextLabel(percent)}>
         <span class="ai-context-ring" aria-hidden="true" />
         <span class="ai-usage-text">
           会話 <span data-ai-context-percent>{percent}</span>%
@@ -388,10 +391,29 @@ const ContextMeter = ({ percent }: { percent: number }) => (
     <div class="ai-usage-head">
       <strong>会話の長さ</strong>
     </div>
-    <p class="ai-context-note">
-      AI に送っている会話の量です。100%
-      になると、次に送るときに古いやり取りを要約して、続きから話せるようにします。パネルの会話はそのまま残ります。
-    </p>
+    <div class="ai-meters">
+      <div class="ai-meter" data-state="ok">
+        <div class="ai-meter-top">
+          <span class="ai-meter-label">今の会話</span>
+          <span class="ai-meter-value">
+            <span data-ai-meter-percent data-ai-context-percent>
+              {percent}
+            </span>
+            % 使用
+          </span>
+        </div>
+        <div
+          class="ai-meter-track"
+          role="progressbar"
+          aria-label="会話の長さ"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+        >
+          <span class="ai-meter-fill" />
+        </div>
+      </div>
+    </div>
   </Popover>
 )
 
@@ -403,6 +425,7 @@ const Usage = ({ option, hidden }: { option: AiModelOption; hidden: boolean }) =
       <Popover
         class="ai-usage-pop"
         panelClass="ai-usage-panel"
+        data-hover-open
         trigger={
           <summary class="ai-usage-trigger" aria-label={`今週の利用状況（${main.label} ${main.percent}% 使用）`} data-ai-usage-trigger>
             <span class="ai-usage-bars" aria-hidden="true">
