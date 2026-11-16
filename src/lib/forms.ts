@@ -465,6 +465,8 @@ const aiMessage = z.object({
   page: hidden(500),
   hard: flag(),
   revision: hidden(50),
+  /** 新しいチャットで選ぶアイテム（コース ID/アイテム ID）。コーディング問題の編集画面のボタンから始めたときだけ送る */
+  focus: hidden(50),
 })
 
 const id = () => z.pipe(hidden(20), z.pipe(z.transform(Number), z.int().check(z.positive())))
@@ -511,6 +513,9 @@ const codeSuggest = z.object({
   title: hidden(200),
   body: z.pipe(hidden(100_000), z.string().check(z.minLength(1, '先に問題文を書いてください。'))),
 })
+
+/** 編集画面の問題文と最初のコードから、制約だけを作るときに送るもの */
+const codeConstraintsSuggest = z.object({ ...codeSuggest.shape, ...codeFields })
 
 const regrade = z.object({ submission: id() })
 
@@ -582,6 +587,7 @@ export const FORMS = {
   courseRole,
   siteRole,
   codeSuggest,
+  codeConstraintsSuggest,
   regrade,
   bundleUpload,
   bundleRemove,
