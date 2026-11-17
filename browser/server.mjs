@@ -526,6 +526,11 @@ async function run(cdp, html, record) {
   record.timeline = await s.evaluate(ctx, `__step.diff(${JSON.stringify(start)}, __step.state(), 10)`)
 
   await s.page('DOM.getDocument', { depth: 0 })
+  // transition の終わりを待たずに止めるのは、待つと :hover を書いた要素の数だけ時間が延び、待たないと変わり始めの値しか測れず「変わらない」と記録されるため
+  await s.evaluate(
+    ctx,
+    `(() => { const style = document.createElement('style'); style.id = 'step-learn-no-transition'; style.textContent = '*, *::before, *::after { transition: none !important; }'; document.documentElement.append(style) })()`,
+  )
   for (const objectId of (await s.handles(ctx, `__step.hoverTargets(${MAX_HOVERS})`)).slice(0, MAX_HOVERS)) {
     const target = await s.call(objectId, 'function () { return __step.label(this) }')
     const before = await s.call(objectId, 'function () { return __step.look(this) }')
@@ -536,6 +541,7 @@ async function run(cdp, html, record) {
     const changes = after.flatMap((v, i) => (v === before[i] ? [] : [`${before[i]} → ${v}`]))
     record.hovers.push({ target, changes })
   }
+  await s.evaluate(ctx, `document.getElementById('step-learn-no-transition')?.remove()`)
 
   // click のリスナーを足しただけの div なども押すのは、ボタン以外を押させる課題（カードを押すと開くなど）があるため
   let extra = 0
