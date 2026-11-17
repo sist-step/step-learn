@@ -498,6 +498,8 @@ const aiMessage = z.object({
   revision: hidden(50),
   /** 新しいチャットで選ぶアイテム（コース ID/アイテム ID）。コーディング問題の編集画面のボタンから始めたときだけ送る */
   focus: hidden(50),
+  /** 発言に添えた画像。種類と大きさは中身を読まないと分からないので、lib/ai-agent.ts で確かめる */
+  image: z.transform((v: unknown) => (isFile(v) ? v : null)),
 })
 
 const id = () => z.pipe(hidden(20), z.pipe(z.transform(Number), z.int().check(z.positive())))

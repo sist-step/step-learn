@@ -31,6 +31,12 @@ async function detectImageType(file: File): Promise<ImageExt | null> {
   return null
 }
 
+/** 中身から見分けた画像の種類（MIME タイプ）。PNG・JPEG・WebP・GIF でなければ null */
+export async function imageMediaType(file: File) {
+  const ext = await detectImageType(file)
+  return ext && IMAGE_TYPES[ext]
+}
+
 export async function putImage(prefix: string, file: File): Promise<{ key: string } | { error: string }> {
   if (file.size > MAX_IMAGE_SIZE) return { error: IMAGE_TOO_LARGE }
   const ext = await detectImageType(file)
