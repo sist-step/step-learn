@@ -4,7 +4,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { SyncError, isSafePath, type ManifestUser } from './sync'
 
-/** コードのアイテムのファイル 1 つ。名前は Web エディターのタブと同じ（index.html・style.css・script.js・main.py） */
+/** コードのアイテムのファイル 1 つ。名前はブラウザエディターのタブと同じ（index.html・style.css・script.js・main.py） */
 export type CodeFile = { path: string; content: string }
 
 /** STEP Learn の GET /api/vscode/code/state の応答 */
@@ -87,7 +87,7 @@ export async function fetchCodeState(server: URL, token: string): Promise<CodeSt
 
 const filesBody = (files: CodeFile[]) => JSON.stringify({ files: Object.fromEntries(files.map((f) => [f.path, f.content])) })
 
-/** 書きかけのコードとして保存する（Web エディターで開くと、この内容が入る） */
+/** 書きかけのコードとして保存する（ブラウザエディターで開くと、この内容が入る） */
 export async function saveDraft(server: URL, token: string, files: CodeFile[]) {
   await call(new URL('/api/vscode/code/draft', server), {
     method: 'POST',

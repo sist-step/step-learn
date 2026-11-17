@@ -34,10 +34,10 @@ export async function chooseSide(title: string, conflicts: CodeFile[]): Promise<
   const server = 'STEP Learn の内容にする'
   const local = '手元のファイルを使う'
   const answer = await vscode.window.showWarningMessage(
-    `「${title}」の ${conflicts.map((f) => f.path).join('・')} は、VS Code と Web エディターの両方で書き換えられています。`,
+    `「${title}」の ${conflicts.map((f) => f.path).join('・')} は、VS Code とブラウザエディターの両方で書き換えられています。`,
     {
       modal: true,
-      detail: `「${server}」を選ぶと、Web エディターで書いた内容でこのフォルダーのファイルを置き換えます。「${local}」を選ぶと、VS Code のファイルを STEP Learn に送ります。`,
+      detail: `「${server}」を選ぶと、ブラウザエディターで書いた内容でこのフォルダーのファイルを置き換えます。「${local}」を選ぶと、VS Code のファイルを STEP Learn に送ります。`,
     },
     server,
     local,
@@ -47,7 +47,7 @@ export async function chooseSide(title: string, conflicts: CodeFile[]): Promise<
 
 const MARKS: Record<CodeResult['verdicts'][number]['verdict'], string> = { pass: '○', partial: '△', fail: '×' }
 
-/** 判定の結果を見せる。詳しく見たいときは STEP Learn の Web エディターを開く */
+/** 判定の結果を見せる。詳しく見たいときは STEP Learn のブラウザエディターを開く */
 async function showResult(result: CodeResult, title: string, page: string) {
   const open = 'STEP Learn で見る'
   const show = (message: string, detail: string) =>
@@ -80,7 +80,7 @@ type State = 'ok' | 'busy' | 'waiting' | 'expired'
 const STATUS: Record<State, { text: string; tooltip: string }> = {
   ok: {
     text: '$(check) STEP Learn に保存済み',
-    tooltip: '保存するたびに、STEP Learn の Web エディターの書きかけのコードに反映しています。',
+    tooltip: '保存するたびに、STEP Learn のブラウザエディターの書きかけのコードに反映しています。',
   },
   busy: { text: '$(sync~spin) STEP Learn に保存中', tooltip: 'コードを STEP Learn に送っています。' },
   waiting: { text: '$(warning) STEP Learn に未保存', tooltip: 'しばらくしてから、もう一度送ります。' },
@@ -183,7 +183,7 @@ export class CodeSession implements vscode.Disposable {
     this.later(RETRY, retry)
   }
 
-  /** 開いていないあいだに Web エディターで書き換えた分を取り込み、手元だけで書き換えた分を送る */
+  /** 開いていないあいだにブラウザエディターで書き換えた分を取り込み、手元だけで書き換えた分を送る */
   private async refresh() {
     if (this.stopped) return
     try {
@@ -197,7 +197,7 @@ export class CodeSession implements vscode.Disposable {
         synced = markSynced(synced, written)
         await this.context.globalState.update(codeSyncedKey(this.key), synced)
       }
-      // どちらにするか選ばずに閉じたときに送らないのは、Web エディターで書いた内容を、確かめないまま手元のファイルで上書きしないため。次に保存したときに送る
+      // どちらにするか選ばずに閉じたときに送らないのは、ブラウザエディターで書いた内容を、確かめないまま手元のファイルで上書きしないため。次に保存したときに送る
       const undecided = plan.conflicts.length > 0 && side === null
       if (!undecided && (plan.ahead.length || side === 'local')) await this.flush()
       else this.show('ok')
