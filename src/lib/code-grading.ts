@@ -1,8 +1,9 @@
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { isModelPaused } from './ai'
 import { aiLedger } from './ai-usage'
 import { isCleared, isJudge, type Judge } from './code'
-import { createGrader } from './code-grader'
+import { createGrader, createPreparer } from './code-grader'
+import { touchCourse } from './courses'
 import { db } from './db'
 import { appSettings, codeItems, codeSubmissions, completions, courses, items } from './schema'
 
@@ -44,6 +45,7 @@ export const grader = createGrader({
         constraints: codeItems.constraints,
         solution: codeItems.solution,
         solutionPublic: codeItems.solutionPublic,
+        guides: codeItems.guides,
       })
       .from(codeSubmissions)
       .innerJoin(codeItems, eq(codeItems.itemId, codeSubmissions.itemId))
@@ -91,5 +93,38 @@ export const grader = createGrader({
   judgeOf: currentJudge,
 })
 
+/** 通常モード（step-learn.db）の、確定した問題の準備 */
+export const preparer = createPreparer<number>({
+  load(itemId) {
+    const row = db
+      .select({ title: items.title, body: items.body, code: codeItems })
+      .from(codeItems)
+      .innerJoin(items, eq(items.id, codeItems.itemId))
+      .where(and(eq(codeItems.itemId, itemId), eq(codeItems.stage, 'preparing')))
+      .get()
+    return row ? { title: row.title, body: row.body, ...row.code, solutionPublic: row.code.solutionPublic === 1 } : null
+  },
+  save(itemId, result) {
+    const courseId = db.select({ courseId: items.courseId }).from(items).where(eq(items.id, itemId)).get()?.courseId
+    db.update(codeItems)
+      .set(result.stage === 'ready' ? { stage: 'ready', guides: result.guides } : { stage: 'failed' })
+      .where(and(eq(codeItems.itemId, itemId), eq(codeItems.stage, 'preparing')))
+      .run()
+    if (courseId) touchCourse(courseId)
+  },
+  pendingKeys: () =>
+    db
+      .select({ itemId: codeItems.itemId })
+      .from(codeItems)
+      .where(eq(codeItems.stage, 'preparing'))
+      .limit(1000)
+      .all()
+      .map((r) => r.itemId),
+  ledger: aiLedger,
+})
+
 // 開発サーバーで戻さないのは、モジュールを読み込み直すたびに、前のモジュールが採点している提出をもう一度採点してしまうため
-if (!import.meta.env.DEV) grader.resume()
+if (!import.meta.env.DEV) {
+  grader.resume()
+  preparer.resume()
+}

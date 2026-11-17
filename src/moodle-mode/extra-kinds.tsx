@@ -13,10 +13,12 @@ import { Button } from '../components/button'
 import { LinkCard } from '../components/card'
 import {
   CodeAiHelp,
+  CodeFinalizedFields,
   CodeGradingFields,
   CodeOpen,
   CodePeriodFields,
   CodeSolutionFields,
+  CodeStageFields,
   CodeStarterFields,
   type ConstraintRow,
 } from '../components/code'
@@ -35,6 +37,7 @@ import {
   filesFor,
   goalsOf,
   isCodeLanguage,
+  isFinalized,
   publicSolutionOf,
   type CodeFiles,
 } from '../lib/code'
@@ -61,7 +64,7 @@ import { isSharing } from '../lib/screen-share'
 import type { AppEnv } from '../lib/types'
 import { agentModelData, agentModelOfData, agentPeriodOf, agentStore } from './agent-store'
 import { bundleStore, bundleSyncStore } from './bundle-store'
-import { codePeriodOf, codeSettingsOf, codeStore, grader } from './code-store'
+import { codePeriodOf, codeSettingsOf, codeStageOf, codeStore, grader, preparer } from './code-store'
 import type { Api, MoodleCourse, SaveActivity } from './client'
 import type { MItem } from './mapping'
 import { quizStore } from './quiz'
@@ -74,7 +77,8 @@ export type ExtraData = Record<string, unknown>
  * 種類を足すときは EXTRA_KINDS に定義を足し、forms.ts に extraItemFields を含むスキーマを登録する
  */
 /** 編集画面で開いているアイテム。itemId は活動の cmid */
-export type ExtraTarget = { courseId: number; itemId: number; title: string }
+/** 編集しているアイテム。key は moodle-mode.db の extra_items の key */
+export type ExtraTarget = { courseId: number; itemId: number; title: string; key: string }
 
 export type ExtraKind = {
   label: string
@@ -101,6 +105,8 @@ export type ExtraKind = {
   View: FC<{ item: MItem; data: ExtraData; access: CourseAccess }>
   /** 編集画面の、保存のフォームの外に置く欄（ファイルのアップロードのように、別の送信先を持つもの） */
   Panel?: FC<{ item: MItem; access: CourseAccess }>
+  /** 編集画面から保存したあとに呼ぶ。保存をきっかけに始める処理（問題の確定の準備など）を始め、返した文言を「保存しました。」の代わりに出す */
+  saved?: (key: string, data: ExtraData, userId: number) => string | undefined
   /** 追加したあとに、アイテムの画面ではなく編集画面へ進めるか */
   editAfterCreate?: boolean
   /** アイテムを追加するモーダルで、種類ごとの欄の代わりに出す説明 */
@@ -200,7 +206,51 @@ const periodInputOf = (values: Record<string, unknown>, field: 'opens_at' | 'clo
 
 const unixOf = (input: string) => (isDateTimeInput(input) ? dateTimeInputToUnix(input) : null)
 
-const CodeFields: ExtraKind['Fields'] = ({ values, errors, idPrefix, target }) => {
+const PREPARE_FORM = 'code-prepare-form'
+
+/** 確定した問題の編集画面。判定に関わる欄は入力欄にせず中身を見せ、制約は検証を通すためだけに隠し欄で送る（保存では保存済みの値を使う） */
+const FinalizedCodeFields = ({ saved, values, errors, idPrefix, target }: Parameters<ExtraKind['Fields']>[0] & { saved: ExtraData }) => {
+  const settings = codeSettingsOf(saved)
+  if (!settings) return null
+  const stage = codeStageOf(saved)
+  return (
+    <>
+      <input type="hidden" name="language" value={settings.language} />
+      <input type="hidden" name="starter_set" value="1" />
+      {settings.constraints.map((c) => (
+        <>
+          <input type="hidden" name="constraint_label[]" value={c.label} />
+          <input type="hidden" name="constraint_text[]" value={c.text} />
+          <input type="hidden" name="constraint_kind[]" value={c.optional ? 'optional' : 'required'} />
+        </>
+      ))}
+      <div class="field">
+        <span class="strong small">問題文</span>
+        <div class="reader-sheet">
+          <Markdown source={settings.body || '（問題文はありません）'} />
+        </div>
+      </div>
+      <CodeStageFields stage={stage} running={!!target && preparer.isRunning(target.key)} forms={{ prepare: PREPARE_FORM }} />
+      <CodeFinalizedFields
+        code={{
+          ...settings,
+          constraints: settings.constraints.map((c) => ({ label: c.label, text: c.text, optional: !!c.optional })),
+          solutionPublic: values.solutionPublic === true || values.solution_public === '1',
+        }}
+      />
+      <CodePeriodFields
+        opensAt={periodInputOf(values, 'opens_at', 'opensAt')}
+        closesAt={periodInputOf(values, 'closes_at', 'closesAt')}
+        errors={errors}
+        idPrefix={idPrefix}
+      />
+    </>
+  )
+}
+
+const CodeFields: ExtraKind['Fields'] = (props) => {
+  const { values, errors, idPrefix, saved, target } = props
+  if (saved && isFinalized(codeStageOf(saved))) return <FinalizedCodeFields {...props} saved={saved} />
   const language = str(values.language)
   // 言語が決まっていないのは、追加するとき。問題文・最初のコード・採点基準は、言語が決まったあとの編集画面で設定する
   if (!isCodeLanguage(language)) {
@@ -249,9 +299,21 @@ const CodeFields: ExtraKind['Fields'] = ({ values, errors, idPrefix, target }) =
         errors={errors}
         idPrefix={idPrefix}
       />
+      {saved && <CodeStageFields stage={codeStageOf(saved)} running={false} forms={{ prepare: PREPARE_FORM }} />}
     </>
   )
 }
+
+/** 判定に関わる中身。確定した問題を保存するときは、送られてきた値ではなくこれを使う */
+const lockedCodeData = (data: ExtraData) => ({
+  body: data.body,
+  language: data.language,
+  starter: data.starter,
+  stdin: data.stdin,
+  criteria: data.criteria,
+  constraints: data.constraints,
+  solution: data.solution,
+})
 
 const code: ExtraKind = {
   label: 'コーディング問題',
@@ -259,10 +321,19 @@ const code: ExtraKind = {
   icon: 'terminal',
   form: 'extraCode',
   // 中身の読み取りは moodle-mode/code-store.ts の codeSettingsOf と codePeriodOf。タイトルも入れておくのは、採点が Moodle に問い合わせずに動くため
+  // 確定の段階と判定の基準を prepare で values に移すのは、toData が保存済みの中身を受け取らず、保存のたびに中身を作り直すため
+  async prepare(values, current) {
+    if (!current) return { values: { ...values, stage: 'draft', guides: [] } }
+    const stage = codeStageOf(current)
+    const guides = Array.isArray(current.guides) ? current.guides : []
+    if (isFinalized(stage)) return { values: { ...values, stage, guides, locked: lockedCodeData(current) } }
+    return { values: { ...values, stage: values.finalize === 1 ? 'preparing' : stage, guides } }
+  },
   toData(values) {
     const language = isCodeLanguage(str(values.language)) ? (values.language as (typeof CODE_LANGUAGES)[number]) : 'web'
     const edited = values.starter_set === 1
-    return {
+    const stage = typeof values.stage === 'string' ? { stage: values.stage, guides: values.guides } : {}
+    const data = {
       title: str(values.title),
       body: str(values.body),
       language,
@@ -274,8 +345,24 @@ const code: ExtraKind = {
       solutionPublic: edited && values.solution_public === 1,
       opensAt: edited ? unixOf(str(values.opens_at)) : null,
       closesAt: edited ? unixOf(str(values.closes_at)) : null,
+      ...stage,
     }
+    return typeof values.locked === 'object' && values.locked !== null ? { ...data, ...values.locked } : data
   },
+  saved(key, data, userId) {
+    if (codeStageOf(data) !== 'preparing' || preparer.isRunning(key)) return undefined
+    preparer.start(key, userId)
+    return '保存して問題を確定しました。準備が終わると、学生が解けるようになります。'
+  },
+  Panel: ({ item, access }) => (
+    <form
+      id={PREPARE_FORM}
+      method="post"
+      action={`/courses/${access.course.id}/items/${item.id}/${CODE_KIND}/prepare`}
+      hidden
+      data-loading-form
+    />
+  ),
   Fields: CodeFields,
   addNote: '問題文・最初のコード・制約・提出の期間は、追加したあとの編集画面で設定します。',
   editAfterCreate: true,
@@ -292,6 +379,7 @@ const code: ExtraKind = {
             grade={grade}
             solution={publicSolutionOf(settings, codePeriodOf(data))}
             canManage={access.canManage}
+            stage={codeStageOf(data)}
           />
           {settings.body && (
             <div class="reader-sheet">

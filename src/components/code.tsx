@@ -3,6 +3,7 @@ import { useRequestContext } from 'hono/jsx-renderer'
 import {
   CODE_FILES,
   CODE_LANGUAGE_LABELS,
+  CODE_STAGE_LABELS,
   CONSTRAINT_KINDS,
   CONSTRAINT_KIND_LABELS,
   JUDGES,
@@ -16,10 +17,14 @@ import {
   buildWebDocument,
   formatPeriodLength,
   formatWait,
+  hasCode,
   isCleared,
+  isFinalized,
+  isSolvable,
   verdictCounts,
   type CodeFiles,
   type CodeLanguage,
+  type CodeStage,
   type ConstraintResult,
   type Goal,
   type GradingStatus,
@@ -773,6 +778,187 @@ export const CodeGradingCard = ({
   )
 }
 
+// ---------------------------------------------------------------- 問題の確定
+
+const FINALIZE_CONFIRM =
+  '確定すると、問題文・制約・補足・最初のコード・解答例は変えられなくなります（タイトル・提出の期間・公開の設定は変えられます）。保存していない変更も一緒に保存して確定します。確定しますか？'
+
+const STAGE_TEXT: Record<NonNullable<CodeStage> | 'legacy', string> = {
+  legacy:
+    'この問題は確定の仕組みより前に作ったので、確定しなくても学生が解けます。確定すると、AI が制約ごとの判定の基準を書き、判定が揃いやすくなります。',
+  draft:
+    '確定するまで、学生はこの問題を解けません。確定すると AI（Claude Opus 5.5）が制約ごとの判定の基準を書き、終わると学生が解けるようになります。',
+  preparing: 'AI が制約ごとの判定の基準を書いています。終わると学生が解けるようになります（1〜2 分ほど）。',
+  ready: '準備が終わり、学生が解けます。',
+  failed: '判定の基準を書けませんでした。もう一度準備するまで、学生は解けません。',
+}
+
+/** 確定と準備の段階ごとの説明と操作。finalize は確定のボタンを送るフォーム、prepare と duplicate は、もう一度準備する・複製するフォームの id */
+const StageBody = ({
+  stage,
+  running,
+  forms,
+}: {
+  stage: CodeStage
+  /** 準備をこのプロセスで進めている */
+  running: boolean
+  forms: { finalize?: string; prepare: string; duplicate?: string }
+}) => (
+  <div class="stack code-stage-panel">
+    {stage && (
+      <p class="code-stage-line">
+        <Chip tone={stage === 'ready' ? 'success' : stage === 'preparing' ? 'accent' : 'default'}>{CODE_STAGE_LABELS[stage]}</Chip>
+      </p>
+    )}
+    <p class="muted small">{STAGE_TEXT[stage ?? 'legacy']}</p>
+    {!isFinalized(stage) && (
+      <Button
+        type="submit"
+        form={forms.finalize}
+        name="finalize"
+        value="1"
+        variant="primary"
+        icon="lock"
+        data-confirm={FINALIZE_CONFIRM}
+        data-confirm-ok="確定する"
+      >
+        問題を確定する
+      </Button>
+    )}
+    {(stage === 'failed' || (stage === 'preparing' && !running)) && (
+      <Button type="submit" form={forms.prepare} icon="arrowPath">
+        もう一度準備する
+      </Button>
+    )}
+    {stage === 'preparing' && running && (
+      <a href="" class="small" data-reload>
+        開き直して確かめる
+      </a>
+    )}
+    {isFinalized(stage) &&
+      (forms.duplicate ? (
+        <div class="stack">
+          <Button type="submit" form={forms.duplicate} icon="copy">
+            複製して作り直す
+          </Button>
+          <p class="muted small">
+            直したいときは、確定する前の新しいアイテムとして複製し、そちらを直して確定します。この問題と提出はそのまま残ります。
+          </p>
+        </div>
+      ) : (
+        <p class="muted small">直したいときは、新しいコーディング問題を作ってください。</p>
+      ))}
+  </div>
+)
+
+/** 通常モードの編集画面の右の列に置く、問題の確定のカード */
+export const CodeStageCard = (props: Parameters<typeof StageBody>[0]) => (
+  <Card heading="問題の確定">
+    <StageBody {...props} />
+  </Card>
+)
+
+/** Moodle モードの入力欄の、問題の確定の欄 */
+export const CodeStageFields = (props: Parameters<typeof StageBody>[0]) => (
+  <fieldset class="field">
+    <legend>問題の確定</legend>
+    <StageBody {...props} />
+  </fieldset>
+)
+
+/** 確定した問題の、判定に関わる設定。変えられないので入力欄ではなく、中身をそのまま見せる */
+export type FinalizedCode = {
+  language: CodeLanguage
+  starter: CodeFiles
+  stdin: string
+  criteria: string
+  constraints: ConstraintRow[]
+  solution: CodeFiles
+  solutionPublic: boolean
+  /** 制約ごとの判定の基準（準備が終わるまでは空） */
+  guides: string[]
+}
+
+const SourceBlock = ({ label, source }: { label: string; source: string }) => (
+  <details class="code-solution-file">
+    <summary>
+      {label}
+      <Icon name="chevronDown" size={14} class="code-task-arrow" />
+    </summary>
+    <pre>{source || '（空）'}</pre>
+  </details>
+)
+
+const FinalizedBody = ({ code }: { code: FinalizedCode }) => {
+  useStyle('/src/components/code.css')
+  const { language, starter, stdin, criteria, constraints, solution, solutionPublic, guides } = code
+  return (
+    <div class="stack">
+      <div class="stack">
+        <h3 class="code-finalized-heading">制約</h3>
+        <ol class="code-finalized-constraints">
+          {constraints.map((c, i) => (
+            <li>
+              <span class="strong">{c.label}</span> <Chip>{CONSTRAINT_KIND_LABELS[c.optional ? 'optional' : 'required']}</Chip>
+              {c.text && <p class="muted small">{c.text}</p>}
+              {guides[i] && (
+                <p class="code-guide small">
+                  <span class="strong">判定の基準：</span>
+                  {guides[i]}
+                </p>
+              )}
+            </li>
+          ))}
+        </ol>
+      </div>
+      {criteria && (
+        <div class="stack">
+          <h3 class="code-finalized-heading">補足</h3>
+          <p class="small">{criteria}</p>
+        </div>
+      )}
+      <div class="stack">
+        <h3 class="code-finalized-heading">最初のコード</h3>
+        {CODE_FILES[language].map((f) => (
+          <SourceBlock label={f.name} source={starter[f.key] ?? ''} />
+        ))}
+        {language === 'python' && <SourceBlock label="入力の例" source={stdin} />}
+      </div>
+      {hasCode(solution) && (
+        <div class="stack">
+          <h3 class="code-finalized-heading">解答例</h3>
+          {CODE_FILES[language].map((f) => (
+            <SourceBlock label={f.name} source={solution[f.key] ?? ''} />
+          ))}
+          <SolutionPublicField checked={solutionPublic} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** 通常モードの編集画面の、確定した問題の中身のカード。最初のコード・解答例・判定のカードの代わりに置く */
+export const CodeFinalizedCard = ({ code }: { code: FinalizedCode }) => (
+  <Card
+    class="editor-extra code-section"
+    heading="確定した問題"
+    description="確定したので、判定に関わる設定は変えられません。判定の基準は、AI が判定のたびに読みます（学生には見えません）。"
+  >
+    <FinalizedBody code={code} />
+  </Card>
+)
+
+/** Moodle モードの入力欄の、確定した問題の中身 */
+export const CodeFinalizedFields = ({ code }: { code: FinalizedCode }) => (
+  <fieldset class="field">
+    <legend>確定した問題</legend>
+    <p class="field-hint">
+      確定したので、判定に関わる設定は変えられません。判定の基準は、AI が判定のたびに読みます（学生には見えません）。
+    </p>
+    <FinalizedBody code={code} />
+  </fieldset>
+)
+
 export const CODE_FORM = 'code-form'
 const RESET_FORM = 'code-reset'
 
@@ -981,6 +1167,7 @@ export const CodeOpen = ({
   grade,
   solution,
   canManage,
+  stage,
 }: {
   /** Web エディターの画面（`/courses/1/items/2/code`） */
   base: string
@@ -991,10 +1178,23 @@ export const CodeOpen = ({
   /** 学生に見せる解答例（lib/code.ts の publicSolutionOf）。見せないあいだは渡さない */
   solution?: CodeFiles | null
   canManage: boolean
+  /** 問題の確定と準備の段階。準備が終わるまで、学生には開く操作を出さない */
+  stage: CodeStage
 }) => {
   useStyle('/src/components/code.css', '/src/components/card.css')
+  if (!canManage && !isSolvable(stage))
+    return (
+      <div class="code-open stack">
+        <Alert tone="info">この問題は準備中です。教師が問題を確定して準備が終わると、解けるようになります。</Alert>
+      </div>
+    )
   return (
     <div class="code-open stack">
+      {canManage && !isSolvable(stage) && (
+        <Alert tone="info">
+          学生はまだこの問題を解けません（{CODE_STAGE_LABELS[stage!]}）。編集画面で問題を確定し、準備が終わると解けるようになります。
+        </Alert>
+      )}
       <LinkCard href={base} icon="code" class="link-card-lg kind-code">
         <span class="file-name">
           <span class="strong">Web エディターで開く</span>
@@ -1337,6 +1537,11 @@ export const VerdictList = ({
               {v.aiVerdict && (
                 <Chip tone="accent" class="code-goal-kind">
                   教師が変更
+                </Chip>
+              )}
+              {showText && v.review && (
+                <Chip icon="eye" class="code-goal-kind" title="最初の判定に自信がなく、判定し直したら違う判定になりました">
+                  要確認
                 </Chip>
               )}
             </span>

@@ -1,8 +1,10 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { filesFor, isCleared, type CodeConstraint, type CodeFiles, type CodeLanguage, type SubmitPeriod } from './code'
 import type { CodeStore } from './code-store'
+import { nextPosition } from './courses'
 import { db, type DB } from './db'
 import { codeDrafts, codeItems, codeSubmissions, completions, courses, enrollments, items, users } from './schema'
+import type { CodeItem, Item } from './types'
 
 export const getCodeItem = (itemId: number) => db.select().from(codeItems).where(eq(codeItems.itemId, itemId)).get()
 
@@ -41,6 +43,49 @@ export const updateCodeItem = (
     })
     .where(eq(codeItems.itemId, itemId))
     .run()
+
+/** 問題の確定と準備の段階を変える。準備をやり直すときは、前の判定の基準を消す */
+export const setCodeStage = (itemId: number, stage: 'preparing') =>
+  db.update(codeItems).set({ stage, guides: [] }).where(eq(codeItems.itemId, itemId)).run()
+
+/**
+ * 確定したコーディング問題を、確定する前（draft）の新しいアイテムとして、同じセクションの末尾に複製する。新しいアイテムの ID を返す。
+ * 学生に表示しないのは、直して確定するまで学生は解けず、解けないアイテムが一覧に増えるだけになるため。
+ * 提出の期間を写さないのは、直しているあいだに期間が始まり、元の問題と同じ時間に受け付けることになるため
+ */
+export function duplicateCodeItem(item: Item, code: CodeItem) {
+  const position = nextPosition(items, eq(items.sectionId, item.sectionId))
+  return db.transaction((tx) => {
+    const { id } = tx
+      .insert(items)
+      .values({
+        courseId: item.courseId,
+        sectionId: item.sectionId,
+        type: 'code',
+        title: `${item.title}（コピー）`.slice(0, 200),
+        body: item.body,
+        hidden: 1,
+        completion: item.completion,
+        position,
+      })
+      .returning({ id: items.id })
+      .get()
+    tx.insert(codeItems)
+      .values({
+        itemId: id,
+        language: code.language,
+        starter: code.starter,
+        stdin: code.stdin,
+        criteria: code.criteria,
+        constraints: code.constraints,
+        solution: code.solution,
+        solutionPublic: code.solutionPublic,
+        stage: 'draft',
+      })
+      .run()
+    return id
+  })
+}
 
 const SUMMARY = {
   id: codeSubmissions.id,

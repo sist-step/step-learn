@@ -1263,16 +1263,18 @@ const currentForm = (form: HTMLFormElement) =>
 
 document.addEventListener('submit', async (e) => {
   const form = e.target as HTMLFormElement
-  const msg = form.dataset.confirm
+  const submitter = (e as SubmitEvent).submitter
+  // ボタンにも data-confirm を書けるのは、保存と一緒に取り消せない操作をするボタン（問題の確定など）を、同じフォームに置くため
+  const confirmer = submitter instanceof HTMLElement && submitter.dataset.confirm ? submitter : form
+  const msg = confirmer.dataset.confirm
   if (msg && form.dataset.confirmed !== '1') {
     e.preventDefault()
-    const submitter = (e as SubmitEvent).submitter
-    const ok = form.dataset.confirmOk
+    const ok = confirmer.dataset.confirmOk
     if (!(await (submitter ? confirmNear(submitter, [msg], { ok }) : confirmDialog(msg)))) return
     const target = currentForm(form)
     if (!target) return
     target.dataset.confirmed = '1'
-    target.requestSubmit()
+    target.requestSubmit(confirmer !== form && submitter instanceof HTMLButtonElement && submitter.isConnected ? submitter : undefined)
     return
   }
   if (form.hasAttribute('data-complete')) return handleComplete(e, form)

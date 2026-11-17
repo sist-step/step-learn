@@ -13,11 +13,14 @@ import {
   filesFor,
   goalsOf,
   isCleared,
+  isFinalized,
+  isSolvable,
   isVerdict,
   sameFiles,
   submitStateOf,
   type CodeConstraint,
   type CodeFiles,
+  type CodeStage,
   type ConstraintResult,
   type SubmitPeriod,
   type SubmitState,
@@ -36,6 +39,7 @@ import {
   SUBMISSION_FILTERS,
   SubmissionPage,
   SubmissionsPage,
+  needsReview,
   submissionsUrl,
   type ConstraintStat,
   type SubmissionFilter,
@@ -50,6 +54,8 @@ export type CodeContext = {
   /** 拡張機能に渡すアイテムの識別子。targetOf に渡すと同じアイテムが返る */
   ref: string
   settings: CodeSettings
+  /** 問題の確定と準備の段階。準備が終わるまで（isSolvable でないあいだ）は、学生に開かせない */
+  stage: CodeStage
   /** 学生が提出できる期間。null なら期間を設けない */
   period: SubmitPeriod | null
   store: CodeStore
@@ -58,7 +64,7 @@ export type CodeContext = {
 }
 
 /** 拡張機能からの要求（ログインのセッションがない）で使う、アイテムの設定と置き場所 */
-export type CodeTarget = Pick<CodeContext, 'settings' | 'period' | 'store'> & {
+export type CodeTarget = Pick<CodeContext, 'settings' | 'stage' | 'period' | 'store'> & {
   course: string
   /** 提出できる人（コースの学生）か */
   isStudent: boolean
@@ -82,6 +88,11 @@ export type CodeBackend = {
   pageUrl: (courseId: number, itemId: number) => string
   /** アイテムの画面 */
   itemUrl: (courseId: number, itemId: number) => string
+  /**
+   * 確定した問題の準備をやり直す（失敗したときと、準備中のまま進んでいないとき）。始めたら true。
+   * 通常モードは編集画面のルート（content の /prepare）で受けるので渡さない
+   */
+  prepareAgain?: (ctx: CodeContext, userId: number) => boolean
 }
 
 /** 書きかけのコード。なければ最後の提出、それもなければ最初のコード */
@@ -151,7 +162,7 @@ const submittedMessage = (accepted: Extract<Accepted, { ok: true }>) =>
 
 const serverOrigin = (c: Context) => config.appOrigin ?? new URL(c.req.url).origin
 
-export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBackend) {
+export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl, prepareAgain: startAgain }: CodeBackend) {
   // 上限なしにしないのは、sandbox が同時に 4 つまでしか実行できず、1 人が繰り返し実行するとほかの人が待たされるため
   const runLimit = rateLimiter({ limit: 20, windowSec: 60 })
   // 回数を絞るのは、押すたびに AI の利用料がかかるため
@@ -160,7 +171,8 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
 
   async function open(c: C) {
     const ctx = await resolve(c)
-    if (!ctx) return null
+    // 準備が終わるまで学生に開かせないのは、判定の基準がないまま提出を受け付けると、確定したあとの判定と揃わないため
+    if (!ctx || (!ctx.access.canManage && !isSolvable(ctx.stage))) return null
     const { access, itemId, settings } = ctx
     return {
       ...ctx,
@@ -309,6 +321,17 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
     return ctx && ctx.access.canManage ? ctx : null
   }
 
+  async function prepareAgain(c: C) {
+    const ctx = await manage(c)
+    if (!ctx || !startAgain?.(ctx, ctx.userId)) return c.notFound()
+    return redirectWith(
+      c,
+      `/courses/${ctx.courseId}/items/${ctx.itemId}/edit`,
+      'もう一度準備しています。終わると、学生が解けるようになります。',
+      'info',
+    )
+  }
+
   /** 学生ごとの、提出の回数・いちばん新しい提出・どれかの提出でクリアしたか */
   function studentRows(store: CodeStore): StudentRow[] {
     const byStudent = new Map<number, Omit<StudentRow, 'student'>>()
@@ -340,6 +363,7 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
     unsubmitted: (r) => !r.latest,
     uncleared: (r) => !!r.latest && !r.cleared,
     appeal: (r) => r.appealed !== null,
+    review: (r) => !!r.latest && needsReview(r.latest),
   }
 
   /** 提出の一覧が変わったかを見分ける値。提出・採点の終わり・確認の依頼のどれでも変わる */
@@ -371,6 +395,7 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
           unsubmitted: rows.filter(FILTERS.unsubmitted).length,
           uncleared: rows.filter(FILTERS.uncleared).length,
           appeal: rows.filter(FILTERS.appeal).length,
+          review: rows.filter(FILTERS.review).length,
         }}
         filter={filter}
         stats={constraintStats(settings.constraints, rows)}
@@ -463,7 +488,8 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
     const target = fields.ok ? history.find((h) => h.id === fields.values.submission) : undefined
     const submission = target?.status === 'graded' ? store.getSubmission(target.id) : undefined
     if (!submission?.verdicts?.length) return c.notFound()
-    const verdicts = submission.verdicts.map((v, i): ConstraintResult => {
+    // 変えなかった判定からも「要確認」を消すのは、判定の欄を保存したことで、教師がすべての判定を見たことになるため
+    const verdicts = submission.verdicts.map(({ review: _review, ...v }, i): ConstraintResult => {
       const chosen = field(form, `verdict_${i}`, 10)
       if (!isVerdict(chosen) || chosen === v.verdict) return v
       const { aiVerdict = v.verdict, ...rest } = v
@@ -501,7 +527,8 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
     respond: (made: T) => Response | Promise<Response> = (made) => c.json(made),
   ) {
     const ctx = await manage(c)
-    if (!ctx || !gradingEnabled) return c.notFound()
+    // 確定した問題で断るのは、変えられない設定の下書きや試しの判定に、AI の利用料をかけないため
+    if (!ctx || !gradingEnabled || isFinalized(ctx.stage)) return c.notFound()
     if (!wantsJson(c)) return c.redirect(ctx.page, 303)
     const result = validate(form, await readForm(c))
     if (!result.ok) return c.json({ error: firstError(result.errors) }, 422)
@@ -614,6 +641,7 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl }: CodeBa
     suggest,
     suggestConstraints,
     trial,
+    prepareAgain,
   }
 }
 
@@ -640,6 +668,7 @@ export function codeRoutes(h: ReturnType<typeof createCodeHandlers>) {
   app.post('/:id/items/:iid/code/suggest', h.suggest)
   app.post('/:id/items/:iid/code/constraints', h.suggestConstraints)
   app.post('/:id/items/:iid/code/trial', h.trial)
+  app.post('/:id/items/:iid/code/prepare', h.prepareAgain)
   return app
 }
 
@@ -691,7 +720,7 @@ export function codeVscodeApi({ targetOf, grader, pageUrl }: Pick<CodeBackend, '
   async function targetFrom(c: C) {
     const claims = verifyCode(bearer(c))
     const target = claims && (await targetOf(claims.ref, claims.userId))
-    if (!claims || !target || !target.store.findUser(claims.userId)) return null
+    if (!claims || !target || !target.store.findUser(claims.userId) || (target.isStudent && !isSolvable(target.stage))) return null
     return { ...target, userId: claims.userId, limitKey: `${claims.ref} ${claims.userId}` }
   }
 
@@ -709,7 +738,8 @@ export function codeVscodeApi({ targetOf, grader, pageUrl }: Pick<CodeBackend, '
     if (claimLimit.retryAfter(ip)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
     claimLimit.hit(ip)
     const claims = claimCodeLaunch((await readJson(c, LAUNCH_CLAIM))?.token ?? '')
-    const target = claims && (await targetOf(claims.ref, claims.userId))
+    const found = claims && (await targetOf(claims.ref, claims.userId))
+    const target = found && (!found.isStudent || isSolvable(found.stage)) ? found : null
     const user = claims && target?.store.findUser(claims.userId)
     if (!claims || !target || !user)
       return c.json({ error: 'リンクの期限が切れているか、すでに使われています。STEP Learn の画面からもう一度開いてください。' }, 401)
