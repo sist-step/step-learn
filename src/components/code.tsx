@@ -1155,7 +1155,7 @@ export const CodeWorkspace = ({
 }
 
 /**
- * アイテムの画面に置く、コードを書く場所の入口。Web エディターはこのアイテムの下の画面（base）で開き、
+ * アイテムの画面に置く、コードを書く場所の入口。ブラウザエディターはこのアイテムの下の画面（base）で開き、
  * VS Code は拡張機能が書きかけのコードを受け取って開く。VS Code で保存すると書きかけに反映し、VS Code からも提出できる。
  * 判定中は、いちばん新しい提出のカードに data-code-grade（確かめる先の URL）を付け、src/code-editor.ts が判定の終わりを待って、
  * カードとクリアの条件（data-code-grade-with の id）を取り直す
@@ -1169,7 +1169,7 @@ export const CodeOpen = ({
   canManage,
   stage,
 }: {
-  /** Web エディターの画面（`/courses/1/items/2/code`） */
+  /** ブラウザエディターの画面（`/courses/1/items/2/code`） */
   base: string
   language: CodeLanguage
   goals: readonly Goal[]
@@ -1197,7 +1197,7 @@ export const CodeOpen = ({
       )}
       <LinkCard href={base} icon="code" class="link-card-lg kind-code">
         <span class="file-name">
-          <span class="strong">Web エディターで開く</span>
+          <span class="strong">ブラウザエディターで開く</span>
           <span class="muted small">
             {language === 'web' ? 'ブラウザで書いて、その場でプレビューを見られます' : 'ブラウザで書いて、その場で実行できます'}
           </span>
@@ -1210,7 +1210,7 @@ export const CodeOpen = ({
         <span class="file-name">
           <span class="strong">VS Code で開く</span>
           <span class="muted small">
-            ファイルを用意して VS Code で開きます。保存した内容は Web エディターにも反映され、VS Code から提出もできます
+            ファイルを用意して VS Code で開きます。保存した内容はブラウザエディターにも反映され、VS Code から提出もできます
           </span>
         </span>
         <form method="post" action={`${base}/launch`} data-vscode-launch>
