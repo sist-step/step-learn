@@ -70,6 +70,9 @@
   --media-text: #a6a6b0;
   --code-bg: #16171d;
   --code-text: #e6e7ee;
+  --paper: #ffffff;
+  --paper-ink: #1f2937;
+  --paper-line: #d7dbe3;
   --switch-thumb: #ffffff;
   --focus: #00788a;
   --ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--focus);
@@ -184,6 +187,9 @@
   --media-text: #8e8e99;
   --code-bg: #0f1013;
   --code-text: #e6e7ee;
+  --paper: #ffffff;
+  --paper-ink: #1f2937;
+  --paper-line: #d7dbe3;
   --switch-thumb: #ffffff;
   --auth-stage: #000000;
   --art-deep: #01030c;

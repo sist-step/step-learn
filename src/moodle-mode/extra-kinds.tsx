@@ -26,6 +26,8 @@ import { SelectField } from '../components/form'
 import type { IconName } from '../components/icons'
 import { Markdown, MarkdownEditor } from '../components/markdown'
 import { QuizFields, QuizPanel } from '../components/quiz'
+import { CollabFacts, CollabPanel, CollabPickFields } from '../components/collab'
+import { COLLAB_KIND, collabSettingsOf, isCollabKind, isCollabScope, type CollabView } from '../lib/collab'
 import { Chip } from '../components/ui'
 import { AGENT_KIND, DEFAULT_AGENT_MODEL, agentBase, agentViewOf, type AgentModel, type AgentView } from '../lib/agent'
 import { agentOpenRouterModels, cachedAgentOpenRouterModels, resolveAgentModel } from '../lib/agent-model'
@@ -61,12 +63,13 @@ import {
 import { quizViewOf, type QuizView } from '../lib/quiz-store'
 import { availableCodeLanguages } from '../lib/sandbox'
 import { isSharing } from '../lib/screen-share'
-import type { AppEnv } from '../lib/types'
+import { ITEM_TYPE_LABELS, type AppEnv } from '../lib/types'
 import { agentModelData, agentModelOfData, agentPeriodOf, agentStore } from './agent-store'
 import { bundleStore, bundleSyncStore } from './bundle-store'
 import { codePeriodOf, codeSettingsOf, codeStageOf, codeStore, grader, preparer } from './code-store'
 import type { Api, MoodleCourse, SaveActivity } from './client'
 import type { MItem } from './mapping'
+import { collabStore } from './collab'
 import { quizStore } from './quiz'
 
 export type ExtraData = Record<string, unknown>
@@ -626,10 +629,70 @@ const quiz: ExtraKind = {
   },
 }
 
+function collabViewOf(item: MItem, access: CourseAccess): CollabView | null {
+  if (!item.extraKey || !item.extra) return null
+  const settings = collabSettingsOf(item.extra.data)
+  const students = access.canManage && settings.scope === 'student' ? collabStore(item.extraKey).students() : undefined
+  return { settings, href: `/courses/${access.course.id}/items/${item.id}/collab`, students }
+}
+
+const collab: ExtraKind = {
+  label: ITEM_TYPE_LABELS.collab,
+  description: '文書・表計算・スライド・キャンバスを、みんなで同時に編集する',
+  icon: 'userGroup',
+  form: 'extraCollab',
+  // 中身の読み取りは lib/collab.ts の collabSettingsOf
+  toData: (values) => ({
+    title: str(values.title),
+    body: str(values.body),
+    kind: isCollabKind(values.collab_kind) ? values.collab_kind : 'doc',
+    scope: isCollabScope(values.collab_scope) ? values.collab_scope : 'course',
+  }),
+  // 編集のときに保存済みの値に戻すのは、送られてきた欄（隠し欄やほかの値）で、追加したあとに種類と分け方を変えさせないため
+  prepare: async (values, current) => ({
+    values: current ? { ...values, collab_kind: collabSettingsOf(current).kind, collab_scope: collabSettingsOf(current).scope } : values,
+  }),
+  Fields: ({ values, errors, idPrefix, saved }) =>
+    saved ? (
+      <>
+        <MarkdownEditor
+          label="説明（任意）"
+          name="body"
+          id={`${idPrefix}-body`}
+          value={str(values.body)}
+          error={errors.body}
+          rows={5}
+          split
+        />
+        <fieldset class="field">
+          <legend>ファイル</legend>
+          <CollabFacts settings={collabSettingsOf(saved)} />
+        </fieldset>
+      </>
+    ) : (
+      <CollabPickFields />
+    ),
+  View: ({ item, data, access }) => {
+    const view = collabViewOf(item, access)
+    const body = str(data.body)
+    return (
+      <>
+        {body && (
+          <div class="reader-sheet">
+            <Markdown source={body} />
+          </div>
+        )}
+        {view && <CollabPanel collab={view} />}
+      </>
+    )
+  },
+}
+
 export const EXTRA_KINDS: Record<string, ExtraKind> = {
   screen,
   [CODE_KIND]: code,
   [QUIZ_KIND]: quiz,
+  [COLLAB_KIND]: collab,
   [BUNDLE_KIND]: bundle,
   [AGENT_KIND]: agent,
 }

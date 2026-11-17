@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { blob, check, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { CODE_LANGUAGES, CODE_STAGES, GRADING_STATUSES, type CodeConstraint, type CodeFiles, type ConstraintResult } from './code'
+import { COLLAB_KINDS, COLLAB_SCOPES } from './collab'
 import { DEFAULT_PASS_PERCENT, QUIZ_LOOKS, type QuizAnswerRecord, type QuizQuestion } from './quiz'
 import type { RunResult } from './sandbox'
 import { LOG_KINDS } from './types'
@@ -154,7 +155,7 @@ export const items = sqliteTable(
     sectionId: integer('section_id')
       .notNull()
       .references(() => sections.id, { onDelete: 'cascade' }),
-    type: text('type', { enum: ['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz'] }).notNull(),
+    type: text('type', { enum: ['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab'] }).notNull(),
     title: text('title').notNull(),
     body: text('body').notNull().default(''),
     url: text('url').notNull().default(''),
@@ -181,7 +182,7 @@ export const items = sqliteTable(
   (t) => [
     index('items_section').on(t.sectionId, t.position),
     index('items_course').on(t.courseId),
-    check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz')`),
+    check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab')`),
     check('items_completion', sql`${t.completion} IN ('none', 'manual', 'view', 'play', 'clear', 'pass')`),
     check('items_link_target', sql`${t.linkTarget} IN ('new', 'same', 'embed')`),
   ],
@@ -518,6 +519,44 @@ export const quizAttempts = sqliteTable(
     createdAt: integer('created_at').notNull().default(now),
   },
   (t) => [index('quiz_attempts_item_user').on(t.itemId, t.userId, t.id), index('quiz_attempts_user').on(t.userId)],
+)
+
+/** 共同編集のアイテム（items.type が collab）の設定。種類と持ち主の分け方は、追加したあとは変えない */
+export const collabItems = sqliteTable(
+  'collab_items',
+  {
+    itemId: integer('item_id')
+      .primaryKey()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: COLLAB_KINDS }).notNull(),
+    scope: text('scope', { enum: COLLAB_SCOPES }).notNull(),
+  },
+  (t) => [
+    check('collab_items_kind', sql`${t.kind} IN ('doc', 'sheet', 'slides', 'board')`),
+    check('collab_items_scope', sql`${t.scope} IN ('course', 'student')`),
+  ],
+)
+
+/** 共同編集のファイル。中身は Yjs の状態をまとめて 1 つにしたもの。画像はストレージに置く */
+export const collabDocs = sqliteTable(
+  'collab_docs',
+  {
+    id: integer('id').primaryKey(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    /** 持ち主（lib/collab.ts の CollabOwner）。course・template・user:<id> */
+    owner: text('owner').notNull(),
+    /** 持ち主の学生。学生のアカウントを消したときに、その学生のファイルも消すために持つ */
+    userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    state: blob('state', { mode: 'buffer' }).notNull(),
+    updatedBy: integer('updated_by').references(() => users.id, { onDelete: 'set null' }),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .default(now)
+      .$onUpdate(() => now),
+  },
+  (t) => [uniqueIndex('collab_docs_item_owner').on(t.itemId, t.owner), index('collab_docs_user').on(t.userId)],
 )
 
 /** 操作ログ。種類ごとの保存期間を過ぎたものは消す（lib/operation-log.ts） */

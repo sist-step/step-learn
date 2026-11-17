@@ -14,6 +14,7 @@ import { aiRoutes, createAiHandlers } from '../routes/ai/handlers'
 import { bundleRoutes, createBundleHandlers, isSyncRequest, vscodeApi } from '../routes/bundle/handlers'
 import { CODE_BODY_LIMIT, codeRoutes, codeVscodeApi, createCodeHandlers, isCodeRequest } from '../routes/code/handlers'
 import { createQuizHandlers, quizRoutes } from '../routes/quiz/handlers'
+import { collabRoutes, createCollabHandlers } from '../routes/collab/handlers'
 import { agentBackend } from './agent'
 import { canUseMoodleAi, moodleAssistant } from './ai-assistant'
 import { aiLedger, usageByUser } from './ai-usage'
@@ -23,6 +24,7 @@ import { MoodleError, isAccessDenied, isNotFound, isTokenError, isUnavailable, m
 import { codeBackend } from './code'
 import * as h from './handlers'
 import { quizBackend } from './quiz'
+import { collabBackend } from './collab'
 import { ErrorPage, errorContent, type ErrorContent } from './views'
 
 const app = new Hono<MoodleEnv>()
@@ -129,6 +131,7 @@ auth.get('/courses/:id/items/:iid/file', h.downloadFile)
 auth.get('/courses/:id/items/:iid/screen', h.showScreen)
 auth.route('/courses', codeRoutes(createCodeHandlers(codeBackend)))
 auth.route('/courses', quizRoutes(createQuizHandlers(quizBackend)))
+auth.route('/courses', collabRoutes(createCollabHandlers(collabBackend)))
 auth.route('/courses', bundleRoutes(createBundleHandlers(bundleBackend)))
 auth.route('/courses', agentRoutes(createAgentHandlers(agentBackend)))
 auth.get('/m/:key', h.openExtra)

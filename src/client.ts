@@ -2223,6 +2223,22 @@ function initPdfViewers() {
     })
 }
 
+// --- 共同編集のエディター（components/collab.tsx の CollabWorkspace）
+// ここに直接 import しないのは、Yjs と種類ごとのエディター（TipTap や Office の形式の読み書き）が大きく、共同編集のない画面でも毎回読み込むことになるため
+let collabApp: Promise<typeof import('./collab/app')> | null = null
+function initCollabs() {
+  void collabApp?.then(({ releaseDetachedCollabs }) => releaseDetachedCollabs())
+  const roots = $$<HTMLElement>('[data-collab]:not([data-collab-ready])')
+  if (!roots.length) return
+  collabApp ??= import('./collab/app')
+  collabApp
+    .then(({ mountCollab }) => roots.forEach((root) => void mountCollab(root, toast, confirmNear)))
+    .catch(() => {
+      collabApp = null
+      toast('エディターを読み込めませんでした。', 'error')
+    })
+}
+
 // --- マスコットの気まぐれな動き（components/mascot.tsx の Mascot）
 // CSS のくり返しだけで動かさないのは、同じ間隔で同じ動きが続くと機械的に見えるため
 const MASCOT_QUIRKS = { hop: 900, 'lean-l': 1400, 'lean-r': 1400, squish: 700, peek: 1600, tap: 1300 } as const
@@ -5019,6 +5035,7 @@ function initContent() {
   applyPdfMode()
   initPdfViewers()
   initQuizWorlds()
+  initCollabs()
   initMascots()
   initWalkers()
   initRestrictionEditors()

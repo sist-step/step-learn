@@ -13,6 +13,7 @@ import {
   type CodeConstraint,
   type CodeFiles,
 } from './code'
+import { COLLAB_KINDS, COLLAB_SCOPES } from './collab'
 import { dateInputToUnix, dateTimeInputToUnix, isDateInput, isDateTimeInput } from './course-period'
 import { checkPassword } from './password'
 import { isMediaFile } from './preview'
@@ -299,6 +300,8 @@ const itemFields = {
   type: choice(ITEM_TYPES, 'page'),
   language: choice(CODE_LANGUAGES, 'web'),
   link_target: choice(LINK_TARGETS, 'new'),
+  collab_kind: choice(COLLAB_KINDS, 'doc'),
+  collab_scope: choice(COLLAB_SCOPES, 'course'),
   completion: z.optional(z.enum(COMPLETIONS, '完了の条件が正しくありません。')),
   // 必須にしないのは、ファイルの欄がファイルのアイテムのフォームにしかないため
   file: z.optional(z.unknown()),
@@ -471,6 +474,14 @@ const extraQuiz = z
     }),
   )
 
+/** Moodle モードの共同編集のアイテム。種類と分け方は追加のときだけ使い、編集では保存済みの値に戻す（extra-kinds.tsx の prepare） */
+const extraCollab = z.object({
+  ...extraItemFields,
+  body: text('説明', 100_000),
+  collab_kind: choice(COLLAB_KINDS, 'doc'),
+  collab_scope: choice(COLLAB_SCOPES, 'course'),
+})
+
 const image = z.object({ image: file('画像を選択してください。') })
 
 // 始まりだけを見るのは、キーの形は提供元が変えることがあり、使えるかは保存するときに提供元に確かめるため
@@ -622,6 +633,7 @@ export const FORMS = {
   extraCode,
   extraAgent,
   extraQuiz,
+  extraCollab,
   image,
   aiSettings,
   aiMessage,
