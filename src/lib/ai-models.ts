@@ -142,15 +142,17 @@ export const AI_FILE_MEDIA_TYPES = ['application/pdf', 'image/png', 'image/jpeg'
 
 export type AiFileMediaType = (typeof AI_FILE_MEDIA_TYPES)[number]
 
-/** ツールの結果に添えて AI に見せるファイル。data は base64 */
+/** ツールの結果や利用者の発言に添えて AI に見せるファイル。data は base64 */
 export type AiFilePart = { mediaType: AiFileMediaType; data: string }
 
 // OpenRouter のモデルに渡さないのは、DeepSeek V4.1 Flash は PDF を受け取れず、OpenAI 互換の API にはツールの結果に画像を添える形がないため
-/** ツールの結果に添えたファイル（AiFilePart）を読めるモデル */
+/** ツールの結果や発言に添えたファイル（AiFilePart）を読めるモデル */
 export const readsFiles = (model: AiModel) => isAnthropicModel(model)
 
 export type AiMessage =
-  | { role: 'system' | 'user'; content: string }
+  | { role: 'system'; content: string }
+  /** files は利用者が発言に添えた画像。readsFiles のモデルにだけ送る */
+  | { role: 'user'; content: string; files?: AiFilePart[] }
   /** native は AiReply の native。次の要求でもそのまま付けて送る。stopped は利用者が生成を止めたこと（content はそこまでの本文） */
   | { role: 'assistant'; content: string; toolCalls?: AiToolCall[]; native?: unknown; stopped?: boolean }
   /** files は結果に添えたファイル。readsFiles のモデルにだけ送る */

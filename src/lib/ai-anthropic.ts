@@ -112,6 +112,8 @@ function toWire(all: AiMessage[]) {
       } else {
         messages.push({ role: 'user', content: [result] })
       }
+    } else if (m.role === 'user' && m.files?.length) {
+      messages.push({ role: 'user', content: [...m.files.map(fileBlock), { type: 'text', text: m.content }] })
     } else {
       messages.push({ role: m.role, content: m.content })
     }

@@ -5,6 +5,7 @@ import type { AiTouched } from '../lib/ai-tool-kit'
 import { formatBytes } from '../lib/bytes'
 import { formatClock } from '../lib/clock'
 import type { DiffLine } from '../lib/diff'
+import { IMAGE_ACCEPT } from '../lib/images'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE } from '../lib/storage'
 import { Button, IconButton } from './button'
 import { FieldError, FileChip, FileInput, SegmentedControl, validateWith } from './form'
@@ -17,8 +18,10 @@ import { useStyle } from './style'
 /** 確認カードの 1 行。複数行の文章は差分（hunks）で見せる */
 export type AiCardChange = { label: string; before: string; after: string } | { label: string; hunks: DiffLine[][] }
 
+/** image は利用者が発言に添えた画像の URL */
 export type AiChatEntry =
-  | { kind: 'user' | 'assistant'; text: string }
+  | { kind: 'user'; text: string; image?: string }
+  | { kind: 'assistant'; text: string }
   | { kind: 'stopped' }
   | { kind: 'compacted' }
   | { kind: 'tool'; label: string; touched?: AiTouched }
@@ -42,7 +45,7 @@ export type AiFileEntry = {
 
 /**
  * hardLabel は「難しい依頼」を選んだときに答えるモデル（なければ選べない）、hardOff はそれを今使えない短い理由、
- * problem は今そのモデルを使えない理由、usage はそのモデルで使う今週の枠の使い具合
+ * problem は今そのモデルを使えない理由、usage はそのモデルで使う今週の枠の使い具合、images は発言に画像を添えられること
  */
 export type AiModelOption = {
   value: string
@@ -51,6 +54,7 @@ export type AiModelOption = {
   hardOff: string | null
   problem: string | null
   usage: AiUsageMeter[]
+  images: boolean
 }
 
 export type AiPanelProps = {
@@ -59,6 +63,8 @@ export type AiPanelProps = {
   revision: string
   /** 音声入力を使えるときの、1 回に録れる長さ（秒）と文字数。使えなければ null */
   voice: { maxSeconds: number; maxChars: number } | null
+  /** 発言に添えられる画像の、このチャットでの残りと上限の枚数（lib/ai-agent.ts の MAX_CHAT_IMAGES） */
+  images: { left: number; max: number }
   /**
    * hard は最後の発言で「難しい依頼」を選んでいたこと、replies は最後の応答のあとに出す、押して送れる続きの依頼、
    * context は会話の大きさ（lib/ai-agent.ts の contextPercent）、focus は選んでいるアイテム（lib/ai-chat.ts の AiFocus）と、その編集画面
@@ -241,7 +247,7 @@ const Entry = ({ entry, chatId }: { entry: AiChatEntry; chatId: number }) => {
   if (entry.kind === 'card') return <Card entry={entry} chatId={chatId} />
   if (entry.kind === 'file') return <FileRequest entry={entry} chatId={chatId} />
   if (entry.kind === 'tool') return <ToolLine label={entry.label} touched={entry.touched} />
-  if (entry.kind === 'user') return <UserMessage text={entry.text} />
+  if (entry.kind === 'user') return <UserMessage text={entry.text} image={entry.image} />
   if (entry.kind === 'stopped') return <StoppedLine />
   if (entry.kind === 'compacted') return <CompactedLine />
   return (
@@ -251,9 +257,24 @@ const Entry = ({ entry, chatId }: { entry: AiChatEntry; chatId: number }) => {
   )
 }
 
-const UserMessage = ({ text }: { text?: string }) => (
+const UserMessage = ({ text, image }: { text?: string; image?: string }) => (
   <div class="ai-msg ai-msg-user">
+    <a href={image} target="_blank" rel="noopener" class="ai-msg-image" hidden={!image} data-ai-image-link>
+      <img src={image} alt="添えた画像" loading="lazy" />
+    </a>
     <p data-ai-text>{text}</p>
+  </div>
+)
+
+const imageLabel = ({ left, max }: AiPanelProps['images']) =>
+  left > 0 ? `画像を添える（このチャットであと ${left} 枚）` : `画像は 1 つのチャットで ${max} 枚まで送れます`
+
+/** 送る前の画像。client.ts（attachAiImage）が選んだ画像を入れて出す */
+const ImageChip = () => (
+  <div class="ai-attach" data-ai-attach hidden>
+    <img class="ai-attach-thumb" alt="" data-ai-attach-thumb />
+    <span class="ai-attach-name truncate" data-ai-attach-name />
+    <IconButton icon="x" label="画像を外す" iconSize={14} class="ai-attach-clear" data-ai-attach-clear />
   </div>
 )
 
@@ -486,7 +507,7 @@ export const AiPanelToggle = () => (
   />
 )
 
-export const AiPanel = ({ models, revision, voice, chat }: AiPanelProps) => {
+export const AiPanel = ({ models, revision, voice, images, chat }: AiPanelProps) => {
   useStyle('/src/components/ai-panel.css')
   useStyle('/src/components/markdown.css')
   const usable = models.filter((m) => !m.problem)
@@ -494,7 +515,9 @@ export const AiPanel = ({ models, revision, voice, chat }: AiPanelProps) => {
   const hard = !!chat?.hard && !!current?.hardLabel && !current.hardOff
   const choices = chat ? [chat.model] : usable
   // 選べるモデルごとの名前を渡すのは、モデルや「難しい依頼」を切り替えたとき、client.ts がヘッダーの名前を書き換えるため
-  const labels = Object.fromEntries(choices.map((m) => [m.value, { label: m.label, hard: m.hardLabel, hardOff: m.hardOff }]))
+  const labels = Object.fromEntries(
+    choices.map((m) => [m.value, { label: m.label, hard: m.hardLabel, hardOff: m.hardOff, images: m.images }]),
+  )
   const pendingCards = (chat?.entries ?? []).flatMap((e) => (e.kind === 'card' && e.state === 'pending' ? [e.callId] : []))
   return (
     <aside
@@ -564,6 +587,7 @@ export const AiPanel = ({ models, revision, voice, chat }: AiPanelProps) => {
         {!chat && usable.length === 1 && <input type="hidden" name="model" value={usable[0].value} />}
         {!chat && <input type="hidden" name="focus" value="" />}
         <FocusChip focus={chat?.focus ?? null} removable={!chat} />
+        <ImageChip />
         <div class="field ai-input">
           {/* title を空にするのは、ブラウザ標準のツールチップが CSS のチップと重なって 2 つ出るため */}
           <IconButton
@@ -575,6 +599,19 @@ export const AiPanel = ({ models, revision, voice, chat }: AiPanelProps) => {
             aria-pressed={hard ? 'true' : 'false'}
             hidden={!current?.hardLabel}
             disabled={!!current?.hardOff}
+          />
+          {/* name を付けないのは、client.ts が大きな画像を縮めてから送るため */}
+          <input type="file" accept={IMAGE_ACCEPT} hidden data-ai-image-input />
+          <IconButton
+            icon="photo"
+            label={imageLabel(images)}
+            title=""
+            class="ai-image"
+            data-ai-image
+            data-left={String(images.left)}
+            data-max={String(images.max)}
+            hidden={!current?.images}
+            disabled={images.left === 0}
           />
           <textarea
             id="ai-message"

@@ -1,9 +1,28 @@
 // DB を開くモジュールを読み込まず、モードごとの違いを AiBackend で受け取るのは、Moodle モード（moodle-mode/app.tsx）も同じハンドラを使うため
+import crypto from 'node:crypto'
 import { Hono, type Context } from 'hono'
 import { stream } from 'hono/streaming'
 import { AiPanel, type AiCardChange, type AiChatEntry, type AiPanelProps } from '../../components/ai-panel'
-import { AI_CHAT_MODELS, AI_MODEL_LABELS, AiError, aiProvider, isAiModel, isProviderEnabled, type AiModel } from '../../lib/ai'
-import { contextPercent, quotaProblem, SUGGEST_REPLIES, type AiAgent, type AiAgentEvent } from '../../lib/ai-agent'
+import {
+  AI_CHAT_MODELS,
+  AI_MODEL_LABELS,
+  AiError,
+  aiProvider,
+  isAiModel,
+  isProviderEnabled,
+  readsFiles,
+  type AiFilePart,
+  type AiModel,
+} from '../../lib/ai'
+import {
+  contextPercent,
+  imagesLeft,
+  MAX_CHAT_IMAGES,
+  quotaProblem,
+  SUGGEST_REPLIES,
+  type AiAgent,
+  type AiAgentEvent,
+} from '../../lib/ai-agent'
 import { chatRevision, type AiCard, type AiChatContent } from '../../lib/ai-chat'
 import { fileKindsAccept, fileKindsLabel } from '../../lib/ai-file-kinds'
 import type { AiChange, AiTouched } from '../../lib/ai-tool-kit'
@@ -58,10 +77,15 @@ function cardEntry(callId: string, card: AiCard, touched: AiTouched | undefined)
   }
 }
 
+// 添字や連番にしないのは、SQLite がチャットの ID を使い回し、閉じたチャットの画像をブラウザが覚えたまま、同じ URL で別の画像を出すことになるため
+const imageKey = ({ data }: AiFilePart) => crypto.createHash('sha256').update(data).digest('base64url').slice(0, 22)
+
+const imageUrl = (file: AiFilePart) => `/ai/chat/images/${imageKey(file)}`
+
 function entriesOf({ messages, labels, cards, touched, compactions = [] }: AiChatContent): AiChatEntry[] {
   return messages.flatMap((m, i): AiChatEntry[] => {
     const marks = compactions.includes(i) ? [{ kind: 'compacted' as const }] : []
-    if (m.role === 'user') return [...marks, { kind: 'user', text: m.content }]
+    if (m.role === 'user') return [...marks, { kind: 'user', text: m.content, image: m.files?.[0] && imageUrl(m.files[0]) }]
     if (m.role !== 'assistant') return marks
     return [
       ...marks,
@@ -110,6 +134,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
       hardOff: agent.hardOff(user.id, model),
       problem: quotaProblem(ledger.getQuota(user.id, model)),
       usage: agent.usageOf(user.id, model),
+      images: readsFiles(model),
     }
   }
 
@@ -119,6 +144,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
       models: enabledModels().map((m) => modelOption(user, m)),
       revision: chatRevision(chat),
       voice: voiceProblem(user) ? null : { maxSeconds: MAX_VOICE_SECONDS, maxChars: MAX_VOICE_CHARS },
+      images: { left: chat ? imagesLeft(chat.content) : MAX_CHAT_IMAGES, max: MAX_CHAT_IMAGES },
       chat: chat && {
         id: chat.id,
         model: modelOption(user, chat.model),
@@ -156,7 +182,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     const result = validate('aiMessage', await readForm(c))
     return streamEvents(c, async (emit) => {
       if (!result.ok) return emit({ type: 'error', message: firstError(result.errors), retract: true })
-      const { message, model, chat: chatId, page, hard, revision, focus: focusField } = result.values
+      const { message, model, chat: chatId, page, hard, revision, focus: focusField, image } = result.values
 
       let chat = chats.currentChat(user.id)
       // 古い画面からの発言を今のチャットに足さないのは、利用者が読んでいない発言を踏まえた応答になり、チャットがないと思って送ると、ほかのタブのチャットを消して始めてしまうため
@@ -189,13 +215,32 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
         chat = chats.startChat(user.id, model, focus ?? undefined)
         emit({ type: 'chat', id: chat.id })
       }
-      await agent.send({ c, chat, message, page, hard: hard === 1 }, emit)
+      await agent.send({ c, chat, message, page, hard: hard === 1, image }, emit)
       // 何も残らなかったチャットを閉じるのは、最初の発言が失敗したとき、モデルを選び直して始められるようにするため
       if (chat.content.messages.length === 0) {
         chats.closeChat(user.id)
         emit({ type: 'closed' })
       }
     })
+  }
+
+  /** 発言に添えた画像。開いているチャットのものだけを返す */
+  async function image(c: Context<AppEnv>) {
+    const user = c.var.user!
+    if (!(await canUse(c))) return c.notFound()
+    const key = c.req.param('key')
+    const file = (chats.currentChat(user.id)?.content.messages ?? [])
+      .flatMap((m) => (m.role === 'user' ? (m.files ?? []) : []))
+      .find((f) => imageKey(f) === key)
+    if (!file) return c.notFound()
+    const etag = `"${key}"`
+    // max-age で覚えさせないのは、チャットを閉じたあとも、共有の端末のブラウザに画像が残って開けるため
+    c.header('Cache-Control', 'private, no-cache')
+    c.header('ETag', etag)
+    if (c.req.header('If-None-Match') === etag) return c.body(null, 304)
+    c.header('Content-Type', file.mediaType)
+    c.header('X-Content-Type-Options', 'nosniff')
+    return c.body(Buffer.from(file.data, 'base64'))
   }
 
   // lib/forms.ts で確かめないのは、上限の値がストレージの設定にあり、実行ファイルかどうかは中身を読まないと分からないため
@@ -293,7 +338,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     return c.redirect(sameOriginReferer(c, '/dashboard'), 303)
   }
 
-  return { renderPanel, show, state, suggestions, send, decide, approveAll, stop, voice, close }
+  return { renderPanel, show, state, suggestions, image, send, decide, approveAll, stop, voice, close }
 }
 
 export type AiHandlers = ReturnType<typeof createAiHandlers>
@@ -302,6 +347,7 @@ export function aiRoutes(h: AiHandlers) {
   const app = new Hono<AppEnv>()
   app.get('/chat', h.show)
   app.get('/chat/state', h.state)
+  app.get('/chat/images/:key', h.image)
   app.get('/suggestions', h.suggestions)
   app.post('/chat', h.send)
   app.post('/chat/confirm', h.decide)
