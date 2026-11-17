@@ -128,9 +128,12 @@ const Cleared = ({ submission }: { submission: SubmissionSummary }) => {
   )
 }
 
-export const SUBMISSION_FILTERS = ['all', 'unsubmitted', 'uncleared', 'appeal'] as const
+export const SUBMISSION_FILTERS = ['all', 'unsubmitted', 'uncleared', 'appeal', 'review'] as const
 
-/** 提出の一覧の絞り込み。uncleared は提出したがまだクリアしていない学生、appeal は判定の確認を頼んでいる学生 */
+/**
+ * 提出の一覧の絞り込み。uncleared は提出したがまだクリアしていない学生、appeal は判定の確認を頼んでいる学生、
+ * review はいちばん新しい提出に、AI の判定が割れて教師に確かめてほしい制約がある学生
+ */
 export type SubmissionFilter = (typeof SUBMISSION_FILTERS)[number]
 
 const FILTER_LABELS: Record<SubmissionFilter, string> = {
@@ -138,6 +141,7 @@ const FILTER_LABELS: Record<SubmissionFilter, string> = {
   unsubmitted: '未提出',
   uncleared: '未クリア',
   appeal: '確認の依頼',
+  review: '要確認',
 }
 
 const FILTER_EMPTY: Record<SubmissionFilter, { title: string; text: string }> = {
@@ -145,7 +149,12 @@ const FILTER_EMPTY: Record<SubmissionFilter, { title: string; text: string }> = 
   unsubmitted: { title: '未提出の学生はいません', text: '全員が提出しています。' },
   uncleared: { title: '未クリアの学生はいません', text: '提出した学生は、全員クリアしています。' },
   appeal: { title: '確認の依頼はありません', text: '学生が判定の確認を頼むと、ここに並びます。' },
+  review: { title: '確かめる判定はありません', text: 'AI の判定が割れた制約があると、ここに並びます。' },
 }
+
+/** AI の判定が割れて、教師に確かめてほしい制約がある提出 */
+export const needsReview = (s: Pick<SubmissionSummary, 'status' | 'verdicts'>) =>
+  s.status === 'graded' && !!s.verdicts?.some((v) => v.review)
 
 /** 制約 1 つの状況。passed はいちばん新しい提出でできている学生の数、judged はその制約を判定した提出のある学生の数 */
 export type ConstraintStat = { label: string; optional: boolean; passed: number; judged: number }
@@ -158,6 +167,7 @@ export type SubmissionCounts = {
   unsubmitted: number
   uncleared: number
   appeal: number
+  review: number
 }
 
 export const SubmissionsPage = ({
@@ -310,6 +320,13 @@ const SubmissionRows = ({
                     <a href={submissionsUrl(access.course.id, item.id, student.id, appealed)} class="appeal-link">
                       <Chip tone="accent" icon="flag">
                         確認の依頼
+                      </Chip>
+                    </a>
+                  )}
+                  {needsReview(latest) && (
+                    <a href={submissionsUrl(access.course.id, item.id, student.id, latest.id)} class="appeal-link">
+                      <Chip icon="eye" title="AI の判定が割れた制約があります">
+                        要確認
                       </Chip>
                     </a>
                   )}

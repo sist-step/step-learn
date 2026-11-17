@@ -2,10 +2,12 @@ import { AGENT_BODY_HINT, AgentEditPanel, AgentInstructionsField, AgentModelCard
 import { BundleEditPanel, BundleOpen, type BundleView } from '../../components/bundle'
 import {
   CodeAiHelp,
+  CodeFinalizedCard,
   CodeGradingCard,
   CodeOpen,
   CodePeriodCard,
   CodeSolutionCard,
+  CodeStageCard,
   CodeStarterCard,
   type ConstraintRow,
   type GradeView,
@@ -39,7 +41,7 @@ import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import { agentBase, type AgentView } from '../../lib/agent'
 import type { OpenRouterModelInfo } from '../../lib/ai-models'
 import { bundleBase } from '../../lib/bundle'
-import type { CodeFiles, CodeLanguage, Goal, Judge } from '../../lib/code'
+import { isFinalized, type CodeFiles, type CodeLanguage, type CodeStage, type Goal, type Judge } from '../../lib/code'
 import { unixToDateTimeInput } from '../../lib/course-period'
 import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
@@ -79,7 +81,7 @@ export type ItemInput = {
 }
 
 /** コードのアイテムの言語と、見ている学生のいちばん新しい提出。goals は学生に見せるクリアの条件（制約のラベル） */
-export type CodeView = { language: CodeLanguage; goals: Goal[]; grade: GradeView | null; solution: CodeFiles | null }
+export type CodeView = { language: CodeLanguage; goals: Goal[]; grade: GradeView | null; solution: CodeFiles | null; stage: CodeStage }
 
 export type OutlineItem = Pick<
   Item,
@@ -106,11 +108,14 @@ const hostName = (url: string) => {
 }
 
 const JUDGE_FORM = 'code-judge-form'
+const PREPARE_FORM = 'code-prepare-form'
+const DUPLICATE_FORM = 'code-duplicate-form'
 
 export const ItemEditPage = ({
   access,
   item,
   code,
+  preparing = false,
   bundle,
   agent,
   quiz,
@@ -124,6 +129,8 @@ export const ItemEditPage = ({
   access: CourseAccess
   item: Item
   code?: CodeItem
+  /** コーディング問題の準備を、このプロセスで進めている */
+  preparing?: boolean
   /** ファイル自動配布のアイテムで配るファイルと、同期の状態 */
   bundle?: BundleView
   /** コーディングエージェントのアイテムの設定と利用状況 */
@@ -167,6 +174,7 @@ export const ItemEditPage = ({
     model: agent?.settings.model.id ?? '',
     ...values,
   }
+  const finalized = !!code && isFinalized(code.stage)
   const section = sections.find((s) => s.id === item.sectionId)
   const crumbs = [
     { href: '/courses', label: 'コース一覧' },
@@ -205,25 +213,48 @@ export const ItemEditPage = ({
               </div>
             )}
             {item.type === 'file' && <ItemFileField name={item.fileName ?? ''} size={item.fileSize ?? 0} error={errors.file} />}
-            <MarkdownEditor
-              label={item.type === 'page' ? '本文' : item.type === 'code' ? '問題文' : '説明（任意）'}
-              name="body"
-              value={v.body}
-              error={errors.body}
-              hint={agent ? AGENT_BODY_HINT : undefined}
-              rows={item.type === 'page' ? 18 : item.type === 'code' ? 10 : 5}
-              split
-            />
+            {finalized ? (
+              <div class="field">
+                <span class="strong small">問題文</span>
+                <div class="reader-sheet">
+                  <Markdown source={v.body || '（問題文はありません）'} />
+                </div>
+              </div>
+            ) : (
+              <MarkdownEditor
+                label={item.type === 'page' ? '本文' : item.type === 'code' ? '問題文' : '説明（任意）'}
+                name="body"
+                value={v.body}
+                error={errors.body}
+                hint={agent ? AGENT_BODY_HINT : undefined}
+                rows={item.type === 'page' ? 18 : item.type === 'code' ? 10 : 5}
+                split
+              />
+            )}
             {agent && <AgentInstructionsField value={v.instructions} error={errors.instructions} />}
-            {code && (
+            {code && !finalized && (
               <CodeAiHelp
                 suggest={gradingEnabled ? `${base}/code/suggest` : undefined}
                 item={{ courseId, itemId: item.id, title: item.title }}
               />
             )}
           </Card>
-          {code && <CodeStarterCard language={code.language} starter={v.starter} stdin={v.stdin} errors={errors} />}
-          {code && (
+          {code && finalized && (
+            <CodeFinalizedCard
+              code={{
+                language: code.language,
+                starter: code.starter,
+                stdin: code.stdin,
+                criteria: code.criteria,
+                constraints: v.constraints,
+                solution: code.solution,
+                solutionPublic: v.solutionPublic,
+                guides: code.guides,
+              }}
+            />
+          )}
+          {code && !finalized && <CodeStarterCard language={code.language} starter={v.starter} stdin={v.stdin} errors={errors} />}
+          {code && !finalized && (
             <CodeSolutionCard
               language={code.language}
               solution={v.solution}
@@ -232,7 +263,7 @@ export const ItemEditPage = ({
               errors={errors}
             />
           )}
-          {code && (
+          {code && !finalized && (
             <CodeGradingCard
               gradingEnabled={gradingEnabled}
               criteria={v.criteria}
@@ -245,6 +276,13 @@ export const ItemEditPage = ({
           {quiz && <QuizEditor rows={v.questions} errors={errors} />}
 
           <aside class="editor-side">
+            {code && (
+              <CodeStageCard
+                stage={code.stage}
+                running={preparing}
+                forms={{ finalize: ITEM_FORM, prepare: PREPARE_FORM, duplicate: DUPLICATE_FORM }}
+              />
+            )}
             {code && <CodePeriodCard opensAt={v.opensAt} closesAt={v.closesAt} errors={errors} />}
             {quiz && <QuizGradingCard passPercent={v.passPercent} showAnswers={v.showAnswers} errors={errors} />}
             {quiz && <QuizLookCard look={v.look} />}
@@ -285,6 +323,8 @@ export const ItemEditPage = ({
         )}
 
         {judge && code && <form id={JUDGE_FORM} method="post" action={`${base}/judge`} hidden />}
+        {code && <form id={PREPARE_FORM} method="post" action={`${base}/prepare`} hidden data-loading-form />}
+        {code && <form id={DUPLICATE_FORM} method="post" action={`${base}/duplicate`} hidden data-loading-form />}
       </div>
     </AppShell>
   )
@@ -456,6 +496,7 @@ export const ItemPage = ({
               grade={code.grade}
               solution={code.solution}
               canManage={access.canManage}
+              stage={code.stage}
             />
           )}
 

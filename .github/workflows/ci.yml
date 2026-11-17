@@ -74,6 +74,22 @@ jobs:
             })
             req.end(JSON.stringify({ language: "python", code: "print(\"ok\")" }))
           '
+      # 押したときの変化まで確かめるのは、ネットワークも権限もないコンテナで、Chromium が起動してページを操作できることを確かめるため
+      - name: Open a page in the browser
+        run: |
+          docker compose exec -T app node -e '
+            const html = "<button onclick=\"this.textContent = 1 + 1\">押す</button>"
+            const req = require("node:http").request({ socketPath: "/run/browser/browser.sock", path: "/render", method: "POST" }, (res) => {
+              let body = ""
+              res.on("data", (chunk) => (body += chunk))
+              res.on("end", () => {
+                console.log(body)
+                const record = JSON.parse(body)
+                process.exit(record.status === "ok" && record.clicks.some((c) => c.changes.some((l) => l.includes("2"))) ? 0 : 1)
+              })
+            })
+            req.end(JSON.stringify({ html }))
+          '
       - name: Show logs
         if: failure()
         run: docker compose logs

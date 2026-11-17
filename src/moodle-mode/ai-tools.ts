@@ -23,7 +23,16 @@ import {
   type AiFileReader,
   type AiToolContext,
 } from '../lib/ai-tool-kit'
-import { CODE_FILES, CODE_LANGUAGES, CODE_LANGUAGE_LABELS, DEFAULT_STARTER, MAX_CODE_LENGTH, MAX_STDIN_LENGTH, filesFor } from '../lib/code'
+import {
+  CODE_FILES,
+  CODE_LANGUAGES,
+  CODE_LANGUAGE_LABELS,
+  DEFAULT_STARTER,
+  MAX_CODE_LENGTH,
+  MAX_STDIN_LENGTH,
+  filesFor,
+  isFinalized,
+} from '../lib/code'
 import { config } from '../lib/config'
 import { isHttpUrl } from '../lib/forms'
 import { availableCodeLanguages } from '../lib/sandbox'
@@ -32,7 +41,7 @@ import { consumeUpload, findUpload, type MoodleAiUpload } from './ai-uploads'
 import type { MoodleEnv } from './auth'
 import { forgetCourse } from './cache'
 import { fetchFile } from './client'
-import { codeSettingsOf } from './code-store'
+import { codeSettingsOf, codeStageOf } from './code-store'
 import { loadCourse, moodle, myCourses, otherCourses, type LoadedCourse } from './data'
 import { insertExtra, newExtraKey, updateExtraData } from './extra'
 import { CODE_KIND } from './extra-kinds'
@@ -300,6 +309,8 @@ const createItem = defineTool(
           constraints: toConstraints(args.constraints ?? []),
           opensAt: null,
           closesAt: null,
+          stage: 'draft',
+          guides: [],
         },
       })
     }
@@ -467,6 +478,8 @@ function checkItemArgs(loaded: LoadedCourse, item: MItem, args: UpdateItemArgs, 
   const codeArgs = [args.body, args.constraints, args.criteria, args.starter, args.stdin]
   if (codeArgs.some((v) => v !== undefined) && !codeKind(item))
     return '問題文・制約・補足・最初のコード・入力の例は、コーディング問題でだけ変えられます。'
+  if (codeArgs.some((v) => v !== undefined) && item.extra && isFinalized(codeStageOf(item.extra.data)))
+    return 'このコーディング問題は確定しているので、問題文・制約・補足・最初のコード・入力の例は変えられません。直すときは、新しいコーディング問題を作ってください。'
   if (args.section_id !== undefined && !loaded.sections.some((s) => s.id === args.section_id))
     return '移し先のセクションが、同じコースにありません。'
   return null

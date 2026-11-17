@@ -415,6 +415,8 @@ const extraCode = z
     body: text('問題文', 100_000),
     language: choice(CODE_LANGUAGES, 'web'),
     starter_set: flag(),
+    /** 保存と一緒に問題を確定する（編集画面の「問題を確定する」） */
+    finalize: flag(),
     criteria: text('補足', 5000),
     'constraint_label[]': list(),
     'constraint_text[]': list(),

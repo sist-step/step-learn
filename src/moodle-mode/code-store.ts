@@ -1,7 +1,7 @@
 // extra-kinds.tsx からも読み込むので、extra-kinds.tsx を読み込むモジュール（./code.ts など）を import しない
 import { and, desc, eq, sql } from 'drizzle-orm'
-import { isCodeLanguage, type CodeConstraint, type CodeFiles, type SubmitPeriod } from '../lib/code'
-import { createGrader } from '../lib/code-grader'
+import { CODE_STAGES, isCodeLanguage, type CodeConstraint, type CodeFiles, type CodeStage, type SubmitPeriod } from '../lib/code'
+import { createGrader, createPreparer } from '../lib/code-grader'
 import type { CodeSettings, CodeStore } from '../lib/code-store'
 import { aiLedger } from './ai-usage'
 import { db, type MoodleDB } from './db'
@@ -28,8 +28,14 @@ export function codeSettingsOf(data: Record<string, unknown>, title = text(data.
     // 解答例の欄ができる前に作ったアイテムは solution を持たない
     solution: typeof data.solution === 'object' && data.solution !== null ? (data.solution as CodeFiles) : {},
     solutionPublic: data.solutionPublic === true,
+    // 確定の仕組みより前に作ったアイテムは guides を持たない
+    guides: Array.isArray(data.guides) ? data.guides.filter((g): g is string => typeof g === 'string') : [],
   }
 }
+
+/** extra_items の data の、問題の確定と準備の段階。確定の仕組みより前に作ったアイテムは持たず、null になる */
+export const codeStageOf = (data: Record<string, unknown>): CodeStage =>
+  (CODE_STAGES as readonly unknown[]).includes(data.stage) ? (data.stage as NonNullable<CodeStage>) : null
 
 const unix = (v: unknown) => (typeof v === 'number' ? v : null)
 
@@ -142,5 +148,48 @@ export const grader = createGrader({
   ledger: aiLedger,
 })
 
+const codeDataOf = (key: string) =>
+  db
+    .select({ data: extraItems.data })
+    .from(extraItems)
+    .where(and(eq(extraItems.key, key), eq(extraItems.type, 'code')))
+    .get()?.data
+
+/** 準備をやり直すために、段階を準備中に戻し、前の判定の基準を消す */
+export function restartPreparation(key: string) {
+  const data = codeDataOf(key)
+  if (data)
+    db.update(extraItems)
+      .set({ data: { ...data, stage: 'preparing', guides: [] } })
+      .where(eq(extraItems.key, key))
+      .run()
+}
+
+/** Moodle モード（moodle-mode.db）の、確定した問題の準備。段階と判定の基準は extra_items の data の stage と guides に置く */
+export const preparer = createPreparer<string>({
+  load(key) {
+    const data = codeDataOf(key)
+    return data && codeStageOf(data) === 'preparing' ? codeSettingsOf(data) : null
+  },
+  save(key, result) {
+    const data = codeDataOf(key)
+    if (!data || codeStageOf(data) !== 'preparing') return
+    const next = result.stage === 'ready' ? { ...data, stage: 'ready', guides: result.guides } : { ...data, stage: 'failed' }
+    db.update(extraItems).set({ data: next }).where(eq(extraItems.key, key)).run()
+  },
+  pendingKeys: () =>
+    db
+      .select({ key: extraItems.key })
+      .from(extraItems)
+      .where(and(eq(extraItems.type, 'code'), sql`json_extract(${extraItems.data}, '$.stage') = 'preparing'`))
+      .limit(1000)
+      .all()
+      .map((r) => r.key),
+  ledger: aiLedger,
+})
+
 // 開発サーバーで戻さないのは、モジュールを読み込み直すたびに、前のモジュールが採点している提出をもう一度採点してしまうため
-if (!import.meta.env.DEV) grader.resume()
+if (!import.meta.env.DEV) {
+  grader.resume()
+  preparer.resume()
+}
