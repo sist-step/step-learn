@@ -46,8 +46,12 @@
 .collab-presence { display: flex; align-items: center; gap: 10px; flex: none; margin-left: auto; padding-left: 12px; }
 .collab-people { display: flex; align-items: center; }
 .collab-person { display: grid; place-items: center; width: 28px; height: 28px; margin-left: -6px; border: 2px solid var(--collab-bar-bg); border-radius: 50%; background: var(--person, var(--muted)); color: var(--on-strong); font-size: var(--fs-xs); font-weight: 700; }
+.collab-person { cursor: pointer; }
 .collab-person:first-child { margin-left: 0; }
 .collab-person.is-more { background: var(--surface-3); color: var(--text-2); }
+.collab-person-tip { position: fixed; z-index: 30; max-width: min(320px, calc(100vw - 16px)); padding: 4px 10px; border: 1px solid var(--overlay-border); border-radius: 999px; background: var(--surface-raised); color: var(--text); box-shadow: var(--shadow); font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; animation: collab-tip-in 0.12s ease-out; }
+.collab-person-tip[hidden] { display: none; }
+@keyframes collab-tip-in { from { opacity: 0; translate: 0 -2px; } }
 .collab-status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .collab-status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--warning); }
 .collab[data-state='synced'] .collab-status::before { background: var(--success); }
