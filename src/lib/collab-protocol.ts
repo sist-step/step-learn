@@ -19,6 +19,8 @@ export type ServerToClientEvents = {
 export type ClientToServerEvents = {
   update: (update: Uint8Array) => void
   awareness: (update: Uint8Array) => void
+  /** 遅延を測るため、サーバーはすぐに ack を返す */
+  latency: (ack: () => void) => void
 }
 
 export type CollabError = 'not_found' | 'too_large'

@@ -183,6 +183,10 @@ function join(socket: CollabSocket) {
     }
   })
 
+  socket.on('latency', (ack) => {
+    if (typeof ack === 'function') ack()
+  })
+
   socket.on('disconnect', () => {
     room.sockets.delete(socket.id)
     if (entry.clients.size) removeAwarenessStates(room.awareness, [...entry.clients], null)
