@@ -1,5 +1,5 @@
 import http from 'node:http'
-import type { CodeLanguage } from './code'
+import { CODE_LANGUAGES, type CodeLanguage } from './code'
 import { config } from './config'
 
 export const SANDBOX_LANGUAGES = ['python'] as const
@@ -35,10 +35,7 @@ const TIMEOUT = 40_000
 export const sandboxEnabled = config.sandbox !== null
 
 /** 新しく作るコードのアイテムで選べる言語。Python は sandbox が設定されているときだけ */
-// 'python' を入れていないのは、当面は Web だけで運用するため。実行と採点の処理は残してあり、ここに足せば選べるようになる
-const SELECTABLE_CODE_LANGUAGES: readonly CodeLanguage[] = ['web']
-
-export const availableCodeLanguages = SELECTABLE_CODE_LANGUAGES.filter((l) => l !== 'python' || sandboxEnabled)
+export const availableCodeLanguages: readonly CodeLanguage[] = CODE_LANGUAGES.filter((l) => l !== 'python' || sandboxEnabled)
 
 const isRunResult = (v: unknown): v is RunResult => {
   if (typeof v !== 'object' || v === null) return false

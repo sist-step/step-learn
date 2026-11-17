@@ -84,7 +84,7 @@ export type CodeBackend = {
   /** 拡張機能からの要求で、userId の人が ref のアイテムを今も開けるなら返す。開けなければ null */
   targetOf: (ref: string, userId: number) => Promise<CodeTarget | null>
   grader: Grader
-  /** Web エディターの画面（showPage） */
+  /** ブラウザエディターの画面（showPage） */
   pageUrl: (courseId: number, itemId: number) => string
   /** アイテムの画面 */
   itemUrl: (courseId: number, itemId: number) => string
@@ -284,7 +284,7 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl, prepareA
     return c.json({ pending: latest?.status === 'pending', ahead: latest ? grader.aheadOf(latest.id) : 0 })
   }
 
-  /** Web エディターの画面 */
+  /** ブラウザエディターの画面 */
   async function showPage(c: C) {
     const ctx = await open(c)
     if (!ctx) return c.notFound()
@@ -300,7 +300,7 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl, prepareA
         submissions={access.role === 'student' ? submissionsOf(ctx.store, ctx.userId, grader, ctx.period) : null}
         completion={ctx.completion}
       />,
-      { title: `Web エディター - ${settings.title}` },
+      { title: `ブラウザエディター - ${settings.title}` },
     )
   }
 
@@ -692,7 +692,7 @@ export const isCodeRequest = (c: Context) => c.req.method === 'POST' && c.req.pa
 
 const EXPIRED = '期限が切れたか、このアイテムを開けなくなりました。STEP Learn の画面から、もう一度 VS Code で開いてください。'
 
-/** 拡張機能に渡すファイルの一覧。ファイルの名前は Web エディターのタブと同じ */
+/** 拡張機能に渡すファイルの一覧。ファイルの名前はブラウザエディターのタブと同じ */
 const fileList = (settings: CodeSettings, files: CodeFiles) =>
   CODE_FILES[settings.language].map((f) => ({ path: f.name, content: files[f.key] ?? '' }))
 
@@ -752,7 +752,7 @@ export function codeVscodeApi({ targetOf, grader, pageUrl }: Pick<CodeBackend, '
     })
   })
 
-  // 拡張機能がフォルダーを開き直したときに、Web エディターで書き換えた分を取り込むのに使う
+  // 拡張機能がフォルダーを開き直したときに、ブラウザエディターで書き換えた分を取り込むのに使う
   app.get('/state', async (c) => {
     const target = await targetFrom(c)
     if (!target) return c.json({ error: EXPIRED }, 401)
@@ -770,7 +770,7 @@ export function codeVscodeApi({ targetOf, grader, pageUrl }: Pick<CodeBackend, '
     if (!read) return c.json({ error: '送られた内容が正しくありません。' }, 400)
     if (!read.ok) return c.json({ error: read.error }, 422)
     const { settings, store, userId } = target
-    // 入力（stdin）は VS Code にないので、Web エディターで書いたものを残す
+    // 入力（stdin）は VS Code にないので、ブラウザエディターで書いたものを残す
     store.saveDraft(userId, read.files, currentCode(settings, store, userId).stdin)
     return c.json({ saved: true })
   })

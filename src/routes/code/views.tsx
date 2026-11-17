@@ -47,7 +47,7 @@ const crumbs = (access: CourseAccess, item: CodeTarget, pageUrl: string, student
   ...(student ? [{ href: submissionsUrl(access.course.id, item.id), label: '提出' }] : []),
 ]
 
-/** Web エディターの画面。アイテムの画面の「Web エディターで開く」から開く */
+/** ブラウザエディターの画面。アイテムの画面の「ブラウザエディターで開く」から開く */
 export const CodePage = ({
   access,
   item,
@@ -83,7 +83,7 @@ export const CodePage = ({
             { href: `/courses/${access.course.id}`, label: access.course.title },
             { href: itemUrl, label: item.title },
           ]}
-          title="Web エディター"
+          title="ブラウザエディター"
         >
           {access.canManage && (
             <Button href={`${itemUrl}/edit`} variant="ghost" size="sm" icon="pencil" aria-label="編集">
