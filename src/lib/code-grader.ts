@@ -91,16 +91,42 @@ function describeRun(result: RunResult | null) {
   ].join('\n')
 }
 
+const HALF_WIDTH: Record<string, string> = { '，': ',', '：': ':' }
+
+/** 文字列の外にある全角の「，」「：」を半角にする。文字列の中は学生のコードの写しや日本語の文なので変えない */
+function halfWidthOutsideStrings(json: string) {
+  let out = ''
+  let inString = false
+  let escaped = false
+  for (const ch of json) {
+    if (inString) {
+      if (escaped) escaped = false
+      else if (ch === '\\') escaped = true
+      else if (ch === '"') inString = false
+      out += ch
+      continue
+    }
+    if (ch === '"') inString = true
+    out += HALF_WIDTH[ch] ?? ch
+  }
+  return out
+}
+
 function parseJson(text: string): Record<string, unknown> | null {
   const start = text.indexOf('{')
   const end = text.lastIndexOf('}')
   if (start < 0 || end <= start) return null
-  try {
-    const data: unknown = JSON.parse(text.slice(start, end + 1))
-    return typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : null
-  } catch {
-    return null
+  const json = text.slice(start, end + 1)
+  // 全角の区切りを直して読み直すのは、Haiku が日本語の文に続けて「]，」のように全角で区切ることがあり、そのたびに採点をやり直すと料金がかさむため
+  for (const candidate of [json, halfWidthOutsideStrings(json)]) {
+    try {
+      const data: unknown = JSON.parse(candidate)
+      return typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : null
+    } catch {
+      continue
+    }
   }
+  return null
 }
 
 /** 採点に使うもの。設定は採点するときのアイテムのもの、files は提出されたコード */
@@ -195,12 +221,16 @@ export function buildJudgeMessages(
     '- 判定は次の 3 つのどれかにします。"pass": 満たしている / "partial": 一部だけ満たしている、または満たそうとしているが誤りがある / "fail": 満たしていない、または手を付けていない',
     '- 最初のコード（教師が用意したもの）にはじめから書いてある部分だけでは、"pass" にしません。',
     '- 制約に書かれていないことでは判定を下げません。見た目の好み（色の選び方など）でも下げません。',
-    '- 制約は 1 つずつ独立に判定します。ほかの制約に関わる誤りや、まだ書いていない部分は、その制約の判定に持ち込みません。',
+    '- 制約は 1 つずつ判定し、ほかの制約で見る誤りだけを理由に下げません。ただし、答えや動作の結果を求める制約では結果を変える誤りはどれも下げる理由になり、その制約が働くのに要る処理がまだ書かれていなければ満たしたことにしません。',
     '- 書き方は問いません。標準ライブラリや教科書と違う書き方でも、制約が求める動作をしていれば "pass" にします。',
     '- 名前・コメント・docstring ではなく、実際に動く中身で判断します。関数や処理を書いていても、どこからも呼ばれていない、いつも同じ値を返すなどで制約の動作をしないなら "fail" にします。',
+    '- 「〜させない」「〜できなくする」制約は、その機能がまだ作られていないために起きないだけなら、満たしたことにせず "fail" にします。',
     ...(observed.web
       ? [
-          `- 「${WEB_RECORD_LABEL}」は、提出をブラウザで開いて見た目を測り、押せる要素を押した結果です。CSS や JavaScript が書いてあっても、記録の上で効いていなければ（後のルールに上書きされている、押しても変わらない、計算結果がおかしいなど）"pass" にしません。記録にない操作（文字の入力など）は、コードを読んで判断します。`,
+          `- 「${WEB_RECORD_LABEL}」は、提出をブラウザで開いて幅 1280px と 375px で測り、押せる要素を上から順に押した結果です。`,
+          '- 記録を理由に判定を下げるのは、その制約のために書いたコードが記録の上で効いていないと確かめられたとき（後のルールに上書きされた CSS、押しても変わらないボタン、計算結果がおかしいなど）だけです。書こうとした CSS が綴りの誤りや上書きで効いていないときは "partial" にします。',
+          '- その制約のコードが上書きされて効いていないなら、上書きしたのがほかの制約のためのコードでも下げます。下げないのは、その制約のコードは効いているのに、ほかの誤りで測れる値が変わっている場合（カードが 1 列なので横の隙間を測れないなど）と、記録に写らないこと（スクロール、文字の入力、記録した以外の幅）です。これらはコードを読んで判断し、「〜の恐れがある」のような推測でも下げません。',
+          '- 記録は押せる要素を一通り押しただけです。"pass" にする前に、記録で試していない場面（2 問目以降、同じボタンを 2 回目に押したときなど）でもコードが制約どおりに動くかを確かめます。記録で誤りが見えなかったことだけを理由に "pass" にしません。',
         ]
       : []),
     ...(fixed.some((v) => v)
@@ -243,11 +273,12 @@ export function parseJudgement(text: string, count: number): Judgement | null {
   const data = parseJson(text)
   if (!data || !Array.isArray(data.verdicts) || typeof data.feedback !== 'string') return null
   const byNo = new Map<number, JudgedVerdict>()
-  for (const v of data.verdicts as unknown[]) {
+  for (const [index, v] of (data.verdicts as unknown[]).entries()) {
     if (typeof v !== 'object' || v === null) continue
     const { no, verdict, reason, file, quote } = v as Record<string, unknown>
-    if (typeof no === 'number' && isVerdict(verdict) && typeof reason === 'string')
-      byNo.set(no, {
+    const key = typeof no === 'number' ? no : index + 1
+    if (!byNo.has(key) && isVerdict(verdict) && typeof reason === 'string')
+      byNo.set(key, {
         verdict,
         reason: reason.trim().slice(0, MAX_REASON_LENGTH),
         quote: typeof quote === 'string' ? quote.trim() : '',
@@ -409,9 +440,11 @@ async function judgeByDecider(
       {
         type: 'choice' as const,
         instructions: [
-          `学生が提出したコードが、次の制約を満たしているかを判定する。最初のコードにはじめから書いてある部分だけでは満たしたことにしない。ほかの制約に関わる誤りは、この制約の判定に持ち込まない。制約: ${constraintLine(c, guides[i])}`,
+          `学生が提出したコードが、次の制約を満たしているかを判定する。最初のコードにはじめから書いてある部分だけでは満たしたことにしない。ほかの制約で見る誤りだけを理由に下げないが、答えや動作の結果を求める制約では結果を変える誤りはどれも下げる理由になる。制約:${constraintLine(c, guides[i])}`,
           ...(web
-            ? ['実行の記録の上で効いていないコード（上書きされた CSS、押しても変わらないボタンなど）は、満たしたことにしない。']
+            ? [
+                'その制約のために書いたコードが実行の記録の上で効いていない（上書きされた CSS、押しても変わらないボタンなど）なら満たしたことにしないが、記録に写らないことやほかの制約の誤りで記録の見え方が変わっていることでは下げない。',
+              ]
             : []),
         ].join(''),
         criteria: DECIDER_CRITERIA,
@@ -680,14 +713,21 @@ export function buildPrepareMessages({
   const observed =
     language === 'web'
       ? '判定のときには、提出をブラウザで開いた「実行の記録」も渡されます。記録には、幅 1280px と 375px の画面での要素の場所・大きさ・計算後のスタイル、:hover を書いた要素にマウスを乗せたときの変化、押せる要素を上から順に押したときの画面の変化、コンソールのエラーが入っています（文字の入力はしません）。'
-      : '判定のときには、提出を「標準入力の例」で実行した結果（標準出力と標準エラー出力）も渡されます。'
+      : '判定のときには、提出を「標準入力の例」で実行した結果（標準出力と標準エラー出力）も渡されます。実行するのはこの例 1 つだけで、例の出力が合っていてもほかの入力で正しいとは限りません。答えの正しさを求める制約は、コードを読んで確かめる基準にし、例の出力は合っていなければ下げる手がかりとして使います。'
   const system = [
     'あなたは、プログラミングの授業の教師を手伝うアシスタントです。教師が確定したコーディング問題について、別の AI が学生の提出を制約ごとに判定するときに読む「判定の基準」を、制約 1 つずつに書きます。',
     '- 判定は "pass"（満たしている）・"partial"（一部だけ満たしている、または満たそうとしているが誤りがある）・"fail"（満たしていない、または手を付けていない）の 3 段階です。基準には、この 3 つの境目を、コードと実行の結果で確かめられる形で具体的に書きます。',
     '- 制約が求める動作を満たす別の書き方（標準ライブラリ、教科書と違う書き方）のうち、認めるものを書きます。',
-    '- その制約では見ないこと（ほかの制約で見る誤り、制約にない速さや見た目の好みなど）を書きます。',
-    '- 書いてあっても動かないコード（呼ばれていない関数、後のルールに上書きされた CSS など）をどう扱うかを書きます。',
+    '- その制約では見ないこと（ほかの制約で見る誤り、制約にない速さや見た目の好みなど）を書きます。ただし、答えや動作の結果を求める制約では、ほかの制約で見る誤りでも結果を変えるなら下げると書きます。その制約が働くのに要る処理がまだ書かれていない提出は、pass にしないと書きます。',
+    '- 書いてあっても動かないコードは、どこからも呼ばれない関数やいつも同じ値を返す関数なら "fail"、書こうとした CSS が綴りの誤りや後のルールの上書きで効いていないなら "partial" として基準に書きます。',
+    '- 「〜させない」「〜できなくする」制約では、その機能がまだ作られていないために起きないだけの提出は "fail" と書きます。',
+    '- 問題文の仕様や入力の形にない場合（入力が複数行に分かれるなど）を、新しく求めません。',
     `- ${observed}その制約を確かめるには、実行の結果のどこを見ればよいかも書きます。`,
+    ...(language === 'web'
+      ? [
+          '- 記録で確かめる基準は、ほかの制約を満たしていない提出（並び方が崩れているなど）でもその制約だけを見られる形にします。記録に写らないこと（スクロール、文字の入力）や推測を pass の条件にしません。その制約のコードがほかの規則に上書きされて効いていないなら下げると書きます。記録は押せる要素を一通り押すだけなので、記録で試さない場面（2 問目以降、2 回目に押したときなど）で起きる誤りを挙げ、それはコードで確かめると書きます。',
+        ]
+      : []),
     '- 問題文・補足・解答例から教師の意図を読み取り、制約の文だけでは判定が割れそうなところは、意図に沿った解釈を 1 つ選んで基準に書きます。',
     `- 1 つの基準は ${MAX_GUIDE_LENGTH / 2} 字以内の日本語にします。学生には見せません。`,
     '- 出力は次の形の JSON だけにします。guides には、すべての制約の基準を制約と同じ順に入れます。前後に説明やコードブロックの記号を付けません。',
