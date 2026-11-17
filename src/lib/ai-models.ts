@@ -7,7 +7,12 @@ export const AI_MODELS = [...OPENROUTER_MODELS, ...ANTHROPIC_MODELS] as const
 
 // AI_MODELS に入れないのは、文章を作らず、決めた選択肢から答えを選ぶだけで、会話（AI エージェントやアシスタント）には使えないため
 /** 判定だけを返すモデル（OpenRouter の Decisions API）。使用量は OpenRouter の月の上限に数える */
-export const OPENROUTER_DECISION_MODELS = ['typesafe/jev-1.14', 'respan/span-01-lite', 'respan/span-02'] as const
+export const OPENROUTER_DECISION_MODELS = [
+  'typesafe/jev-1.14',
+  'respan/span-01-lite',
+  'respan/span-02',
+  'perplexity/pplx-decider-v1.2',
+] as const
 
 export type DecisionModel = (typeof OPENROUTER_DECISION_MODELS)[number]
 
@@ -117,6 +122,13 @@ export const AI_PROVIDER_MODELS: Record<AiProvider, readonly AiModel[]> = { open
 export const AI_RETIRED_PROVIDER_MODELS: Record<AiProvider, readonly string[]> = {
   openrouter: ['deepseek/deepseek-v4.1-flash'],
   anthropic: [],
+}
+
+// AI_PROVIDER_MODELS に入れないのは、会話には使わず、選択肢や管理画面の一覧に出さないため
+/** 会話の外の決まった作業だけに使うモデル（コーディング問題を確定したときの準備の Opus）。使用量はその提供元の月の上限に数える */
+export const AI_TASK_PROVIDER_MODELS: Record<AiProvider, readonly ClaudeModel[]> = {
+  openrouter: [],
+  anthropic: ['claude-opus-5-5'],
 }
 
 export const aiProvider = (model: AiModel | TranscriptionModel): AiProvider => (isAnthropicModel(model) ? 'anthropic' : 'openrouter')

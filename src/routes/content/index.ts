@@ -5,10 +5,12 @@ import {
   createItem,
   createSection,
   downloadFile,
+  duplicateCode,
   editItem,
   editRestriction,
   moveItem,
   moveSection,
+  prepareCode,
   removeItem,
   removeSection,
   setItemHidden,
@@ -40,6 +42,8 @@ app.post('/:id/items/:iid/visibility', setItemHidden)
 app.get('/:id/items/:iid/restriction', editRestriction)
 app.post('/:id/items/:iid/restriction', updateRestriction)
 app.post('/:id/items/:iid/judge', switchJudge)
+app.post('/:id/items/:iid/prepare', prepareCode)
+app.post('/:id/items/:iid/duplicate', duplicateCode)
 app.get('/:id/items/:iid', showItem)
 app.post('/:id/items/:iid/complete', toggleComplete)
 app.get('/:id/items/:iid/file', downloadFile)

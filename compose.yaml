@@ -13,12 +13,14 @@ services:
       PORT: 3000
       DATA_DIR: /app/data
       SANDBOX_URL: unix:/run/sandbox/sandbox.sock
+      BROWSER_URL: unix:/run/browser/browser.sock
     # 0.0.0.0 を既定にしないのは、Docker の公開ポートはホストの ufw / firewalld を素通りし、リバースプロキシを経由しない直接アクセスで APP_ORIGIN の CSRF 検証と TLS を迂回されるため
     ports:
       - '${HOST_BIND:-127.0.0.1}:${HOST_PORT:-3000}:3000'
     volumes:
       - data:/app/data
       - sandbox-socket:/run/sandbox
+      - browser-socket:/run/browser
       # イメージに入れないのは、STEP Docs は非公開で、公開リポジトリから作るイメージに含められないため。step-docs のワークフローが書く
       - ${AI_DOCS_HOST_DIR:-./ai-docs}:/app/ai-docs:ro
 
@@ -64,6 +66,33 @@ services:
     volumes:
       - sandbox-socket:/run/sandbox
 
+  # Web の提出（HTML / CSS / JavaScript）を採点の前に開いて、画面の様子と操作したときの変化を記録する。
+  # sandbox と分けるのは、Chromium は動かすのに多くのプロセスとメモリが要り、Python の実行ごとの制限（プロセス 16 個など）に収まらないため
+  browser:
+    build: ./browser
+    image: step-learn-browser:latest
+    restart: unless-stopped
+    # sandbox と同じく、ネットワークにつながず、app とは共有ボリュームのソケットで話す
+    network_mode: none
+    init: true
+    read_only: true
+    ipc: none
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    runtime: ${SANDBOX_RUNTIME:-runc}
+    pids_limit: 512
+    mem_limit: 1g
+    memswap_limit: 1g
+    cpus: 1
+    # Chromium のプロファイルとキャッシュを置く。実行ごとに作って消すので、ディスクには何も残さない
+    tmpfs:
+      - /tmp:size=256m,mode=1777,nosuid,nodev
+    volumes:
+      - browser-socket:/run/browser
+
 volumes:
   data:
   sandbox-socket:
+  browser-socket:

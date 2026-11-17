@@ -63,8 +63,10 @@ export const VERDICT_LABELS: Record<Verdict, string> = { pass: 'できている'
 export type ConstraintResult = CodeConstraint & {
   verdict: Verdict
   reason: string
-  /** 判定の確からしさ（0〜1）。判定だけを返すモデル（Jev）で判定したときだけ入る */
+  /** 判定の確からしさ（0〜1）。判定だけを返すモデルで最初に判定したときに入る（判定し直した制約では、最初の判定の確からしさ） */
   confidence?: number
+  /** 教師に確かめてほしい判定。最初の判定に自信がなく、判定し直したら違う判定になったもの。教師が判定を変えると消える */
+  review?: true
   /** 判定の根拠になった、提出したコードの一部。提出の中にあることを確かめたものだけが入る */
   evidence?: Evidence
   /** 教師が判定を変えたときの、AI の元の判定 */
@@ -82,6 +84,28 @@ export type Judge = (typeof JUDGES)[number]
 export const isJudge = (s: unknown): s is Judge => (JUDGES as readonly unknown[]).includes(s)
 
 export const JUDGE_LABELS: Record<Judge, string> = { llm: 'AI', jev: 'Jev' }
+
+/**
+ * 問題の確定と準備の段階。draft は確定する前、preparing は確定して AI が判定の基準を書いている途中、ready は準備が終わったもの、failed は準備に失敗したもの。
+ * 確定したあと（draft 以外）は、問題文・制約・最初のコードなど判定に関わる設定を変えられない
+ */
+export const CODE_STAGES = ['draft', 'preparing', 'ready', 'failed'] as const
+
+/** null は確定の仕組みより前に作ったアイテムで、確定しなくても学生が解け、設定も変えられる */
+export type CodeStage = (typeof CODE_STAGES)[number] | null
+
+export const CODE_STAGE_LABELS: Record<NonNullable<CodeStage>, string> = {
+  draft: '確定前',
+  preparing: '準備中',
+  ready: '準備完了',
+  failed: '準備に失敗',
+}
+
+/** 学生が解ける（エディターを開いて提出できる） */
+export const isSolvable = (stage: CodeStage) => stage === null || stage === 'ready'
+
+/** 確定していて、判定に関わる設定（問題文・制約・教師の補足・最初のコード・解答例・標準入力）を変えられない */
+export const isFinalized = (stage: CodeStage) => stage !== null && stage !== 'draft'
 
 /** 必須の制約と発展の制約それぞれの、判定の数（total）と、そのうちできている（pass）の数（passed） */
 export function verdictCounts(verdicts: readonly ConstraintResult[]) {

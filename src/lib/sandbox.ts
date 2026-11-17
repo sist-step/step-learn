@@ -52,11 +52,11 @@ const isRunResult = (v: unknown): v is RunResult => {
   )
 }
 
-// fetch を使わないのは、UNIX ドメインソケットにつなげないため
-function post(target: NonNullable<typeof config.sandbox>, path: string, body: string) {
+/** sandbox と browser のコンテナに JSON を POST する。fetch を使わないのは、UNIX ドメインソケットにつなげないため */
+export function postToContainer(target: NonNullable<typeof config.sandbox>, path: string, body: string, timeout = TIMEOUT) {
   return new Promise<{ status: number; body: string }>((resolve, reject) => {
     const req = http.request(
-      { ...target, path, method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(TIMEOUT) },
+      { ...target, path, method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(timeout) },
       (res) => {
         const chunks: Buffer[] = []
         res.on('data', (chunk: Buffer) => chunks.push(chunk))
@@ -75,7 +75,7 @@ export async function runCode({ language, code, stdin = '' }: RunRequest): Promi
   if (Buffer.byteLength(stdin) > MAX_STDIN_BYTES) throw new SandboxError('入力が長すぎるため、実行できません')
   let res: { status: number; body: string }
   try {
-    res = await post(config.sandbox, '/run', JSON.stringify({ language, code, stdin }))
+    res = await postToContainer(config.sandbox, '/run', JSON.stringify({ language, code, stdin }))
   } catch (e) {
     console.error('[sandbox]', e)
     throw new SandboxError('実行環境に接続できません')

@@ -1316,7 +1316,7 @@ export const ItemEditPage = ({
                 saved={item.extra?.data}
                 errors={errors}
                 idPrefix="f"
-                target={{ courseId, itemId: item.id, title: item.title }}
+                target={{ courseId, itemId: item.id, title: item.title, key: item.extraKey ?? '' }}
               />
             )}
             {item.kind === 'link' && (

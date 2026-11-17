@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { blob, check, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import { CODE_LANGUAGES, GRADING_STATUSES, type CodeConstraint, type CodeFiles, type ConstraintResult } from './code'
+import { CODE_LANGUAGES, CODE_STAGES, GRADING_STATUSES, type CodeConstraint, type CodeFiles, type ConstraintResult } from './code'
 import { DEFAULT_PASS_PERCENT, QUIZ_LOOKS, type QuizAnswerRecord, type QuizQuestion } from './quiz'
 import type { RunResult } from './sandbox'
 import { LOG_KINDS } from './types'
@@ -294,8 +294,15 @@ export const codeItems = sqliteTable(
     solution: text('solution', { mode: 'json' }).$type<CodeFiles>().notNull().default({}),
     /** 提出の期間が終わったあと、解答例を学生に見せるか */
     solutionPublic: integer('solution_public').notNull().default(0),
+    /** 問題の確定と準備の段階（code.ts の CODE_STAGES）。NULL は確定の仕組みより前に作ったアイテム */
+    stage: text('stage', { enum: CODE_STAGES }),
+    /** 制約ごとの判定の基準（制約と同じ順）。確定したあとに AI が書き、判定のたびに AI に渡す */
+    guides: text('guides', { mode: 'json' }).$type<string[]>().notNull().default([]),
   },
-  (t) => [check('code_items_language', sql`${t.language} IN ('web', 'python')`)],
+  (t) => [
+    check('code_items_language', sql`${t.language} IN ('web', 'python')`),
+    check('code_items_stage', sql`${t.stage} IS NULL OR ${t.stage} IN ('draft', 'preparing', 'ready', 'failed')`),
+  ],
 )
 
 /** ファイル自動配布のアイテム（items.type が bundle）で配るファイル。path はアイテムの中での場所（/ 区切り） */

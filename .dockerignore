@@ -15,3 +15,6 @@ sandbox
 .claude/worktrees
 # STEP Docs の索引（非公開。本番ではマウントする）
 ai-docs
+
+# browser のイメージは browser/ だけでビルドする（アプリのイメージには要らない）
+browser

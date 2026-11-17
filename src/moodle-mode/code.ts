@@ -3,7 +3,7 @@ import { intParam } from '../lib/http'
 import type { CodeBackend } from '../routes/code/handlers'
 import { storedToken, type MoodleEnv } from './auth'
 import { isAccessDenied, isNotFound, isTokenError } from './client'
-import { codePeriodOf, codeSettingsOf, codeStore, grader } from './code-store'
+import { codePeriodOf, codeSettingsOf, codeStageOf, codeStore, grader, preparer, restartPreparation } from './code-store'
 import { loadCourse, loadCourseAs, outlineOf, type LoadedCourse, type Viewer } from './data'
 import { findExtra } from './extra'
 import { CODE_KIND } from './extra-kinds'
@@ -17,7 +17,14 @@ function codeItemOf(loaded: LoadedCourse, match: (it: MItem) => boolean) {
   const data = item?.extra?.data
   const settings = data && codeSettingsOf(data, item.title)
   if (!item?.extraKey || !data || !settings) return null
-  return { cmid: item.id, key: item.extraKey, settings, period: codePeriodOf(data), store: codeStore(item.extraKey) }
+  return {
+    cmid: item.id,
+    key: item.extraKey,
+    settings,
+    stage: codeStageOf(data),
+    period: codePeriodOf(data),
+    store: codeStore(item.extraKey),
+  }
 }
 
 /** viewer がコースを開けなければ null。Moodle に接続できないときなどは例外のまま投げる */
@@ -33,6 +40,13 @@ async function loadIfAllowed(viewer: Viewer, courseId: number) {
 /** Moodle モード: 設定を extra_items に、書きかけのコードと提出を moodle-mode.db に置き、権限を Moodle のコースから確かめる */
 export const codeBackend: CodeBackend = {
   grader,
+  prepareAgain(ctx, userId) {
+    const key = ctx.ref.slice(REF_PREFIX.length)
+    if (!(ctx.stage === 'failed' || (ctx.stage === 'preparing' && !preparer.isRunning(key)))) return false
+    restartPreparation(key)
+    preparer.start(key, userId)
+    return true
+  },
   pageUrl: (courseId, itemId) => `/courses/${courseId}/items/${itemId}/${CODE_KIND}`,
   itemUrl: (courseId, itemId) => `/courses/${courseId}/items/${itemId}`,
   async resolve(c) {
@@ -43,8 +57,8 @@ export const codeBackend: CodeBackend = {
     const loaded = await loadCourse(c as Context<MoodleEnv>, courseId)
     const found = codeItemOf(loaded, (it) => it.id === itemId)
     if (!found) return null
-    const { settings, period, store, key } = found
-    return { settings, period, store, access: loaded.access, itemId, ref: `${REF_PREFIX}${key}` }
+    const { settings, stage, period, store, key } = found
+    return { settings, stage, period, store, access: loaded.access, itemId, ref: `${REF_PREFIX}${key}` }
   },
   // 中身の行があるかだけで決めないのは、Moodle のごみ箱から戻せるよう、活動を消しても中身を残しているため。
   // Moodle の画面で消した・非表示にした活動や、コースから外れた学生も止められるよう、Moodle で今も開けるかで確かめる
@@ -55,10 +69,11 @@ export const codeBackend: CodeBackend = {
     const loaded = extra && token && (await loadIfAllowed({ token, userId }, extra.courseId))
     const found = loaded && codeItemOf(loaded, (it) => it.extraKey === key)
     if (!found) return null
-    const { settings, period, store, cmid } = found
+    const { settings, stage, period, store, cmid } = found
     const { access } = loaded
     return {
       settings,
+      stage,
       period,
       store,
       course: access.course.title,

@@ -32,6 +32,7 @@ import {
   MAX_CODE_LENGTH,
   MAX_STDIN_LENGTH,
   filesFor,
+  isFinalized,
   type CodeFiles,
 } from './code'
 import { unixToDateInput } from './course-period'
@@ -371,6 +372,7 @@ const createItem = defineTool(
             starter: DEFAULT_STARTER[language],
             criteria: args.criteria ?? '',
             constraints: toConstraints(args.constraints ?? []),
+            stage: 'draft',
           })
           .run()
       return row
@@ -551,6 +553,8 @@ function checkItemArgs(item: Item, args: UpdateItemArgs, sectionCourse: number |
   const codeArgs = [args.constraints, args.criteria, args.starter, args.stdin]
   if (codeArgs.some((v) => v !== undefined) && item.type !== 'code')
     return '制約・補足・最初のコード・入力の例は、コーディング問題でだけ変えられます。'
+  if (item.type === 'code' && [args.body, ...codeArgs].some((v) => v !== undefined) && isFinalized(codeOf(item.id)?.stage ?? null))
+    return 'このコーディング問題は確定しているので、問題文・制約・補足・最初のコード・入力の例は変えられません。直すときは、編集画面の「複製して作り直す」で複製してください。'
   if (args.section_id !== undefined && sectionCourse !== item.courseId) return '移し先のセクションが、同じコースにありません。'
   return null
 }

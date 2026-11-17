@@ -42,6 +42,8 @@ export type CodeSettings = {
   solution: CodeFiles
   /** 提出の期間が終わったあと、解答例を学生に見せるか */
   solutionPublic: boolean
+  /** 制約ごとの判定の基準（制約と同じ順）。問題を確定したときに AI が書き、判定のたびに AI に渡す。確定する前と、確定の仕組みより前のアイテムでは空 */
+  guides: string[]
 }
 
 /** AI の採点の結果。verdicts は制約ごとの判定で、制約のないアイテムでは null。採点できなかったときは status が failed */
