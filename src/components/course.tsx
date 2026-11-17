@@ -313,6 +313,26 @@ export const ItemIcon = ({ type }: { type: ItemType }) => {
   )
 }
 
+/** 編集モードでアイテムの行の上の境目に置き、ホバーで出すプラスボタン。押すと追加のモーダルを、この行の前に入れる設定で開く */
+export const ItemInsertButton = ({ modal, sectionId, before }: { modal: string; sectionId: number; before: number }) => {
+  useStyle('/src/components/course.css')
+  return (
+    <span class="item-insert edit-only">
+      <button
+        type="button"
+        class="item-insert-btn"
+        popovertarget={modal}
+        data-add-item-section={sectionId}
+        data-add-item-before={before}
+        aria-label="ここにアイテムを追加"
+        title="ここにアイテムを追加"
+      >
+        <Icon name="plus" size={14} />
+      </button>
+    </span>
+  )
+}
+
 /** アイテムを読む画面の目次（.reader-outline）の見出しに置く開閉ボタン。閉じた種類は client.ts が端末ごとの設定に覚える */
 export const OutlineToggle = () => (
   <IconButton icon="chevronDoubleRight" label="目次を隠す" class="outline-toggle" aria-expanded="true" data-outline-toggle />

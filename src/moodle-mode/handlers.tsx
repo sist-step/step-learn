@@ -364,10 +364,10 @@ export async function createItem(c: C) {
   const form = await readForm(c)
   const placement = validate('itemPlacement', form)
   if (!placement.ok) return c.notFound()
-  const { section_id: sectionId, after, type: requestedType } = placement.values
+  const { section_id: sectionId, after, before, type: requestedType } = placement.values
   if (!loaded.sections.some((s) => s.id === sectionId)) return c.notFound()
   const extraKind = extraKindOf(requestedType)
-  if (extraKind) return createExtraItem(c, loaded, sectionId, extraKind, form, { type: requestedType, after })
+  if (extraKind) return createExtraItem(c, loaded, sectionId, extraKind, form, { type: requestedType, after, before })
   const result = validate('item', form)
   if (!result.ok) return redirectWith(c, editUrl(loaded, sectionId), firstError(result.errors), 'error')
   const { type, hidden, title, url } = result.values
@@ -385,9 +385,16 @@ export async function createItem(c: C) {
     if (uploadError || !file) return redirectWith(c, editUrl(loaded, sectionId), uploadError ?? 'ファイルを選択してください。', 'error')
     cmid = await moodle(c).saveResource({ ...target, draftitemid: await uploadDraft(c.var.token!, file) })
   }
+  await placeBefore(c, loaded, sectionId, cmid, before)
   forgetCourse(id)
   const next = after === 'view' ? `/courses/${id}/items/${cmid}` : editUrl(loaded, sectionId)
   return redirectWith(c, next, `「${title}」を追加しました。`)
+}
+
+// 作るときに位置を渡さないのは、Moodle の活動を追加する API が位置を受け取らず、いつもセクションの末尾に入れるため
+async function placeBefore(c: C, loaded: LoadedCourse, sectionId: number, cmid: number, before: number) {
+  if (!loaded.items.some((it) => it.id === before && it.sectionId === sectionId)) return
+  await moodle(c).updateCourse(loaded.course.id, 'cm_move', [cmid], { cmid: before })
 }
 
 async function validateExtra(kind: ExtraKind, form: Form, current?: ExtraData) {
@@ -407,7 +414,7 @@ async function createExtraItem(
   sectionId: number,
   kind: ExtraKind,
   form: Form,
-  placement: { type: string; after: 'edit' | 'view' },
+  placement: { type: string; after: 'edit' | 'view'; before: number },
 ) {
   const id = loaded.course.id
   const result = await validateExtra(kind, form)
@@ -426,6 +433,7 @@ async function createExtraItem(
     cmid = await moodle(c).saveUrl({ ...activity, externalurl: extraUrl(c, key), display: kind.tabPath ? 'new' : 'same' })
     insertExtra({ key, courseId: id, cmid, type: placement.type, data: result.data })
   }
+  await placeBefore(c, loaded, sectionId, cmid, placement.before)
   forgetCourse(id)
   if (kind.editAfterCreate)
     return redirectWith(c, `/courses/${id}/items/${cmid}/edit`, `「${title}」を追加しました。続けて中身を設定してください。`)

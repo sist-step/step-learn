@@ -541,9 +541,14 @@ const visibility = z.object({ hidden: flag() })
 
 const collapse = z.object({ open: ids(), closed: ids() })
 
-// section_id が正しくなくても失敗させないのは、編集画面では今のセクションのままにするため。
+// section_id が正しくなくても失敗させないのは、編集画面では今のセクションのままにするため。before も同じく、正しくなければ末尾に入れる。
 // type を item の選択肢で絞らないのは、Moodle モードの extra の種類（src/moodle-mode/extra-kinds.tsx）も送られるため
-const itemPlacement = z.object({ section_id: z.catch(id(), 0), after: choice(['edit', 'view'], 'edit'), type: hidden(50) })
+const itemPlacement = z.object({
+  section_id: z.catch(id(), 0),
+  before: z.catch(id(), 0),
+  after: choice(['edit', 'view'], 'edit'),
+  type: hidden(50),
+})
 
 const completionToggle = z.object({ on: z.pipe(hidden(10), z.enum(['', 'view', 'ended'])) })
 
