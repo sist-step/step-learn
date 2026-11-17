@@ -19,6 +19,9 @@ const bytes = (v: ArrayBuffer | Uint8Array) => (v instanceof Uint8Array ? v : ne
 // 状態ベクトルの差分が空のときの長さ（ブロックも削除もない更新）
 const EMPTY_UPDATE = 2
 
+const LATENCY_INTERVAL = 3_000
+const LATENCY_TIMEOUT = 10_000
+
 /** socket.io で Yjs の文書と参加者の情報（Awareness）をサーバーと同期する */
 export class CollabProvider {
   readonly awareness: Awareness
@@ -26,6 +29,8 @@ export class CollabProvider {
   readonly synced: Promise<void>
   private readonly socket: CollabSocket
   private readonly listeners = new Set<(state: ConnectionState) => void>()
+  private readonly latencyListeners = new Set<(ms: number | null) => void>()
+  private latencyTimer: ReturnType<typeof setInterval> | undefined
   private everSynced = false
 
   constructor(
@@ -43,6 +48,7 @@ export class CollabProvider {
       if (diff.byteLength > EMPTY_UPDATE) this.socket.emit('update', diff)
       this.everSynced = true
       this.setState('synced')
+      this.startLatency()
       if (this.awareness.getLocalState()) this.socket.emit('awareness', encodeAwarenessUpdate(this.awareness, [doc.clientID]))
       resolve()
     })
@@ -56,6 +62,7 @@ export class CollabProvider {
       else this.setState(this.everSynced ? 'offline' : 'connecting')
     })
     this.socket.on('disconnect', () => {
+      this.stopLatency()
       if (this.state === 'revoked' || this.state === 'too_large') return
       this.setState('offline')
       const others = [...this.awareness.getStates().keys()].filter((id) => id !== doc.clientID)
@@ -83,6 +90,30 @@ export class CollabProvider {
 
   private readonly onPageHide = () => removeAwarenessStates(this.awareness, [this.doc.clientID], 'local')
 
+  private measureLatency() {
+    const started = performance.now()
+    // 届かなかったときに null にしないのは、切れたなら disconnect が先に表示を戻し、遅いだけなら前の値のほうが実態に近いため
+    this.socket.timeout(LATENCY_TIMEOUT).emit('latency', (err: Error | null) => {
+      if (!err && this.latencyTimer !== undefined) this.setLatency(Math.round(performance.now() - started))
+    })
+  }
+
+  private startLatency() {
+    this.stopLatency()
+    this.latencyTimer = setInterval(() => this.measureLatency(), LATENCY_INTERVAL)
+    this.measureLatency()
+  }
+
+  private stopLatency() {
+    clearInterval(this.latencyTimer)
+    this.latencyTimer = undefined
+    this.setLatency(null)
+  }
+
+  private setLatency(ms: number | null) {
+    for (const listener of this.latencyListeners) listener(ms)
+  }
+
   private setState(state: ConnectionState) {
     if (this.state === state) return
     this.state = state
@@ -90,6 +121,7 @@ export class CollabProvider {
   }
 
   private stop(state: ConnectionState) {
+    this.stopLatency()
     this.setState(state)
     this.socket.disconnect()
   }
@@ -100,7 +132,14 @@ export class CollabProvider {
     return () => this.listeners.delete(listener)
   }
 
+  /** サーバーとの往復の時間（ms）。測れていないあいだは null */
+  onLatency(listener: (ms: number | null) => void) {
+    this.latencyListeners.add(listener)
+    return () => this.latencyListeners.delete(listener)
+  }
+
   destroy() {
+    this.stopLatency()
     removeEventListener('pagehide', this.onPageHide)
     removeAwarenessStates(this.awareness, [this.doc.clientID], 'local')
     this.doc.off('update', this.onDocUpdate)
@@ -108,5 +147,6 @@ export class CollabProvider {
     this.socket.disconnect()
     this.awareness.destroy()
     this.listeners.clear()
+    this.latencyListeners.clear()
   }
 }

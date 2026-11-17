@@ -49,7 +49,7 @@ const mounted = new Map<HTMLElement, Mounted>()
 
 const STATE_LABELS: Record<ConnectionState, string> = {
   connecting: '接続しています…',
-  synced: '同期しています',
+  synced: '遅延を測っています…',
   offline: '接続が切れました。つなぎ直しています…',
   revoked: 'このファイルを開けなくなりました',
   too_large: 'ファイルが大きすぎて保存できません',
@@ -163,9 +163,22 @@ export async function mountCollab(root: HTMLElement, toast: Toast, confirmNear: 
   provider.awareness.setLocalStateField('user', user)
 
   const status = root.querySelector<HTMLElement>('[data-collab-status]')
+  let latency: number | null = null
+  const renderStatus = () => {
+    if (!status) return
+    const measured = provider.state === 'synced' && latency !== null
+    status.textContent = measured ? `${latency} ms` : STATE_LABELS[provider.state]
+    status.title = measured ? 'サーバーとの往復にかかった時間' : ''
+    // 遅延を出しているあいだ読み上げを止めるのは、数秒ごとに数字が変わるたびに読み上げられてしまうため
+    status.setAttribute('aria-live', measured ? 'off' : 'polite')
+  }
+  provider.onLatency((ms) => {
+    latency = ms
+    renderStatus()
+  })
   provider.onState((state) => {
     root.dataset.state = state
-    if (status) status.textContent = STATE_LABELS[state]
+    renderStatus()
     if (state === 'revoked') toast('このファイルを開けなくなりました。画面を読み込み直してください。', 'error')
     if (state === 'too_large') toast('ファイルが大きすぎて、変更を保存できませんでした。画像や内容を減らしてください。', 'error')
   })

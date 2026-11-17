@@ -52,7 +52,7 @@
 .collab-person-tip { position: fixed; z-index: 30; max-width: min(320px, calc(100vw - 16px)); padding: 4px 10px; border: 1px solid var(--overlay-border); border-radius: 999px; background: var(--surface-raised); color: var(--text); box-shadow: var(--shadow); font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; animation: collab-tip-in 0.12s ease-out; }
 .collab-person-tip[hidden] { display: none; }
 @keyframes collab-tip-in { from { opacity: 0; translate: 0 -2px; } }
-.collab-status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+.collab-status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .collab-status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--warning); }
 .collab[data-state='synced'] .collab-status::before { background: var(--success); }
 .collab:is([data-state='revoked'], [data-state='too_large']) .collab-status { color: var(--danger-text); }
