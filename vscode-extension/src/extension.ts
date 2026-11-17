@@ -232,7 +232,7 @@ async function openCode(context: vscode.ExtensionContext, server: URL, token: st
     await writeLocal(folder, [...plan.write, ...(side === 'server' ? plan.conflicts : [])])
     const names = manifest.files.map((f) => f.path)
     const local = await readLocal(folder, names)
-    // 開いたときに手元の分を送っておくのは、このあと Web エディターを開いても、VS Code と同じコードが入っているようにするため
+    // 開いたときに手元の分を送っておくのは、このあとブラウザエディターを開いても、VS Code と同じコードが入っているようにするため
     if (plan.ahead.length || side === 'local') await saveDraft(server, manifest.token, local)
     synced = markSynced({}, local)
 
