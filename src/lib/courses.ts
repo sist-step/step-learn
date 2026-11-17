@@ -88,17 +88,38 @@ export function nextPosition(table: Ordered, scope: SQL) {
   return (row?.last ?? 0) + 1
 }
 
-/** position を持つ行を1つ上下に動かす。並びを 1..n に正規化し、変化した行だけ更新する */
-export function moveRow(table: Ordered, scope: SQL, id: number, dir: 'up' | 'down') {
-  const rows = db.select({ id: table.id, position: table.position }).from(table).where(scope).orderBy(table.position, table.id).all()
-  const i = rows.findIndex((r) => r.id === id)
-  const j = dir === 'up' ? i - 1 : i + 1
-  if (i < 0 || j < 0 || j >= rows.length) return
-  ;[rows[i], rows[j]] = [rows[j], rows[i]]
+type PositionRow = { id: number; position: number }
+
+const orderedRows = (table: Ordered, scope: SQL): PositionRow[] =>
+  db.select({ id: table.id, position: table.position }).from(table).where(scope).orderBy(table.position, table.id).all()
+
+/** 並べ替えた rows の position を 1..n に正規化し、変化した行だけ更新する */
+function renumber(table: Ordered, rows: PositionRow[]) {
   const updates = rows.map((r, idx) => ({ ...r, next: idx + 1 })).filter((r) => r.position !== r.next)
   db.transaction((tx) => {
     for (const r of updates) tx.update(table).set({ position: r.next }).where(eq(table.id, r.id)).run()
   })
+}
+
+/** position を持つ行を1つ上下に動かす */
+export function moveRow(table: Ordered, scope: SQL, id: number, dir: 'up' | 'down') {
+  const rows = orderedRows(table, scope)
+  const i = rows.findIndex((r) => r.id === id)
+  const j = dir === 'up' ? i - 1 : i + 1
+  if (i < 0 || j < 0 || j >= rows.length) return
+  ;[rows[i], rows[j]] = [rows[j], rows[i]]
+  renumber(table, rows)
+}
+
+/** id の行を、同じ scope の beforeId の行の直前に移す。beforeId がなければ何もしない */
+export function placeBefore(table: Ordered, scope: SQL, id: number, beforeId: number) {
+  const rows = orderedRows(table, scope)
+  const moving = rows.find((r) => r.id === id)
+  const rest = rows.filter((r) => r.id !== id)
+  const j = rest.findIndex((r) => r.id === beforeId)
+  if (!moving || j < 0) return
+  rest.splice(j, 0, moving)
+  renumber(table, rest)
 }
 
 // DB に持たないのは、画面に変更を知らせるためだけの値で、再起動で失われても開いている画面が一度取り直すだけで済むため

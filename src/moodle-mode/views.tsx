@@ -6,6 +6,7 @@ import {
   ItemEditActions,
   ItemFileField,
   ItemIcon,
+  ItemInsertButton,
   LinkEmbed,
   LinkTargetField,
   LessonBadge,
@@ -181,6 +182,7 @@ const CompleteCheck = ({ item, base, manage }: { item: MItem; base: string; mana
 const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId: number; isStudent: boolean; manage: boolean }) => {
   const base = `/courses/${courseId}/items/${item.id}`
   const tracked = isTracked(item)
+  const insert = manage && <ItemInsertButton modal={ADD_ITEM_MODAL} sectionId={item.sectionId} before={item.id} />
   const actions = manage && (
     <div class="row-actions edit-only">
       {hasEditPage(item) && <IconButton href={`${base}/edit`} icon="pencil" label="編集" />}
@@ -190,6 +192,7 @@ const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId:
   if (item.kind === 'label') {
     return (
       <li class={cx('item-row item-label', item.hidden && 'is-hidden edit-only')} data-item={item.id}>
+        {insert}
         <div class="item-text">
           {item.body ? <Markdown source={item.body} /> : <span class="muted">{item.title}</span>}
           {manage && item.rule && <RestrictionNote text={item.rule.text} />}
@@ -235,6 +238,7 @@ const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId:
       class={cx('item-row', tracked && item.done && 'is-done', item.hidden && 'is-hidden edit-only', item.locked && 'is-locked')}
       data-item={item.id}
     >
+      {insert}
       {linkless ? (
         <span class="item-link">{body}</span>
       ) : (
@@ -278,6 +282,7 @@ const SubsectionRow = ({
       id={`section-${item.childSectionId}`}
     >
       <div class="item-row subsection-head" data-item={item.id}>
+        {manage && <ItemInsertButton modal={ADD_ITEM_MODAL} sectionId={item.sectionId} before={item.id} />}
         <span class="item-link">
           <span class="item-icon kind-subsection">
             <Icon name={item.locked ? 'lock' : 'folder'} size={16} />
@@ -386,6 +391,7 @@ const AddItemModal = ({
       {...validateWith('item')}
     >
       <input type="hidden" name="type" value="link" />
+      <input type="hidden" name="before" value="" />
       <div class="item-step kind-picker" role="group" aria-label="種類">
         {KINDS.map((t) => (
           <button type="button" class="kind-option" data-pick-kind={t}>
