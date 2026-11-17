@@ -201,7 +201,7 @@ details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
 .code-goal-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .code-goal-kind { margin-left: 6px; }
 
-/* ===== アイテムの画面の入口（Web エディター / VS Code） ===== */
+/* ===== アイテムの画面の入口（ブラウザエディター / VS Code） ===== */
 .code-open { margin-bottom: 24px; }
 .code-open > .link-card { margin-bottom: 0; }
 .code-open-help { margin: 0; }
