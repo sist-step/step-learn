@@ -3082,7 +3082,7 @@ function setAiOpen(open: boolean) {
   if (aiDocked()) aiInput()?.focus()
 }
 
-type AiModelLabels = Record<string, { label: string; hard: string | null; hardOff: string | null }>
+type AiModelLabels = Record<string, { label: string; hard: string | null; hardOff: string | null; images: boolean }>
 
 const aiLabelsOf = (form: HTMLFormElement) => JSON.parse(form.dataset.aiLabels ?? '{}') as AiModelLabels
 
@@ -3097,6 +3097,10 @@ function syncAiModel(form: HTMLFormElement) {
   const model = chosenAiModel(form)
   const entry = model ? aiLabelsOf(form)[model] : undefined
   $$<HTMLElement>('[data-ai-usage]', form).forEach((el) => (el.hidden = el.dataset.aiUsage !== model))
+  const imageButton = form.querySelector<HTMLButtonElement>('button[data-ai-image]')
+  if (imageButton) imageButton.hidden = !entry?.images
+  // 選んだ画像を残したまま隠さないのは、読めないモデルに選び直したあと、見えない画像が発言と一緒に送られて断られるため
+  if (!entry?.images && aiImage) setAiImage(null)
   const toggle = form.querySelector<HTMLButtonElement>('button[data-ai-hard]')
   const hardField = form.elements.namedItem('hard')
   if (!toggle || !(hardField instanceof HTMLInputElement)) return
@@ -3236,6 +3240,7 @@ async function refreshAiPanel(model?: string) {
     fitAiInput(input)
   }
   if (input && focused) input.focus()
+  paintAiImage()
   showAiVoice()
   initMascots()
   void fillAiSuggestions()
@@ -3431,6 +3436,142 @@ function noteAiProblem(message: string) {
   scrollAiLog(true)
 }
 
+// --- AI のパネルの発言に添える画像（components/ai-panel.tsx の data-ai-image。送るのは発言と同じ /ai/chat）
+// 縮めずに送らないのは、Claude は長い辺が 1568px を超える画像を縮めてから読むので、大きいまま送っても見え方は変わらず、送る量と保存する会話が膨らむだけのため
+const AI_IMAGE_MAX_EDGE = 1568
+const AI_IMAGE_MAX_SIZE = 5 * 1024 * 1024
+const AI_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+// 入力欄の下に置かないのは、パネルを取り直すと選んだ画像が消え、送る前に外されたように見えるため
+let aiImage: { file: File; url: string } | null = null
+
+const aiImageButton = () => aiPanel()?.querySelector<HTMLButtonElement>('button[data-ai-image]') ?? null
+
+async function shrinkAiImage(file: File): Promise<File | null> {
+  const bitmap = await createImageBitmap(file).catch(() => null)
+  if (!bitmap) return null
+  const scale = Math.min(1, AI_IMAGE_MAX_EDGE / Math.max(bitmap.width, bitmap.height))
+  if (scale === 1 && file.size <= AI_IMAGE_MAX_SIZE && AI_IMAGE_TYPES.includes(file.type)) {
+    bitmap.close()
+    return file
+  }
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+  const context = canvas.getContext('2d')!
+  const render = (type: 'image/png' | 'image/jpeg') => {
+    context.clearRect(0, 0, canvas.width, canvas.height)
+    // 透明なまま JPEG にしないのは、透明な部分が黒く塗られて読めなくなるため
+    if (type === 'image/jpeg') {
+      context.fillStyle = '#fff'
+      context.fillRect(0, 0, canvas.width, canvas.height)
+    }
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.9))
+  }
+  // 画面の写しを JPEG にしないのは、文字のまわりがにじんで、AI が細かい文字を読み違えるため
+  let blob = file.type === 'image/png' ? await render('image/png') : null
+  if (!blob || blob.size > AI_IMAGE_MAX_SIZE) blob = await render('image/jpeg')
+  bitmap.close()
+  if (!blob || blob.size > AI_IMAGE_MAX_SIZE) return null
+  const base = file.name.replace(/\.[^.]*$/, '') || 'image'
+  return new File([blob], `${base}.${blob.type === 'image/png' ? 'png' : 'jpg'}`, { type: blob.type })
+}
+
+/** 送る前の画像を出し直す。パネルを取り直したあとにも呼ぶ */
+function paintAiImage() {
+  const chip = aiPanel()?.querySelector<HTMLElement>('[data-ai-attach]')
+  const thumb = chip?.querySelector<HTMLImageElement>('[data-ai-attach-thumb]')
+  const name = chip?.querySelector('[data-ai-attach-name]')
+  if (!chip || !thumb || !name) return
+  chip.hidden = !aiImage
+  if (aiImage) thumb.src = aiImage.url
+  else thumb.removeAttribute('src')
+  name.textContent = aiImage?.file.name ?? ''
+}
+
+/** 送る前の画像を替える。sent は、外す画像を送った発言がまだ画面で使っていること */
+function setAiImage(file: File | null, sent = false) {
+  if (aiImage && !sent) URL.revokeObjectURL(aiImage.url)
+  aiImage = file && { file, url: URL.createObjectURL(file) }
+  paintAiImage()
+}
+
+// 1 回の発言に何枚も選ばせないのは、1 回に添えられるのは 1 枚までで、2 枚目を選んだら替えたいのだと分かるため
+async function attachAiImage(file: File) {
+  const button = aiImageButton()
+  if (!button || button.hidden || button.disabled) return
+  if (!file.type.startsWith('image/')) return toast('画像のファイルを選んでください。', 'error')
+  const shrunk = await shrinkAiImage(file)
+  if (!shrunk) return toast('この画像は読み込めません。PNG・JPEG・WebP・GIF の画像を選んでください。', 'error')
+  setAiImage(shrunk)
+  aiInput()?.focus()
+}
+
+/** 画像を添えた発言を送れたら、このチャットで添えられる残りの枚数を減らす */
+function countAiImageSent() {
+  const button = aiImageButton()
+  if (!button) return
+  const left = Math.max(0, Number(button.dataset.left ?? 0) - 1)
+  button.dataset.left = String(left)
+  button.disabled = left === 0
+  button.setAttribute(
+    'aria-label',
+    left > 0 ? `画像を添える（このチャットであと ${left} 枚）` : `画像は 1 つのチャットで ${button.dataset.max ?? ''} 枚まで送れます`,
+  )
+}
+
+document.addEventListener('click', (e) => {
+  const target = e.target as Element
+  if (target.closest('[data-ai-attach-clear]')) {
+    setAiImage(null)
+    return aiInput()?.focus()
+  }
+  if (target.closest('button[data-ai-image]')) aiPanel()?.querySelector<HTMLInputElement>('[data-ai-image-input]')?.click()
+})
+
+document.addEventListener('change', (e) => {
+  const input = e.target as Element
+  if (!(input instanceof HTMLInputElement) || !input.matches('[data-ai-image-input]')) return
+  const file = input.files?.[0]
+  input.value = ''
+  if (file) void attachAiImage(file)
+})
+
+// 文字と画像の両方が入っていれば文字を貼るのは、表計算や文書の範囲を写すと、文字と一緒にその範囲の画像も入るため
+document.addEventListener('paste', (e) => {
+  const input = e.target as Element
+  if (!(input instanceof HTMLTextAreaElement) || !input.matches('.ai-textarea') || !e.clipboardData) return
+  const file = [...e.clipboardData.files].find((f) => f.type.startsWith('image/'))
+  if (!file || e.clipboardData.types.includes('text/plain')) return
+  e.preventDefault()
+  void attachAiImage(file)
+})
+
+// ファイルを選ぶカードの上では受けないのは、カードのファイルの選択（.file-drop-zone）に落としたファイルまで、発言に添えることになるため
+const aiImageDropOf = (e: DragEvent) =>
+  e.target instanceof Element && carriesFiles(e) && !dropZoneOf(e) ? e.target.closest<HTMLElement>('[data-ai-panel]') : null
+
+document.addEventListener('dragover', (e) => {
+  const panel = aiImageDropOf(e)
+  if (!panel || aiImageButton()?.hidden !== false || aiImageButton()?.disabled) return
+  e.preventDefault()
+  e.dataTransfer!.dropEffect = 'copy'
+  panel.toggleAttribute('data-dragging', true)
+})
+document.addEventListener('dragleave', (e) => {
+  const panel = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-ai-panel]') : null
+  // 子要素に入ったときに外さないのは、強調がちらつくため
+  if (panel && !(e.relatedTarget instanceof Node && panel.contains(e.relatedTarget))) panel.removeAttribute('data-dragging')
+})
+document.addEventListener('drop', (e) => {
+  const panel = aiImageDropOf(e)
+  if (!panel) return
+  e.preventDefault()
+  panel.removeAttribute('data-dragging')
+  const file = [...e.dataTransfer!.files].find((f) => f.type.startsWith('image/')) ?? e.dataTransfer!.files[0]
+  if (file) void attachAiImage(file)
+})
+
 /**
  * 入力欄の発言を送る。パネルが古ければ取り直してから送り、開いていたチャットがほかのタブで閉じられていれば、
  * 同じモデル（model）の新しいチャットで送る。retried は、送ったときにパネルが古かったために送り直した 2 回目であること
@@ -3445,6 +3586,8 @@ async function sendAiMessage(retried = false, model = aiPanel()?.dataset.model) 
   const text = input.value.trim()
   if (!text) return
   const data = new FormData(form)
+  const image = aiImage
+  if (image) data.set('image', image.file)
   const intro = log.querySelector<HTMLElement>('[data-ai-intro]')
   const started = !panel.dataset.chat
   const dismissing = !!log.querySelector('.ai-card[data-state=pending]')
@@ -3452,9 +3595,16 @@ async function sendAiMessage(retried = false, model = aiPanel()?.dataset.model) 
   replies.forEach((el) => (el.hidden = true))
   if (intro) intro.hidden = true
   const sent = aiTemplate('user', text)
+  const sentImage = sent.querySelector<HTMLAnchorElement>('[data-ai-image-link]')
+  if (image && sentImage) {
+    sentImage.href = image.url
+    sentImage.querySelector('img')!.src = image.url
+    sentImage.hidden = false
+  }
   log.append(sent)
   input.value = ''
   fitAiInput(input)
+  if (image) setAiImage(null, true)
 
   const outcome = await streamAi(form.action, data, {
     onRetract: () => {
@@ -3463,12 +3613,17 @@ async function sendAiMessage(retried = false, model = aiPanel()?.dataset.model) 
       if (intro && !log.querySelector('.ai-msg')) intro.hidden = false
       if (!input.value) input.value = text
       fitAiInput(input)
+      if (image && !aiImage) {
+        aiImage = image
+        paintAiImage()
+      }
     },
     onChat: (id) => {
       const chatField = form.elements.namedItem('chat')
       if (chatField instanceof HTMLInputElement) chatField.value = String(id)
     },
   })
+  if (image && !outcome.retracted && !outcome.outdated) countAiImageSent()
   if (outcome.outdated) {
     await refreshAiPanel(model)
     if (!retried) return sendAiMessage(true, model)
