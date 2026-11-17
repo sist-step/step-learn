@@ -48,7 +48,7 @@
 .collab-person { display: grid; place-items: center; width: 28px; height: 28px; margin-left: -6px; border: 2px solid var(--collab-bar-bg); border-radius: 50%; background: var(--person, var(--muted)); color: var(--on-strong); font-size: var(--fs-xs); font-weight: 700; }
 .collab-person:first-child { margin-left: 0; }
 .collab-person.is-more { background: var(--surface-3); color: var(--text-2); }
-.collab-status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+.collab-status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .collab-status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--warning); }
 .collab[data-state='synced'] .collab-status::before { background: var(--success); }
 .collab:is([data-state='revoked'], [data-state='too_large']) .collab-status { color: var(--danger-text); }
