@@ -5,6 +5,7 @@ import {
   CourseLiveSync,
   CreateCourseButton,
   ItemIcon,
+  ItemInsertButton,
   LinkTargetField,
   LessonBadge,
   LessonJump,
@@ -217,6 +218,7 @@ const ItemRow = ({
       class={cx('item-row', tracked && done && 'is-done', !!item.hidden && 'is-hidden edit-only', locked && 'is-locked')}
       data-item={item.id}
     >
+      {manage && <ItemInsertButton modal={ADD_ITEM_MODAL} sectionId={item.sectionId} before={item.id} />}
       {locked ? (
         <span class="item-link">{body}</span>
       ) : (
@@ -356,6 +358,7 @@ const AddItemModal = ({
       {...validateWith('item')}
     >
       <input type="hidden" name="type" value="page" />
+      <input type="hidden" name="before" value="" />
       <div class="item-step kind-picker" role="group" aria-label="種類">
         {ITEM_TYPES.map((t) => (
           <button type="button" class="kind-option" data-pick-kind={t}>

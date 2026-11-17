@@ -126,6 +126,22 @@ div.course-hero-cover { background: linear-gradient(150deg, var(--c2), var(--c1)
 .kind-agent { --kind: color-mix(in srgb, var(--accent) 55%, var(--success)); }
 .kind-collab { --kind: color-mix(in srgb, var(--warning) 55%, var(--danger)); }
 
+/* ===== アイテムの間に追加するボタン（ItemInsertButton） */
+/* 行と行の境目に重ねて置くのは、行の間に隙間を空けると編集モードと閲覧モードで並びの高さが変わるため */
+.item-row:has(> .item-insert) { position: relative; }
+.item-insert { position: absolute; z-index: 2; top: -6px; left: 12px; right: 12px; height: 12px; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.15s; }
+.item-insert::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; border-radius: 1px; background: var(--c-ink); }
+.item-insert-btn { position: relative; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 2px solid var(--c-ink); border-radius: 999px; background: var(--surface); color: var(--c-ink); cursor: pointer; box-shadow: var(--shadow-sm); transition: background 0.15s, scale 0.15s; }
+.item-insert:focus-within { opacity: 1; }
+@media (hover: hover) {
+  .item-insert:hover { opacity: 1; }
+  .item-insert-btn:hover { background: linear-gradient(var(--c-soft), var(--c-soft)), var(--surface); scale: 1.1; }
+}
+/* タッチ端末で出さないのは、ホバーで探せず、行の境目に常に並べると行を押し間違えやすいため。末尾の「アイテムを追加」と「上へ移動」で代わりができる */
+@media (hover: none) {
+  .item-insert { display: none; }
+}
+
 /* ===== アイテムを画面いっぱいに出すときのヘッダーの帯（ItemBar） */
 .item-bar { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding-left: 12px; }
 .item-bar > .item-icon { width: 32px; height: 32px; border-radius: 8px; flex: none; }

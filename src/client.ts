@@ -1439,13 +1439,24 @@ document.addEventListener(
   true,
 )
 
-// --- 「アイテムを追加」を押したセクションを、モーダルのセクション欄で選んでおく
+// --- 「アイテムを追加」を押したセクションと、行の間のプラスなら入れる位置を、モーダルの欄に入れておく
 // セクションごとにモーダルを置かないのは、セクションの数だけ同じフォームが HTML に並ぶため
 document.addEventListener('click', (e) => {
   const btn = (e.target as Element).closest<HTMLElement>('[data-add-item-section]')
   const modal = btn && document.getElementById(btn.getAttribute('popovertarget') ?? '')
   const select = modal?.querySelector<HTMLSelectElement>('select[name=section_id]')
+  const before = modal?.querySelector<HTMLInputElement>('input[name=before]')
   if (btn && select) select.value = btn.dataset.addItemSection ?? ''
+  if (btn && before) before.value = btn.dataset.addItemBefore ?? ''
+})
+
+// 位置を残さないのは、別のセクションに移すと、選んだ行の前という位置がそのセクションにないため
+document.addEventListener('change', (e) => {
+  const select = e.target as HTMLElement
+  if (select.matches('select[name=section_id]')) {
+    const before = select.closest('form')?.querySelector<HTMLInputElement>('input[name=before]')
+    if (before) before.value = ''
+  }
 })
 
 // --- アイテムの追加: 種類を選ぶと設定へ進み、選んだ種類のカードが設定の上の見出しに移る
