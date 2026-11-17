@@ -554,6 +554,7 @@ export const CollabWorkspace = ({ kind, courseId, itemId, owner, user, title, im
           </span>
         </div>
       </div>
+      <div class="collab-person-tip" role="tooltip" data-collab-person-tip hidden />
       {note && <div class="collab-note">{note}</div>}
       {kind === 'sheet' && (
         <div class="sheet-formula">
