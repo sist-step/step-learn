@@ -33,6 +33,7 @@ async function openable(user: User, itemId: number, access?: CourseAccess | null
     access: granted,
     completion: item.completion,
     settings: { title: item.title, body: item.body, ...code, solutionPublic: code.solutionPublic === 1 },
+    stage: code.stage,
     period: { opensAt: code.opensAt, closesAt: code.closesAt },
     store: codeStore(item.courseId, itemId),
   }
@@ -68,9 +69,10 @@ export const backend: CodeBackend = {
     const user = ref.startsWith(REF_PREFIX) && Number.isSafeInteger(itemId) && findUser(userId)
     const found = user && (await openable(user, itemId))
     if (!found) return null
-    const { access, settings, period, store } = found
+    const { access, settings, stage, period, store } = found
     return {
       settings,
+      stage,
       period,
       store,
       course: access.course.title,

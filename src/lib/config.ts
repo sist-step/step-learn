@@ -67,16 +67,18 @@ function loadMicrosoft() {
   return { clientId: env.MICROSOFT_CLIENT_ID, clientSecret: env.MICROSOFT_CLIENT_SECRET, tenant }
 }
 
-function loadSandbox() {
-  if (!env.SANDBOX_URL) return null
-  if (env.SANDBOX_URL.startsWith('unix:')) {
-    const socketPath = env.SANDBOX_URL.slice('unix:'.length)
-    if (!path.isAbsolute(socketPath)) throw new Error('SANDBOX_URL の unix: の後ろは、ソケットの絶対パスにしてください')
+/** コンテナの接続先（unix:/ で始まるソケットのパスか、http://ホスト:ポート）を http.request に渡す形にする */
+function loadSocketTarget(name: 'SANDBOX_URL' | 'BROWSER_URL') {
+  const value = env[name]
+  if (!value) return null
+  if (value.startsWith('unix:')) {
+    const socketPath = value.slice('unix:'.length)
+    if (!path.isAbsolute(socketPath)) throw new Error(`${name} の unix: の後ろは、ソケットの絶対パスにしてください`)
     return { socketPath }
   }
-  const url = URL.parse(env.SANDBOX_URL)
+  const url = URL.parse(value)
   if (!url || url.protocol !== 'http:' || !url.port)
-    throw new Error('SANDBOX_URL は unix:/ で始まるソケットのパスか、http://ホスト:ポート の形にしてください')
+    throw new Error(`${name} は unix:/ で始まるソケットのパスか、http://ホスト:ポート の形にしてください`)
   return { host: url.hostname, port: Number(url.port) }
 }
 
@@ -107,5 +109,7 @@ export const config = {
   /** MICROSOFT_CLIENT_ID が設定されていれば、通常モードのログイン画面で Microsoft アカウントでログインできる（lib/microsoft.ts） */
   microsoft: loadMicrosoft(),
   /** SANDBOX_URL が設定されていれば、学生のコードを sandbox のコンテナで実行できる（lib/sandbox.ts）。なければ実行は失敗する */
-  sandbox: loadSandbox(),
+  sandbox: loadSocketTarget('SANDBOX_URL'),
+  /** BROWSER_URL が設定されていれば、Web の提出を採点の前に browser のコンテナで開き、その記録も AI に渡す（lib/browser.ts）。なければコードだけで判定する */
+  browser: loadSocketTarget('BROWSER_URL'),
 }

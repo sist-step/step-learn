@@ -274,6 +274,20 @@
       "when": 1794844657450,
       "tag": "0038_code_solution_appeal",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1794886983836,
+      "tag": "0039_motionless_odin",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1794886995486,
+      "tag": "0040_boring_the_executioner",
+      "breakpoints": true
     }
   ]
 }

@@ -5,11 +5,13 @@ import { config } from './config'
 const ENDPOINT = 'https://openrouter.ai/api/alpha/decisions'
 
 // usage.cost だけに頼らないのは、cost のない応答を 0 として数えると、上限の計算から漏れるため。
-// Jev は料金表が読めなかったので公式の例（入力 476 トークンで 0.00002 ドル）より、Span-02 は料金表（入力 100 万トークンで 0.01 ドル）より高めに見積もる。Span-01 Lite は無料で、出力はどれも無料
+// Jev は料金表が読めなかったので公式の例（入力 476 トークンで 0.00002 ドル）より、Span-02 と Decider は料金表（入力 100 万トークンで 0.01 ドル・0.02 ドル）より高めに見積もる。
+// Span-01 Lite は無料で、出力はどれも無料
 const FALLBACK_INPUT_PRICE: Record<DecisionModel, number> = {
   'typesafe/jev-1.14': 0.1e-6,
   'respan/span-01-lite': 0,
   'respan/span-02': 0.05e-6,
+  'perplexity/pplx-decider-v1.2': 0.05e-6,
 }
 
 /** 決めた選択肢（criteria のキー）から 1 つを選ばせる問い。criteria の値は、その選択肢の説明 */

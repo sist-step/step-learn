@@ -535,7 +535,8 @@ async function updateExtraItem(c: C, loaded: LoadedCourse, item: EditableItem & 
   if (!!hidden !== item.hidden) await moodle(c).updateCourse(id, hidden ? 'cm_hide' : 'cm_show', [item.id])
   if (sectionId !== item.sectionId) await moodle(c).updateCourse(id, 'cm_move', [item.id], { sectionid: sectionId })
   forgetCourse(id)
-  return redirectWith(c, `/courses/${id}/items/${item.id}/edit`, '保存しました。')
+  const message = kind.saved?.(item.extraKey, result.data, c.var.user!.id)
+  return redirectWith(c, `/courses/${id}/items/${item.id}/edit`, message ?? '保存しました。')
 }
 
 export async function moveItem(c: C) {

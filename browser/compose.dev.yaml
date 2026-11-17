@@ -1,0 +1,18 @@
+name: step-learn-browser
+
+# ホストで動かす開発サーバー（npm run dev）から Web の提出を実行するための環境。本番には使わない
+services:
+  browser:
+    extends:
+      file: ../compose.yaml
+      service: browser
+    # ソケットを使わないのは、macOS では Docker のボリュームの中のソケットにホストからつなげないため。
+    # ポートを公開するためにネットワークにつなぐが、Chromium の通信はプロキシの設定と要求の差し止めで止めている
+    network_mode: bridge
+    environment:
+      BROWSER_LISTEN: tcp:8092
+    ports:
+      - '127.0.0.1:8092:8092'
+
+volumes:
+  browser-socket:

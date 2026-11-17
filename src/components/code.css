@@ -213,6 +213,14 @@ details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
 .code-solution-file summary::-webkit-details-marker, .code-trial-detail summary::-webkit-details-marker { display: none; }
 .code-solution-file pre { max-height: 60vh; margin: 0; padding: 12px 14px; border-top: 1px solid var(--border); overflow: auto; font: var(--fs-sm)/1.6 var(--mono); white-space: pre; tab-size: 4; }
 .code-solution-file p { margin: 0; padding: 0 14px 12px; }
+
+/* ===== 問題の確定 ===== */
+.code-stage-line { margin: 0; }
+.code-stage-panel p { margin: 0; }
+.code-finalized-heading { margin: 0; font-size: var(--fs-md); }
+.code-finalized-constraints { display: flex; flex-direction: column; gap: 10px; margin: 0; padding-left: 1.5em; }
+.code-finalized-constraints p { margin: 4px 0 0; }
+.code-guide { padding: 8px 12px; border-radius: var(--radius-field); background: var(--surface-2); overflow-wrap: anywhere; }
 @media (max-width: 640px) {
   .code-open .link-card-lg > form { flex-basis: 100%; }
   .code-open .link-card-lg > form > .btn { width: 100%; }

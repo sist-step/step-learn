@@ -6,6 +6,7 @@ import {
   isVisibleItem,
   moveRow,
   nextPosition,
+  touchCourse,
   trackedDoneCount,
   trackedItemCount,
   visibleItem,
@@ -21,6 +22,7 @@ import { bundleBase } from '../../lib/bundle'
 import { bundleKeysOf, bundleStore, bundleSyncStore } from '../../lib/bundle-items'
 import { syncStateOf } from '../../lib/bundle-sync'
 import {
+  CODE_FILE_KEYS,
   CODE_LANGUAGE_LABELS,
   DEFAULT_STARTER,
   MAX_CODE_LENGTH,
@@ -30,11 +32,13 @@ import {
   MAX_STDIN_LENGTH,
   JUDGE_LABELS,
   goalsOf,
+  isFinalized,
   publicSolutionOf,
+  type CodeFiles,
 } from '../../lib/code'
 import { gradingEnabled, submissionsOf } from '../../lib/code-grader'
-import { currentJudge, grader, judgeSwitchable, setJudge } from '../../lib/code-grading'
-import { codeStore, getCodeItem, updateCodeItem } from '../../lib/code-items'
+import { currentJudge, grader, judgeSwitchable, preparer, setJudge } from '../../lib/code-grading'
+import { codeStore, duplicateCodeItem, getCodeItem, setCodeStage, updateCodeItem } from '../../lib/code-items'
 import { dateTimeInputToUnix } from '../../lib/course-period'
 import { db } from '../../lib/db'
 import { completionError, firstError, isFile, readConstraints, solutionOf, validate, type FieldErrors } from '../../lib/forms'
@@ -68,7 +72,7 @@ import {
   type RestrictionFormNode,
   type RestrictionSet,
 } from '../../lib/restriction'
-import type { AppEnv, Completion } from '../../lib/types'
+import type { AppEnv, CodeItem, Completion } from '../../lib/types'
 import { ItemEditPage, ItemPage, TEXT_PREVIEW_MAX, editUrl, type ItemInput, type OutlineItem, type RestrictedOutline } from './views'
 
 async function manageAccess(c: Context<AppEnv>) {
@@ -250,6 +254,22 @@ function readItemInput(form: Form): ItemInput {
   }
 }
 
+/** 確定したコーディング問題の、判定に関わる欄の保存済みの値。編集画面のフォームと同じ名前で返す */
+function lockedFields(body: string, code: CodeItem): Form {
+  const files = (prefix: string, source: CodeFiles) =>
+    Object.fromEntries(CODE_FILE_KEYS.map((key) => [`${prefix}${key}`, source[key] ?? '']))
+  return {
+    body,
+    ...files('', code.starter),
+    stdin: code.stdin,
+    criteria: code.criteria,
+    'constraint_label[]': code.constraints.map((c) => c.label),
+    'constraint_text[]': code.constraints.map((c) => c.text),
+    'constraint_kind[]': code.constraints.map((c) => (c.optional ? 'optional' : 'required')),
+    ...files('solution_', code.solution),
+  }
+}
+
 const listField = (form: Form, key: string, max: number) => {
   const v = form[key]
   return (Array.isArray(v) ? v : v === undefined ? [] : [v]).slice(0, max).map((s) => (typeof s === 'string' ? s.trim() : ''))
@@ -300,7 +320,7 @@ export async function createItem(c: Context<AppEnv>) {
       })
       .returning({ id: items.id })
       .get()
-    if (type === 'code') tx.insert(codeItems).values({ itemId: row.id, language, starter: DEFAULT_STARTER[language] }).run()
+    if (type === 'code') tx.insert(codeItems).values({ itemId: row.id, language, starter: DEFAULT_STARTER[language], stage: 'draft' }).run()
     return row
   })
   // ファイル自動配布は、ファイルを置くまで学生に配れないので、アップロードする編集画面へ進める
@@ -339,6 +359,7 @@ export async function editItem(c: Context<AppEnv>) {
       access={access}
       item={item}
       code={getCodeItem(iid)}
+      preparing={preparer.isRunning(iid)}
       bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
       agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
       quiz={item.type === 'quiz' ? getQuizSettings(iid) : undefined}
@@ -359,8 +380,11 @@ export async function updateItem(c: Context<AppEnv>) {
   const item = getItem(courseId, iid)
   if (!item) return c.notFound()
   const code = getCodeItem(iid)
+  const finalized = !!code && isFinalized(code.stage)
 
-  const form = await readForm(c)
+  // 確定した問題は、判定に関わる欄を保存済みの値で上書きしてから検証する。画面に入力欄を出していないうえ、送られてきても変えさせないため
+  const form = finalized ? { ...(await readForm(c)), ...lockedFields(item.body, code) } : await readForm(c)
+  const finalizing = !!code && !finalized && field(form, 'finalize', 1) === '1'
   const placement = validate('itemPlacement', form)
   const requestedSection = placement.ok ? placement.values.section_id : 0
   const sectionId = getSection(courseId, requestedSection) ? requestedSection : item.sectionId
@@ -435,6 +459,16 @@ export async function updateItem(c: Context<AppEnv>) {
       opensAt: dateTimeInputToUnix(input.opens_at ?? ''),
       closesAt: dateTimeInputToUnix(input.closes_at ?? ''),
     })
+    if (finalizing) {
+      setCodeStage(iid, 'preparing')
+      preparer.start(iid, c.var.user!.id)
+      touchCourse(courseId)
+      return redirectWith(
+        c,
+        `/courses/${courseId}/items/${iid}/edit`,
+        '保存して問題を確定しました。準備が終わると、学生が解けるようになります。',
+      )
+    }
   }
   if (agentModel && 'model' in agentModel)
     saveAgentOptions(iid, {
@@ -453,6 +487,39 @@ export async function updateItem(c: Context<AppEnv>) {
     })
   if (stored && item.fileKey) inBackground(deleteKeys([item.fileKey]))
   return redirectWith(c, `/courses/${courseId}/items/${iid}/edit`, '保存しました。')
+}
+
+/** 確定したコーディング問題の準備をやり直す。失敗したときと、準備中のまま進んでいない（再起動などで止まった）ときだけ */
+export async function prepareCode(c: Context<AppEnv>) {
+  const access = await manageAccess(c)
+  const iid = intParam(c, 'iid')
+  const code = access && iid && getItem(access.course.id, iid) ? getCodeItem(iid) : undefined
+  if (!access || !iid || !code || !(code.stage === 'failed' || (code.stage === 'preparing' && !preparer.isRunning(iid))))
+    return c.notFound()
+  setCodeStage(iid, 'preparing')
+  preparer.start(iid, c.var.user!.id)
+  return redirectWith(
+    c,
+    `/courses/${access.course.id}/items/${iid}/edit`,
+    'もう一度準備しています。終わると、学生が解けるようになります。',
+    'info',
+  )
+}
+
+/** 確定したコーディング問題を、確定する前の新しいアイテムとして同じセクションの末尾に複製する。提出は写さない */
+export async function duplicateCode(c: Context<AppEnv>) {
+  const access = await manageAccess(c)
+  const iid = intParam(c, 'iid')
+  const item = access && iid ? getItem(access.course.id, iid) : undefined
+  const code = item && getCodeItem(item.id)
+  if (!access || !item || !code || !isFinalized(code.stage)) return c.notFound()
+  const id = duplicateCodeItem(item, code)
+  touchCourse(access.course.id)
+  return redirectWith(
+    c,
+    `/courses/${access.course.id}/items/${id}/edit`,
+    `「${item.title}」を複製しました。直してから確定してください。学生には表示していません。`,
+  )
 }
 
 /** コードのアイテムの、制約ごとの判定をするものを切り替える。開発サーバーだけで使え、すべてのアイテムに効く */
@@ -677,6 +744,7 @@ export async function showItem(c: Context<AppEnv>) {
     goals: goalsOf(codeItem.constraints),
     grade: access.role === 'student' ? submissionsOf(codeStore(id, iid), userId, grader, codePeriod!).grade : null,
     solution: publicSolutionOf({ ...codeItem, solutionPublic: codeItem.solutionPublic === 1 }, codePeriod!),
+    stage: codeItem.stage,
   }
   const textPreview =
     item.type === 'file' && item.fileKey && item.fileSize && previewKind(item.fileType ?? '', item.fileName ?? '') === 'text'
