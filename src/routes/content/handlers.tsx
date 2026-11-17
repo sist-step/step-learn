@@ -6,6 +6,7 @@ import {
   isVisibleItem,
   moveRow,
   nextPosition,
+  placeBefore,
   touchCourse,
   trackedDoneCount,
   trackedItemCount,
@@ -333,6 +334,7 @@ export async function createItem(c: Context<AppEnv>) {
     if (type === COLLAB_KIND) tx.insert(collabItems).values({ itemId: row.id, kind: collabKind, scope: collabScope }).run()
     return row
   })
+  if (placement.values.before) placeBefore(items, eq(items.sectionId, sectionId), created.id, placement.values.before)
   // ファイル自動配布は、ファイルを置くまで学生に配れないので、アップロードする編集画面へ進める
   if (type === 'bundle')
     return redirectWith(
