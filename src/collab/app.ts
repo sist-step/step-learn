@@ -83,6 +83,8 @@ function download(blob: Blob, name: string) {
 
 const initials = (name: string) => [...name.trim()].slice(0, 1).join('') || '?'
 
+const MAX_PEOPLE = 6
+
 function renderPeople(host: HTMLElement, awareness: Awareness, selfId: number) {
   const seen = new Map<number, Presence>()
   for (const state of awareness.getStates().values()) {
@@ -90,20 +92,57 @@ function renderPeople(host: HTMLElement, awareness: Awareness, selfId: number) {
     if (user && typeof user.id === 'number' && !seen.has(user.id)) seen.set(user.id, user)
   }
   const people = [...seen.values()].sort((a, b) => (a.id === selfId ? -1 : b.id === selfId ? 1 : a.name.localeCompare(b.name, 'ja')))
+  const label = (p: Presence) => (p.id === selfId ? `${p.name} さん（あなた）` : `${p.name} さん`)
+  const person = (key: string, text: string, tip: string) => {
+    const el = document.createElement('span')
+    el.className = key === 'more' ? 'collab-person is-more' : 'collab-person'
+    el.dataset.personKey = key
+    el.dataset.personTip = tip
+    el.textContent = text
+    return el
+  }
   host.replaceChildren(
-    ...people.slice(0, 6).map((p) => {
-      const el = document.createElement('span')
-      el.className = 'collab-person'
+    ...people.slice(0, MAX_PEOPLE).map((p) => {
+      const el = person(String(p.id), initials(p.name), label(p))
       el.style.setProperty('--person', p.color)
-      el.textContent = initials(p.name)
-      el.title = p.id === selfId ? `${p.name} さん（あなた）` : `${p.name} さん`
       return el
     }),
-    ...(people.length > 6
-      ? [Object.assign(document.createElement('span'), { className: 'collab-person is-more', textContent: `+${people.length - 6}` })]
+    ...(people.length > MAX_PEOPLE
+      ? [person('more', `+${people.length - MAX_PEOPLE}`, people.slice(MAX_PEOPLE).map(label).join('、'))]
       : []),
   )
   host.setAttribute('aria-label', `開いている人 ${people.length} 人: ${people.map((p) => p.name).join('、')}`)
+}
+
+// title にしないのは、ブラウザのツールチップは出るまでが遅く、場所も選べないため
+function bindPersonTip(host: HTMLElement, tip: HTMLElement) {
+  let activeKey: string | null = null
+  const place = () => {
+    const el = activeKey ? host.querySelector<HTMLElement>(`[data-person-key="${activeKey}"]`) : null
+    if (!el) {
+      activeKey = null
+      tip.hidden = true
+      return
+    }
+    tip.textContent = el.dataset.personTip ?? ''
+    tip.hidden = false
+    const rect = el.getBoundingClientRect()
+    const width = tip.offsetWidth
+    const left = Math.min(Math.max(rect.left + rect.width / 2 - width / 2, 8), window.innerWidth - width - 8)
+    tip.style.left = `${left}px`
+    tip.style.top = `${rect.bottom + 6}px`
+  }
+  host.addEventListener('pointermove', (e) => {
+    const key = (e.target as Element).closest<HTMLElement>('.collab-person')?.dataset.personKey ?? null
+    if (key === activeKey) return
+    activeKey = key
+    place()
+  })
+  host.addEventListener('pointerleave', () => {
+    activeKey = null
+    place()
+  })
+  return place
 }
 
 export async function mountCollab(root: HTMLElement, toast: Toast, confirmNear: ConfirmNear) {
@@ -131,8 +170,13 @@ export async function mountCollab(root: HTMLElement, toast: Toast, confirmNear: 
     if (state === 'too_large') toast('ファイルが大きすぎて、変更を保存できませんでした。画像や内容を減らしてください。', 'error')
   })
   const people = root.querySelector<HTMLElement>('[data-collab-people]')
+  const personTip = root.querySelector<HTMLElement>('[data-collab-person-tip]')
   if (people) {
-    const render = () => renderPeople(people, provider.awareness, userId)
+    const placeTip = personTip ? bindPersonTip(people, personTip) : () => {}
+    const render = () => {
+      renderPeople(people, provider.awareness, userId)
+      placeTip()
+    }
     provider.awareness.on('change', render)
     render()
   }
