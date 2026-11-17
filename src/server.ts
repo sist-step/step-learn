@@ -28,8 +28,16 @@ const httpServer = serve({ fetch: server.fetch, port: config.port }, (info) => {
 // 両方を静的に import しないのは、通常モードの権限の確認が step-learn.db を開くので、Moodle モードでも作られてしまうため
 const { attach } = config.moodle ? await import('./moodle-mode/screen-share') : await import('./lib/screen-share-access')
 const io = attach(httpServer as HttpServer)
+const collab = config.moodle ? await import('./moodle-mode/collab') : await import('./lib/collab-access')
+const collabIo = collab.attach(httpServer as HttpServer)
+const { flushCollabRooms } = await import('./lib/collab-server')
 
 // httpServer.close だけにしないのは、開いたままの socket.io の接続が残って終了できなくなるため
-const shutdown = () => io.close(() => process.exit(0))
+const shutdown = () => {
+  // 接続を閉じる前に保存するのは、閉じたあとの保存は部屋ごとに切断の順で走り、終わる前に process.exit が来ることがあるため
+  flushCollabRooms()
+  void collabIo.close()
+  void io.close(() => process.exit(0))
+}
 process.on('SIGINT', shutdown)
 process.on('SIGTERM', shutdown)

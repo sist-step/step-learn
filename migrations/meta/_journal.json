@@ -288,6 +288,20 @@
       "when": 1794886995486,
       "tag": "0040_boring_the_executioner",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1794920289863,
+      "tag": "0041_collab_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "6",
+      "when": 1794920298605,
+      "tag": "0042_item_type_collab",
+      "breakpoints": true
     }
   ]
 }

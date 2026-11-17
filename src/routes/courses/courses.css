@@ -79,6 +79,7 @@
 .item-form:not([data-kind='bundle']) .when-bundle { display: none; }
 .item-form:not([data-kind='agent']) .when-agent { display: none; }
 .item-form:not([data-kind='quiz']) .when-quiz { display: none; }
+.item-form:not([data-kind='collab']) .when-collab { display: none; }
 .item-form[data-kind='code'] .unless-code, .item-form:is([data-kind='bundle'], [data-kind='code'], [data-kind='agent'], [data-kind='quiz']) .unless-edit-next { display: none; }
 
 :root:not([data-edit-mode]) .edit-only,
@@ -267,6 +268,7 @@
 .item-form[data-kind='screen'] [data-kind-summary='screen'],
 .item-form[data-kind='code'] [data-kind-summary='code'],
 .item-form[data-kind='quiz'] [data-kind-summary='quiz'],
+.item-form[data-kind='collab'] [data-kind-summary='collab'],
 .item-form[data-kind='bundle'] [data-kind-summary='bundle'],
 .item-form[data-kind='agent'] [data-kind-summary='agent'] { display: flex; }
 .kind-summary > .btn { flex: none; margin-left: auto; }

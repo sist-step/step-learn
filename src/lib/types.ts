@@ -43,7 +43,7 @@ export type CodeItem = typeof codeItems.$inferSelect
 
 export type QuizItem = typeof quizItems.$inferSelect
 
-export const ITEM_TYPES = ['page', 'link', 'file', 'screen', 'code', 'quiz', 'bundle', 'agent'] as const
+export const ITEM_TYPES = ['page', 'link', 'file', 'screen', 'code', 'quiz', 'collab', 'bundle', 'agent'] as const
 
 export type ItemType = (typeof ITEM_TYPES)[number]
 
@@ -54,6 +54,7 @@ export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   screen: '画面共有',
   code: 'コーディング問題',
   quiz: '小テスト',
+  collab: '共同編集',
   bundle: 'ファイル自動配布',
   agent: 'コーディングエージェント',
 }
