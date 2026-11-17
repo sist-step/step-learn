@@ -116,6 +116,7 @@ const NATIVE_MODULE: Record<ItemType, string> = {
   bundle: '',
   agent: '',
   quiz: '',
+  collab: '',
 }
 
 /** source はプレビューの見出しに出す取り込み元（ファイル名やコースの URL） */

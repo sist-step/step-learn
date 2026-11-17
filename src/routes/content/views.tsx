@@ -37,7 +37,9 @@ import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
 import { QuizEditor, QuizGradingCard, QuizLookCard, QuizPanel } from '../../components/quiz'
+import { CollabPanel, CollabSettingsCard } from '../../components/collab'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
+import type { CollabSettings, CollabView } from '../../lib/collab'
 import { agentBase, type AgentView } from '../../lib/agent'
 import type { OpenRouterModelInfo } from '../../lib/ai-models'
 import { bundleBase } from '../../lib/bundle'
@@ -119,6 +121,7 @@ export const ItemEditPage = ({
   bundle,
   agent,
   quiz,
+  collab,
   agentModels = null,
   gradingEnabled,
   judge,
@@ -137,6 +140,8 @@ export const ItemEditPage = ({
   agent?: AgentView
   /** 小テストのアイテムの設定 */
   quiz?: QuizSettings
+  /** 共同編集のアイテムの種類と分け方 */
+  collab?: CollabSettings
   /** コーディングエージェントのアイテムで選べる OpenRouter のモデル。一覧を取れなければ null */
   agentModels?: OpenRouterModelInfo[] | null
   /** AI が設定されていて、提出を自動で採点するか */
@@ -181,7 +186,7 @@ export const ItemEditPage = ({
     { href: `/courses/${courseId}`, label: access.course.title },
     ...(section ? [{ href: editUrl(courseId, section.id), label: section.title }] : []),
   ]
-  const lost = `${bundle ? '配布するファイルと、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : agent ? '利用状況と' : quiz ? '受験の記録と' : ''}完了記録も消え、元に戻せません。`
+  const lost = `${bundle ? '配布するファイルと、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : agent ? '利用状況と' : quiz ? '受験の記録と' : collab ? 'ファイルと' : ''}完了記録も消え、元に戻せません。`
   return (
     <AppShell
       tone={access.course.color}
@@ -286,6 +291,7 @@ export const ItemEditPage = ({
             {code && <CodePeriodCard opensAt={v.opensAt} closesAt={v.closesAt} errors={errors} />}
             {quiz && <QuizGradingCard passPercent={v.passPercent} showAnswers={v.showAnswers} errors={errors} />}
             {quiz && <QuizLookCard look={v.look} />}
+            {collab && <CollabSettingsCard settings={collab} />}
             {agent && <AgentModelCard value={v.model} saved={agent.settings.model} models={agentModels} error={errors.agent_model} />}
             {agent && <AgentPeriodCard opensAt={v.opensAt} closesAt={v.closesAt} userLimit={v.userLimit} errors={errors} />}
             <Card heading="公開と配置">
@@ -346,6 +352,7 @@ export const ItemPage = ({
   bundle,
   agent,
   quiz,
+  collab,
   revision,
 }: {
   access: CourseAccess
@@ -363,6 +370,7 @@ export const ItemPage = ({
   bundle?: BundleView
   agent?: AgentView
   quiz?: QuizView
+  collab?: CollabView
   revision: string
 }) => {
   const id = access.course.id
@@ -385,6 +393,7 @@ export const ItemPage = ({
     item.type === 'bundle' ||
     item.type === 'agent' ||
     item.type === 'quiz' ||
+    item.type === 'collab' ||
     embedded ||
     !!code ||
     (!!preview && (preview !== 'text' || textPreview !== null))
@@ -579,6 +588,8 @@ export const ItemPage = ({
           )}
 
           {quiz && <QuizPanel quiz={quiz} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />}
+
+          {collab && <CollabPanel collab={collab} />}
 
           {waitsFor(item, 'view') && opensOnView && <span hidden data-complete-on-view={completeUrl(item)} />}
 

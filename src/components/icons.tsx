@@ -79,6 +79,24 @@ import userMinus from 'heroicons/24/outline/user-minus.svg?raw'
 import users from 'heroicons/24/outline/users.svg?raw'
 import columns from 'heroicons/24/outline/view-columns.svg?raw'
 import x from 'heroicons/24/outline/x-mark.svg?raw'
+import underline from 'heroicons/24/outline/underline.svg?raw'
+import strikethrough from 'heroicons/24/outline/strikethrough.svg?raw'
+import presentation from 'heroicons/24/outline/presentation-chart-bar.svg?raw'
+import userGroup from 'heroicons/24/outline/user-group.svg?raw'
+import swatch from 'heroicons/24/outline/swatch.svg?raw'
+import paintBrush from 'heroicons/24/outline/paint-brush.svg?raw'
+import cursor from 'heroicons/24/outline/cursor-arrow-rays.svg?raw'
+import hand from 'heroicons/24/outline/hand-raised.svg?raw'
+import redo from 'heroicons/24/outline/arrow-uturn-right.svg?raw'
+import minus from 'heroicons/24/outline/minus.svg?raw'
+import arrowLongRight from 'heroicons/24/outline/arrow-long-right.svg?raw'
+import note from 'heroicons/24/outline/document.svg?raw'
+import documentUp from 'heroicons/24/outline/document-arrow-up.svg?raw'
+import alignCenter from 'heroicons/24/outline/bars-3-center-left.svg?raw'
+import variable from 'heroicons/24/outline/variable.svg?raw'
+import squares2x2 from 'heroicons/24/outline/squares-2x2.svg?raw'
+import chevronUp from 'heroicons/24/outline/chevron-up.svg?raw'
+import squaresPlus from 'heroicons/24/outline/squares-plus.svg?raw'
 
 // 外部アイコンフォントを読み込まず、使う分だけをビルド時に文字列として埋め込む
 const svgs = {
@@ -162,6 +180,24 @@ const svgs = {
   columns,
   format,
   question,
+  underline,
+  strikethrough,
+  presentation,
+  userGroup,
+  swatch,
+  paintBrush,
+  cursor,
+  hand,
+  redo,
+  minus,
+  arrowLongRight,
+  note,
+  documentUp,
+  alignCenter,
+  variable,
+  squares2x2,
+  chevronUp,
+  squaresPlus,
 } as const
 
 export type IconName = keyof typeof svgs

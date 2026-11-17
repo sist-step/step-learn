@@ -501,6 +501,7 @@ const BODY_LABELS: Record<Item['type'], string> = {
   bundle: '説明',
   agent: '説明',
   quiz: '説明',
+  collab: '説明',
 }
 
 const codeOf = (itemId: number) => db.select().from(codeItems).where(eq(codeItems.itemId, itemId)).get()

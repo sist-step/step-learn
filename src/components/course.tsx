@@ -299,6 +299,7 @@ export const ITEM_ICONS: Record<ItemType, IconName> = {
   screen: 'monitor',
   code: 'terminal',
   quiz: 'clipboardCheck',
+  collab: 'userGroup',
   bundle: 'folder',
   agent: 'cpuChip',
 }
@@ -463,6 +464,7 @@ const COMPLETION_HINTS: Record<ItemType | 'any', string> = {
   screen: '画面共有では「なし」か「学生が自分で完了にする」を選べます。',
   code: '「開いたら完了」は学生がこのアイテムを開いたとき、「制約をすべてクリアしたら完了」は提出が AI の判定ですべての制約を満たしたときに完了になります。',
   quiz: '「開いたら完了」は学生がこのアイテムを開いたとき、「合格したら完了」は正解の割合が合格の割合以上になったときに完了になります。',
+  collab: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
   bundle: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
   agent: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
   any: '「開いたら完了」はページ・リンク・ファイルで、「最後まで再生したら完了」は動画・音声のファイルで、「制約をすべてクリアしたら完了」はコードで、「合格したら完了」は小テストで選べます。',
