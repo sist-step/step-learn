@@ -36,6 +36,8 @@ import {
   publicSolutionOf,
   type CodeFiles,
 } from '../../lib/code'
+import { COLLAB_KIND, type CollabView } from '../../lib/collab'
+import { collabStore, getCollabSettings } from '../../lib/collab-items'
 import { gradingEnabled, submissionsOf } from '../../lib/code-grader'
 import { currentJudge, grader, judgeSwitchable, preparer, setJudge } from '../../lib/code-grading'
 import { codeStore, duplicateCodeItem, getCodeItem, setCodeStage, updateCodeItem } from '../../lib/code-items'
@@ -48,7 +50,7 @@ import { DEFAULT_PASS_PERCENT, MAX_QUIZ_JSON_LENGTH, isQuizLook, readQuizForm } 
 import { getQuizSettings, quizStore, saveQuizSettings } from '../../lib/quiz-items'
 import { quizViewOf } from '../../lib/quiz-store'
 import { availableCodeLanguages } from '../../lib/sandbox'
-import { codeItems, completions, items, sections } from '../../lib/schema'
+import { codeItems, collabItems, completions, items, sections } from '../../lib/schema'
 import { isSharing } from '../../lib/screen-share'
 import {
   EXECUTABLE_NOT_ALLOWED,
@@ -100,6 +102,13 @@ const quizView = (c: Context<AppEnv>, access: CourseAccess, itemId: number) =>
     student: access.role === 'student',
     retake: c.req.query('retake') === '1',
   })
+
+function collabView(access: CourseAccess, itemId: number): CollabView | undefined {
+  const settings = getCollabSettings(itemId)
+  if (!settings) return undefined
+  const students = access.canManage && settings.scope === 'student' ? collabStore(access.course.id, itemId).students() : undefined
+  return { settings, href: `/courses/${access.course.id}/items/${itemId}/collab`, students }
+}
 
 const getItem = (courseId: number, itemId: number) =>
   db
@@ -292,7 +301,7 @@ export async function createItem(c: Context<AppEnv>) {
   if (!placement.ok || !getSection(courseId, sectionId)) return c.notFound()
   const result = validate('item', form)
   if (!result.ok) return redirectWith(c, editUrl(courseId, sectionId), firstError(result.errors), 'error')
-  const { type, hidden, language, ...input } = result.values
+  const { type, hidden, language, collab_kind: collabKind, collab_scope: collabScope, ...input } = result.values
   if (type === 'code' && !availableCodeLanguages.includes(language))
     return redirectWith(c, editUrl(courseId, sectionId), `${CODE_LANGUAGE_LABELS[language]} は選べません。`, 'error')
   const file = type === 'file' && isFile(input.file) ? input.file : null
@@ -321,6 +330,7 @@ export async function createItem(c: Context<AppEnv>) {
       .returning({ id: items.id })
       .get()
     if (type === 'code') tx.insert(codeItems).values({ itemId: row.id, language, starter: DEFAULT_STARTER[language], stage: 'draft' }).run()
+    if (type === COLLAB_KIND) tx.insert(collabItems).values({ itemId: row.id, kind: collabKind, scope: collabScope }).run()
     return row
   })
   // ファイル自動配布は、ファイルを置くまで学生に配れないので、アップロードする編集画面へ進める
@@ -363,6 +373,7 @@ export async function editItem(c: Context<AppEnv>) {
       bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
       agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
       quiz={item.type === 'quiz' ? getQuizSettings(iid) : undefined}
+      collab={item.type === COLLAB_KIND ? (getCollabSettings(iid) ?? undefined) : undefined}
       agentModels={item.type === 'agent' ? await agentOpenRouterModels() : undefined}
       gradingEnabled={gradingEnabled}
       judge={judgeSwitchable ? currentJudge() : undefined}
@@ -422,6 +433,7 @@ export async function updateItem(c: Context<AppEnv>) {
         bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
         agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
         quiz={item.type === 'quiz' ? getQuizSettings(iid) : undefined}
+        collab={item.type === COLLAB_KIND ? (getCollabSettings(iid) ?? undefined) : undefined}
         agentModels={item.type === 'agent' ? await agentOpenRouterModels() : undefined}
         gradingEnabled={gradingEnabled}
         judge={judgeSwitchable ? currentJudge() : undefined}
@@ -569,10 +581,11 @@ export async function removeItem(c: Context<AppEnv>) {
   const item = db
     .delete(items)
     .where(and(eq(items.id, iid), eq(items.courseId, access.course.id)))
-    .returning({ sectionId: items.sectionId, fileKey: items.fileKey, title: items.title })
+    .returning({ sectionId: items.sectionId, fileKey: items.fileKey, title: items.title, type: items.type })
     .get()
   if (!item) return c.notFound()
   inBackground(deleteKeys([item.fileKey, ...bundleKeys]))
+  if (item.type === COLLAB_KIND) inBackground(storage.deletePrefix(`${collabStore(access.course.id, iid).imagePrefix}/`))
   return redirectWith(c, editUrl(access.course.id, item.sectionId), `「${item.title}」を削除しました。`, 'info')
 }
 
@@ -768,6 +781,7 @@ export async function showItem(c: Context<AppEnv>) {
       bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
       agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
       quiz={item.type === 'quiz' ? quizView(c, access, iid) : undefined}
+      collab={item.type === COLLAB_KIND ? collabView(access, iid) : undefined}
       revision={revision}
     />,
     { title: item.title },

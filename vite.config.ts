@@ -59,6 +59,8 @@ export default defineConfig(({ command }) => ({
             config.moodle ? '/src/moodle-mode/screen-share.ts' : '/src/lib/screen-share-access.ts',
           )
           attach(httpServer)
+          const collab = await server.ssrLoadModule(config.moodle ? '/src/moodle-mode/collab.ts' : '/src/lib/collab-access.ts')
+          collab.attach(httpServer)
         })
       },
     },

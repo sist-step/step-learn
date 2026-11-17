@@ -302,3 +302,26 @@ export const appSettings = sqliteTable('app_settings', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
 })
+
+/**
+ * 共同編集のアイテム（extra-kinds.tsx の collab）のファイル。通常モードの collab_docs と同じ形で、key は extra_items の key。
+ * 種類と持ち主の分け方は extra_items の data に置く。完全移行では引き継がない
+ */
+export const collabDocs = sqliteTable(
+  'collab_docs',
+  {
+    id: integer('id').primaryKey(),
+    key: text('key')
+      .notNull()
+      .references(() => extraItems.key, { onDelete: 'cascade' }),
+    owner: text('owner').notNull(),
+    userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    state: blob('state', { mode: 'buffer' }).notNull(),
+    updatedBy: integer('updated_by').references(() => users.id, { onDelete: 'set null' }),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .default(now)
+      .$onUpdate(() => now),
+  },
+  (t) => [uniqueIndex('collab_docs_key_owner').on(t.key, t.owner)],
+)
