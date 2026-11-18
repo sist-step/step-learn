@@ -314,6 +314,12 @@ export const ItemIcon = ({ type }: { type: ItemType }) => {
   )
 }
 
+export const AddSectionButton = ({ modal }: { modal: string }) => (
+  <button type="button" class="add-item add-section edit-only" popovertarget={modal}>
+    <Icon name="plus" size={16} /> セクションを追加
+  </button>
+)
+
 /** 編集モードのアイテムの行に置くつまみ。マウスは行のどこからでも動かせ、タッチはここからだけ動かせる */
 export const ItemGrip = ({ action }: { action: string }) => {
   useStyle('/src/components/course.css')
