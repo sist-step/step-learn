@@ -14,6 +14,8 @@ import {
   COLLAB_SCOPES,
   COLLAB_SCOPE_DESCRIPTIONS,
   COLLAB_SCOPE_LABELS,
+  DOC_FONTS,
+  DOC_FONT_SIZES,
   userOwner,
   type CollabKind,
   type CollabOwner,
@@ -310,6 +312,123 @@ const HistoryTools = () => (
   </>
 )
 
+const DOC_TEXT_COLORS = [
+  { value: '#111827', label: '黒' },
+  { value: '#6b7280', label: '灰色' },
+  { value: '#d92d20', label: '赤' },
+  { value: '#ea580c', label: 'オレンジ' },
+  { value: '#a16207', label: '黄土色' },
+  { value: '#15803d', label: '緑' },
+  { value: '#1d4ed8', label: '青' },
+  { value: '#7e22ce', label: '紫' },
+]
+
+const DOC_HIGHLIGHT_COLORS = [
+  { value: '#fef08a', label: '黄色' },
+  { value: '#fed7aa', label: 'オレンジ' },
+  { value: '#fecaca', label: '赤' },
+  { value: '#fbcfe8', label: 'ピンク' },
+  { value: '#ddd6fe', label: '紫' },
+  { value: '#bfdbfe', label: '青' },
+  { value: '#bbf7d0', label: '緑' },
+  { value: '#e5e7eb', label: '灰色' },
+]
+
+// 色の入力欄だけにしないのは、同じ色を選び直しても change が起きず、続けて同じ色を塗れないため
+const DocColorMenu = ({
+  cmd,
+  label,
+  glyph,
+  noneLabel,
+  colors,
+}: {
+  cmd: string
+  label: string
+  glyph: Child
+  noneLabel: string
+  colors: { value: string; label: string }[]
+}) => (
+  <Popover
+    class="collab-menu"
+    trigger={
+      <summary class="icon-btn collab-tool doc-color" data-doc-color={cmd} aria-label={label} title={label}>
+        {glyph}
+        <span class="collab-color-bar" />
+      </summary>
+    }
+  >
+    <MenuItem icon="x" data-cmd={cmd} data-cmd-value="">
+      {noneLabel}
+    </MenuItem>
+    <div class="doc-swatches">
+      {colors.map((c) => (
+        <button
+          type="button"
+          class="doc-swatch"
+          style={`--swatch:${c.value}`}
+          data-cmd={cmd}
+          data-cmd-value={c.value}
+          aria-label={c.label}
+          title={c.label}
+        />
+      ))}
+    </div>
+    <label class="menu-item doc-custom-color">
+      <Icon name="swatch" size={18} />
+      <span>ほかの色</span>
+      <input type="color" value={colors[0].value} data-cmd={cmd} aria-label={`${label}をほかの色から選ぶ`} />
+    </label>
+  </Popover>
+)
+
+const DocLinkMenu = () => (
+  <Popover
+    class="collab-menu"
+    data-doc-link-menu
+    trigger={
+      <summary class="icon-btn collab-tool" data-doc-link-toggle aria-label="リンク（⌘K）" title="リンク（⌘K）" aria-pressed="false">
+        <Icon name="link" size={16} />
+      </summary>
+    }
+  >
+    <div class="doc-link">
+      <label class="small strong" for="doc-link-url">
+        リンク先の URL
+      </label>
+      <input
+        id="doc-link-url"
+        class="input input-sm"
+        data-doc-link-url
+        inputmode="url"
+        placeholder="https://example.com"
+        autocomplete="off"
+        spellcheck={false}
+      />
+      <div class="doc-link-actions">
+        <Button size="sm" variant="primary" data-doc-link-apply>
+          適用
+        </Button>
+        <Button size="sm" variant="ghost" data-cmd="unlink" data-doc-link-existing>
+          解除
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          href="#"
+          target="_blank"
+          rel="noopener noreferrer"
+          iconEnd="external"
+          data-no-prefetch
+          data-doc-link-open
+          data-doc-link-existing
+        >
+          開く
+        </Button>
+      </div>
+    </div>
+  </Popover>
+)
+
 const DocTools = () => (
   <>
     <ToolSelect
@@ -320,31 +439,90 @@ const DocTools = () => (
         { value: 'h1', label: '見出し 1' },
         { value: 'h2', label: '見出し 2' },
         { value: 'h3', label: '見出し 3' },
+        { value: 'h4', label: '見出し 4' },
+        { value: 'blockquote', label: '引用' },
+        { value: 'codeBlock', label: 'コード' },
       ]}
+    />
+    <ToolSelect
+      cmd="fontFamily"
+      label="フォント"
+      options={[{ value: '', label: '標準' }, ...DOC_FONTS.map(({ value, label }) => ({ value, label }))]}
+    />
+    <ToolSelect
+      cmd="fontSize"
+      label="文字の大きさ（pt）"
+      options={[{ value: '', label: '標準' }, ...DOC_FONT_SIZES.map((s) => ({ value: String(s), label: String(s) }))]}
     />
     <Sep />
     <Tool cmd="bold" icon="bold" label="太字（⌘B）" />
     <Tool cmd="italic" icon="italic" label="斜体（⌘I）" />
     <Tool cmd="underline" icon="underline" label="下線（⌘U）" />
     <Tool cmd="strike" icon="strikethrough" label="取り消し線" />
-    <ColorTool cmd="color" icon="swatch" label="文字の色" value="#d92d20" />
-    <ColorTool cmd="highlight" icon="paintBrush" label="蛍光ペン" value="#fde047" />
+    <Tool cmd="code" icon="code" label="コード（⌘E）" />
+    <DocColorMenu
+      cmd="color"
+      label="文字の色"
+      glyph={<span class="doc-color-glyph">A</span>}
+      noneLabel="自動（色なし）"
+      colors={DOC_TEXT_COLORS}
+    />
+    <DocColorMenu
+      cmd="highlight"
+      label="蛍光ペン"
+      glyph={<Icon name="paintBrush" size={16} />}
+      noneLabel="蛍光ペンなし"
+      colors={DOC_HIGHLIGHT_COLORS}
+    />
+    <Tool cmd="clearFormat" icon="backspace" label="書式をクリア" />
     <Sep />
-    <Tool cmd="align" value="left" icon="format" label="左揃え" />
-    <Tool cmd="align" value="center" icon="alignCenter" label="中央揃え" />
-    <Tool cmd="align" value="right" icon="indent" label="右揃え" />
+    <ToolMenu icon="format" label="文字の揃え">
+      <MenuItem icon="format" data-cmd="align" data-cmd-value="left" aria-pressed="false">
+        左揃え
+      </MenuItem>
+      <MenuItem icon="alignCenter" data-cmd="align" data-cmd-value="center" aria-pressed="false">
+        中央揃え
+      </MenuItem>
+      <MenuItem icon="indent" data-cmd="align" data-cmd-value="right" aria-pressed="false">
+        右揃え
+      </MenuItem>
+      <MenuItem icon="menu" data-cmd="align" data-cmd-value="justify" aria-pressed="false">
+        両端揃え
+      </MenuItem>
+    </ToolMenu>
     <Tool cmd="bulletList" icon="listBullet" label="箇条書き" />
     <Tool cmd="orderedList" icon="listNumbered" label="番号付きリスト" />
+    <Tool cmd="outdent" icon="chevronDoubleLeft" label="字下げを減らす（⇧Tab）" />
+    <Tool cmd="indent" icon="chevronDoubleRight" label="字下げを増やす（Tab）" />
     <Sep />
+    <DocLinkMenu />
     <ToolMenu icon="table" label="表">
       <MenuItem icon="plus" data-cmd="tableInsert">
         表を挿入（3 × 3）
       </MenuItem>
-      <MenuItem data-cmd="tableRowAfter">下に行を挿入</MenuItem>
-      <MenuItem data-cmd="tableColAfter">右に列を挿入</MenuItem>
-      <MenuItem data-cmd="tableRowDelete">行を削除</MenuItem>
-      <MenuItem data-cmd="tableColDelete">列を削除</MenuItem>
-      <MenuItem icon="trash" class="is-danger" data-cmd="tableDelete">
+      <MenuItem data-cmd="tableRowBefore" data-doc-needs-table>
+        上に行を挿入
+      </MenuItem>
+      <MenuItem data-cmd="tableRowAfter" data-doc-needs-table>
+        下に行を挿入
+      </MenuItem>
+      <MenuItem data-cmd="tableColBefore" data-doc-needs-table>
+        左に列を挿入
+      </MenuItem>
+      <MenuItem data-cmd="tableColAfter" data-doc-needs-table>
+        右に列を挿入
+      </MenuItem>
+      <MenuItem data-cmd="tableMerge">セルの結合・解除</MenuItem>
+      <MenuItem data-cmd="tableHeaderRow" data-doc-needs-table>
+        先頭の行を見出しにする・戻す
+      </MenuItem>
+      <MenuItem data-cmd="tableRowDelete" data-doc-needs-table>
+        行を削除
+      </MenuItem>
+      <MenuItem data-cmd="tableColDelete" data-doc-needs-table>
+        列を削除
+      </MenuItem>
+      <MenuItem icon="trash" class="is-danger" data-cmd="tableDelete" data-doc-needs-table>
         表を削除
       </MenuItem>
     </ToolMenu>
