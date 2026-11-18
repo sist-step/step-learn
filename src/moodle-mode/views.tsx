@@ -1,4 +1,5 @@
 import {
+  AddSectionButton,
   CourseHeader,
   CourseLiveSync,
   ITEM_FORM,
@@ -931,6 +932,7 @@ export const CoursePage = ({
           ) : (
             <ListSections {...props} />
           ))}
+        {manage && o.topSections.length > 0 && <AddSectionButton modal={ADD_SECTION_MODAL} />}
         {manage && <AddSectionModal courseId={id} />}
         {manage && sections.length > 0 && <AddItemModal courseId={id} sections={sections} tracking={tracking} kinds={extraKinds} />}
       </TabPanel>
