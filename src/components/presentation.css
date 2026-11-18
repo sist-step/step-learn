@@ -42,10 +42,11 @@
 }
 .pdf-thumb.is-unreleased .pdf-thumb-page { opacity: 0.45; }
 /* 先生が映しているページ */
-.pdf-thumb.is-presenting .pdf-thumb-num::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 50%; background: var(--danger-text); vertical-align: middle; }
+.presentation-viewer .pdf-thumb.is-presenting .pdf-thumb-num { background: var(--success-soft); color: var(--success-text); font-weight: 600; }
 
 @media (max-width: 640px) {
-  .presentation-count { display: none; }
+  /* スマホ幅で同期のボタンを隠すのは、同期にはパソコンの VS Code と PowerPoint が要り、押しても始められないため */
+  .presentation-state, .presentation-launch { display: none; }
   /* ボタンの右端にそろえたままにしないのは、ボタンが帯の途中にあり、パネルが画面の左へはみ出すため。帯の幅にそろえる */
   .presentation-release { position: static; }
   .presentation-release-panel { right: 12px; left: 12px; width: auto; }
