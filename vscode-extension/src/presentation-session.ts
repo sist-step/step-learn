@@ -37,6 +37,8 @@ const WAITING_HINT = IS_MAC
 const MAX_RESTARTS = 3
 /** 書き出した直後のスライドショーでは、書き出し直さない（ミリ秒） */
 const FRESH_EXPORT = 10_000
+/** PowerPoint とつながらない状態がこれだけ続いたら、PowerPoint を止めたとみなす（ミリ秒） */
+const DISCONNECT_LIMIT = 300_000
 
 const keyOf = (p: Position) => `${p.slideId}:${p.complete}`
 
@@ -69,6 +71,8 @@ export class PresentationSession {
   private readonly warnedSlides = new Set<number>()
   private toldError = ''
   private restarts = 0
+  /** PowerPoint とつながらなくなった時刻 */
+  private disconnectedAt: number | null = null
   private disposed = false
 
   constructor(
@@ -159,6 +163,7 @@ export class PresentationSession {
   private onState(state: ShowState) {
     if (this.disposed) return
     this.state = state
+    if (this.disconnectedTooLong(state)) return this.stopDisconnected()
     if (state.state === 'error') {
       // 同じ理由を読むたびに出さないのは、0.5 秒おきに読んでいて、通知が積み上がるため
       if (state.message && state.message !== this.toldError && /許可/.test(state.message)) {
@@ -195,6 +200,26 @@ export class PresentationSession {
       }
     }
     this.render()
+  }
+
+  // タイマーで測らないのは、PC がスリープから戻った直後に、眠っていた時間まで切れていた時間に数えて止めてしまうため
+  private disconnectedTooLong(state: ShowState) {
+    // 書き出し中を数えないのは、PowerPoint が許可の画面を出しているあいだは読めなくても、つながっているため
+    if (this.exporting || state.state === 'idle' || state.state === 'show') {
+      this.disconnectedAt = null
+      return false
+    }
+    const now = Date.now()
+    this.disconnectedAt ??= now
+    return now - this.disconnectedAt >= DISCONNECT_LIMIT
+  }
+
+  // すべて公開しないのは、先生がいないところで、まだ見せていないページを学生に見せてしまうため
+  private stopDisconnected() {
+    void vscode.window.showWarningMessage(
+      `PowerPoint との接続が切れたままのため、「${this.grant.title}」の同期を止めました。もう一度始めるときは、STEP Learn の「PowerPoint と同期」を押してください。`,
+    )
+    void this.end(false)
   }
 
   /** いちばん新しい位置だけを送る。送っているあいだに届いた位置は、終わってから送る */
@@ -268,16 +293,23 @@ export class PresentationSession {
       keep,
     )
     if (!answer || this.disposed) return
-    this.dispose()
-    try {
-      const summary = await endSync(this.server, this.grant.token, answer === releaseAll)
+    const summary = await this.end(answer === releaseAll)
+    if (summary)
       void vscode.window.showInformationMessage(
         summary.all ? '同期を止め、すべてのページを公開しました。' : `同期を止めました（${summary.released} ページ目まで公開しています）。`,
       )
+  }
+
+  /** 同期を終えて STEP Learn に伝える。伝えられなかったときは、知らせて null を返す */
+  private async end(releaseAll: boolean) {
+    this.dispose()
+    try {
+      return await endSync(this.server, this.grant.token, releaseAll)
     } catch (e) {
       void vscode.window.showErrorMessage(
         `同期は止めましたが、STEP Learn に伝えられませんでした。公開の範囲は STEP Learn の画面で確かめてください（${messageOf(e, '失敗')}）`,
       )
+      return null
     }
   }
 
