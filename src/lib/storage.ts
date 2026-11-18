@@ -168,7 +168,17 @@ export async function moveToCourse(courseId: number, key: string, name: string) 
   return to
 }
 
-export const deleteKeys = (keys: (string | null | undefined)[]) => storage.delete(keys.filter((k): k is string => !!k))
+const PRESENTATION_PDF = /^(.*\/presentations\/[^/]+)\/slides\.pdf$/
+
+/** 発表ファイルの PDF を 1 ページずつに分けたファイルのキー。元の PDF と同じフォルダーの下に置く */
+export const presentationPageKey = (fileKey: string, page: number) => `${fileKey.replace(/[^/]+$/, '')}pages/${page}.pdf`
+
+export async function deleteKeys(keys: (string | null | undefined)[]) {
+  const found = keys.filter((k): k is string => !!k)
+  // 呼び出し側で発表ファイルを見分けないのは、アイテムやセクションを消す経路ごとに、ページのファイルの消し忘れが起きるため
+  const presentations = found.flatMap((k) => PRESENTATION_PDF.exec(k)?.[1] ?? [])
+  await Promise.all([storage.delete(found), ...presentations.map((dir) => storage.deletePrefix(`${dir}/`))])
+}
 
 export const deleteCourseFiles = (courseId: number) => storage.deletePrefix(`courses/${courseId}/`)
 

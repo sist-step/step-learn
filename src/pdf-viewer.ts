@@ -4,6 +4,7 @@
 // legacy でない版を使わないのは、Iterator や Map.prototype.getOrInsertComputed を前提にしていて、iOS 18 までの Safari では読み込んだ時点で止まるため
 import {
   GlobalWorkerOptions,
+  PDFWorker,
   TextLayer,
   getDocument,
   version,
@@ -24,10 +25,13 @@ const MIN_ZOOM = ZOOM_STEPS[0]
 const MAX_ZOOM = ZOOM_STEPS.at(-1)!
 const MAX_AUTO_ZOOM = 1.25
 const MAX_CANVAS_PIXELS = 16_777_216
+const PAGE_REQUESTS = 6
 
 type Zoom = number | 'auto' | 'width'
 
 type PageView = {
+  /** ビューアーの中のページ番号。1 ページずつの PDF では page.pageNumber が常に 1 になるので別に持つ */
+  n: number
   page: PDFPageProxy
   el: HTMLDivElement
   width: number
@@ -75,8 +79,66 @@ export function releaseDetachedPdfViewers() {
   }
 }
 
+/** ビューアーに渡すページの読み込み元 */
+type PageSource = {
+  /** from から to ページ目まで。PDF の終わりより先は返さない */
+  pages: (from: number, to: number) => Promise<PDFPageProxy[]>
+  destroy: () => void
+}
+
+const pageNumbers = (from: number, to: number) => Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => from + i)
+
+const openPdf = (url: string, worker?: PDFWorker) =>
+  getDocument({
+    url,
+    worker,
+    cMapUrl: `${ASSETS}cmaps/`,
+    standardFontDataUrl: `${ASSETS}standard_fonts/`,
+    wasmUrl: `${ASSETS}wasm/`,
+  })
+
+/** 全ページが入った 1 つの PDF */
+function wholePdf(url: string): PageSource {
+  const loading = openPdf(url)
+  return {
+    async pages(from, to) {
+      const doc = await loading.promise
+      return Promise.all(pageNumbers(from, Math.min(to, doc.numPages)).map((n) => doc.getPage(n)))
+    },
+    destroy: () => void loading.destroy(),
+  }
+}
+
+/** 1 ページずつ別の URL にある PDF */
+function separatePdfs(urlOf: (page: number) => string): PageSource {
+  // PDF ごとに worker を作らせないのは、ページの数だけ worker が立ち上がり、メモリを使い切るため
+  const worker = new PDFWorker()
+  const loadings: ReturnType<typeof openPdf>[] = []
+  let destroyed = false
+  const load = async (n: number) => {
+    const loading = openPdf(urlOf(n), worker)
+    loadings.push(loading)
+    return (await loading.promise).getPage(1)
+  }
+  return {
+    async pages(from, to) {
+      const found: PDFPageProxy[] = []
+      const numbers = pageNumbers(from, to)
+      // 全ページを一度に求めないのは、公開済みのページが多いと、学生全員の分の要求が同時にサーバーへ集まるため
+      for (let i = 0; i < numbers.length && !destroyed; i += PAGE_REQUESTS)
+        found.push(...(await Promise.all(numbers.slice(i, i + PAGE_REQUESTS).map(load))))
+      return found
+    },
+    destroy() {
+      destroyed = true
+      loadings.forEach((loading) => void loading.destroy())
+      worker.destroy()
+    },
+  }
+}
+
 type ViewerOptions = {
-  url: string
+  source: PageSource
   /** 描くページ数。なければ全ページ */
   limit?: number
   /** PDF を読み込めなかったときに出す文言 */
@@ -102,7 +164,7 @@ export async function mountPdfViewer(root: HTMLElement) {
   root.dataset.pdfReady = ''
   releaseDetachedPdfViewers()
   const viewer = createViewer(root, {
-    url: root.dataset.pdfViewer!,
+    source: wholePdf(root.dataset.pdfViewer!),
     errorText: 'PDF を表示できませんでした。「ブラウザ」に切り替えるか、ダウンロードして開いてください。',
   })
   viewers.add({ root, destroy: viewer.destroy })
@@ -110,7 +172,7 @@ export async function mountPdfViewer(root: HTMLElement) {
 }
 
 /** ビューアーを組み立てる。ready は描けるようになったら操作の口を返し、読み込めなかったときや途中で外されたときは null を返す */
-function createViewer(root: HTMLElement, { url, limit = Infinity, errorText }: ViewerOptions) {
+function createViewer(root: HTMLElement, { source, limit = Infinity, errorText }: ViewerOptions) {
   const pagesEl = root.querySelector<HTMLElement>('[data-pdf-pages]')!
   const status = root.querySelector<HTMLElement>('[data-pdf-status]')!
   const toolbar = root.querySelector<HTMLElement>('[data-pdf-toolbar]')!
@@ -123,12 +185,6 @@ function createViewer(root: HTMLElement, { url, limit = Infinity, errorText }: V
   const tail = pagesEl.querySelector<HTMLElement>('[data-pdf-tail]')
   const narrow = matchMedia('(max-width: 640px)')
 
-  const loading = getDocument({
-    url,
-    cMapUrl: `${ASSETS}cmaps/`,
-    standardFontDataUrl: `${ASSETS}standard_fonts/`,
-    wasmUrl: `${ASSETS}wasm/`,
-  })
   let observer: IntersectionObserver | null = null
   let thumbObserver: IntersectionObserver | null = null
   let resizer: ResizeObserver | null = null
@@ -142,7 +198,7 @@ function createViewer(root: HTMLElement, { url, limit = Infinity, errorText }: V
     thumbObserver?.disconnect()
     resizer?.disconnect()
     listeners.abort()
-    void loading.destroy()
+    source.destroy()
     pagesEl.querySelectorAll('.pdf-page').forEach((el) => el.remove())
     thumbsEl.replaceChildren()
     toolbar.hidden = true
@@ -162,37 +218,30 @@ function createViewer(root: HTMLElement, { url, limit = Infinity, errorText }: V
     let sized = false
     let presenting: number | null = null
 
-    const doc = await loading.promise.catch(() => null)
-    if (!doc) {
-      if (root.isConnected && !destroyed) status.textContent = errorText
-      return null
-    }
-
     function size(v: PageView) {
       v.el.style.width = `${Math.floor(v.width * scale)}px`
       v.el.style.height = `${Math.floor(v.height * scale)}px`
     }
 
     function mark(v: PageView) {
-      const n = v.page.pageNumber
-      v.el.classList.toggle('is-unreleased', n > unreleasedAfter)
-      v.thumb.el.classList.toggle('is-unreleased', n > unreleasedAfter)
-      v.thumb.el.classList.toggle('is-presenting', n === presenting)
+      v.el.classList.toggle('is-unreleased', v.n > unreleasedAfter)
+      v.thumb.el.classList.toggle('is-unreleased', v.n > unreleasedAfter)
+      v.thumb.el.classList.toggle('is-presenting', v.n === presenting)
     }
 
     async function addPages(upTo: number) {
       const from = views.length + 1
-      const to = Math.min(upTo, doc!.numPages)
-      if (to < from) return
-      const pages = await Promise.all(Array.from({ length: to - from + 1 }, (_, i) => doc!.getPage(from + i)))
+      const pages = await source.pages(from, upTo)
       if (destroyed || !root.isConnected) return
-      const added = pages.map((page): PageView => {
+      const added = pages.map((page, i): PageView => {
+        const n = from + i
         const { width, height } = page.getViewport({ scale: CSS_UNITS })
         const el = document.createElement('div')
         el.className = 'pdf-page'
         el.setAttribute('role', 'img')
-        el.setAttribute('aria-label', `${page.pageNumber} ページ`)
+        el.setAttribute('aria-label', `${n} ページ`)
         return {
+          n,
           page,
           el,
           width,
@@ -201,7 +250,7 @@ function createViewer(root: HTMLElement, { url, limit = Infinity, errorText }: V
           renderedScale: 0,
           task: null,
           text: null,
-          thumb: createThumb(page.pageNumber, width, height),
+          thumb: createThumb(n, width, height),
         }
       })
       views.push(...added)
@@ -221,8 +270,12 @@ function createViewer(root: HTMLElement, { url, limit = Infinity, errorText }: V
       countEl.textContent = String(views.length)
     }
 
-    await addPages(limit)
-    if (destroyed || !root.isConnected || views.length === 0) return null
+    const loaded = await addPages(limit).then(
+      () => true,
+      () => false,
+    )
+    if (!loaded && root.isConnected && !destroyed) status.textContent = errorText
+    if (!loaded || destroyed || !root.isConnected || views.length === 0) return null
 
     status.hidden = true
     toolbar.hidden = false
@@ -396,7 +449,7 @@ function createViewer(root: HTMLElement, { url, limit = Infinity, errorText }: V
       jumped = null
       if (pagesEl.scrollTop <= 0) return 1
       if (pagesEl.scrollTop + pagesEl.clientHeight >= pagesEl.scrollHeight - 1) return views.length
-      return pageAt(pagesEl.scrollTop + pagesEl.clientHeight / 3).page.pageNumber
+      return pageAt(pagesEl.scrollTop + pagesEl.clientHeight / 3).n
     }
 
     let lastPage = 1
@@ -405,7 +458,7 @@ function createViewer(root: HTMLElement, { url, limit = Infinity, errorText }: V
     let current: PageView | null = null
     function markCurrent() {
       const next = views[currentPage() - 1]
-      if (document.activeElement !== pageInput) pageInput.value = String(next.page.pageNumber)
+      if (document.activeElement !== pageInput) pageInput.value = String(next.n)
       if (next === current) return
       current?.thumb.el.removeAttribute('aria-current')
       next.thumb.el.setAttribute('aria-current', 'page')
@@ -426,9 +479,9 @@ function createViewer(root: HTMLElement, { url, limit = Infinity, errorText }: V
     function goTo(n: number) {
       const v = views[Math.min(views.length, Math.max(1, n)) - 1]
       pagesEl.scrollTo({ top: v.el.offsetTop - parseFloat(getComputedStyle(pagesEl).paddingTop) })
-      jumped = { page: v.page.pageNumber, scrollTop: pagesEl.scrollTop }
-      lastPage = v.page.pageNumber
-      pageInput.value = String(v.page.pageNumber)
+      jumped = { page: v.n, scrollTop: pagesEl.scrollTop }
+      lastPage = v.n
+      pageInput.value = String(v.n)
       markCurrent()
     }
 
@@ -529,7 +582,7 @@ function createViewer(root: HTMLElement, { url, limit = Infinity, errorText }: V
         const next = views[Number(thumb.dataset.pdfThumb) - 1 + step]
         if (!next) return
         next.thumb.el.focus({ preventScroll: true })
-        moveTo(next.page.pageNumber)
+        moveTo(next.n)
       },
       { signal },
     )
@@ -621,7 +674,9 @@ export function mountPresentation(root: HTMLElement) {
     if (!view.pages) return showMessage('先生がスライドを映すと、ここに表示されます。')
     showMessage('読み込んでいます…')
     const created = createViewer(root, {
-      url: `${base}/pdf?v=${view.version}`,
+      // 教師やすべて公開のあとまでページごとに読まないのは、全ページを見られる人にページの数だけ要求させることになるため
+      source:
+        canManage || view.all ? wholePdf(`${base}/pdf?v=${view.version}`) : separatePdfs((n) => `${base}/pages/${n}?v=${view.version}`),
       limit: view.pages,
       errorText: 'PDF を表示できませんでした。ページを読み込み直してください。',
     })
@@ -666,7 +721,8 @@ export function mountPresentation(root: HTMLElement) {
     follow = canManage ? null : view.follow
     renderBar(view)
     if (view.version !== version || view.pages < pages || (pages === 0 && view.pages > 0)) await load(view)
-    else if (view.pages > pages) {
+    // 前回の範囲とだけ比べないのは、新しいページの読み込みに失敗したときに、次の確認で読み直せなくなるため
+    else if (view.pages > (handle?.pages() ?? pages)) {
       pages = view.pages
       await handle?.setLimit(pages)
     }
