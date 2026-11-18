@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import * as vscode from 'vscode'
+import { showNotice, showNoticeUntil } from './notice'
 import { PowerPointError, type Deck, type PowerPoint, type ShowState } from './powerpoint'
 import { MacPowerPoint } from './powerpoint-mac'
 import { WindowsPowerPoint } from './powerpoint-win'
@@ -99,7 +100,17 @@ export class PresentationSession {
       // いつも同じ場所に書き出すのは、Mac の PowerPoint がフォルダーごとに許可を求め、場所を変えるたびに先生に聞くことになるため
       const target = path.join(this.context.globalStorageUri.fsPath, 'presentation', 'slides.pdf')
       await fs.mkdir(path.dirname(target), { recursive: true })
-      const deck = await this.powerPoint.exportPdf(target, () => void vscode.window.showInformationMessage(WAITING_HINT), this.deck)
+      // 一定の時間で消さないのは、PowerPoint の確認の画面に答えるまで、この案内が必要なため
+      const exported: Promise<Deck> = this.powerPoint.exportPdf(
+        target,
+        () =>
+          showNoticeUntil(
+            WAITING_HINT,
+            exported.catch(() => null),
+          ),
+        this.deck,
+      )
+      const deck = await exported
       const meta = metaOf(deck)
       if (meta.slideIds.length === 0) throw new SyncError('表示するスライドがありません。')
       this.summary = await uploadPdf(this.server, this.grant, new Uint8Array(await fs.readFile(target)), deck)
@@ -112,7 +123,7 @@ export class PresentationSession {
       // 上げ直すと STEP Learn は先生のページを忘れるので、同じスライドのままでも送り直す
       this.lastKey = null
       if (notices) {
-        void vscode.window.showInformationMessage(`PowerPoint の「${deck.name}」を「${this.grant.title}」と同期します。`)
+        showNotice(`PowerPoint の「${deck.name}」を「${this.grant.title}」と同期します。`)
         this.tellReleased()
         this.tellAnimations(meta.animatedPages, meta.triggerPages)
       }
@@ -132,7 +143,7 @@ export class PresentationSession {
     const { pages, released, all } = this.summary
     const range = all ? `すべてのページ（${pages} ページ）` : released > 0 ? `${released} ページ目まで` : ''
     if (range)
-      void vscode.window.showInformationMessage(
+      showNotice(
         `「${this.grant.title}」は、${range}を学生に公開しています。1 ページ目から見せ直すときは、STEP Learn のアイテムの画面で「公開をリセット」を押してください。`,
       )
   }
@@ -144,7 +155,7 @@ export class PresentationSession {
       )
     // クリックの段階を読める Windows では、アニメーションが終わったときに出せるので、知らせることがない
     if (IS_MAC && animatedPages.length > 0)
-      void vscode.window.showInformationMessage(
+      showNotice(
         `クリックで進むアニメーションのあるスライドが ${animatedPages.length} 枚あります。Mac では、これらのスライドは次のスライドへ進んだときに学生に表示されます。`,
       )
   }
@@ -184,7 +195,7 @@ export class PresentationSession {
       this.dirty = true
       if (inShow && !this.toldDirty) {
         this.toldDirty = true
-        void vscode.window.showInformationMessage('スライドが変わりました。スライドショーを終えたら、PDF を書き出し直します。')
+        showNotice('スライドが変わりました。スライドショーを終えたら、PDF を書き出し直します。')
       }
     }
     if (saved !== null) this.wasSaved = saved
@@ -281,8 +292,7 @@ export class PresentationSession {
     const picked = await vscode.window.showQuickPick([again, stop], {
       placeHolder: `「${this.grant.title}」と同期しています（公開 ${this.summary.released} / ${this.summary.pages} ページ）`,
     })
-    if (picked === again && (await this.publish(false)))
-      void vscode.window.showInformationMessage(`PDF を書き出し直しました（${this.summary.pages} ページ）。`)
+    if (picked === again && (await this.publish(false))) showNotice(`PDF を書き出し直しました（${this.summary.pages} ページ）。`)
     if (picked === stop) await this.stop()
   }
 
@@ -303,7 +313,7 @@ export class PresentationSession {
     if (!answer || this.disposed) return
     const summary = await this.end(answer === releaseAll)
     if (summary)
-      void vscode.window.showInformationMessage(
+      showNotice(
         summary.all ? '同期を止め、すべてのページを公開しました。' : `同期を止めました（${summary.released} ページ目まで公開しています）。`,
       )
   }

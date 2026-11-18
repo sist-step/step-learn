@@ -2,10 +2,8 @@ import { findAgentUser } from '../../lib/agent-items'
 import { canOpenItem } from '../../lib/availability'
 import { getCourseAccess, getCourseAccessFor, isVisibleItem } from '../../lib/courses'
 import { intParam } from '../../lib/http'
-import { getPresentationItem, presentationStore } from '../../lib/presentation-items'
+import { PRESENTATION_REF_PREFIX as REF_PREFIX, getPresentationItem, presentationStore } from '../../lib/presentation-items'
 import type { PresentationBackend } from './handlers'
-
-const REF_PREFIX = 'presentation-'
 
 /** 通常モード: PDF と公開の状態を step-learn.db に置き、権限をコースの参加者から確かめる */
 export const backend: PresentationBackend = {

@@ -5,6 +5,7 @@ import { AgentController } from './agent-view'
 import { claimCode, markSynced, planCode, readLocal, saveDraft, writeLocal, type CodeRecord, type CodeSynced } from './code-item'
 import { CodeSession, chooseSide, codeSyncedKey, codeTokenKey } from './code-session'
 import { HistorySession, confirmSync, tokenKey } from './history-session'
+import { showNotice } from './notice'
 import { claimPresentation } from './presentation-core'
 import { PRESENTATION_MENU_COMMAND, PresentationSession, powerPointFor } from './presentation-session'
 import {
@@ -178,7 +179,7 @@ async function openFolder(folder: string) {
   const uri = vscode.Uri.file(folder)
   const open = vscode.workspace.workspaceFolders ?? []
   if (open.some((f) => f.uri.fsPath === uri.fsPath)) {
-    void vscode.window.showInformationMessage(`「${path.basename(folder)}」はこのウィンドウで開いています。`)
+    showNotice(`「${path.basename(folder)}」はこのウィンドウで開いています。`)
     return
   }
   // フォルダーを開いていないウィンドウなら、新しいウィンドウを増やさずにそのウィンドウで開く
@@ -263,7 +264,7 @@ async function syncPresentation(context: vscode.ExtensionContext, server: URL, t
   }
   const powerPoint = powerPointFor(process.platform)
   if (!powerPoint) {
-    void vscode.window.showInformationMessage('PowerPoint との同期は、Windows と Mac で使えます。')
+    showNotice('PowerPoint との同期は、Windows と Mac で使えます。')
     return
   }
   if (!(await trust(context, server))) return
@@ -362,13 +363,11 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('stepLearn.code.submit', async (key?: unknown) => {
       const session = await sessionToSubmit(typeof key === 'string' ? key : undefined)
       if (!session) {
-        void vscode.window.showInformationMessage(
-          'STEP Learn のコードのアイテムを開いていません。STEP Learn の画面の「VS Code で開く」から始めてください。',
-        )
+        showNotice('STEP Learn のコードのアイテムを開いていません。STEP Learn の画面の「VS Code で開く」から始めてください。')
         return
       }
       if (!session.record.canSubmit) {
-        void vscode.window.showInformationMessage('提出できるのは、コースの学生だけです。')
+        showNotice('提出できるのは、コースの学生だけです。')
         return
       }
       await session.submit()
@@ -376,16 +375,14 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('stepLearn.openRootFolder', async () => {
       const root = await configuredRoot()
       if (!(await exists(root))) {
-        void vscode.window.showInformationMessage(
-          'まだファイルを用意していません。STEP Learn の画面の「VS Code で開く」から始めてください。',
-        )
+        showNotice('まだファイルを用意していません。STEP Learn の画面の「VS Code で開く」から始めてください。')
         return
       }
       await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(root))
     }),
     vscode.commands.registerCommand('stepLearn.forgetServers', async () => {
       await context.globalState.update(TRUSTED_KEY, [])
-      void vscode.window.showInformationMessage('ファイルを受け取ってよいサーバーの記録を消しました。次に開くときに、もう一度確認します。')
+      showNotice('ファイルを受け取ってよいサーバーの記録を消しました。次に開くときに、もう一度確認します。')
     }),
   )
   // ふだんは何も返さないのは、ほかの拡張機能からコーディングエージェントを操作できないようにするため。

@@ -162,6 +162,7 @@ npm start            # = node dist/server/index.js
 - `BROWSER_URL`：Web の提出を採点の前に開く browser のコンテナ（下の「Web の提出を開く browser」）の接続先。未設定なら、Web の提出はコードだけで判定します。Docker Compose で動かす場合は自動で設定されます
 - `TRUST_PROXY`：リバースプロキシの後ろで動かす場合は `1` にしてください。`X-Forwarded-For` からクライアントの IP を取ってレート制限に使います（未設定だと全員がプロキシの IP として扱われます）
 - 画面共有は `/socket.io/` で WebSocket を使います。リバースプロキシでは WebSocket の Upgrade を通してください（nginx なら `proxy_http_version 1.1;` と `Upgrade` / `Connection` ヘッダーの転送）。通らない場合は HTTP のロングポーリングに切り替わって動きますが、遅延と負荷が増えます
+- 発表ファイルは `/presentation-io/` の socket.io で、スライドが変わったことを学生の画面に知らせます。リバースプロキシでは画面共有と同じように WebSocket の Upgrade を通してください。つながらない場合は、3 秒おきの確認で反映されます
 - 配信中の状態と、コードの採点の順番待ちはプロセスのメモリに持つため、複数のプロセスやサーバーに分散させないでください。採点の途中で再起動すると、その提出は「採点できませんでした」になり、教師が採点し直せます
 - 実行時に必要なのは `dist/`・`migrations/`・`migrations-moodle/`（Moodle モードのとき）・`.env` と、`better-sqlite3` を入れた `node_modules` です（`npm ci --omit=dev` で入ります）。起動したディレクトリを基準に読み込みます
 - SQLite・セッション署名鍵・（ローカル保存時の）教材ファイルは、起動したディレクトリの `data/` に保存されます（変更はできません）。**このディレクトリをバックアップ対象にしてください**

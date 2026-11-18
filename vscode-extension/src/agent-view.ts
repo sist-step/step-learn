@@ -23,6 +23,7 @@ import {
 import { TerminalRecorder } from './agent-terminal'
 import { agentHtml } from './agent-webview'
 import { EXCLUDED_GLOB, isExcluded, relativePath } from './history'
+import { showNotice } from './notice'
 import { SyncError, parseServer } from './sync'
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
@@ -154,9 +155,9 @@ export class AgentController implements vscode.WebviewViewProvider {
     const status = this.statuses.get(key)
     if (status?.open) {
       await vscode.commands.executeCommand(`${this.viewId}.focus`)
-      void vscode.window.showInformationMessage(`「${grant.title}」のコーディングエージェントを使えるようにしました。`)
+      showNotice(`「${grant.title}」のコーディングエージェントを使えるようにしました。`)
     } else {
-      void vscode.window.showInformationMessage(
+      showNotice(
         `「${grant.title}」のコーディングエージェントを登録しました。${status?.message ?? ''}使える期間になると、${this.viewId === VIEW_ID ? '左のバー' : '右側のサイドバー'}に STEP Learn が表示されます。`,
       )
     }
@@ -212,7 +213,7 @@ export class AgentController implements vscode.WebviewViewProvider {
   private async disconnect() {
     const entries = Object.entries(this.saved())
     if (!entries.length) {
-      void vscode.window.showInformationMessage('つないでいるコーディングエージェントはありません。')
+      showNotice('つないでいるコーディングエージェントはありません。')
       return
     }
     const picked = await vscode.window.showQuickPick(
@@ -225,7 +226,7 @@ export class AgentController implements vscode.WebviewViewProvider {
     if (server && token) await revokeAgent(server, token)
     await this.forget(picked.key)
     await this.refresh()
-    void vscode.window.showInformationMessage(`「${picked.label}」の接続を解除しました。`)
+    showNotice(`「${picked.label}」の接続を解除しました。`)
   }
 
   resolveWebviewView(view: vscode.WebviewView) {

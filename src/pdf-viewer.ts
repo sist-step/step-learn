@@ -13,7 +13,14 @@ import {
   type RenderTask,
 } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
-import { STATE_INTERVAL, type PresentationView } from './lib/presentation'
+import type { Socket } from 'socket.io-client'
+import {
+  LIVE_STATE_INTERVAL,
+  PRESENTATION_SOCKET_PATH,
+  STATE_INTERVAL,
+  type PresentationServerEvents,
+  type PresentationView,
+} from './lib/presentation'
 import { getSetting, setSetting } from './lib/settings'
 
 GlobalWorkerOptions.workerSrc = workerUrl
@@ -651,6 +658,10 @@ export function mountPresentation(root: HTMLElement) {
   let following = true
   let timer = 0
   let stopped = false
+  let reading = false
+  let readAgain = false
+  let socket: Socket<PresentationServerEvents> | null = null
+  let wantsSocket = false
 
   function setFollowing(on: boolean) {
     following = on
@@ -730,22 +741,54 @@ export function mountPresentation(root: HTMLElement) {
     setFollowing(following)
   }
 
-  async function tick() {
-    if (stopped) return
-    if (!document.hidden) {
-      try {
-        const res = await fetch(`${base}/state`, { headers: { Accept: 'application/json' }, cache: 'no-store' })
-        if (stopped) return
-        if (res.ok) await apply((await res.json()) as PresentationView)
-        else if (res.status === 404) {
-          version = -1
-          pages = 0
-          renderBar({ version: 0, pages: 0, released: 0, follow: null, all: false, syncing: false })
-          showMessage('この資料は、今は開けません。')
-        }
-      } catch {}
+  // 先頭で import しないのは、発表ファイルではない PDF の画面にまで socket.io のクライアントを読み込むことになるため
+  async function connectSocket() {
+    wantsSocket = true
+    const { io } = await import('socket.io-client')
+    if (!socket) {
+      socket = io({ path: PRESENTATION_SOCKET_PATH, auth: { base }, forceNew: true, autoConnect: false })
+      // つながったときにも読むのは、切れていたあいだの変更の知らせを受け取れていないため
+      socket.on('connect', () => void refresh())
+      socket.on('changed', () => void refresh())
+      socket.on('disconnect', () => void refresh())
     }
-    if (!stopped) timer = window.setTimeout(() => void tick(), STATE_INTERVAL)
+    if (wantsSocket && !stopped) socket.connect()
+  }
+
+  function disconnectSocket() {
+    wantsSocket = false
+    socket?.disconnect()
+  }
+
+  async function readState() {
+    try {
+      const res = await fetch(`${base}/state`, { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      if (stopped) return
+      if (res.ok) await apply((await res.json()) as PresentationView)
+      else if (res.status === 404) {
+        version = -1
+        pages = 0
+        renderBar({ version: 0, pages: 0, released: 0, follow: null, all: false, syncing: false })
+        showMessage('この資料は、今は開けません。')
+      }
+    } catch {}
+  }
+
+  // 読んでいる途中の知らせを捨てないのは、読んだ内容がその変更より古い場合があるため
+  async function refresh() {
+    if (stopped) return
+    if (reading) {
+      readAgain = true
+      return
+    }
+    reading = true
+    clearTimeout(timer)
+    do {
+      readAgain = false
+      if (!document.hidden) await readState()
+    } while (readAgain && !stopped)
+    reading = false
+    if (!stopped) timer = window.setTimeout(() => void refresh(), socket?.connected ? LIVE_STATE_INTERVAL : STATE_INTERVAL)
   }
 
   returnBtn.addEventListener(
@@ -760,9 +803,9 @@ export function mountPresentation(root: HTMLElement) {
   document.addEventListener(
     'visibilitychange',
     () => {
-      if (document.hidden) return
-      clearTimeout(timer)
-      void tick()
+      if (document.hidden) return disconnectSocket()
+      void connectSocket().catch(() => {})
+      void refresh()
     },
     { signal: listeners.signal },
   )
@@ -772,9 +815,11 @@ export function mountPresentation(root: HTMLElement) {
     destroy: () => {
       stopped = true
       clearTimeout(timer)
+      disconnectSocket()
       listeners.abort()
       viewer?.destroy()
     },
   })
-  void tick()
+  if (!document.hidden) void connectSocket().catch(() => {})
+  void refresh()
 }
