@@ -42,7 +42,9 @@ function textOptions(d: ElData): PptxGenJS.TextPropsOptions {
 }
 
 const textRuns = (d: ElData): PptxGenJS.TextProps[] =>
-  (d.text ?? '').split('\n').map((line) => ({ text: line, options: { bullet: d.bullet && line ? true : undefined, breakLine: true } }))
+  (d.text ?? '')
+    .split('\n')
+    .map((line, i, lines) => ({ text: line, options: { bullet: d.bullet && line ? true : undefined, breakLine: i < lines.length - 1 } }))
 
 const base64 = (data: ArrayBuffer) => {
   let s = ''
