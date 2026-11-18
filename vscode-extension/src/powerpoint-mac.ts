@@ -53,7 +53,7 @@ const EXPORT_SCRIPT = `on run argv
 	return resultLines as text
 end run`
 
-// osascript を読むたびに起動しないのは、起動だけで 0.1 秒ほどかかり、0.5 秒おきに読むには重いため。起動したまま 1 行ずつ JSON を書き出す。
+// osascript を読むたびに起動しないのは、起動だけで 0.1 秒ほどかかり、0.25 秒おきに読むには重いため。起動したまま 1 行ずつ JSON を書き出す。
 // 親のプロセスを確かめるのは、VS Code が終了したあとも読み続けないため（親がいなくなると、親の番号が 1 になる）
 const WATCH_SCRIPT = `ObjC.import('Foundation')
 ObjC.import('unistd')
@@ -92,7 +92,7 @@ function run(argv) {
     } catch (e) {
       write({ state: 'error', message: String(e) })
     }
-    delay(0.5)
+    delay(0.25)
   }
 }`
 

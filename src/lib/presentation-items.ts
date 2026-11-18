@@ -3,6 +3,8 @@ import { db } from './db'
 import { EMPTY_PRESENTATION, PRESENTATION_KIND, type PresentationState, type PresentationStore } from './presentation'
 import { items, presentationItems } from './schema'
 
+export const PRESENTATION_REF_PREFIX = 'presentation-'
+
 /** 発表ファイルのアイテムなら、そのコースの ID とタイトル */
 export const getPresentationItem = (itemId: number) =>
   db

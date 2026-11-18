@@ -8,6 +8,7 @@ import { config } from '../../lib/config'
 import type { CourseAccess } from '../../lib/courses'
 import { clientIp, intParam, readFields, readJson, redirectWith, wantsJson } from '../../lib/http'
 import { servePresentationPage, splitPresentationPdf } from '../../lib/presentation-pages'
+import { notifyPresentation } from '../../lib/presentation-socket'
 import {
   PRESENTATION_END,
   PRESENTATION_META,
@@ -66,6 +67,15 @@ const bearer = (c: Context) => c.req.header('authorization')?.replace(/^Bearer /
 
 const pagesOf = (s: PresentationState) => (s.fileKey ? s.slideIds.length : 0)
 
+// すべての保存で知らせないのは、拡張機能が同じ位置を送り続けるたびに、開いている全員が読み直すことになるため
+function savePresentation({ ref, store }: { ref: string; store: PresentationStore }, patch: Partial<PresentationState>) {
+  const before = store.get()
+  store.save(patch)
+  const now = nowSec()
+  const viewOf = (s: PresentationState) => JSON.stringify(presentationView(s, now, true))
+  if (viewOf(before) !== viewOf({ ...before, ...patch })) notifyPresentation(ref)
+}
+
 export function createPresentationHandlers({ resolve, itemUrl }: PresentationBackend) {
   async function manage(c: C) {
     const ctx = await resolve(c)
@@ -117,7 +127,7 @@ export function createPresentationHandlers({ resolve, itemUrl }: PresentationBac
     const saved = ctx.store.get()
     const back = itemUrl(ctx.access.course.id, ctx.itemId)
     if (!saved.fileKey) return redirectWith(c, back, 'PDF がまだありません。', 'error')
-    ctx.store.save(releasedAll(saved))
+    savePresentation(ctx, releasedAll(saved))
     return redirectWith(c, back, 'すべてのページを公開しました。')
   }
 
@@ -128,7 +138,7 @@ export function createPresentationHandlers({ resolve, itemUrl }: PresentationBac
     const saved = ctx.store.get()
     if (!fields || !saved.fileKey) return c.notFound()
     const patch = releasedBy(saved, fields.page)
-    ctx.store.save(patch)
+    savePresentation(ctx, patch)
     const message = patch.releasedPage ? `${patch.releasedPage} ページ目までを公開しました。` : 'すべてのページを未公開にしました。'
     return redirectWith(c, itemUrl(ctx.access.course.id, ctx.itemId), message)
   }
@@ -139,7 +149,7 @@ export function createPresentationHandlers({ resolve, itemUrl }: PresentationBac
     const saved = ctx.store.get()
     const back = itemUrl(ctx.access.course.id, ctx.itemId)
     if (!saved.fileKey) return redirectWith(c, back, 'PDF がまだありません。', 'error')
-    ctx.store.save(restarted(saved))
+    savePresentation(ctx, restarted(saved))
     const showing = isSyncing(saved, nowSec()) && (saved.currentPage ?? 0) > 1
     return redirectWith(
       c,
@@ -199,7 +209,7 @@ const summaryOf = (s: PresentationState) => ({
 export function presentationApi({ targetOf, keyPrefix }: PresentationBackend) {
   // 上限を付けるのは、ログインしていなくても呼べ、鍵を総当たりで試されないようにするため
   const claimLimit = rateLimiter({ limit: 30, windowSec: 60 })
-  // 拡張機能は 0.5 秒おきに読み、変わったときと SYNC_HEARTBEAT 秒おきにだけ送るので、スライドを送り続けても届かない回数にする
+  // 拡張機能は 0.25 秒おきに読み、変わったときと SYNC_HEARTBEAT 秒おきにだけ送るので、スライドを送り続けても届かない回数にする
   const positionLimit = rateLimiter({ limit: 300, windowSec: 60 })
   const app = new Hono<AppEnv>()
 
@@ -210,7 +220,7 @@ export function presentationApi({ targetOf, keyPrefix }: PresentationBackend) {
     if (!claims || !target) return null
     c.set('logUserId', target.user.id)
     c.set('logTarget', { courseId: target.courseId, title: target.title })
-    return { ...target, limitKey: `${claims.ref} ${claims.userId}` }
+    return { ...target, ref: claims.ref, limitKey: `${claims.ref} ${claims.userId}` }
   }
 
   app.post('/claim', async (c) => {
@@ -259,7 +269,8 @@ export function presentationApi({ targetOf, keyPrefix }: PresentationBackend) {
     }
     const inPdf = (list: number[]) => [...new Set(list)].filter((page) => page <= pages).sort((a, b) => a - b)
     const saved = target.store.get()
-    target.store.save(
+    savePresentation(
+      target,
       uploaded(
         saved,
         {
@@ -288,7 +299,7 @@ export function presentationApi({ targetOf, keyPrefix }: PresentationBackend) {
     const saved = target.store.get()
     if (!saved.fileKey) return c.json({ error: 'PDF がまだありません。PDF を書き出してから同期してください。' }, 409)
     const { patch, unknown } = moved(saved, position, nowSec())
-    target.store.save(patch)
+    savePresentation(target, patch)
     const next = { ...saved, ...patch }
     return c.json({ unknown, page: next.currentPage, ...summaryOf(next) })
   })
@@ -300,7 +311,7 @@ export function presentationApi({ targetOf, keyPrefix }: PresentationBackend) {
     if (!body) return c.json({ error: '送られた内容が正しくありません。' }, 400)
     const saved = target.store.get()
     const patch = ended(saved, body.releaseAll && !!saved.fileKey)
-    target.store.save(patch)
+    savePresentation(target, patch)
     return c.json(summaryOf({ ...saved, ...patch }))
   })
 

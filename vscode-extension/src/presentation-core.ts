@@ -141,6 +141,8 @@ export async function endSync(server: URL, token: string, releaseAll: boolean): 
 const DEFAULT_TAIL = 1
 /** アニメーションが長くても、これ以上は待たない */
 const MAX_TAIL = 15
+/** PowerPoint がクリックの段階として返す、すべてのアニメーションのあとの値（msoClickStateAfterAllAnimations） */
+const AFTER_ALL_ANIMATIONS = -2
 
 /**
  * PowerPoint の状態から、STEP Learn に送る位置（映しているスライドと、そのスライドのアニメーションが終わったか）を決める。
@@ -168,7 +170,10 @@ export class PositionTracker {
     }
     const slide = this.slides.get(state.slideId)
     // 自動で始まるアニメーションの前（クリックの段階が -1）は、クリックの数（0 以上）より小さいので、終わっていないことになる
-    const reached = state.click !== null && state.clicks !== null ? state.click >= state.clicks : (slide?.clicks ?? 0) === 0
+    const reached =
+      state.click !== null && state.clicks !== null
+        ? state.click === AFTER_ALL_ANIMATIONS || state.click >= state.clicks
+        : (slide?.clicks ?? 0) === 0
     if (!reached) {
       this.reachedAt = null
       return { slideId: state.slideId, complete: false }
