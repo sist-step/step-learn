@@ -219,6 +219,7 @@
   .add-item:hover { color: var(--primary-text); border-color: var(--primary); background: var(--primary-soft); }
 }
 .items + .add-item { margin-top: 0; }
+.add-item.add-section { justify-content: center; width: 100%; margin: 12px 0 0; padding: 12px; }
 
 /* アイテムの追加: 種類を選ぶ → 設定する */
 .item-steps { position: relative; }
