@@ -77,6 +77,7 @@ const RULES: Rule[] = [
   post('/courses/:id/items', 'item.create', 'アイテムを追加', 'change'),
   post('/courses/:id/items/:iid', 'item.update', 'アイテムを編集', 'change', 'item'),
   post('/courses/:id/items/:iid/move', 'item.move', 'アイテムを並べ替え', 'change', 'item'),
+  post('/courses/:id/items/:iid/place', 'item.move', 'アイテムを並べ替え', 'change', 'item'),
   post('/courses/:id/items/:iid/visibility', 'item.visibility', 'アイテムの表示を切り替え', 'change', 'item'),
   post('/courses/:id/items/:iid/judge', 'item.judge', '制約の判定方法を切り替え', 'change', 'item'),
   post('/courses/:id/items/:iid/delete', 'item.delete', 'アイテムを削除', 'important', 'item'),

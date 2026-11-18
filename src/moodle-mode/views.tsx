@@ -6,6 +6,7 @@ import {
   ItemBar,
   ItemEditActions,
   ItemFileField,
+  ItemGrip,
   ItemIcon,
   ItemInsertButton,
   LinkEmbed,
@@ -190,6 +191,7 @@ const ItemRow = ({ item, courseId, isStudent, manage }: { item: MItem; courseId:
   const insert = manage && <ItemInsertButton modal={ADD_ITEM_MODAL} sectionId={item.sectionId} before={item.id} />
   const actions = manage && (
     <div class="row-actions edit-only">
+      <ItemGrip action={`${base}/place`} />
       {hasEditPage(item) && <IconButton href={`${base}/edit`} icon="pencil" label="編集" />}
       <RowMenu base={base} hidden={item.hidden} confirm={`「${item.title}」を削除しますか？`} restriction={`${base}/restriction`} />
     </div>
@@ -285,6 +287,7 @@ const SubsectionRow = ({
     <li
       class={cx('item-subsection', item.hidden && 'is-hidden edit-only', item.locked && 'is-locked')}
       id={`section-${item.childSectionId}`}
+      data-item-drop={manage && item.childSectionId ? item.childSectionId : undefined}
     >
       <div class="item-row subsection-head" data-item={item.id}>
         {manage && <ItemInsertButton modal={ADD_ITEM_MODAL} sectionId={item.sectionId} before={item.id} />}
@@ -301,6 +304,7 @@ const SubsectionRow = ({
         </span>
         {manage && (
           <div class="row-actions edit-only">
+            <ItemGrip action={`/courses/${courseId}/items/${item.id}/place`} />
             <RowMenu
               base={`/courses/${courseId}/items/${item.id}`}
               hidden={item.hidden}
@@ -598,6 +602,7 @@ const SectionCard = ({
       open={open}
       name={group}
       data-section={s.id}
+      data-item-drop={manage ? s.id : undefined}
     >
       <summary class="section-head" tabindex={fixed ? -1 : undefined}>
         <span class="section-num">{o.sectionNumber.get(s.id) ?? <Icon name={s.number === 0 ? 'home' : 'eyeSlash'} size={14} />}</span>
