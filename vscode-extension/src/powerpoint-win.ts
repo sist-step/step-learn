@@ -1,6 +1,8 @@
 // VS Code の API を使わないのは、Node だけで動かして確かめられるようにするため
 import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs/promises'
+import path from 'node:path'
+import { jpegsToPdf } from './jpeg-pdf'
 import {
   NO_PRESENTATION,
   PowerPointError,
@@ -12,6 +14,8 @@ import {
   type PowerPoint,
   type ShowState,
 } from './powerpoint'
+
+const IMAGE_WIDTH = 1920
 
 // 出力を UTF-8 にそろえるのは、Windows PowerShell の既定がその PC の文字コード（日本語なら Shift_JIS）で、ファイル名が文字化けするため
 const PRELUDE = `$ErrorActionPreference = 'Stop'
@@ -25,10 +29,40 @@ const NOT_RUNNING = '-2147221021'
 
 // ExportAsFixedFormat の引数は、順に、PDF（2）・印刷用（2）・枠なし・配布資料の並び・スライド（1）・非表示のスライドを含めない（0）・
 // 範囲の指定なし・すべて（1）・スライドショーの名前なし・文書のプロパティなし・IRM を保つ・タグを付ける・埋め込めないフォントは画像にする・PDF/A にしない。
-// 失敗したら SaveCopyAs で書き出すのは、PowerShell からは範囲の指定（PrintRange）を省けず、呼び出しが通らない PowerPoint があるため。
-// SaveAs にしないのは、開いているファイルを PDF として保存し直すことになるため
+// 範囲の指定（PrintRange）を省かず Nothing を渡すのは、省くと型の不一致で失敗するため。InvokeMember を使うのは、PowerShell の型の変換を通さずに Nothing を渡すため。
+// 失敗したときに開いているファイルを直接 PDF にしないのは、SaveCopyAs の PDF 指定は Windows の実機で失敗し、SaveAs は開いているファイルに影響しかねないため。
+// 複製の印刷の設定を変えるのは、SaveAs には非表示のスライドを除く引数がなく、ページとスライドの対応がずれないようにするため。
+// 読み取り専用のファイルで複製を試さないのは、この PC にないフォントのために読み取り専用になったファイルは保存できないため。
+// 画像で書き出すのを最初から選ばないのは、PDF の文字を選べなくなり、ファイルも大きくなるため
 const EXPORT_SCRIPT = `${PRELUDE}
+function MessageOf($err) { return $err.Exception.GetBaseException().Message }
+function ExportViaCopy($p, $target) {
+  $ext = [IO.Path]::GetExtension($p.Name)
+  if (-not $ext) { $ext = '.pptx' }
+  $copyPath = Join-Path ([IO.Path]::GetTempPath()) ('step-learn-' + [Guid]::NewGuid().ToString('N') + $ext)
+  $copy = $null
+  try {
+    $p.SaveCopyAs($copyPath)
+    $copy = $p.Application.Presentations.Open($copyPath, -1, 0, 0)
+    $copy.PrintOptions.PrintHiddenSlides = 0
+    $copy.SaveAs($target, 32)
+  } finally {
+    if ($null -ne $copy) { $copy.Close() }
+    Remove-Item -LiteralPath $copyPath -Force -ErrorAction SilentlyContinue
+  }
+}
+function ExportImages($p, $imageDir) {
+  $width = ${IMAGE_WIDTH}
+  $height = [int][Math]::Round($width * $p.PageSetup.SlideHeight / $p.PageSetup.SlideWidth)
+  $page = 0
+  foreach ($s in $p.Slides) {
+    if ($s.SlideShowTransition.Hidden) { continue }
+    $page++
+    $s.Export((Join-Path $imageDir "$page.jpg"), 'JPG', $width, $height)
+  }
+}
 $target = '__TARGET__'
+$imageDir = '__IMAGES__'
 $file = '__FILE__'
 try { $app = [Runtime.InteropServices.Marshal]::GetActiveObject('PowerPoint.Application') } catch { Emit @{ result = 'closed' }; exit }
 try {
@@ -52,16 +86,25 @@ try {
     }
     $slides += @{ id = [int]$s.SlideID; hidden = [bool]$s.SlideShowTransition.Hidden; clicks = $clicks; tail = $tail; triggers = ($s.TimeLine.InteractiveSequences.Count -gt 0) }
   }
-  $missing = [Type]::Missing
+  $method = $null
+  $failures = @()
   try {
-    $p.ExportAsFixedFormat($target, 2, 2, 0, 1, 1, 0, $missing, 1, '', $false, $true, $true, $true, $false, $missing)
+    $nothing = [Runtime.InteropServices.DispatchWrapper]::new($null)
+    $exportArgs = [object[]]@($target, 2, 2, 0, 1, 1, 0, $nothing, 1, '', $false, $true, $true, $true, $false)
+    [void][System.__ComObject].InvokeMember('ExportAsFixedFormat', [Reflection.BindingFlags]::InvokeMethod, $null, $p, $exportArgs)
     $method = 'export'
-  } catch {
-    $p.SaveCopyAs($target, 32)
-    $method = 'copy'
+  } catch { $failures += "ExportAsFixedFormat: $(MessageOf $_)" }
+  if (-not $method -and -not $p.ReadOnly) {
+    try { ExportViaCopy $p $target; $method = 'copy' } catch { $failures += "SaveAs: $(MessageOf $_)" }
   }
-  Emit @{ result = 'ok'; file = [string]$p.FullName; name = [string]$p.Name; method = $method; slides = $slides }
-} catch { Emit @{ result = 'error'; message = $_.Exception.Message } }
+  if (-not $method) {
+    try { ExportImages $p $imageDir; $method = 'images' } catch {
+      $failures += "Export: $(MessageOf $_)"
+      throw ($failures -join ' / ')
+    }
+  }
+  Emit @{ result = 'ok'; file = [string]$p.FullName; name = [string]$p.Name; method = $method; pageWidth = [double]$p.PageSetup.SlideWidth; pageHeight = [double]$p.PageSetup.SlideHeight; slides = $slides }
+} catch { Emit @{ result = 'error'; message = (MessageOf $_) } }
 `
 
 // PowerShell を読むたびに起動しないのは、起動に 1 秒近くかかり、0.5 秒おきに読めないため。起動したまま 1 行ずつ JSON を書き出す。
@@ -130,10 +173,23 @@ function parseSlide(raw: unknown): DeckSlide | null {
 
 export class WindowsPowerPoint implements PowerPoint {
   async exportPdf(target: string, onWaiting: () => void, source: Deck | null): Promise<Deck> {
+    const imageDir = `${target}.images`
     await fs.rm(target, { force: true })
+    await fs.rm(imageDir, { recursive: true, force: true })
+    await fs.mkdir(imageDir, { recursive: true })
+    try {
+      return await this.runExport(target, imageDir, onWaiting, source)
+    } finally {
+      await fs.rm(imageDir, { recursive: true, force: true })
+    }
+  }
+
+  private async runExport(target: string, imageDir: string, onWaiting: () => void, source: Deck | null): Promise<Deck> {
     const waiting = setTimeout(onWaiting, WAITING_AFTER)
     // 置き換える文字列を関数で返すのは、文字列で渡すと、パスの中の $& などが特別な意味になるため
-    const script = EXPORT_SCRIPT.replace('__TARGET__', () => quoted(target)).replace('__FILE__', () => quoted(source?.file ?? ''))
+    const script = EXPORT_SCRIPT.replace('__TARGET__', () => quoted(target))
+      .replace('__IMAGES__', () => quoted(imageDir))
+      .replace('__FILE__', () => quoted(source?.file ?? ''))
     const output = await new Promise<string>((resolve, reject) => {
       execFile('powershell.exe', powershellArgs(script), { timeout: EXPORT_TIMEOUT, windowsHide: true }, (error, stdout, stderr) => {
         if (!error) return resolve(stdout)
@@ -156,9 +212,18 @@ export class WindowsPowerPoint implements PowerPoint {
       throw new PowerPointError(
         `PowerPoint から PDF を書き出せませんでした（${typeof raw.message === 'string' ? raw.message : '理由は分かりません'}）。`,
       )
+    const slides = raw.slides.map(parseSlide).filter((s): s is DeckSlide => s !== null)
+    if (raw.method === 'images') {
+      if (typeof raw.pageWidth !== 'number' || typeof raw.pageHeight !== 'number')
+        throw new PowerPointError('PowerPoint から受け取った内容が正しくありません。')
+      const pages = slides.filter((s) => !s.hidden).map((_, i) => path.join(imageDir, `${i + 1}.jpg`))
+      const jpegs = await Promise.all(pages.map((page) => fs.readFile(page))).catch(() => {
+        throw new PowerPointError('スライドの画像を読めませんでした。')
+      })
+      await fs.writeFile(target, jpegsToPdf(jpegs, { width: raw.pageWidth, height: raw.pageHeight }))
+    }
     const stat = await fs.stat(target).catch(() => null)
     if (!stat?.size) throw new PowerPointError('PDF を書き出せませんでした。')
-    const slides = raw.slides.map(parseSlide).filter((s): s is DeckSlide => s !== null)
     return { file: raw.file, name: typeof raw.name === 'string' ? raw.name : '', slides }
   }
 
