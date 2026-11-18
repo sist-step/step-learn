@@ -16,6 +16,7 @@ import {
   type CodeResult,
   type CodeSynced,
 } from './code-item'
+import { showNotice } from './notice'
 
 // 保存のたびにすぐ送らないのは、続けて保存したときや「すべて保存」でまとめて書き出されたファイルを 1 回にまとめるため
 const DEBOUNCE = 1500
@@ -259,7 +260,7 @@ export class CodeSession implements vscode.Disposable {
       await this.context.globalState.update(codeSyncedKey(this.key), markSynced(this.synced(), files))
       this.show('ok')
       if (!graded) {
-        void vscode.window.showInformationMessage(`「${this.record.title}」を提出しました。教師が確認します。`)
+        showNotice(`「${this.record.title}」を提出しました。教師が確認します。`)
         return
       }
       const result = await vscode.window.withProgress(
