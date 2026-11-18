@@ -111,6 +111,7 @@ const NATIVE_MODULE: Record<ItemType, string> = {
   page: 'page',
   link: 'url',
   file: 'resource',
+  presentation: '',
   screen: '',
   code: '',
   bundle: '',

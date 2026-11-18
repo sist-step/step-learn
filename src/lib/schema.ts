@@ -155,7 +155,7 @@ export const items = sqliteTable(
     sectionId: integer('section_id')
       .notNull()
       .references(() => sections.id, { onDelete: 'cascade' }),
-    type: text('type', { enum: ['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab'] }).notNull(),
+    type: text('type', { enum: ['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab', 'presentation'] }).notNull(),
     title: text('title').notNull(),
     body: text('body').notNull().default(''),
     url: text('url').notNull().default(''),
@@ -182,7 +182,7 @@ export const items = sqliteTable(
   (t) => [
     index('items_section').on(t.sectionId, t.position),
     index('items_course').on(t.courseId),
-    check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab')`),
+    check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab', 'presentation')`),
     check('items_completion', sql`${t.completion} IN ('none', 'manual', 'view', 'play', 'clear', 'pass')`),
     check('items_link_target', sql`${t.linkTarget} IN ('new', 'same', 'embed')`),
   ],
@@ -558,6 +558,35 @@ export const collabDocs = sqliteTable(
   },
   (t) => [uniqueIndex('collab_docs_item_owner').on(t.itemId, t.owner), index('collab_docs_user').on(t.userId)],
 )
+
+/**
+ * 発表ファイルのアイテムの、PDF とスライドの対応と公開の状態（lib/presentation.ts）。行がなければ、PDF がまだない。
+ * PDF そのものは items の file_key に置く
+ */
+export const presentationItems = sqliteTable('presentation_items', {
+  itemId: integer('item_id')
+    .primaryKey()
+    .references(() => items.id, { onDelete: 'cascade' }),
+  /** PDF を上げ直すたびに増やす。学生のビューアーが読み込み直すのに使う */
+  version: integer('version').notNull().default(0),
+  /** PDF の各ページの、PowerPoint のスライドの ID */
+  slideIds: text('slide_ids', { mode: 'json' }).$type<number[]>().notNull().default([]),
+  /** クリックで進むアニメーションがあるページ（1 始まり） */
+  animatedPages: text('animated_pages', { mode: 'json' }).$type<number[]>().notNull().default([]),
+  /** 図形を押すと動くアニメーションがあるページ（1 始まり） */
+  triggerPages: text('trigger_pages', { mode: 'json' }).$type<number[]>().notNull().default([]),
+  sourceName: text('source_name').notNull().default(''),
+  /** これまでに公開したスライドの ID。PDF を上げ直したときに、公開の範囲を引き継ぐのに使う */
+  releasedSlideIds: text('released_slide_ids', { mode: 'json' }).$type<number[]>().notNull().default([]),
+  // released_slide_ids から求め直さないのは、学生の画面が数秒おきに読むため
+  releasedPage: integer('released_page').notNull().default(0),
+  /** 先生が映しているページ。スライドショーをしていないときは NULL */
+  currentPage: integer('current_page'),
+  allReleased: integer('all_released').notNull().default(0),
+  /** 最後に拡張機能から届いた時刻 */
+  syncedAt: integer('synced_at'),
+  exportedAt: integer('exported_at'),
+})
 
 /** 操作ログ。種類ごとの保存期間を過ぎたものは消す（lib/operation-log.ts） */
 export const operationLogs = sqliteTable(

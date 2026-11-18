@@ -119,6 +119,7 @@ div.course-hero-cover { background: linear-gradient(150deg, var(--c2), var(--c1)
 .kind-page { --kind: var(--c1, var(--accent)); }
 .kind-link { --kind: var(--info); }
 .kind-file { --kind: var(--warning); }
+.kind-presentation { --kind: color-mix(in srgb, var(--warning) 55%, var(--accent)); }
 .kind-screen { --kind: var(--success); }
 .kind-code { --kind: var(--accent); }
 .kind-quiz { --kind: color-mix(in srgb, var(--success) 60%, var(--info)); }

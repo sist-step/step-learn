@@ -1,4 +1,4 @@
-import type { FC } from 'hono/jsx'
+import type { Child, FC } from 'hono/jsx'
 import { useRequestContext } from 'hono/jsx-renderer'
 import {
   AGENT_BODY_HINT,
@@ -28,7 +28,8 @@ import { Markdown, MarkdownEditor } from '../components/markdown'
 import { QuizFields, QuizPanel } from '../components/quiz'
 import { CollabFacts, CollabPanel, CollabPickFields } from '../components/collab'
 import { COLLAB_KIND, collabSettingsOf, isCollabKind, isCollabScope, type CollabView } from '../lib/collab'
-import { Chip } from '../components/ui'
+import { PresentationBar, PresentationEditNote, PresentationStage } from '../components/presentation'
+import { Chip, type Crumb } from '../components/ui'
 import { AGENT_KIND, DEFAULT_AGENT_MODEL, agentBase, agentViewOf, type AgentModel, type AgentView } from '../lib/agent'
 import { agentOpenRouterModels, cachedAgentOpenRouterModels, resolveAgentModel } from '../lib/agent-model'
 import {
@@ -46,6 +47,7 @@ import {
 import { dateTimeInputToUnix, isDateTimeInput, unixToDateTimeInput } from '../lib/course-period'
 import { BUNDLE_KIND, bundleBase } from '../lib/bundle'
 import { BUNDLE_MODULE } from '../lib/bundle'
+import { PRESENTATION_KIND, presentationBase } from '../lib/presentation'
 import { syncStateOf } from '../lib/bundle-sync'
 import { gradingEnabled, submissionsOf } from '../lib/code-grader'
 import type { CourseAccess } from '../lib/courses'
@@ -70,6 +72,7 @@ import { codePeriodOf, codeSettingsOf, codeStageOf, codeStore, grader, preparer 
 import type { Api, MoodleCourse, SaveActivity } from './client'
 import type { MItem } from './mapping'
 import { collabStore } from './collab'
+import { presentationStore } from './presentation-store'
 import { quizStore } from './quiz'
 
 export type ExtraData = Record<string, unknown>
@@ -121,6 +124,14 @@ export type ExtraKind = {
   tabPath?: string
   /** 一覧に「配信中」を出すか。引数は活動の cmid */
   isLive?: (cmid: number) => boolean
+  /**
+   * 付けると、アイテムの画面をビューアーでいっぱいに使い（PDF のファイルと同じ）、一覧や目次からは新しいタブで開く。
+   * Bar はヘッダーの帯で、children に編集のボタンを受け取る。Stage は本文の上に置くビューアー
+   */
+  immersive?: {
+    Bar: FC<{ item: MItem; access: CourseAccess; crumbs: readonly Crumb[]; hiddenNote?: string; children?: Child }>
+    Stage: FC<{ item: MItem; access: CourseAccess }>
+  }
   /**
    * 付けると、Moodle には /m/<key> の URL の活動ではなく、専用の活動（moodle/mod_<name>）を置く。開くと STEP Learn のアイテムの画面に移る。
    * 中身は同じく moodle-mode.db に置き、活動が持つ鍵で見分ける。鍵は Moodle が決めるので、中身は最初に見たときに空で作る（extra.ts の withExtras）。
@@ -688,8 +699,50 @@ const collab: ExtraKind = {
   },
 }
 
+const presentation: ExtraKind = {
+  label: '発表ファイル',
+  description: 'PowerPoint で映したところまでを学生に見せる',
+  icon: 'presentation',
+  form: 'extraItem',
+  toData: () => ({}),
+  Fields: () => null,
+  addNote: 'PDF は、追加したあとのアイテムの画面の「PowerPoint と同期」から、VS Code の拡張機能でアップロードします。',
+  View: () => null,
+  Panel: ({ item }) => {
+    const saved = item.extraKey ? presentationStore(item.extraKey).get() : null
+    return (
+      <div class="editor-extra">
+        <PresentationEditNote
+          summary={{
+            pages: saved?.fileKey ? saved.slideIds.length : 0,
+            sourceName: saved?.sourceName ?? '',
+            exportedAt: saved?.exportedAt ?? null,
+          }}
+        />
+      </div>
+    )
+  },
+  immersive: {
+    Bar: ({ item, access, crumbs, hiddenNote, children }) => (
+      <PresentationBar
+        crumbs={crumbs}
+        title={item.title}
+        hiddenNote={hiddenNote}
+        base={presentationBase(access.course.id, item.id)}
+        canManage={access.canManage}
+      >
+        {children}
+      </PresentationBar>
+    ),
+    Stage: ({ item, access }) => (
+      <PresentationStage base={presentationBase(access.course.id, item.id)} title={item.title} canManage={access.canManage} />
+    ),
+  },
+}
+
 export const EXTRA_KINDS: Record<string, ExtraKind> = {
   screen,
+  [PRESENTATION_KIND]: presentation,
   [CODE_KIND]: code,
   [QUIZ_KIND]: quiz,
   [COLLAB_KIND]: collab,

@@ -12,6 +12,7 @@ import { createAiAdminHandlers } from '../routes/admin/ai'
 import { agentApi, agentRequestCheck, agentRoutes, createAgentHandlers } from '../routes/agent/handlers'
 import { aiRoutes, createAiHandlers } from '../routes/ai/handlers'
 import { bundleRoutes, createBundleHandlers, isSyncRequest, vscodeApi } from '../routes/bundle/handlers'
+import { createPresentationHandlers, isPresentationUpload, presentationApi, presentationRoutes } from '../routes/presentation/handlers'
 import { CODE_BODY_LIMIT, codeRoutes, codeVscodeApi, createCodeHandlers, isCodeRequest } from '../routes/code/handlers'
 import { createQuizHandlers, quizRoutes } from '../routes/quiz/handlers'
 import { collabRoutes, createCollabHandlers } from '../routes/collab/handlers'
@@ -23,6 +24,7 @@ import { destroySession, requireAuth, session, type MoodleEnv } from './auth'
 import { MoodleError, isAccessDenied, isNotFound, isTokenError, isUnavailable, moodleUrl } from './client'
 import { codeBackend } from './code'
 import * as h from './handlers'
+import { presentationBackend } from './presentation'
 import { quizBackend } from './quiz'
 import { collabBackend } from './collab'
 import { ErrorPage, errorContent, type ErrorContent } from './views'
@@ -48,7 +50,7 @@ const isAgentRequest = agentRequestCheck(agentBackend)
 app.use((c, next) =>
   (isAgentRequest(c)
     ? agentBodyLimit
-    : c.var.user
+    : c.var.user || isPresentationUpload(c)
       ? userBodyLimit
       : isSyncRequest(c)
         ? syncBodyLimit
@@ -80,6 +82,7 @@ app.post('/auth/moodle/backchannel-logout', h.backchannel)
 app.post('/logout', h.logout)
 app.route('/api/vscode/agent', agentApi(agentBackend))
 app.route('/api/vscode/code', codeVscodeApi(codeBackend))
+app.route('/api/vscode/presentation', presentationApi(presentationBackend))
 app.route('/api/vscode', vscodeApi(bundleBackend))
 
 const auth = new Hono<MoodleEnv>()
@@ -134,6 +137,7 @@ auth.route('/courses', quizRoutes(createQuizHandlers(quizBackend)))
 auth.route('/courses', collabRoutes(createCollabHandlers(collabBackend)))
 auth.route('/courses', bundleRoutes(createBundleHandlers(bundleBackend)))
 auth.route('/courses', agentRoutes(createAgentHandlers(agentBackend)))
+auth.route('/courses', presentationRoutes(createPresentationHandlers(presentationBackend)))
 auth.get('/m/:key', h.openExtra)
 auth.route('/ai', aiRoutes(aiHandlers))
 app.route('/', auth)

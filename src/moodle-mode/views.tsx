@@ -101,6 +101,9 @@ const isPdf = (it: MItem) => it.kind === 'file' && previewKind(it.fileType, it.f
 
 const tabPathOf = (it: MItem) => kindOfItem(it)?.tabPath ?? null
 
+/** アイテムの画面をビューアーでいっぱいに使うアイテム（PDF のファイルと、発表ファイルのような種類） */
+const isImmersive = (it: MItem) => isPdf(it) || !!kindOfItem(it)?.immersive
+
 /** アイテムを開く a 要素の属性 */
 function openAttrs(courseId: number, it: MItem) {
   const page = `/courses/${courseId}/items/${it.id}`
@@ -109,10 +112,11 @@ function openAttrs(courseId: number, it: MItem) {
   if (it.kind === 'moodle') return { href: it.url, ...newTab }
   const tabPath = tabPathOf(it)
   if (tabPath) return { href: `${page}/${tabPath}`, ...newTab }
-  return isPdf(it) ? { href: page, ...newTab } : { href: page }
+  return isImmersive(it) ? { href: page, ...newTab } : { href: page }
 }
 
-const leavesPage = (it: MItem) => it.kind === 'moodle' || (it.kind === 'link' && it.linkTarget !== 'embed') || isPdf(it) || !!tabPathOf(it)
+const leavesPage = (it: MItem) =>
+  it.kind === 'moodle' || (it.kind === 'link' && it.linkTarget !== 'embed') || isImmersive(it) || !!tabPathOf(it)
 
 const completesOnOpen = (it: MItem) =>
   ((it.kind === 'link' && it.linkTarget !== 'embed') || !!tabPathOf(it)) && it.completion === 'view' && !it.done
@@ -995,6 +999,7 @@ export const ItemPage = ({
   const waiting = item.completion === 'view' || item.completion === 'auto' ? COMPLETION_WAITING[item.completion][item.kind] : undefined
 
   const pdf = preview === 'pdf'
+  const immersive = extraKind?.immersive
   const crumbs = (
     <Breadcrumbs
       items={[
@@ -1028,38 +1033,40 @@ export const ItemPage = ({
     </>
   )
 
+  const barCrumbs = [
+    { href: '/courses', label: 'コース一覧' },
+    { href: `/courses/${id}`, label: access.course.title },
+    ...(section && position > 0
+      ? [{ href: sectionHref(id, layout, sections, section.id), label: `${section.title} · ${position} / ${siblings.length}` }]
+      : []),
+  ]
+  const hiddenNote =
+    access.canManage && isHidden(item) ? `${item.hidden ? 'このアイテム' : 'このアイテムのセクション'}は学生に非表示です。` : undefined
+  const editButton = access.canManage && (
+    <Button href={`${base}/${item.id}/edit`} variant="ghost" size="sm" icon="pencil" aria-label="編集">
+      <span class="hide-sm">編集</span>
+    </Button>
+  )
   const pdfBar = pdf ? (
-    <PdfBar
-      crumbs={[
-        { href: '/courses', label: 'コース一覧' },
-        { href: `/courses/${id}`, label: access.course.title },
-        ...(section && position > 0
-          ? [{ href: sectionHref(id, layout, sections, section.id), label: `${section.title} · ${position} / ${siblings.length}` }]
-          : []),
-      ]}
-      title={item.title}
-      hiddenNote={
-        access.canManage && isHidden(item) ? `${item.hidden ? 'このアイテム' : 'このアイテムのセクション'}は学生に非表示です。` : undefined
-      }
-    >
-      {access.canManage && (
-        <Button href={`${base}/${item.id}/edit`} variant="ghost" size="sm" icon="pencil" aria-label="編集">
-          <span class="hide-sm">編集</span>
-        </Button>
-      )}
+    <PdfBar crumbs={barCrumbs} title={item.title} hiddenNote={hiddenNote}>
+      {editButton}
       <Button href={fileUrl} size="sm" icon="download" aria-label="ダウンロード" data-no-prefetch download {...onOpen(item)}>
         <span class="hide-sm">ダウンロード</span>
       </Button>
     </PdfBar>
+  ) : immersive ? (
+    <immersive.Bar item={item} access={access} crumbs={barCrumbs} hiddenNote={hiddenNote}>
+      {editButton}
+    </immersive.Bar>
   ) : undefined
 
   return (
     <AppShell tone={access.course.color} topbar={pdfBar}>
       <Styles use={['/src/routes/content/content.css', '/src/moodle-mode/moodle-mode.css']} />
-      {pdf ? <PdfStage src={previewUrl} title={item.fileName} /> : crumbs}
+      {pdf ? <PdfStage src={previewUrl} title={item.fileName} /> : immersive ? <immersive.Stage item={item} access={access} /> : crumbs}
       <div class="reader" data-outline-kind={outlineKind(item)}>
         <article class="reader-main" data-ai-watch={`item:${item.id}`}>
-          {!pdf && head}
+          {!pdf && !immersive && head}
 
           {embedded && <LinkEmbed url={item.url} title={item.title} />}
 

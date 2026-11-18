@@ -2234,6 +2234,21 @@ function initPdfViewers() {
     })
 }
 
+// --- 発表ファイルのビューアー（components/presentation.tsx の PresentationStage）
+// PDF の表示方法（applyPdfMode）の対象にしないのは、「ブラウザ」での表示では、まだ公開していないページまで見えてしまうため
+function initPresentations() {
+  void pdfViewer?.then(({ releaseDetachedPdfViewers }) => releaseDetachedPdfViewers())
+  const roots = $$<HTMLElement>('[data-presentation]:not([data-presentation-ready])')
+  if (!roots.length) return
+  pdfViewer ??= import('./pdf-viewer')
+  pdfViewer
+    .then(({ mountPresentation }) => roots.forEach(mountPresentation))
+    .catch(() => {
+      pdfViewer = null
+      toast('PDF ビューアーを読み込めませんでした。', 'error')
+    })
+}
+
 // --- 共同編集のエディター（components/collab.tsx の CollabWorkspace）
 // ここに直接 import しないのは、Yjs と種類ごとのエディター（TipTap や Office の形式の読み書き）が大きく、共同編集のない画面でも毎回読み込むことになるため
 let collabApp: Promise<typeof import('./collab/app')> | null = null
@@ -5045,6 +5060,7 @@ function initContent() {
   initCodeEditors()
   applyPdfMode()
   initPdfViewers()
+  initPresentations()
   initQuizWorlds()
   initCollabs()
   initMascots()

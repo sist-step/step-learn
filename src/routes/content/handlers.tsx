@@ -14,6 +14,7 @@ import {
   type CourseAccess,
 } from '../../lib/courses'
 import type { BundleView } from '../../components/bundle'
+import type { PresentationSummary } from '../../components/presentation'
 import { RestrictionPage } from '../../components/restriction'
 import { MAX_AGENT_INSTRUCTIONS, agentViewOf } from '../../lib/agent'
 import { agentStore, saveAgentOptions, savedAgentModel } from '../../lib/agent-items'
@@ -46,6 +47,7 @@ import { dateTimeInputToUnix } from '../../lib/course-period'
 import { db } from '../../lib/db'
 import { completionError, firstError, isFile, readConstraints, solutionOf, validate, type FieldErrors } from '../../lib/forms'
 import { field, fileField, intParam, readFields, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
+import { presentationStore } from '../../lib/presentation-items'
 import { previewKind } from '../../lib/preview'
 import { DEFAULT_PASS_PERCENT, MAX_QUIZ_JSON_LENGTH, isQuizLook, readQuizForm } from '../../lib/quiz'
 import { getQuizSettings, quizStore, saveQuizSettings } from '../../lib/quiz-items'
@@ -91,6 +93,11 @@ function bundleView(c: Context<AppEnv>, access: CourseAccess, itemId: number): B
     files: bundleStore(itemId).list(),
     sync: syncStateOf(bundleSyncStore(courseId, itemId), bundleBase(courseId, itemId), viewer),
   }
+}
+
+function presentationSummary(itemId: number): PresentationSummary {
+  const saved = presentationStore(itemId).get()
+  return { pages: saved.fileKey ? saved.slideIds.length : 0, sourceName: saved.sourceName, exportedAt: saved.exportedAt }
 }
 
 const agentView = (c: Context<AppEnv>, access: CourseAccess, itemId: number) =>
@@ -356,6 +363,13 @@ export async function createItem(c: Context<AppEnv>) {
     )
   if (type === 'quiz')
     return redirectWith(c, `/courses/${courseId}/items/${created.id}/edit`, `「${input.title}」を追加しました。問題を作ってください。`)
+  // 発表ファイルは、PDF を上げるまで学生に見せるものがないので、同期を始めるアイテムの画面へ進める
+  if (type === 'presentation')
+    return redirectWith(
+      c,
+      `/courses/${courseId}/items/${created.id}`,
+      `「${input.title}」を追加しました。「PowerPoint と同期」から PDF をアップロードしてください。`,
+    )
   const next = placement.values.after === 'view' ? `/courses/${courseId}/items/${created.id}` : editUrl(courseId, sectionId)
   return redirectWith(c, next, `「${input.title}」を追加しました。`)
 }
@@ -373,6 +387,7 @@ export async function editItem(c: Context<AppEnv>) {
       code={getCodeItem(iid)}
       preparing={preparer.isRunning(iid)}
       bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
+      presentation={item.type === 'presentation' ? presentationSummary(iid) : undefined}
       agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
       quiz={item.type === 'quiz' ? getQuizSettings(iid) : undefined}
       collab={item.type === COLLAB_KIND ? (getCollabSettings(iid) ?? undefined) : undefined}
@@ -433,6 +448,7 @@ export async function updateItem(c: Context<AppEnv>) {
         item={item}
         code={code}
         bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
+        presentation={item.type === 'presentation' ? presentationSummary(iid) : undefined}
         agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
         quiz={item.type === 'quiz' ? getQuizSettings(iid) : undefined}
         collab={item.type === COLLAB_KIND ? (getCollabSettings(iid) ?? undefined) : undefined}
