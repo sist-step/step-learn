@@ -227,6 +227,7 @@ function createViewer(root: HTMLElement, { source, limit = Infinity, errorText }
       v.el.classList.toggle('is-unreleased', v.n > unreleasedAfter)
       v.thumb.el.classList.toggle('is-unreleased', v.n > unreleasedAfter)
       v.thumb.el.classList.toggle('is-presenting', v.n === presenting)
+      v.thumb.el.title = v.n === presenting ? 'スライドショーで映しているページ' : ''
     }
 
     async function addPages(upTo: number) {
@@ -628,7 +629,7 @@ function createViewer(root: HTMLElement, { source, limit = Infinity, errorText }
 
 // --- 発表ファイル（components/presentation.tsx の PresentationStage）
 const NO_PDF_FOR_TEACHER =
-  'PDF はまだありません。「PowerPoint と同期」を押すと、VS Code の拡張機能が、PowerPoint で開いているファイルを PDF にしてアップロードします。'
+  'PDF はまだありません。パソコンで「PowerPoint と同期」を押すと、VS Code の拡張機能が、PowerPoint で開いているファイルを PDF にしてアップロードします。'
 
 /** 公開の状態を読み続け、公開の範囲のページだけを描く。学生の画面は、先生が映しているページに合わせて動かす */
 export function mountPresentation(root: HTMLElement) {
@@ -697,18 +698,13 @@ export function mountPresentation(root: HTMLElement) {
     const download = document.querySelector<HTMLAnchorElement>('[data-presentation-download]')
     const pageInput = document.querySelector<HTMLInputElement>('[data-presentation-page]')
     if (live) live.hidden = !view.syncing
+    document.querySelector('[data-presentation-launch]')?.classList.toggle('btn-primary', !view.syncing)
     if (count)
       count.textContent = !view.version
         ? ''
-        : canManage
-          ? view.all
-            ? `すべて公開（${view.pages} ページ）`
-            : `公開 ${view.released} / ${view.pages} ページ`
-          : view.all
-            ? 'すべて公開中'
-            : view.pages
-              ? `${view.pages} ページ目まで公開中`
-              : ''
+        : view.all
+          ? `すべて公開（${view.pages} ページ）`
+          : `公開 ${view.released} / ${view.pages} ページ`
     if (download) {
       download.hidden = !view.version || !(canManage || view.all)
       download.href = `${base}/pdf?download=1&v=${view.version}`
@@ -729,7 +725,7 @@ export function mountPresentation(root: HTMLElement) {
     if (!handle) return
     handle.markUnreleased(canManage ? view.released : view.pages)
     handle.markPresenting(view.manage?.current ?? null)
-    tail.hidden = canManage || view.all
+    tail.hidden = canManage
     if (follow !== null && following && handle.currentPage() !== follow) handle.goTo(follow)
     setFollowing(following)
   }

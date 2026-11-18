@@ -32,16 +32,16 @@ export const PresentationBar = ({
   useStyle(...STYLES)
   return (
     <ItemBar type="presentation" crumbs={crumbs} title={title} hiddenNote={hiddenNote}>
-      <span class="presentation-state" role="status">
-        <Chip tone="live" data-presentation-live hidden>
-          同期中
-        </Chip>
-        <span class="presentation-count small" data-presentation-count />
-      </span>
       {canManage && (
         <>
-          <form method="post" action={`${base}/launch`} data-vscode-launch>
-            <Button type="submit" size="sm" variant="primary" icon="arrowPath" aria-label="PowerPoint と同期">
+          <span class="presentation-state" role="status">
+            <Chip tone="success" data-presentation-live hidden>
+              同期中
+            </Chip>
+            <span class="presentation-count small" data-presentation-count />
+          </span>
+          <form method="post" action={`${base}/launch`} class="presentation-launch" data-vscode-launch>
+            <Button type="submit" size="sm" variant="primary" icon="arrowPath" aria-label="PowerPoint と同期" data-presentation-launch>
               <span class="hide-sm">PowerPoint と同期</span>
             </Button>
           </form>
@@ -114,7 +114,7 @@ export const PresentationStage = ({ base, title, canManage }: { base: string; ti
           title={title}
           tail={
             <p class="presentation-tail muted small" data-pdf-tail hidden>
-              先生がこの先に進むと表示されます
+              一番下です
             </p>
           }
         />
