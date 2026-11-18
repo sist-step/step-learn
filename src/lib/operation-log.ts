@@ -102,6 +102,7 @@ const RULES: Rule[] = [
   post('/courses/:id/items/:iid/presentation/launch', 'presentation.launch', 'PowerPoint との同期を VS Code で始めた', 'change', 'item'),
   post('/courses/:id/items/:iid/presentation/release-all', 'presentation.release.all', '発表ファイルをすべて公開', 'change', 'item'),
   post('/courses/:id/items/:iid/presentation/released', 'presentation.released', '発表ファイルの公開の範囲を変更', 'change', 'item'),
+  post('/courses/:id/items/:iid/presentation/reset', 'presentation.reset', '発表ファイルの公開を 1 ページ目に戻した', 'change', 'item'),
   // 拡張機能からの要求。映しているスライドの位置（/position）を残さないのは、スライドを送るたびに届き、数が多いため
   post('/api/vscode/presentation/pdf', 'presentation.upload', '発表ファイルの PDF をアップロード', 'change'),
   post('/api/vscode/presentation/end', 'presentation.end', 'PowerPoint との同期を止めた', 'change'),

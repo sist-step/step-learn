@@ -74,6 +74,16 @@ export const PresentationBar = ({
                 すべて公開
               </Button>
             </form>
+            <form
+              method="post"
+              action={`${base}/reset`}
+              data-confirm="1 ページ目だけを公開した状態に戻しますか？ 学生には、2 ページ目から先が見えなくなります。"
+              data-confirm-ok="リセットする"
+            >
+              <Button type="submit" size="sm" icon="undo" block>
+                公開をリセット
+              </Button>
+            </form>
           </Popover>
         </>
       )}
