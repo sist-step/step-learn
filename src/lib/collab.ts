@@ -126,6 +126,16 @@ export function presenceColor(id: number) {
   return `hsl(${hues[id % hues.length]} 70% 45%)`
 }
 
+/** 文書で選べるフォント。css は画面、docx は .docx に書き出すときのフォント名 */
+export const DOC_FONTS = [
+  { value: 'gothic', label: 'ゴシック', css: "'Yu Gothic', 'Hiragino Sans', sans-serif", docx: 'Yu Gothic' },
+  { value: 'mincho', label: '明朝', css: "'Yu Mincho', 'Hiragino Mincho ProN', serif", docx: 'Yu Mincho' },
+  { value: 'mono', label: '等幅', css: 'Consolas, Menlo, monospace', docx: 'Consolas' },
+] as const
+
+/** 文書で選べる文字の大きさ（pt） */
+export const DOC_FONT_SIZES = [9, 10, 10.5, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72] as const
+
 /** 開いているファイルの名前（保存するときのファイル名） */
 export const exportFileName = (title: string, kind: CollabKind) =>
   `${title.replace(/[\\/:*?"<>|\p{Cc}]/gu, '_').slice(0, 100) || COLLAB_KIND_LABELS[kind]}.${COLLAB_FILE_EXTS[kind] ?? 'json'}`

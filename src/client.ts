@@ -1618,7 +1618,8 @@ const POPOVER_MARGIN = 8
 function placePopoverPanel(d: HTMLDetailsElement) {
   const panel = d.querySelector<HTMLElement>(':scope > .popover-panel')
   if (!panel) return
-  panel.classList.remove('is-above')
+  panel.classList.remove('is-above', 'is-start')
+  if (panel.getBoundingClientRect().left < POPOVER_MARGIN) panel.classList.add('is-start')
   const anchor = d.getBoundingClientRect()
   const gap = panel.offsetTop - anchor.height
   const needed = panel.offsetHeight + gap + POPOVER_MARGIN
