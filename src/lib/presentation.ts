@@ -128,6 +128,9 @@ export function releasedBy(s: PresentationState, page: number): Patch {
   return { allReleased: false, releasedPage, releasedSlideIds: s.slideIds.slice(0, releasedPage) }
 }
 
+/** 先生が公開をやり直すとき。1 ページ目だけを公開した状態に戻す */
+export const restarted = (s: PresentationState): Patch => releasedBy(s, 1)
+
 export const isSyncing = (s: PresentationState, now: number) => s.syncedAt !== null && now - s.syncedAt < SYNC_ALIVE
 
 /** 画面のビューアーが読む公開の状態 */

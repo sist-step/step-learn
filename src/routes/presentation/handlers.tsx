@@ -13,10 +13,12 @@ import {
   PRESENTATION_POSITION,
   SYNC_HEARTBEAT,
   ended,
+  isSyncing,
   moved,
   presentationView,
   releasedAll,
   releasedBy,
+  restarted,
   uploaded,
   type PresentationState,
   type PresentationStore,
@@ -115,6 +117,23 @@ export function createPresentationHandlers({ resolve, itemUrl }: PresentationBac
     return redirectWith(c, itemUrl(ctx.access.course.id, ctx.itemId), message)
   }
 
+  async function reset(c: C) {
+    const ctx = await manage(c)
+    if (!ctx) return c.notFound()
+    const saved = ctx.store.get()
+    const back = itemUrl(ctx.access.course.id, ctx.itemId)
+    if (!saved.fileKey) return redirectWith(c, back, 'PDF がまだありません。', 'error')
+    ctx.store.save(restarted(saved))
+    const showing = isSyncing(saved, nowSec()) && (saved.currentPage ?? 0) > 1
+    return redirectWith(
+      c,
+      back,
+      showing
+        ? '公開を 1 ページ目に戻しました。スライドショーで映しているページまでは、また公開されます。'
+        : '公開を 1 ページ目に戻しました。',
+    )
+  }
+
   async function launch(c: C) {
     const ctx = await manage(c)
     if (!ctx) return c.notFound()
@@ -124,7 +143,7 @@ export function createPresentationHandlers({ resolve, itemUrl }: PresentationBac
     return c.json({ url: `vscode://${VSCODE_EXTENSION_ID}/presentation?${query}` })
   }
 
-  return { state, pdf, releaseAll, setReleased, launch }
+  return { state, pdf, releaseAll, setReleased, reset, launch }
 }
 
 export function presentationRoutes(h: ReturnType<typeof createPresentationHandlers>) {
@@ -133,6 +152,7 @@ export function presentationRoutes(h: ReturnType<typeof createPresentationHandle
   app.get('/:id/items/:iid/presentation/pdf', h.pdf)
   app.post('/:id/items/:iid/presentation/release-all', h.releaseAll)
   app.post('/:id/items/:iid/presentation/released', h.setReleased)
+  app.post('/:id/items/:iid/presentation/reset', h.reset)
   app.post('/:id/items/:iid/presentation/launch', h.launch)
   return app
 }
