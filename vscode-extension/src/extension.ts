@@ -274,25 +274,6 @@ async function syncPresentation(context: vscode.ExtensionContext, server: URL, t
     )
     const consequence = 'その人のアイテムの PDF と、学生に見せる範囲を変えることになります'
     if (!(await confirmAccount(context, server, grant.title, grant.user, consequence))) return
-    const sync = '同期を始める'
-    const upload = 'アップロードだけ'
-    const released = grant.all ? `すべてのページ（${grant.pages} ページ）` : grant.released > 0 ? `${grant.released} ページ目まで` : ''
-    const answer = await vscode.window.showInformationMessage(
-      `PowerPoint で開いているファイルを PDF にして、「${grant.title}」にアップロードします。`,
-      {
-        modal: true,
-        detail: [
-          '「同期を始める」を選ぶと、スライドショーで映したページまでを学生に見せ続けます。授業の前の準備なら「アップロードだけ」を選んでください。',
-          released &&
-            `今は、${released}を学生に公開しています。同じ名前のファイルなら、この公開の範囲を引き継ぎます。1 ページ目から見せ直すときは、STEP Learn のアイテムの画面で「公開をリセット」を押してください。`,
-        ]
-          .filter(Boolean)
-          .join('\n\n'),
-      },
-      sync,
-      upload,
-    )
-    if (!answer) return
     presentation?.dispose()
     const session: PresentationSession = new PresentationSession(context, server, grant, powerPoint, () => {
       if (presentation !== session) return
@@ -302,13 +283,6 @@ async function syncPresentation(context: vscode.ExtensionContext, server: URL, t
     presentation = session
     await vscode.commands.executeCommand('setContext', 'stepLearn.presentationSyncing', true)
     if (!(await session.publish(true))) return session.dispose()
-    if (answer === upload) {
-      session.dispose()
-      void vscode.window.showInformationMessage(
-        `「${grant.title}」に PDF をアップロードしました（${session.pages} ページ）。授業では、STEP Learn の「PowerPoint と同期」をもう一度押してください。`,
-      )
-      return
-    }
     session.start()
   } catch (e) {
     const message = e instanceof SyncError ? e.message : `同期を始められませんでした（${e instanceof Error ? e.message : String(e)}）。`
