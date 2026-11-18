@@ -73,6 +73,7 @@
   --paper: #ffffff;
   --paper-ink: #1f2937;
   --paper-line: #d7dbe3;
+  --paper-link: #1d4ed8;
   --switch-thumb: #ffffff;
   --focus: #00788a;
   --ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--focus);
@@ -190,6 +191,7 @@
   --paper: #ffffff;
   --paper-ink: #1f2937;
   --paper-line: #d7dbe3;
+  --paper-link: #1d4ed8;
   --switch-thumb: #ffffff;
   --auth-stage: #000000;
   --art-deep: #01030c;
