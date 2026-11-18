@@ -16,6 +16,7 @@
 }
 .popover-panel.is-above { top: auto; bottom: calc(100% + 6px); animation-name: popover-above; }
 @keyframes popover-above { from { opacity: 0; transform: translateY(-6px); } }
+.popover-panel.is-start { left: 0; right: auto; }
 
 .confirm-chip {
   position: fixed;

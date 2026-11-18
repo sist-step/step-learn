@@ -95,6 +95,7 @@ import arrowLongRight from 'heroicons/24/outline/arrow-long-right.svg?raw'
 import note from 'heroicons/24/outline/document.svg?raw'
 import documentUp from 'heroicons/24/outline/document-arrow-up.svg?raw'
 import alignCenter from 'heroicons/24/outline/bars-3-center-left.svg?raw'
+import backspace from 'heroicons/24/outline/backspace.svg?raw'
 import variable from 'heroicons/24/outline/variable.svg?raw'
 import squares2x2 from 'heroicons/24/outline/squares-2x2.svg?raw'
 import chevronUp from 'heroicons/24/outline/chevron-up.svg?raw'
@@ -198,6 +199,7 @@ const svgs = {
   note,
   documentUp,
   alignCenter,
+  backspace,
   variable,
   squares2x2,
   chevronUp,
