@@ -6,7 +6,8 @@ import { VSCODE_EXTENSION_ID } from '../../lib/bundle'
 import { LAUNCH_CLAIM, claimPresentationLaunch, signPresentation, signPresentationLaunch, verifyPresentation } from '../../lib/bundle-token'
 import { config } from '../../lib/config'
 import type { CourseAccess } from '../../lib/courses'
-import { clientIp, readFields, readJson, redirectWith, wantsJson } from '../../lib/http'
+import { clientIp, intParam, readFields, readJson, redirectWith, wantsJson } from '../../lib/http'
+import { servePresentationPage, splitPresentationPdf } from '../../lib/presentation-pages'
 import {
   PRESENTATION_END,
   PRESENTATION_META,
@@ -83,13 +84,28 @@ export function createPresentationHandlers({ resolve, itemUrl }: PresentationBac
     if (!ctx) return c.notFound()
     const saved = ctx.store.get()
     const view = presentationView(saved, nowSec(), ctx.access.canManage)
+    // 公開の途中の学生に返さないのは、この PDF には未公開のページも入っているため。学生は page で公開済みのページだけを受け取る
+    if (!saved.fileKey || view.pages === 0 || !(ctx.access.canManage || view.all)) return c.notFound()
     const download = c.req.query('download') === '1'
-    // 1 ページも公開していないあいだ学生に返さないのは、ビューアーが描かないだけで、PDF そのものには全ページが入っているため
-    if (!saved.fileKey || view.pages === 0 || (download && !ctx.access.canManage && !view.all)) return c.notFound()
     const res = await storage.serve(saved.fileKey, {
       filename: `${ctx.title}.pdf`,
       contentType: 'application/pdf',
       inline: !download,
+      range: c.req.header('range'),
+    })
+    return res ?? c.notFound()
+  }
+
+  async function page(c: C) {
+    const ctx = await resolve(c)
+    const number = intParam(c, 'page')
+    if (!ctx || !number) return c.notFound()
+    const saved = ctx.store.get()
+    if (number > presentationView(saved, nowSec(), ctx.access.canManage).pages) return c.notFound()
+    const res = await servePresentationPage(saved, number, {
+      filename: `${ctx.title} ${number}.pdf`,
+      contentType: 'application/pdf',
+      inline: true,
       range: c.req.header('range'),
     })
     return res ?? c.notFound()
@@ -143,13 +159,14 @@ export function createPresentationHandlers({ resolve, itemUrl }: PresentationBac
     return c.json({ url: `vscode://${VSCODE_EXTENSION_ID}/presentation?${query}` })
   }
 
-  return { state, pdf, releaseAll, setReleased, reset, launch }
+  return { state, pdf, page, releaseAll, setReleased, reset, launch }
 }
 
 export function presentationRoutes(h: ReturnType<typeof createPresentationHandlers>) {
   const app = new Hono<AppEnv>()
   app.get('/:id/items/:iid/presentation/state', h.state)
   app.get('/:id/items/:iid/presentation/pdf', h.pdf)
+  app.get('/:id/items/:iid/presentation/pages/:page', h.page)
   app.post('/:id/items/:iid/presentation/release-all', h.releaseAll)
   app.post('/:id/items/:iid/presentation/released', h.setReleased)
   app.post('/:id/items/:iid/presentation/reset', h.reset)
@@ -231,11 +248,16 @@ export function presentationApi({ targetOf, keyPrefix }: PresentationBackend) {
     } catch {}
     const meta = PRESENTATION_META.safeParse(raw)
     if (!meta.success) return c.json({ error: '送られた内容が正しくありません。' }, 400)
-    const pages = meta.data.slideIds.length
-    const inPdf = (list: number[]) => [...new Set(list)].filter((page) => page <= pages).sort((a, b) => a - b)
 
     const fileKey = `${keyPrefix(target.courseId)}presentations/${crypto.randomUUID()}/slides.pdf`
     await storage.put(fileKey, file, 'application/pdf')
+    // 分けられなくても全ページ入りの PDF を配って続けないのは、未公開のページが学生に渡るため
+    const pages = await splitPresentationPdf(fileKey, new Uint8Array(await file.arrayBuffer()), meta.data.slideIds.length).catch(() => 0)
+    if (!pages) {
+      inBackground(deleteKeys([fileKey]))
+      return c.json({ error: 'PDF を読み取れませんでした。PowerPoint から書き出し直してください。' }, 400)
+    }
+    const inPdf = (list: number[]) => [...new Set(list)].filter((page) => page <= pages).sort((a, b) => a - b)
     const saved = target.store.get()
     target.store.save(
       uploaded(
@@ -243,7 +265,8 @@ export function presentationApi({ targetOf, keyPrefix }: PresentationBackend) {
         {
           fileKey,
           fileSize: file.size,
-          slideIds: meta.data.slideIds,
+          // 届いた ID をそのまま使わないのは、PDF のページのほうが少ないと、開けないページまで公開の範囲に入るため
+          slideIds: meta.data.slideIds.slice(0, pages),
           animatedPages: inPdf(meta.data.animatedPages),
           triggerPages: inPdf(meta.data.triggerPages),
           sourceName: meta.data.sourceName,
