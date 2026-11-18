@@ -599,6 +599,17 @@ const bundleRemove = z.object({ path: hidden(1000), folder: hidden(1000), all: f
 
 const bundleSync = z.object({ sync: flag() })
 
+// ページ数を超えていないかをここで確かめないのは、ページ数が PDF で決まり、ハンドラが最後のページに丸めるため
+const presentationReleased = z.object({
+  page: z.pipe(
+    z.pipe(
+      text('公開するページ', 4, { required: true }),
+      z.string().check(rule((s: string) => (/^\d+$/.test(s) ? null : '公開するページは 0 以上の整数で入力してください。'))),
+    ),
+    z.transform((s: string) => Number(s)),
+  ),
+})
+
 // file を必須にしないのは、ファイルを選ぶカードでだけ送られるため。大きさと中身はストレージの設定と中身で決まるので、ハンドラで確かめる
 const aiDecision = z.object({
   call: hidden(200),
@@ -662,6 +673,7 @@ export const FORMS = {
   bundleUpload,
   bundleRemove,
   bundleSync,
+  presentationReleased,
   aiDecision,
   aiApproveAll,
   aiChat,

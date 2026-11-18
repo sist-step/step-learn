@@ -181,7 +181,7 @@ const ItemRow = ({
   const external = item.type === 'link' && item.linkTarget !== 'embed'
   const opensToComplete = isStudent && completion === 'view' && external && !done
   const pdf = item.type === 'file' && previewKind(item.fileType ?? '', item.fileName ?? '') === 'pdf'
-  const newTab = item.type === 'screen' || pdf
+  const newTab = item.type === 'screen' || item.type === 'presentation' || pdf
   const href = item.type === 'screen' ? `${base}/screen` : base
   const meta =
     item.type === 'link'
@@ -309,6 +309,7 @@ const ITEM_TYPE_DESCRIPTIONS: Record<ItemType, string> = {
   page: '本文を書いて載せる',
   link: '外部のサイトを紹介する',
   file: 'PDF や画像などを配る',
+  presentation: 'PowerPoint で映したところまでを学生に見せる',
   screen: '授業中に画面を配信する',
   code: 'コードを書いて提出する',
   quiz: 'コードを読んで答える問題で理解を確かめる',
@@ -404,6 +405,9 @@ const AddItemModal = ({
         <p class="when-quiz muted small">問題は、追加したあとの編集画面で作ります。</p>
         <CollabPickFields fieldClass="when-collab" />
         <p class="when-bundle muted small">配るファイルは、追加したあとの編集画面でアップロードします。</p>
+        <p class="when-presentation muted small">
+          PDF は、追加したあとのアイテムの画面の「PowerPoint と同期」から、VS Code の拡張機能でアップロードします。
+        </p>
         <p class="when-agent muted small">
           使える期間と上限は、追加したあとの編集画面で設定します。学生が使えるようになるのは、管理者が API キーを入れてからです。
         </p>

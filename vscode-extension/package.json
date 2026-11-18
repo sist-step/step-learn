@@ -1,8 +1,8 @@
 {
   "name": "step-learn-for-vscode",
   "displayName": "STEP Learn for VSCode",
-  "description": "STEP Learn で配られたプログラムのファイルを、ボタン 1 つで VS Code に用意して開きます。先生が指定したアイテムでは、保存した内容を変更履歴として STEP Learn に記録します。コードのアイテムでは、保存したコードを STEP Learn に反映し、VS Code から提出して AI の判定を受け取れます。コーディングエージェントのアイテムでは、使える期間のあいだ AI がファイルを読み書きしてプログラムを書きます。",
-  "version": "0.5.0",
+  "description": "STEP Learn で配られたプログラムのファイルを、ボタン 1 つで VS Code に用意して開きます。先生が指定したアイテムでは、保存した内容を変更履歴として STEP Learn に記録します。コードのアイテムでは、保存したコードを STEP Learn に反映し、VS Code から提出して AI の判定を受け取れます。コーディングエージェントのアイテムでは、使える期間のあいだ AI がファイルを読み書きしてプログラムを書きます。発表ファイルのアイテムでは、先生の PowerPoint のスライドショーに合わせて、映したページまでを学生に見せます。",
+  "version": "0.6.0",
   "publisher": "mint1535",
   "private": true,
   "license": "UNLICENSED",
@@ -45,6 +45,16 @@
         "title": "コードを提出する",
         "category": "STEP Learn",
         "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "stepLearn.presentation.menu",
+        "title": "PowerPoint との同期の操作",
+        "category": "STEP Learn"
+      },
+      {
+        "command": "stepLearn.presentation.stop",
+        "title": "PowerPoint との同期を止める",
+        "category": "STEP Learn"
       },
       {
         "command": "stepLearn.agent.open",
@@ -111,6 +121,14 @@
         {
           "command": "stepLearn.code.submit",
           "when": "stepLearn.codeOpen"
+        },
+        {
+          "command": "stepLearn.presentation.menu",
+          "when": "stepLearn.presentationSyncing"
+        },
+        {
+          "command": "stepLearn.presentation.stop",
+          "when": "stepLearn.presentationSyncing"
         },
         {
           "command": "stepLearn.agent.newChat",

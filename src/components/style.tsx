@@ -18,6 +18,7 @@ export const STYLESHEETS = [
   '/src/components/card.css',
   '/src/components/course.css',
   '/src/components/pdf.css',
+  '/src/components/presentation.css',
   '/src/components/code.css',
   '/src/components/bundle.css',
   '/src/components/agent.css',

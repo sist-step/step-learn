@@ -20,7 +20,14 @@ export type SyncClaims = { kind: 'sync'; ref: string; userId: number; exp: numbe
 export type CodeLaunchClaims = { kind: 'code-launch'; ref: string; userId: number; nonce: string; exp: number }
 /** 拡張機能が書きかけのコードを送る・提出するための鍵 */
 export type CodeClaims = { kind: 'code'; ref: string; userId: number; exp: number }
-type Claims = LaunchClaims | GrantClaims | SyncClaims | CodeLaunchClaims | CodeClaims
+/** 発表ファイルの「PowerPoint と同期」のリンクの鍵 */
+export type PresentationLaunchClaims = { kind: 'presentation-launch'; ref: string; userId: number; nonce: string; exp: number }
+/** 拡張機能が PDF を上げ、映しているスライドを送るための鍵 */
+export type PresentationClaims = { kind: 'presentation'; ref: string; userId: number; exp: number }
+type Claims = LaunchClaims | GrantClaims | SyncClaims | CodeLaunchClaims | CodeClaims | PresentationLaunchClaims | PresentationClaims
+
+/** 発表ファイルの鍵の有効期間。朝に始めた同期が、その日の授業のあいだ続く長さにする */
+export const PRESENTATION_TTL = 12 * 60 * 60
 
 const mac = (body: string) => crypto.createHmac('sha256', key).update(body).digest('base64url')
 
@@ -100,4 +107,22 @@ export const signCode = (claims: Omit<CodeClaims, 'kind' | 'exp'>) => sign({ kin
 export function verifyCode(token: string): CodeClaims | null {
   const claims = verify(token)
   return claims?.kind === 'code' ? claims : null
+}
+
+export const signPresentationLaunch = (claims: Omit<PresentationLaunchClaims, 'kind' | 'nonce' | 'exp'>) =>
+  sign({ kind: 'presentation-launch', ...claims, nonce: crypto.randomBytes(12).toString('base64url'), exp: nowSec() + LAUNCH_TTL })
+
+/** 発表ファイルのリンクの鍵を 1 回だけ使えるように確かめる */
+export function claimPresentationLaunch(token: string): PresentationLaunchClaims | null {
+  const claims = verify(token)
+  return claims?.kind === 'presentation-launch' && useNonce(claims.nonce, claims.exp) ? claims : null
+}
+
+// 変更履歴の鍵のように学期のあいだ使えるようにしないのは、学生に見せる範囲を変えられる鍵で、授業のたびに画面から始め直してもらえば足りるため
+export const signPresentation = (claims: Omit<PresentationClaims, 'kind' | 'exp'>) =>
+  sign({ kind: 'presentation', ...claims, exp: nowSec() + PRESENTATION_TTL })
+
+export function verifyPresentation(token: string): PresentationClaims | null {
+  const claims = verify(token)
+  return claims?.kind === 'presentation' ? claims : null
 }

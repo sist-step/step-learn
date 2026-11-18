@@ -80,7 +80,8 @@
 .item-form:not([data-kind='agent']) .when-agent { display: none; }
 .item-form:not([data-kind='quiz']) .when-quiz { display: none; }
 .item-form:not([data-kind='collab']) .when-collab { display: none; }
-.item-form[data-kind='code'] .unless-code, .item-form:is([data-kind='bundle'], [data-kind='code'], [data-kind='agent'], [data-kind='quiz']) .unless-edit-next { display: none; }
+.item-form:not([data-kind='presentation']) .when-presentation { display: none; }
+.item-form[data-kind='code'] .unless-code, .item-form:is([data-kind='bundle'], [data-kind='code'], [data-kind='agent'], [data-kind='quiz'], [data-kind='presentation']) .unless-edit-next { display: none; }
 
 :root:not([data-edit-mode]) .edit-only,
 :root[data-edit-mode] .view-only { display: none; }
@@ -265,6 +266,7 @@
 .item-form[data-kind='page'] [data-kind-summary='page'],
 .item-form[data-kind='link'] [data-kind-summary='link'],
 .item-form[data-kind='file'] [data-kind-summary='file'],
+.item-form[data-kind='presentation'] [data-kind-summary='presentation'],
 .item-form[data-kind='screen'] [data-kind-summary='screen'],
 .item-form[data-kind='code'] [data-kind-summary='code'],
 .item-form[data-kind='quiz'] [data-kind-summary='quiz'],

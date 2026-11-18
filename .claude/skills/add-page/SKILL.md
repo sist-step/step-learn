@@ -26,7 +26,7 @@ src/routes/<name>/
 Moodle モード（`MOODLE_URL` を設定したとき）は `src/moodle-mode/` の別のアプリで動く。
 
 - Moodle モードから `src/lib/db.ts` を（間接的にも）読み込むと起動時にエラーになる
-- 両方のモードで使うルート（`code/` `quiz/` `ai/` `bundle/` `agent/`）の `handlers.tsx` と `views.tsx` からは、DB を開くモジュールを import しない。モードごとの DB と権限の確認は `XxxBackend`（`backend.ts`、`ai/` は `handlers.tsx` の `AiBackend`）に書く
+- 両方のモードで使うルート（`code/` `quiz/` `ai/` `bundle/` `agent/` `presentation/`）の `handlers.tsx` と `views.tsx` からは、DB を開くモジュールを import しない。モードごとの DB と権限の確認は `XxxBackend`（`backend.ts`、`ai/` は `handlers.tsx` の `AiBackend`）に書く
 - AI のツールは通常モードが `lib/ai-tools.ts`、Moodle モードが `moodle-mode/ai-tools.ts`。どちらも `lib/ai-tool-kit.ts` の `defineTool`（すぐ実行）か `defineConfirmTool`（確認カード）で作る
 - `src/routes/` のビューや `src/components/` の部品を変えるときは、Moodle モードの画面（`src/moodle-mode/views.tsx` と、使い回している `CoursesPage` / `DashboardPage`）も崩れないか確かめる
 
