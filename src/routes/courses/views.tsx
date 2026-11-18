@@ -5,6 +5,7 @@ import {
   CourseHeader,
   CourseLiveSync,
   CreateCourseButton,
+  ItemGrip,
   ItemIcon,
   ItemInsertButton,
   LinkTargetField,
@@ -235,6 +236,7 @@ const ItemRow = ({
       )}
       {manage && (
         <div class="row-actions edit-only">
+          <ItemGrip action={`${base}/place`} />
           <IconButton href={`${base}/edit`} icon="pencil" label="編集" />
           <RowMenu base={base} moveAction={`${base}/move`} hidden={!!item.hidden} confirm={`「${item.title}」を削除しますか？`} />
         </div>
@@ -637,6 +639,7 @@ export const CoursePage = ({
                     when && `is-${when}`,
                   )}
                   id={`section-${s.id}`}
+                  data-item-drop={manage ? s.id : undefined}
                   open
                 >
                   <summary class="section-head">
