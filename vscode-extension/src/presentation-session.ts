@@ -84,11 +84,7 @@ export class PresentationSession {
     this.status.show()
   }
 
-  get pages() {
-    return this.summary.pages
-  }
-
-  /** PowerPoint で開いているファイルを PDF にして上げる。notices は、アニメーションの扱いを知らせるか */
+  /** PowerPoint で開いているファイルを PDF にして上げる。notices は、公開の範囲とアニメーションの扱いを知らせるか */
   async publish(notices: boolean): Promise<boolean> {
     if (this.exporting || this.disposed) return false
     this.exporting = true
@@ -108,7 +104,10 @@ export class PresentationSession {
       this.warnedSlides.clear()
       // 上げ直すと STEP Learn は先生のページを忘れるので、同じスライドのままでも送り直す
       this.lastKey = null
-      if (notices) this.tellAnimations(meta.animatedPages, meta.triggerPages)
+      if (notices) {
+        this.tellReleased()
+        this.tellAnimations(meta.animatedPages, meta.triggerPages)
+      }
       return true
     } catch (e) {
       if (e instanceof PresentationTokenError) this.fail(e.message)
@@ -118,6 +117,16 @@ export class PresentationSession {
       this.exporting = false
       this.render()
     }
+  }
+
+  // 上げる前の範囲で知らせないのは、前と違う名前のファイルを上げると、公開の範囲が引き継がれないため
+  private tellReleased() {
+    const { pages, released, all } = this.summary
+    const range = all ? `すべてのページ（${pages} ページ）` : released > 0 ? `${released} ページ目まで` : ''
+    if (range)
+      void vscode.window.showInformationMessage(
+        `「${this.grant.title}」は、${range}を学生に公開しています。1 ページ目から見せ直すときは、STEP Learn のアイテムの画面で「公開をリセット」を押してください。`,
+      )
   }
 
   private tellAnimations(animatedPages: number[], triggerPages: number[]) {
