@@ -98,7 +98,7 @@ function parseFrameMeta(v: unknown): FrameMeta | null {
 }
 
 // Origin がない要求を拒否しないのは、ロングポーリングの同一オリジンの GET には Origin が付かないため
-function isAllowedOrigin(headers: IncomingHttpHeaders) {
+export function isAllowedOrigin(headers: IncomingHttpHeaders) {
   const origin = headers.origin
   if (!origin) return true
   if (config.appOrigin) return origin === config.appOrigin

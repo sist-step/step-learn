@@ -107,7 +107,7 @@ try {
 } catch { Emit @{ result = 'error'; message = (MessageOf $_) } }
 `
 
-// PowerShell を読むたびに起動しないのは、起動に 1 秒近くかかり、0.5 秒おきに読めないため。起動したまま 1 行ずつ JSON を書き出す。
+// PowerShell を読むたびに起動しないのは、起動に 1 秒近くかかり、0.25 秒おきに読めないため。起動したまま 1 行ずつ JSON を書き出す。
 // 親のプロセスを確かめるのは、VS Code が終了したあとも読み続けないため
 const WATCH_SCRIPT = `${PRELUDE}
 $parent = __PARENT__
@@ -139,7 +139,7 @@ while ($true) {
     if ((HResultOf $_) -eq ${NOT_RUNNING}) { Emit @{ state = 'closed' } }
     else { Emit @{ state = 'error'; message = $_.Exception.Message } }
   }
-  Start-Sleep -Milliseconds 500
+  Start-Sleep -Milliseconds 250
 }
 `
 
