@@ -73,16 +73,24 @@ const releaseTo = (s: PresentationState, page: number): Patch => ({
 
 export type UploadedPdf = Pick<PresentationState, 'fileKey' | 'fileSize' | 'slideIds' | 'animatedPages' | 'triggerPages' | 'sourceName'>
 
-/** PDF を上げ直したとき。公開の範囲は、公開済みのスライドのうち、新しい PDF でいちばん後ろにあるページまで */
+/**
+ * PDF を上げ直したとき。公開の範囲は、公開済みのスライドのうち、新しい PDF でいちばん後ろにあるページまで。
+ * 前と違う名前のファイルなら、どのページも公開していない状態から始める
+ */
 export function uploaded(s: PresentationState, pdf: UploadedPdf, now: number): Patch {
-  const released = new Set(s.releasedSlideIds)
+  // スライドの ID だけで引き継がないのは、ID がどのファイルでも同じ番号から始まり、別のファイルの公開済みのスライドと取り違えるため
+  const same = s.sourceName === pdf.sourceName
+  const before = same ? s.releasedSlideIds : []
+  const allReleased = same && s.allReleased
+  const released = new Set(before)
   // 公開済みのスライドが先頭から続いているところまでにしないのは、途中にスライドを足しただけで、その後ろの公開済みのページが見えなくなるため
-  const releasedPage = s.allReleased ? pdf.slideIds.length : pdf.slideIds.findLastIndex((id) => released.has(id)) + 1
+  const releasedPage = allReleased ? pdf.slideIds.length : pdf.slideIds.findLastIndex((id) => released.has(id)) + 1
   return {
     ...pdf,
     version: s.version + 1,
+    allReleased,
     releasedPage,
-    releasedSlideIds: union(s.releasedSlideIds, pdf.slideIds.slice(0, releasedPage)),
+    releasedSlideIds: union(before, pdf.slideIds.slice(0, releasedPage)),
     currentPage: null,
     exportedAt: now,
     syncedAt: now,
