@@ -11,8 +11,27 @@ export const MAX_PRESENTATION_PAGES = 2000
 export const SYNC_HEARTBEAT = 10
 /** この秒数のあいだ拡張機能から届かなければ、同期が止まったとみなす */
 export const SYNC_ALIVE = 30
-/** 学生の画面が公開の状態を読む間隔（ミリ秒） */
+/** socket.io につながっていないときに、画面が公開の状態を読む間隔（ミリ秒） */
 export const STATE_INTERVAL = 3000
+/** socket.io につながっているときの間隔（ミリ秒）。同期が途切れたことは知らせが来ないので、読むのを完全にはやめない */
+export const LIVE_STATE_INTERVAL = 15_000
+
+/** socket.io の接続先のパス。画面共有（/socket.io）や共同編集とは別のサーバーにする */
+export const PRESENTATION_SOCKET_PATH = '/presentation-io/'
+
+export type PresentationServerEvents = {
+  /** 公開の状態が変わった。中身を送らないのは、読むたびに state で権限を確かめるため */
+  changed: () => void
+}
+
+export type PresentationTargetIds = { courseId: number; itemId: number }
+
+export function parsePresentationBase(base: string): PresentationTargetIds | null {
+  const match = /^\/courses\/(\d+)\/items\/(\d+)\/presentation$/.exec(base)
+  const courseId = Number(match?.[1])
+  const itemId = Number(match?.[2])
+  return Number.isSafeInteger(courseId) && Number.isSafeInteger(itemId) && courseId > 0 && itemId > 0 ? { courseId, itemId } : null
+}
 
 export type PresentationState = {
   /** PDF の保存先。まだなければ null */

@@ -30,12 +30,15 @@ const { attach } = config.moodle ? await import('./moodle-mode/screen-share') : 
 const io = attach(httpServer as HttpServer)
 const collab = config.moodle ? await import('./moodle-mode/collab') : await import('./lib/collab-access')
 const collabIo = collab.attach(httpServer as HttpServer)
+const presentation = config.moodle ? await import('./moodle-mode/presentation') : await import('./lib/presentation-access')
+const presentationIo = presentation.attach(httpServer as HttpServer)
 const { flushCollabRooms } = await import('./lib/collab-server')
 
 // httpServer.close だけにしないのは、開いたままの socket.io の接続が残って終了できなくなるため
 const shutdown = () => {
   // 接続を閉じる前に保存するのは、閉じたあとの保存は部屋ごとに切断の順で走り、終わる前に process.exit が来ることがあるため
   flushCollabRooms()
+  void presentationIo.close()
   void collabIo.close()
   void io.close(() => process.exit(0))
 }

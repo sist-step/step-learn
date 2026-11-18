@@ -61,6 +61,10 @@ export default defineConfig(({ command }) => ({
           attach(httpServer)
           const collab = await server.ssrLoadModule(config.moodle ? '/src/moodle-mode/collab.ts' : '/src/lib/collab-access.ts')
           collab.attach(httpServer)
+          const presentation = await server.ssrLoadModule(
+            config.moodle ? '/src/moodle-mode/presentation.ts' : '/src/lib/presentation-access.ts',
+          )
+          presentation.attach(httpServer)
         })
       },
     },

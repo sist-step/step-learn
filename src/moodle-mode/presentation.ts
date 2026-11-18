@@ -1,9 +1,11 @@
+import type { Server as HttpServer } from 'node:http'
 import { eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { intParam } from '../lib/http'
-import { PRESENTATION_KIND } from '../lib/presentation'
+import { PRESENTATION_KIND, type PresentationTargetIds } from '../lib/presentation'
+import { attachPresentationSocket } from '../lib/presentation-socket'
 import type { PresentationBackend } from '../routes/presentation/handlers'
-import { storedToken, type MoodleEnv } from './auth'
+import { sessionFromCookieHeader, storedToken, type MoodleEnv } from './auth'
 import { isAccessDenied, isNotFound, isTokenError } from './client'
 import { loadCourse, loadCourseAs, outlineOf, type LoadedCourse, type Viewer } from './data'
 import { db } from './db'
@@ -63,3 +65,12 @@ export const presentationBackend: PresentationBackend = {
     return { courseId: found.courseId, course: loaded.access.course.title, title: item.title, user, store: presentationStore(key) }
   },
 }
+
+async function authorize(cookie: string | undefined, { courseId, itemId }: PresentationTargetIds) {
+  const found = await sessionFromCookieHeader(cookie)
+  const loaded = found ? await loadIfAllowed({ token: found.token, userId: found.user.id }, courseId) : null
+  const item = loaded && presentationItemOf(loaded, (it) => it.id === itemId)
+  return item?.extraKey ? `${REF_PREFIX}${item.extraKey}` : null
+}
+
+export const attach = (httpServer: HttpServer) => attachPresentationSocket(httpServer, { authorize })
