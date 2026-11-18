@@ -1,14 +1,40 @@
 // 表計算の中身（Yjs）の形と読み書き。画面（sheet.ts）と .xlsx の変換（xlsx.ts）で使う
 import * as Y from 'yjs'
-import { CYCLE, evaluateFormula, formatGeneral, isDateInput, isError, literalValue, serialDate, shiftFormula, type Scalar } from './formula'
+import {
+  CYCLE,
+  evaluateFormula,
+  formatGeneral,
+  isDateInput,
+  isError,
+  literalValue,
+  moveFormula,
+  renameSheetRefs,
+  serialDate,
+  shiftFormula,
+  type Scalar,
+} from './formula'
 
 export const SHEET_FORMATS = ['', 'number', 'fixed2', 'currency', 'percent', 'date'] as const
 
 export type SheetFormat = (typeof SHEET_FORMATS)[number]
 
-export type CellStyle = { b?: 1; i?: 1; u?: 1; color?: string; fill?: string; align?: 'left' | 'center' | 'right'; fmt?: SheetFormat }
+export type CellStyle = {
+  b?: 1
+  i?: 1
+  u?: 1
+  s?: 1
+  wrap?: 1
+  /** 文字の大きさ（ピクセル）。なければ既定の大きさ */
+  fs?: number
+  /** 罫線のある辺。t・r・b・l の組み合わせ */
+  bd?: string
+  color?: string
+  fill?: string
+  align?: 'left' | 'center' | 'right'
+  fmt?: SheetFormat
+}
 
-/** シート 1 枚。cells はセルの入力（r,c → 入力された文字）、styles は書式、widths は列の幅（ピクセル） */
+/** シート 1 枚。cells はセルの入力（r,c → 入力された文字）、styles は書式、widths は列の幅、heights は行の高さ（ピクセル） */
 export type SheetMap = Y.Map<unknown>
 
 export const DEFAULT_ROWS = 100
@@ -16,6 +42,7 @@ export const DEFAULT_COLS = 26
 export const MAX_ROWS = 10_000
 export const MAX_COLS = 200
 export const DEFAULT_WIDTH = 96
+export const DEFAULT_HEIGHT = 26
 
 export const cellKey = (r: number, c: number) => `${r},${c}`
 
@@ -29,12 +56,26 @@ export const sheetsOf = (doc: Y.Doc) => doc.getArray<SheetMap>('sheets')
 export const cellsOf = (sheet: SheetMap) => sheet.get('cells') as Y.Map<string>
 export const stylesOf = (sheet: SheetMap) => sheet.get('styles') as Y.Map<CellStyle>
 export const widthsOf = (sheet: SheetMap) => sheet.get('widths') as Y.Map<number>
+/** 行の高さ。この機能より前に作ったシートにはまだない */
+export const heightsOf = (sheet: SheetMap) => sheet.get('heights') as Y.Map<number> | undefined
 const text = (v: unknown) => (typeof v === 'string' ? v : '')
 
 export const nameOf = (sheet: SheetMap) => text(sheet.get('name'))
 export const idOf = (sheet: SheetMap) => text(sheet.get('id'))
 export const rowsOf = (sheet: SheetMap) => Math.min(MAX_ROWS, Number(sheet.get('rows')) || DEFAULT_ROWS)
 export const colsOf = (sheet: SheetMap) => Math.min(MAX_COLS, Number(sheet.get('cols')) || DEFAULT_COLS)
+export const frozenRowsOf = (sheet: SheetMap) => Math.max(0, Number(sheet.get('frozenRows')) || 0)
+export const frozenColsOf = (sheet: SheetMap) => Math.max(0, Number(sheet.get('frozenCols')) || 0)
+
+export function setRowHeight(sheet: SheetMap, r: number, height: number) {
+  let heights = heightsOf(sheet)
+  if (height === DEFAULT_HEIGHT) return heights?.delete(String(r))
+  if (!heights) {
+    heights = new Y.Map<number>()
+    sheet.set('heights', heights)
+  }
+  heights.set(String(r), height)
+}
 
 /** まだ文書に入れていないシート（Y.Map に入れる前の値をまとめて持つ） */
 export type SheetData = {
@@ -45,6 +86,9 @@ export type SheetData = {
   cells: Record<string, string>
   styles: Record<string, CellStyle>
   widths: Record<string, number>
+  heights?: Record<string, number>
+  frozenRows?: number
+  frozenCols?: number
 }
 
 export function newSheet(data: SheetData): SheetMap {
@@ -53,16 +97,57 @@ export function newSheet(data: SheetData): SheetMap {
   sheet.set('name', data.name)
   sheet.set('rows', data.rows)
   sheet.set('cols', data.cols)
+  if (data.frozenRows) sheet.set('frozenRows', data.frozenRows)
+  if (data.frozenCols) sheet.set('frozenCols', data.frozenCols)
   const cells = new Y.Map<string>()
   for (const [k, v] of Object.entries(data.cells)) cells.set(k, v)
   const styles = new Y.Map<CellStyle>()
   for (const [k, v] of Object.entries(data.styles)) styles.set(k, v)
   const widths = new Y.Map<number>()
   for (const [k, v] of Object.entries(data.widths)) widths.set(k, v)
+  const heights = new Y.Map<number>()
+  for (const [k, v] of Object.entries(data.heights ?? {})) heights.set(k, v)
   sheet.set('cells', cells)
   sheet.set('styles', styles)
   sheet.set('widths', widths)
+  sheet.set('heights', heights)
   return sheet
+}
+
+export function sheetData(sheet: SheetMap): SheetData {
+  return {
+    id: idOf(sheet),
+    name: nameOf(sheet),
+    rows: rowsOf(sheet),
+    cols: colsOf(sheet),
+    cells: Object.fromEntries(cellsOf(sheet).entries()),
+    styles: Object.fromEntries(stylesOf(sheet).entries()),
+    widths: Object.fromEntries(widthsOf(sheet).entries()),
+    heights: Object.fromEntries(heightsOf(sheet)?.entries() ?? []),
+    frozenRows: frozenRowsOf(sheet),
+    frozenCols: frozenColsOf(sheet),
+  }
+}
+
+/** シートの並びを変える。Yjs の値は入れ直せないので、同じ id の写しに置き換える（開いている人の画面はそのシートのまま） */
+export function moveSheet(doc: Y.Doc, from: number, to: number) {
+  const list = sheetsOf(doc)
+  const data = sheetData(list.get(from))
+  list.delete(from, 1)
+  list.insert(to, [newSheet(data)])
+}
+
+export function renameSheet(doc: Y.Doc, sheet: SheetMap, name: string) {
+  const old = nameOf(sheet)
+  sheet.set('name', name)
+  for (const other of sheetsOf(doc).toArray()) {
+    const cells = cellsOf(other)
+    for (const [key, raw] of Array.from(cells.entries())) {
+      if (!raw.startsWith('=')) continue
+      const next = `=${renameSheetRefs(raw.slice(1), old, name)}`
+      if (next !== raw) cells.set(key, next)
+    }
+  }
 }
 
 export const emptySheet = (id: string, name: string): SheetData => ({
@@ -120,6 +205,7 @@ export function createEvaluator(doc: Y.Doc) {
         const target = name === null ? sheet : sheetByName(doc, name)
         return target && { rows: rowsOf(target), cols: colsOf(target) }
       },
+      here: { r, c },
     })
     busy.delete(key)
     memo.set(key, v)
@@ -184,30 +270,89 @@ export function shiftCells(doc: Y.Doc, sheet: SheetMap, axis: 'row' | 'col', at:
     }
     for (const [key, v] of moved) map.set(key, v)
   }
-  if (axis === 'col') {
-    const widths = widthsOf(sheet)
+  const sizes = axis === 'col' ? widthsOf(sheet) : heightsOf(sheet)
+  if (sizes) {
     const moved: [string, number][] = []
-    for (const [key, w] of Array.from(widths.entries())) {
-      const c = Number(key)
-      if (c < at) continue
-      widths.delete(key)
-      if (count < 0 && c < at - count) continue
-      moved.push([String(c + count), w])
+    for (const [key, size] of Array.from(sizes.entries())) {
+      const pos = Number(key)
+      if (pos < at) continue
+      sizes.delete(key)
+      if (count < 0 && pos < at - count) continue
+      moved.push([String(pos + count), size])
     }
-    for (const [key, w] of moved) widths.set(key, w)
+    for (const [key, size] of moved) sizes.set(key, size)
   }
+  const frozenKey = axis === 'row' ? 'frozenRows' : 'frozenCols'
+  const frozen = axis === 'row' ? frozenRowsOf(sheet) : frozenColsOf(sheet)
+  if (at < frozen) sheet.set(frozenKey, count > 0 ? frozen + count : Math.max(at, frozen + count))
   const sizeKey = axis === 'row' ? 'rows' : 'cols'
   const size = axis === 'row' ? rowsOf(sheet) : colsOf(sheet)
   sheet.set(sizeKey, Math.max(1, Math.min(axis === 'row' ? MAX_ROWS : MAX_COLS, size + count)))
   for (const other of sheetsOf(doc).toArray()) {
     const cells = cellsOf(other)
-    for (const [key, raw] of cells.entries()) {
+    for (const [key, raw] of Array.from(cells.entries())) {
       if (!raw.startsWith('=')) continue
       const next = `=${shiftFormula(raw.slice(1), axis, at, count, name, nameOf(other))}`
       if (next !== raw) cells.set(key, next)
     }
   }
 }
+
+// ---------------------------------------------------------------- オートフィル
+
+const WEEKDAY_SERIES = [
+  ['日', '月', '火', '水', '木', '金', '土'],
+  ['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'],
+  ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+]
+
+const mod = (n: number, size: number) => ((n % size) + size) % size
+
+const stepOf = (ns: number[]) => (ns.length < 2 ? 1 : (ns[ns.length - 1] - ns[0]) / (ns.length - 1))
+
+const isLinear = (ns: number[], step: number) => ns.every((n, i) => Math.abs(n - (ns[0] + step * i)) < 1e-9)
+
+const formatSerialInput = (serial: number) => {
+  const d = serialDate(serial)
+  return `${d.y}/${d.m}/${d.d}`
+}
+
+export function fillSeries(values: string[]): (k: number) => string {
+  const repeat = (k: number) => values[mod(k, values.length)]
+  if (values.some((v) => v === '' || v.startsWith('='))) return repeat
+  if (values.every(isDateInput)) {
+    const serials = values.map((v) => literalValue(v) as number)
+    const step = stepOf(serials)
+    if (isLinear(serials, step)) return (k) => formatSerialInput(serials[0] + step * k)
+    return repeat
+  }
+  const numbers = values.map(literalValue)
+  if (numbers.every((n) => typeof n === 'number')) {
+    if (values.length === 1 || !values.every((v) => /^[+-]?[\d.]+$/.test(v.trim()))) return repeat
+    const ns = numbers as number[]
+    const step = stepOf(ns)
+    if (isLinear(ns, step)) return (k) => formatGeneral(ns[0] + step * k)
+    return repeat
+  }
+  for (const names of WEEKDAY_SERIES) {
+    const at = values.map((v) => names.indexOf(v))
+    if (at.every((i) => i >= 0)) return (k) => names[mod(at[0] + k * (at.length > 1 ? mod(at[1] - at[0], 7) || 1 : 1), 7)]
+  }
+  const parts = values.map((v) => /^(.*?)(\d+)(\D*)$/.exec(v))
+  if (parts.every(Boolean) && parts.every((p) => p![1] === parts[0]![1] && p![3] === parts[0]![3])) {
+    const ns = parts.map((p) => Number(p![2]))
+    const step = stepOf(ns)
+    const width = parts[0]![2].startsWith('0') ? parts[0]![2].length : 0
+    if (isLinear(ns, step))
+      return (k) => {
+        const n = ns[0] + step * k
+        return n < 0 ? repeat(k) : `${parts[0]![1]}${String(n).padStart(width, '0')}${parts[0]![3]}`
+      }
+  }
+  return repeat
+}
+
+export const movedRaw = (raw: string, dr: number, dc: number) => (raw.startsWith('=') ? `=${moveFormula(raw.slice(1), dr, dc)}` : raw)
 
 /** すべてのシートを、読み込んだシートに置き換える */
 export function replaceSheets(doc: Y.Doc, sheets: SheetData[]) {
@@ -228,5 +373,8 @@ export function readSheets(doc: Y.Doc) {
       cells: [...cellsOf(sheet).entries()],
       styles: stylesOf(sheet),
       widths: widthsOf(sheet),
+      heights: heightsOf(sheet),
+      frozenRows: frozenRowsOf(sheet),
+      frozenCols: frozenColsOf(sheet),
     }))
 }

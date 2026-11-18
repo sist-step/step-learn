@@ -1,10 +1,11 @@
 /// <reference lib="dom" />
-// 表計算と .xlsx の変換（exceljs）。値・計算式・文字の書式・塗り・揃え・表示形式・列の幅を引き継ぐ
+// 表計算と .xlsx の変換（exceljs）。値・計算式・文字の書式・塗り・罫線・揃え・折り返し・表示形式・列の幅・行の高さ・固定を引き継ぐ
 import ExcelJS from 'exceljs'
 import type * as Y from 'yjs'
-import { dateSerial, isError } from './formula'
+import { dateSerial, isDateInput, isError } from './formula'
 import {
   DEFAULT_COLS,
+  DEFAULT_HEIGHT,
   DEFAULT_ROWS,
   DEFAULT_WIDTH,
   MAX_COLS,
@@ -20,6 +21,10 @@ import { hexColor } from './office'
 
 // exceljs の列の幅（文字数）とピクセルの比。Excel の既定のフォントでおおよそ 1 文字 7 ピクセル
 const PX_PER_CHAR = 7
+const PT_PER_PX = 0.75
+const EXCEL_DEFAULT_FONT_PT = 11
+const BORDER_SIDES = { t: 'top', r: 'right', b: 'bottom', l: 'left' } as const
+const THIN: Partial<ExcelJS.Border> = { style: 'thin', color: { argb: 'FF000000' } }
 
 const NUM_FMTS: Record<Exclude<SheetFormat, ''>, string> = {
   number: '#,##0',
@@ -49,6 +54,8 @@ export async function sheetsToXlsx(doc: Y.Doc) {
   for (const s of readSheets(doc)) {
     const ws = wb.addWorksheet(s.name.slice(0, 31) || 'Sheet')
     for (const [key, width] of s.widths.entries()) ws.getColumn(Number(key) + 1).width = width / PX_PER_CHAR
+    for (const [key, height] of s.heights?.entries() ?? []) ws.getRow(Number(key) + 1).height = height * PT_PER_PX
+    if (s.frozenRows || s.frozenCols) ws.views = [{ state: 'frozen', xSplit: s.frozenCols, ySplit: s.frozenRows }]
     const cells = new Map(s.cells)
     const keys = new Set([...cells.keys(), ...s.styles.keys()])
     for (const key of keys) {
@@ -60,16 +67,34 @@ export async function sheetsToXlsx(doc: Y.Doc) {
         if (raw.startsWith('=')) {
           const result = isError(value) ? { error: value.error as ExcelJS.CellErrorValue['error'] } : (value ?? undefined)
           cell.value = { formula: raw.slice(1), result: result as ExcelJS.CellFormulaValue['result'] }
-        } else cell.value = isError(value) ? raw : (value as ExcelJS.CellValue)
+        } else {
+          cell.value = isError(value) ? raw : (value as ExcelJS.CellValue)
+          // 入力の形で表示を決めているセルは、書式を付けないと Excel で素の数（シリアル値など）に見えてしまう
+          if (isDateInput(raw)) cell.numFmt = NUM_FMTS.date
+          else if (typeof value === 'number' && /%\s*$/.test(raw)) cell.numFmt = NUM_FMTS.percent
+        }
       }
       const style = s.styles.get(key)
       if (!style) continue
       const color = hexColor(style.color)
-      cell.font = { bold: !!style.b, italic: !!style.i, underline: !!style.u, ...(color && { color: { argb: argb(color) } }) }
+      cell.font = {
+        bold: !!style.b,
+        italic: !!style.i,
+        underline: !!style.u,
+        strike: !!style.s,
+        ...(style.fs && { size: style.fs * PT_PER_PX }),
+        ...(color && { color: { argb: argb(color) } }),
+      }
       const fill = hexColor(style.fill)
       if (fill) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(fill) } }
-      if (style.align) cell.alignment = { horizontal: style.align }
+      if (style.align || style.wrap)
+        cell.alignment = { ...(style.align && { horizontal: style.align }), ...(style.wrap && { wrapText: true }) }
       if (style.fmt) cell.numFmt = NUM_FMTS[style.fmt]
+      if (style.bd) {
+        const border: Partial<ExcelJS.Borders> = {}
+        for (const [side, name] of Object.entries(BORDER_SIDES)) if (style.bd.includes(side)) border[name] = THIN
+        cell.border = border
+      }
     }
   }
   const buffer = await wb.xlsx.writeBuffer()
@@ -100,6 +125,14 @@ function styleOf(cell: ExcelJS.Cell, dateValue: boolean): CellStyle | null {
   if (cell.font?.bold) style.b = 1
   if (cell.font?.italic) style.i = 1
   if (cell.font?.underline) style.u = 1
+  if (cell.font?.strike) style.s = 1
+  if (cell.alignment?.wrapText) style.wrap = 1
+  if (cell.font?.size && cell.font.size !== EXCEL_DEFAULT_FONT_PT) style.fs = Math.round(cell.font.size / PT_PER_PX)
+  const sides = Object.entries(BORDER_SIDES)
+    .filter(([, name]) => cell.border?.[name]?.style)
+    .map(([side]) => side)
+    .join('')
+  if (sides) style.bd = sides
   const color = colorOf(cell.font?.color)
   if (color && color !== '#000000') style.color = color
   const fill = cell.fill?.type === 'pattern' && cell.fill.pattern === 'solid' ? colorOf(cell.fill.fgColor) : undefined
@@ -120,10 +153,13 @@ export async function xlsxToSheets(file: File): Promise<SheetData[]> {
     const cells: Record<string, string> = {}
     const styles: Record<string, CellStyle> = {}
     const widths: Record<string, number> = {}
+    const heights: Record<string, number> = {}
     let maxR = 0
     let maxC = 0
-    ws.eachRow({ includeEmpty: false }, (row, r) => {
+    ws.eachRow({ includeEmpty: true }, (row, r) => {
       if (r > MAX_ROWS) return
+      const height = row.height ? Math.round(row.height / PT_PER_PX) : 0
+      if (height > DEFAULT_HEIGHT) heights[String(r - 1)] = height
       row.eachCell({ includeEmpty: false }, (cell, c) => {
         if (c > MAX_COLS) return
         const key = cellKey(r - 1, c - 1)
@@ -146,6 +182,7 @@ export async function xlsxToSheets(file: File): Promise<SheetData[]> {
       if (c < MAX_COLS && col.width && Math.round(col.width * PX_PER_CHAR) !== DEFAULT_WIDTH)
         widths[String(c)] = Math.round(col.width * PX_PER_CHAR)
     })
+    const view = ws.views?.find((v) => v.state === 'frozen') as Partial<ExcelJS.WorksheetViewFrozen> | undefined
     out.push({
       id: `x${i}${Date.now().toString(36)}`,
       name: ws.name.slice(0, 31) || `Sheet${i}`,
@@ -154,6 +191,9 @@ export async function xlsxToSheets(file: File): Promise<SheetData[]> {
       cells,
       styles,
       widths,
+      heights,
+      frozenRows: view?.ySplit ?? 0,
+      frozenCols: view?.xSplit ?? 0,
     })
   })
   if (!out.length) throw new Error('シートがありません')

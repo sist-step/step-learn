@@ -48,14 +48,19 @@ type Token =
   | { t: 'op'; v: string }
   | { t: 'err'; v: string }
 
-const REF_PART = String.raw`\$?[A-Za-z]{1,3}\$?\d{1,7}`
-const SHEET_PART = String.raw`(?:'((?:[^']|'')+)'|([A-Za-z_぀-ヿ㐀-鿿][\w.぀-ヿ㐀-鿿]*))!`
+const CELL_PART = String.raw`\$?[A-Za-z]{1,3}\$?\d{1,7}`
+const COL_PART = String.raw`\$?[A-Za-z]{1,3}`
+const ROW_PART = String.raw`\$?\d{1,7}`
+const RANGE_PART = String.raw`(?:${CELL_PART}(?::${CELL_PART})?|${COL_PART}:${COL_PART}|${ROW_PART}:${ROW_PART})`
+const BARE_SHEET = String.raw`[A-Za-z_぀-ヿ㐀-鿿][\w.぀-ヿ㐀-鿿]*`
+const SHEET_PART = String.raw`(?:'(?<quoted>(?:[^']|'')+)'|(?<bare>${BARE_SHEET}))!`
+// 数より先に参照を試すのは、行全体の参照（1:3）の先頭を数として読んでしまわないようにするため
 const TOKEN = new RegExp(
   [
     String.raw`(?<space>\s+)`,
+    String.raw`(?<ref>(?:${SHEET_PART})?${RANGE_PART})(?![\w(])`,
     String.raw`(?<num>\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|\.\d+)`,
     String.raw`(?<str>"(?:[^"]|"")*")`,
-    String.raw`(?<ref>(?:${SHEET_PART})?${REF_PART}(?::${REF_PART})?)(?![\w(])`,
     String.raw`(?<err>#(?:DIV\/0!|VALUE!|REF!|NAME\?|N\/A|NUM!|CYCLE!))`,
     String.raw`(?<name>[A-Za-z_][\w.]*)`,
     String.raw`(?<op><>|<=|>=|[-+*/^&=<>(),:%;])`,
@@ -75,7 +80,7 @@ function tokenize(src: string): Token[] | null {
     else if (g.str) tokens.push({ t: 'str', v: g.str.slice(1, -1).replace(/""/g, '"') })
     else if (g.ref) {
       const bang = g.ref.lastIndexOf('!')
-      const sheet = bang < 0 ? null : (m[5] ?? m[6] ?? '').replace(/''/g, "'")
+      const sheet = bang < 0 ? null : (g.quoted ?? g.bare ?? '').replace(/''/g, "'")
       tokens.push({ t: 'ref', sheet, text: g.ref.slice(bang + 1) })
     } else if (g.err) tokens.push({ t: 'err', v: g.err })
     else if (g.name) {
@@ -96,20 +101,36 @@ type Node =
   | { k: 'pct'; a: Node }
   | { k: 'call'; name: string; args: Node[] }
 
-function refNode(sheet: string | null, text: string): Node {
-  const [a, b] = text.split(':')
-  const p = parseCellName(a)!
-  const q = b ? parseCellName(b)! : p
+type RefEnd = { absC: boolean; c: number | null; absR: boolean; r: number | null }
+
+function parseEnd(text: string): RefEnd {
+  const m = /^(\$?)([A-Za-z]{1,3})?(\$?)(\d{1,7})?$/.exec(text)!
+  const hasCol = !!m[2]
   return {
-    k: 'ref',
-    sheet,
-    r1: Math.min(p.r, q.r),
-    c1: Math.min(p.c, q.c),
-    r2: Math.max(p.r, q.r),
-    c2: Math.max(p.c, q.c),
+    absC: hasCol && !!m[1],
+    c: hasCol ? colIndex(m[2]) : null,
+    absR: hasCol ? !!m[3] : !!m[1] || !!m[3],
+    r: m[4] ? Number(m[4]) - 1 : null,
+  }
+}
+
+const formatEnd = (e: RefEnd) =>
+  `${e.c === null ? '' : `${e.absC ? '$' : ''}${colName(e.c)}`}${e.r === null ? '' : `${e.absR ? '$' : ''}${e.r + 1}`}`
+
+function rangeOfText(text: string) {
+  const [a, b] = text.split(':')
+  const p = parseEnd(a)
+  const q = b ? parseEnd(b) : p
+  return {
+    r1: Math.min(p.r ?? 0, q.r ?? 0),
+    c1: Math.min(p.c ?? 0, q.c ?? 0),
+    r2: p.r === null || q.r === null ? Infinity : Math.max(p.r, q.r),
+    c2: p.c === null || q.c === null ? Infinity : Math.max(p.c, q.c),
     range: !!b,
   }
 }
+
+const refNode = (sheet: string | null, text: string): Node => ({ k: 'ref', sheet, ...rangeOfText(text) })
 
 function parse(tokens: Token[]): Node | null {
   let i = 0
@@ -278,6 +299,8 @@ export type Lookup = {
   cell: (sheet: string | null, r: number, c: number) => Scalar | undefined
   /** そのシートが使っている大きさ（範囲の参照を切り詰める） */
   size: (sheet: string | null) => { rows: number; cols: number } | undefined
+  /** 計算式のあるセル（引数なしの ROW・COLUMN で使う） */
+  here?: { r: number; c: number }
 }
 
 const scalarOf = (v: Value): Scalar => (v !== null && typeof v === 'object' && 'range' in v ? (v.range[0]?.[0] ?? null) : v)
@@ -358,7 +381,106 @@ function compareValues(a: Scalar, b: Scalar) {
   return rank(a) - rank(b)
 }
 
-type Fn = (args: Value[], raw: Node[], ev: (n: Node) => Value) => Value
+type Fn = (args: Value[], raw: Node[], ev: (n: Node) => Value, look: Lookup) => Value
+
+const argNumber = (args: Value[], i: number, fallback?: number) =>
+  toNumber(args[i] === undefined || args[i] === null ? (fallback ?? null) : scalarOf(args[i]))
+
+const argText = (args: Value[], i: number) => toText(scalarOf(args[i] ?? null))
+
+function withNumbers(args: Value[], defaults: (number | undefined)[], f: (...ns: number[]) => Value): Value {
+  const ns: number[] = []
+  for (let i = 0; i < defaults.length; i++) {
+    const n = argNumber(args, i, defaults[i])
+    if (isError(n)) return n
+    ns.push(n)
+  }
+  return f(...ns)
+}
+
+function matcher(args: Value[], from: number) {
+  const tests: { cells: Scalar[][]; test: (v: Scalar) => boolean }[] = []
+  for (let i = from; i + 1 < args.length; i += 2) tests.push({ cells: rangeOf(args[i]), test: criterion(scalarOf(args[i + 1])) })
+  return (r: number, c: number) => tests.every((t) => t.test(t.cells[r]?.[c] ?? null))
+}
+
+function conditionalAll(args: Value[], f: (ns: number[]) => number | CellError) {
+  const values = rangeOf(args[0] ?? null)
+  const ok = matcher(args, 1)
+  const picked: number[] = []
+  values.forEach((row, r) => row.forEach((v, c) => typeof v === 'number' && ok(r, c) && picked.push(v)))
+  return f(picked)
+}
+
+function variance(ns: number[], sample: boolean) {
+  if (ns.length < (sample ? 2 : 1)) return DIV0
+  const mean = sum(ns) / ns.length
+  return sum(ns.map((n) => (n - mean) ** 2)) / (ns.length - (sample ? 1 : 0))
+}
+
+const rooted = (v: number | CellError) => (isError(v) ? v : Math.sqrt(v))
+
+const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土']
+
+const weekdayOf = (serial: number) => new Date(EXCEL_EPOCH + Math.floor(serial) * DAY).getUTCDay()
+
+const daysInMonth = (y: number, m: number) => new Date(Date.UTC(y, m, 0)).getUTCDate()
+
+function addMonths(serial: number, months: number) {
+  const d = serialDate(serial)
+  const first = new Date(Date.UTC(d.y, d.m - 1 + months, 1))
+  const y = first.getUTCFullYear()
+  const m = first.getUTCMonth() + 1
+  return dateSerial(y, m, Math.min(d.d, daysInMonth(y, m)))
+}
+
+function formatDatePattern(n: number, pattern: string) {
+  const d = serialDate(n)
+  const sec = Math.round(((n - Math.floor(n)) * DAY) / 1000) % 60
+  const two = (v: number) => String(v).padStart(2, '0')
+  let afterHour = false
+  return pattern.replace(/"([^"]*)"|yyyy|yy|aaa|mm|m|dd|d|hh|h|ss|s/gi, (token, quoted: string | undefined) => {
+    if (quoted !== undefined) return quoted
+    const t = token.toLowerCase()
+    if (t === 'yyyy') return String(d.y)
+    if (t === 'yy') return two(d.y % 100)
+    if (t === 'aaa') return WEEKDAYS[weekdayOf(n)]
+    if (t === 'dd') return two(d.d)
+    if (t === 'd') return String(d.d)
+    if (t === 'hh' || t === 'h') {
+      afterHour = true
+      return t === 'hh' ? two(d.h) : String(d.h)
+    }
+    if (t === 'ss') return two(sec)
+    if (t === 's') return String(sec)
+    const minute = afterHour
+    afterHour = false
+    if (minute) return t === 'mm' ? two(d.min) : String(d.min)
+    return t === 'mm' ? two(d.m) : String(d.m)
+  })
+}
+
+function formatNumberPattern(n: number, pattern: string) {
+  const percent = pattern.includes('%')
+  const value = percent ? n * 100 : n
+  const body = /[#0][#0,.]*/.exec(pattern)
+  if (!body) return pattern
+  const [whole, frac = ''] = body[0].split('.')
+  const digits = frac.length
+  const text = new Intl.NumberFormat('en-US', {
+    useGrouping: whole.includes(','),
+    minimumFractionDigits: frac.replace(/#/g, '').length,
+    maximumFractionDigits: digits,
+    minimumIntegerDigits: Math.max(1, whole.replace(/[^0]/g, '').length),
+  }).format(Math.abs(value))
+  return `${value < 0 ? '-' : ''}${pattern.slice(0, body.index)}${text}${pattern.slice(body.index + body[0].length)}`
+}
+
+function formatPattern(n: number, pattern: string) {
+  return /[ydhm]|aaa/i.test(pattern.replace(/"[^"]*"/g, ''))
+    ? formatDatePattern(n, pattern)
+    : formatNumberPattern(n, pattern.replace(/"/g, ''))
+}
 
 const num1 =
   (f: (n: number) => number | CellError): Fn =>
@@ -551,20 +673,260 @@ const FUNCTIONS: Record<string, Fn> = {
     const c = toNumber(scalarOf(args[2] ?? 1))
     if (isError(r)) return r
     if (isError(c)) return c
-    const v = table[Math.max(1, r) - 1]?.[Math.max(1, c) - 1]
+    const v = table.length === 1 && args[2] === undefined ? table[0][Math.max(1, r) - 1] : table[Math.max(1, r) - 1]?.[Math.max(1, c) - 1]
     return v === undefined ? REF : v
   },
   MATCH: (args) => {
     const key = scalarOf(args[0] ?? null)
     const list = rangeOf(args[1] ?? null).flat()
-    const i = list.findIndex((v) => compareValues(v, key) === 0)
-    return i < 0 ? NA : i + 1
+    const type = argNumber(args, 2, 1)
+    if (isError(type)) return type
+    if (type === 0) {
+      const i = list.findIndex((v) => compareValues(v, key) === 0)
+      return i < 0 ? NA : i + 1
+    }
+    let found = -1
+    for (let i = 0; i < list.length; i++) {
+      if (list[i] === null) continue
+      const cmp = compareValues(list[i], key) * (type > 0 ? 1 : -1)
+      if (cmp > 0) break
+      found = i
+    }
+    return found < 0 ? NA : found + 1
+  },
+  XLOOKUP: (args) => {
+    const key = scalarOf(args[0] ?? null)
+    const i = rangeOf(args[1] ?? null)
+      .flat()
+      .findIndex((v) => v !== null && compareValues(v, key) === 0)
+    if (i < 0) return args[3] === undefined ? NA : scalarOf(args[3])
+    return rangeOf(args[2] ?? null).flat()[i] ?? null
+  },
+  CHOOSE: (args) => {
+    const i = argNumber(args, 0)
+    if (isError(i)) return i
+    const v = args[Math.trunc(i)]
+    return Math.trunc(i) < 1 || v === undefined ? VALUE : scalarOf(v)
+  },
+  ROW: (_args, raw, _ev, look) => (raw[0]?.k === 'ref' ? raw[0].r1 + 1 : look.here ? look.here.r + 1 : VALUE),
+  COLUMN: (_args, raw, _ev, look) => (raw[0]?.k === 'ref' ? raw[0].c1 + 1 : look.here ? look.here.c + 1 : VALUE),
+  ROWS: (args) => rangeOf(args[0] ?? null).length,
+  COLUMNS: (args) => rangeOf(args[0] ?? null)[0]?.length ?? 0,
+
+  SUMIFS: (args) => conditionalAll(args, sum),
+  AVERAGEIFS: (args) => conditionalAll(args, (ns) => (ns.length ? sum(ns) / ns.length : DIV0)),
+  MAXIFS: (args) => conditionalAll(args, (ns) => (ns.length ? Math.max(...ns) : 0)),
+  MINIFS: (args) => conditionalAll(args, (ns) => (ns.length ? Math.min(...ns) : 0)),
+  COUNTIFS: (args) => {
+    const cells = rangeOf(args[0] ?? null)
+    const ok = matcher(args, 0)
+    let n = 0
+    cells.forEach((row, r) => row.forEach((_v, c) => ok(r, c) && n++))
+    return n
+  },
+  SUMPRODUCT: (args) => {
+    const ranges = args.map(rangeOf)
+    let total = 0
+    ;(ranges[0] ?? []).forEach((row, r) =>
+      row.forEach((_v, c) => {
+        let product = 1
+        for (const range of ranges) {
+          const v = range[r]?.[c]
+          product *= typeof v === 'number' ? v : 0
+        }
+        total += product
+      }),
+    )
+    return total
+  },
+  LARGE: (args) => {
+    const ns = numbers([args[0] ?? null])
+    const k = argNumber(args, 1)
+    if (isError(ns)) return ns
+    if (isError(k)) return k
+    return [...ns].sort((a, b) => b - a)[Math.trunc(k) - 1] ?? NUM
+  },
+  SMALL: (args) => {
+    const ns = numbers([args[0] ?? null])
+    const k = argNumber(args, 1)
+    if (isError(ns)) return ns
+    if (isError(k)) return k
+    return [...ns].sort((a, b) => a - b)[Math.trunc(k) - 1] ?? NUM
+  },
+  RANK: (args) => {
+    const n = argNumber(args, 0)
+    const ns = numbers([args[1] ?? null])
+    const order = argNumber(args, 2, 0)
+    if (isError(n)) return n
+    if (isError(ns)) return ns
+    if (isError(order)) return order
+    if (!ns.includes(n)) return NA
+    return ns.filter((v) => (order ? v < n : v > n)).length + 1
+  },
+  MODE: aggregate((ns) => {
+    const counts = new Map<number, number>()
+    for (const n of ns) counts.set(n, (counts.get(n) ?? 0) + 1)
+    let best: number | null = null
+    let most = 1
+    for (const [n, count] of counts)
+      if (count > most) {
+        best = n
+        most = count
+      }
+    return best ?? NA
+  }),
+  VAR: aggregate((ns) => variance(ns, true)),
+  VARP: aggregate((ns) => variance(ns, false)),
+  STDEVP: aggregate((ns) => rooted(variance(ns, false))),
+
+  IFS: (_args, raw, ev) => {
+    for (let i = 0; i + 1 < raw.length; i += 2) {
+      const cond = toBool(scalarOf(ev(raw[i])))
+      if (isError(cond)) return cond
+      if (cond) return scalarOf(ev(raw[i + 1]))
+    }
+    return NA
+  },
+  SWITCH: (_args, raw, ev) => {
+    if (!raw[0]) return NA
+    const key = scalarOf(ev(raw[0]))
+    if (isError(key)) return key
+    let i = 1
+    for (; i + 1 < raw.length; i += 2) if (compareValues(scalarOf(ev(raw[i])), key) === 0) return scalarOf(ev(raw[i + 1]))
+    return raw[i] ? scalarOf(ev(raw[i])) : NA
+  },
+  IFNA: (_args, raw, ev) => {
+    const v = scalarOf(ev(raw[0] ?? { k: 'lit', v: null }))
+    return isError(v) && v.error === NA.error ? scalarOf(ev(raw[1] ?? { k: 'lit', v: '' })) : v
+  },
+  NA: () => NA,
+  ISBLANK: (args) => scalarOf(args[0] ?? null) === null,
+  ISNUMBER: (args) => typeof scalarOf(args[0] ?? null) === 'number',
+  ISTEXT: (args) => typeof scalarOf(args[0] ?? null) === 'string',
+  ISERROR: (args) => isError(scalarOf(args[0] ?? null)),
+  ISNA: (args) => {
+    const v = scalarOf(args[0] ?? null)
+    return isError(v) && v.error === NA.error
+  },
+
+  TRUNC: (args) => withNumbers(args, [undefined, 0], (n, d) => round(n, Math.trunc(d), 'down')),
+  CEILING: (args) => withNumbers(args, [undefined, 1], (n, s) => (s === 0 ? 0 : Math.ceil(n / s - 1e-9) * s)),
+  FLOOR: (args) => withNumbers(args, [undefined, 1], (n, s) => (s === 0 ? DIV0 : Math.floor(n / s + 1e-9) * s)),
+  SIGN: num1(Math.sign),
+  EXP: num1(Math.exp),
+  LN: num1((n) => (n <= 0 ? NUM : Math.log(n))),
+  LOG10: num1((n) => (n <= 0 ? NUM : Math.log10(n))),
+  LOG: (args) => withNumbers(args, [undefined, 10], (n, base) => (n <= 0 || base <= 0 || base === 1 ? NUM : Math.log(n) / Math.log(base))),
+
+  FIND: (args) => findText(args, true),
+  SEARCH: (args) => findText(args, false),
+  SUBSTITUTE: (args) => {
+    const [s, from, to] = [argText(args, 0), argText(args, 1), argText(args, 2)]
+    for (const v of [s, from, to]) if (isError(v)) return v
+    const nth = args[3] === undefined ? null : toNumber(scalarOf(args[3]))
+    if (isError(nth)) return nth
+    const [text, target, next] = [s, from, to] as string[]
+    if (!target) return text
+    if (nth === null) return text.split(target).join(next)
+    const parts = text.split(target)
+    if (nth < 1 || nth >= parts.length) return text
+    return `${parts.slice(0, nth).join(target)}${next}${parts.slice(nth).join(target)}`
+  },
+  REPLACE: (args) => {
+    const s = argText(args, 0)
+    const next = argText(args, 3)
+    if (isError(s)) return s
+    if (isError(next)) return next
+    return withNumbers(args.slice(1, 3), [undefined, undefined], (start, n) => {
+      const chars = [...s]
+      return [...chars.slice(0, start - 1), next, ...chars.slice(start - 1 + n)].join('')
+    })
+  },
+  REPT: (args) => {
+    const s = argText(args, 0)
+    const n = argNumber(args, 1)
+    if (isError(s)) return s
+    if (isError(n)) return n
+    return n < 0 || s.length * n > 32_767 ? VALUE : s.repeat(Math.trunc(n))
+  },
+  EXACT: (args) => {
+    const [a, b] = [argText(args, 0), argText(args, 1)]
+    return isError(a) ? a : isError(b) ? b : a === b
+  },
+  TEXTJOIN: (args) => {
+    const sep = argText(args, 0)
+    const skip = toBool(scalarOf(args[1] ?? true))
+    if (isError(sep)) return sep
+    if (isError(skip)) return skip
+    const out: string[] = []
+    for (const v of flat(args.slice(2))) {
+      const s = toText(v)
+      if (isError(s)) return s
+      if (s !== '' || !skip) out.push(s)
+    }
+    return out.join(sep)
+  },
+  TEXT: (args) => {
+    const v = scalarOf(args[0] ?? null)
+    const pattern = argText(args, 1)
+    if (isError(v)) return v
+    if (isError(pattern)) return pattern
+    const n = typeof v === 'number' ? v : typeof v === 'string' ? literalValue(v) : null
+    return typeof n === 'number' ? formatPattern(n, pattern) : toText(v)
+  },
+
+  WEEKDAY: (args) =>
+    withNumbers(args, [undefined, 1], (n, type) => {
+      const d = weekdayOf(n)
+      return type === 2 ? ((d + 6) % 7) + 1 : type === 3 ? (d + 6) % 7 : d + 1
+    }),
+  HOUR: num1((n) => serialDate(n).h),
+  MINUTE: num1((n) => serialDate(n).min),
+  SECOND: num1((n) => Math.round((n - Math.floor(n)) * 86_400) % 60),
+  DAYS: (args) => withNumbers(args, [undefined, undefined], (end, start) => Math.floor(end) - Math.floor(start)),
+  EDATE: (args) => withNumbers(args, [undefined, undefined], (n, months) => addMonths(n, Math.trunc(months))),
+  EOMONTH: (args) =>
+    withNumbers(args, [undefined, undefined], (n, months) => {
+      const d = serialDate(n)
+      return dateSerial(d.y, d.m + Math.trunc(months) + 1, 0)
+    }),
+  DATEDIF: (args) => {
+    const unit = argText(args, 2)
+    if (isError(unit)) return unit
+    return withNumbers(args.slice(0, 2), [undefined, undefined], (from, to) => {
+      if (to < from) return NUM
+      const a = serialDate(from)
+      const b = serialDate(to)
+      const months = (b.y - a.y) * 12 + b.m - a.m - (b.d < a.d ? 1 : 0)
+      const kind = unit.toUpperCase()
+      return kind === 'Y' ? Math.floor(months / 12) : kind === 'M' ? months : kind === 'D' ? Math.floor(to) - Math.floor(from) : NUM
+    })
   },
 }
 FUNCTIONS.CONCATENATE = FUNCTIONS.CONCAT
+FUNCTIONS['STDEV.S'] = FUNCTIONS.STDEV
+FUNCTIONS['STDEV.P'] = FUNCTIONS.STDEVP
+FUNCTIONS['VAR.S'] = FUNCTIONS.VAR
+FUNCTIONS['VAR.P'] = FUNCTIONS.VARP
+FUNCTIONS['RANK.EQ'] = FUNCTIONS.RANK
+FUNCTIONS['MODE.SNGL'] = FUNCTIONS.MODE
+
+function findText(args: Value[], caseSensitive: boolean): Value {
+  const [needle, hay] = [argText(args, 0), argText(args, 1)]
+  const start = argNumber(args, 2, 1)
+  if (isError(needle)) return needle
+  if (isError(hay)) return hay
+  if (isError(start)) return start
+  const fold = (s: string) => (caseSensitive ? s : s.toLowerCase())
+  const i = fold(hay).indexOf(fold(needle), start - 1)
+  return i < 0 ? VALUE : i + 1
+}
 
 /** 使える関数の名前（入力の補助に出す） */
 export const FUNCTION_NAMES = Object.keys(FUNCTIONS).sort()
+
+// 引数を先に計算しないのは、選ばれなかった側のエラーや循環参照を結果に持ち込まないため
+const LAZY_FUNCTIONS = new Set(['IF', 'IFERROR', 'IFS', 'SWITCH', 'IFNA'])
 
 const MAX_RANGE_CELLS = 200_000
 
@@ -629,8 +991,7 @@ function evaluate(node: Node, look: Lookup): Value {
     case 'call': {
       const fn = FUNCTIONS[node.name]
       if (!fn) return NAME
-      const lazy = node.name === 'IF' || node.name === 'IFERROR'
-      const result = fn(lazy ? [] : node.args.map(ev), node.args, ev)
+      const result = fn(LAZY_FUNCTIONS.has(node.name) ? [] : node.args.map(ev), node.args, ev, look)
       return typeof result === 'number' && !Number.isFinite(result) ? NUM : result
     }
   }
@@ -643,65 +1004,92 @@ export function evaluateFormula(formula: string, look: Lookup): Scalar {
   return scalarOf(evaluate(node, look))
 }
 
+// ---------------------------------------------------------------- 計算式の中の参照を読む・書き換える
+
+type RefMatch = { sheet: string | null; prefix: string; body: string; index: number; length: number }
+
+const refPattern = () =>
+  new RegExp(String.raw`(?<str>"(?:[^"]|"")*")|(?<![\w.$])(?<prefix>${SHEET_PART})?(?<body>${RANGE_PART})(?![\w(])`, 'g')
+
+function rewriteRefs(formula: string, f: (ref: RefMatch) => string) {
+  return formula.replace(refPattern(), (...args) => {
+    const groups = args.at(-1) as Record<string, string | undefined>
+    if (groups.str) return args[0] as string
+    const prefix = groups.prefix ?? ''
+    const sheet = prefix ? (groups.quoted ?? groups.bare ?? '').replace(/''/g, "'") : null
+    return f({ sheet, prefix, body: groups.body!, index: args.at(-3) as number, length: (args[0] as string).length })
+  })
+}
+
+const sameSheet = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+
+export function sheetPrefix(name: string) {
+  return new RegExp(`^${BARE_SHEET}$`).test(name) ? `${name}!` : `'${name.replace(/'/g, "''")}'!`
+}
+
+export type FormulaRef = { sheet: string | null; r1: number; c1: number; r2: number; c2: number }
+
+export function formulaRefs(formula: string): FormulaRef[] {
+  const refs: FormulaRef[] = []
+  rewriteRefs(formula, (ref) => {
+    const { r1, c1, r2, c2 } = rangeOfText(ref.body)
+    refs.push({ sheet: ref.sheet, r1, c1, r2, c2 })
+    return ''
+  })
+  return refs
+}
+
+export function renameSheetRefs(formula: string, from: string, to: string) {
+  return rewriteRefs(formula, (ref) =>
+    ref.sheet !== null && sameSheet(ref.sheet, from) ? `${sheetPrefix(to)}${ref.body}` : `${ref.prefix}${ref.body}`,
+  )
+}
+
 // ---------------------------------------------------------------- 貼り付けで相対参照をずらす
 
 /** 計算式を dr 行・dc 列だけ離れたセルに写したときの式。$ の付いていない行・列だけを動かし、はみ出す参照は #REF! にする */
 export function moveFormula(formula: string, dr: number, dc: number) {
-  return formula.replace(
-    new RegExp(String.raw`("(?:[^"]|"")*")|((?:${SHEET_PART})?)(${REF_PART})(?::(${REF_PART}))?(?![\w(])`, 'g'),
-    (match, str: string | undefined, prefix: string, _quoted: unknown, _bare: unknown, a: string, b: string | undefined) => {
-      if (str) return match
-      const moveOne = (ref: string) => {
-        const m = /^(\$?)([A-Za-z]{1,3})(\$?)(\d{1,7})$/.exec(ref)!
-        const c = m[1] ? colIndex(m[2]) : colIndex(m[2]) + dc
-        const r = m[3] ? Number(m[4]) - 1 : Number(m[4]) - 1 + dr
-        return r < 0 || c < 0 ? null : `${m[1]}${colName(c)}${m[3]}${r + 1}`
-      }
-      const x = moveOne(a)
-      const y = b ? moveOne(b) : ''
-      if (x === null || y === null) return `${prefix}#REF!`
-      return `${prefix}${x}${b ? `:${y}` : ''}`
-    },
-  )
+  return rewriteRefs(formula, ({ prefix, body }) => {
+    const ends = body.split(':').map((text) => {
+      const e = parseEnd(text)
+      const c = e.c === null || e.absC ? e.c : e.c + dc
+      const r = e.r === null || e.absR ? e.r : e.r + dr
+      return (c !== null && c < 0) || (r !== null && r < 0) ? null : formatEnd({ ...e, c, r })
+    })
+    return ends.includes(null) ? '#REF!' : `${prefix}${ends.join(':')}`
+  })
 }
 
 // ---------------------------------------------------------------- 行と列の挿入・削除で参照をずらす
 
 /**
- * 計算式の中の参照を、行（axis が row）か列の挿入・削除に合わせてずらす。at より後ろ（at を含む）を delta だけ動かし、
- * 削除で消えた位置を指す参照は #REF! にする。targetSheet は挿入・削除したシートの名前、ownSheet は計算式のあるシートの名前
+ * 計算式の中の参照を、行（axis が row）か列の挿入・削除に合わせてずらす。at より後ろ（at を含む）を delta だけ動かす。
+ * 削除で範囲の端が消えたら残った部分へ縮め、全部消えた参照だけを #REF! にする。
+ * targetSheet は挿入・削除したシートの名前、ownSheet は計算式のあるシートの名前
  */
 export function shiftFormula(formula: string, axis: 'row' | 'col', at: number, delta: number, targetSheet: string, ownSheet: string) {
-  return formula.replace(
-    new RegExp(String.raw`("(?:[^"]|"")*")|((?:${SHEET_PART})?)(${REF_PART})(?::(${REF_PART}))?(?![\w(])`, 'g'),
-    (
-      match,
-      str: string | undefined,
-      prefix: string,
-      quoted: string | undefined,
-      bare: string | undefined,
-      a: string,
-      b: string | undefined,
-    ) => {
-      if (str) return match
-      const sheet = prefix ? (quoted ?? bare ?? '').replace(/''/g, "'") : ownSheet
-      if (sheet !== targetSheet) return match
-      const shiftOne = (ref: string) => {
-        const m = /^(\$?)([A-Za-z]{1,3})(\$?)(\d{1,7})$/.exec(ref)!
-        let c = colIndex(m[2])
-        let r = Number(m[4]) - 1
-        const pos = axis === 'row' ? r : c
-        if (delta < 0 && pos >= at && pos < at - delta) return null
-        if (pos >= at) {
-          if (axis === 'row') r += delta
-          else c += delta
-        }
-        return `${m[1]}${colName(c)}${m[3]}${r + 1}`
-      }
-      const x = shiftOne(a)
-      const y = b ? shiftOne(b) : ''
-      if (x === null || y === null) return `${prefix}#REF!`
-      return `${prefix}${x}${b ? `:${y}` : ''}`
-    },
-  )
+  const removedEnd = delta < 0 ? at - delta : at
+  const inRemoved = (p: number) => p >= at && p < removedEnd
+  const moved = (p: number) => (p >= removedEnd || (delta > 0 && p >= at) ? p + delta : p)
+  return rewriteRefs(formula, ({ sheet, prefix, body }) => {
+    const same = `${prefix}${body}`
+    if (!sameSheet(sheet ?? ownSheet, targetSheet)) return same
+    const ends = body.split(':').map(parseEnd)
+    const key = axis === 'row' ? 'r' : 'c'
+    const [first, second] = ends
+    if (first[key] === null) return same
+    if (!second) {
+      if (inRemoved(first[key])) return '#REF!'
+      return `${prefix}${formatEnd({ ...first, [key]: moved(first[key]) })}`
+    }
+    const a = first[key]
+    const b = second[key]!
+    const low = Math.min(a, b)
+    const high = Math.max(a, b)
+    if (inRemoved(low) && inRemoved(high)) return '#REF!'
+    const nextLow = inRemoved(low) ? at : moved(low)
+    const nextHigh = inRemoved(high) ? at - 1 : moved(high)
+    const [nextA, nextB] = a <= b ? [nextLow, nextHigh] : [nextHigh, nextLow]
+    return `${prefix}${formatEnd({ ...first, [key]: nextA })}:${formatEnd({ ...second, [key]: nextB })}`
+  })
 }
