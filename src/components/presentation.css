@@ -46,6 +46,9 @@
 
 @media (max-width: 640px) {
   .presentation-count { display: none; }
+  /* ボタンの右端にそろえたままにしないのは、ボタンが帯の途中にあり、パネルが画面の左へはみ出すため。帯の幅にそろえる */
+  .presentation-release { position: static; }
+  .presentation-release-panel { right: 12px; left: 12px; width: auto; }
   .pdf-viewer[data-thumbs-open] .presentation-return { left: 50%; }
   .presentation-return { bottom: 72px; }
 }
