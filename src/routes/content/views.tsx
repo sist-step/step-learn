@@ -36,6 +36,7 @@ import { SegmentedControl, SelectField, TextField, validateWith } from '../../co
 import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
+import { PresentationBar, PresentationEditNote, PresentationStage, type PresentationSummary } from '../../components/presentation'
 import { QuizEditor, QuizGradingCard, QuizLookCard, QuizPanel } from '../../components/quiz'
 import { CollabPanel, CollabSettingsCard } from '../../components/collab'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
@@ -47,6 +48,7 @@ import { isFinalized, type CodeFiles, type CodeLanguage, type CodeStage, type Go
 import { unixToDateTimeInput } from '../../lib/course-period'
 import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
+import { presentationBase } from '../../lib/presentation'
 import { previewKind } from '../../lib/preview'
 import { quizFormRows, type QuizFormRow, type QuizLook, type QuizSettings } from '../../lib/quiz'
 import type { QuizView } from '../../lib/quiz-store'
@@ -119,6 +121,7 @@ export const ItemEditPage = ({
   code,
   preparing = false,
   bundle,
+  presentation,
   agent,
   quiz,
   collab,
@@ -136,6 +139,8 @@ export const ItemEditPage = ({
   preparing?: boolean
   /** ファイル自動配布のアイテムで配るファイルと、同期の状態 */
   bundle?: BundleView
+  /** 発表ファイルのアイテムの、今の PDF */
+  presentation?: PresentationSummary
   /** コーディングエージェントのアイテムの設定と利用状況 */
   agent?: AgentView
   /** 小テストのアイテムの設定 */
@@ -186,7 +191,7 @@ export const ItemEditPage = ({
     { href: `/courses/${courseId}`, label: access.course.title },
     ...(section ? [{ href: editUrl(courseId, section.id), label: section.title }] : []),
   ]
-  const lost = `${bundle ? '配布するファイルと、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : agent ? '利用状況と' : quiz ? '受験の記録と' : collab ? 'ファイルと' : ''}完了記録も消え、元に戻せません。`
+  const lost = `${bundle ? '配布するファイルと、' : presentation ? 'PDF と、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : agent ? '利用状況と' : quiz ? '受験の記録と' : collab ? 'ファイルと' : ''}完了記録も消え、元に戻せません。`
   return (
     <AppShell
       tone={access.course.color}
@@ -218,6 +223,7 @@ export const ItemEditPage = ({
               </div>
             )}
             {item.type === 'file' && <ItemFileField name={item.fileName ?? ''} size={item.fileSize ?? 0} error={errors.file} />}
+            {presentation && <PresentationEditNote summary={presentation} />}
             {finalized ? (
               <div class="field">
                 <span class="strong small">問題文</span>
@@ -390,6 +396,7 @@ export const ItemPage = ({
   const embedded = item.type === 'link' && item.linkTarget === 'embed'
   const opensOnView =
     item.type === 'page' ||
+    item.type === 'presentation' ||
     item.type === 'bundle' ||
     item.type === 'agent' ||
     item.type === 'quiz' ||
@@ -401,7 +408,7 @@ export const ItemPage = ({
 
   const navHref = (o: OutlineItem) => `${base}/${o.id}`
   const opensNewTab = (o: OutlineItem) =>
-    o.type === 'screen' || (o.type === 'file' && previewKind(o.fileType ?? '', o.fileName ?? '') === 'pdf')
+    o.type === 'screen' || o.type === 'presentation' || (o.type === 'file' && previewKind(o.fileType ?? '', o.fileName ?? '') === 'pdf')
   const hiddenSections = new Set(sections.filter((s) => s.hidden).map((s) => s.id))
   const isHidden = (o: OutlineItem) => !!o.hidden || hiddenSections.has(o.sectionId)
   const listed = outline.filter((o) => !restricted.hidden.has(o.id))
@@ -413,6 +420,7 @@ export const ItemPage = ({
     .filter((s) => access.canManage || s.items.length > 0)
 
   const pdf = preview === 'pdf'
+  const presenting = item.type === 'presentation'
   const crumbs = (
     <Breadcrumbs
       items={[
@@ -466,6 +474,16 @@ export const ItemPage = ({
         <span class="hide-sm">ダウンロード</span>
       </Button>
     </PdfBar>
+  ) : presenting ? (
+    <PresentationBar
+      crumbs={barCrumbs}
+      title={item.title}
+      hiddenNote={hiddenNote}
+      base={presentationBase(id, item.id)}
+      canManage={access.canManage}
+    >
+      {editButton}
+    </PresentationBar>
   ) : undefined
 
   return (
@@ -473,10 +491,16 @@ export const ItemPage = ({
       <Styles
         use={['/src/routes/content/content.css', ...(restricted.locked.size > 0 ? (['/src/components/restriction.css'] as const) : [])]}
       />
-      {pdf ? <PdfStage src={previewUrl} title={item.fileName ?? 'プレビュー'} /> : crumbs}
+      {pdf ? (
+        <PdfStage src={previewUrl} title={item.fileName ?? 'プレビュー'} />
+      ) : presenting ? (
+        <PresentationStage base={presentationBase(id, item.id)} title={item.title} canManage={access.canManage} />
+      ) : (
+        crumbs
+      )}
       <div class="reader" data-outline-kind={item.type}>
         <article class="reader-main" data-ai-watch={`item:${item.id}`}>
-          {!pdf && head}
+          {!pdf && !presenting && head}
 
           {item.type === 'link' && embedded && <LinkEmbed url={item.url} title={item.title} />}
 

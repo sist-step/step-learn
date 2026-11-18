@@ -99,6 +99,14 @@ const RULES: Rule[] = [
   post('/courses/:id/items/:iid/agent/key', 'agent.key', 'コーディングエージェントの API キー・全体の上限を保存', 'important', 'item'),
   post('/courses/:id/items/:iid/agent/key/delete', 'agent.key.delete', 'コーディングエージェントの API キーを削除', 'important', 'item'),
 
+  post('/courses/:id/items/:iid/presentation/launch', 'presentation.launch', 'PowerPoint との同期を VS Code で始めた', 'change', 'item'),
+  post('/courses/:id/items/:iid/presentation/release-all', 'presentation.release.all', '発表ファイルをすべて公開', 'change', 'item'),
+  post('/courses/:id/items/:iid/presentation/released', 'presentation.released', '発表ファイルの公開の範囲を変更', 'change', 'item'),
+  post('/courses/:id/items/:iid/presentation/reset', 'presentation.reset', '発表ファイルの公開を 1 ページ目に戻した', 'change', 'item'),
+  // 拡張機能からの要求。映しているスライドの位置（/position）を残さないのは、スライドを送るたびに届き、数が多いため
+  post('/api/vscode/presentation/pdf', 'presentation.upload', '発表ファイルの PDF をアップロード', 'change'),
+  post('/api/vscode/presentation/end', 'presentation.end', 'PowerPoint との同期を止めた', 'change'),
+
   post('/ai/chat', 'ai.send', 'AI に依頼', 'change'),
   post('/ai/chat/confirm', 'ai.confirm', 'AI の確認カードに回答', 'change'),
   post('/ai/chat/confirm-all', 'ai.confirm.all', 'AI の確認カードをすべて承認', 'change'),
@@ -226,8 +234,8 @@ function record(c: Context<AppEnv>, match: Match, path: string, target: string |
         kind: alternate ? ALTERNATES[alternate].kind : match.kind,
         action: failed ? LOGIN_FAILED.action : (alternate ?? match.rule.action),
         path: path.slice(0, 500),
-        courseId: match.params.id ?? null,
-        target,
+        courseId: match.params.id ?? c.var.logTarget?.courseId ?? null,
+        target: target ?? c.var.logTarget?.title.slice(0, 200) ?? null,
         ip: clientIp(c),
         userAgent: auth ? (c.req.header('user-agent') ?? '').slice(0, 300) : null,
         createdAt: t,

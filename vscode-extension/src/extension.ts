@@ -5,6 +5,8 @@ import { AgentController } from './agent-view'
 import { claimCode, markSynced, planCode, readLocal, saveDraft, writeLocal, type CodeRecord, type CodeSynced } from './code-item'
 import { CodeSession, chooseSide, codeSyncedKey, codeTokenKey } from './code-session'
 import { HistorySession, confirmSync, tokenKey } from './history-session'
+import { claimPresentation } from './presentation-core'
+import { PRESENTATION_MENU_COMMAND, PresentationSession, powerPointFor } from './presentation-session'
 import {
   SyncError,
   claim,
@@ -31,6 +33,8 @@ const sessions = new Map<string, HistorySession>()
 const codeSessions = new Map<string, CodeSession>()
 
 let agent: AgentController | null = null
+
+let presentation: PresentationSession | null = null
 
 const recordsOf = (context: vscode.ExtensionContext) => context.globalState.get<Record<string, Synced>>(RECORDS_KEY, {})
 
@@ -248,12 +252,77 @@ async function openCode(context: vscode.ExtensionContext, server: URL, token: st
   }
 }
 
+/** STEP Learn の発表ファイルのアイテムの「PowerPoint と同期」から開いたとき。PowerPoint のファイルを PDF にして上げ、映しているスライドを送り始める */
+async function syncPresentation(context: vscode.ExtensionContext, server: URL, token: string) {
+  // OS より先に確かめるのは、WSL や SSH につないだウィンドウでは拡張機能がつないだ先で動き、OS も PowerPoint もこの PC のものではないため
+  if (vscode.env.remoteName) {
+    void vscode.window.showWarningMessage(
+      'PowerPoint との同期は、この PC のフォルダーを開いたウィンドウで使えます。WSL や SSH につないでいないウィンドウを前に出してから、STEP Learn の「PowerPoint と同期」をもう一度押してください。',
+    )
+    return
+  }
+  const powerPoint = powerPointFor(process.platform)
+  if (!powerPoint) {
+    void vscode.window.showInformationMessage('PowerPoint との同期は、Windows と Mac で使えます。')
+    return
+  }
+  if (!(await trust(context, server))) return
+  try {
+    const grant = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: 'STEP Learn: 発表ファイルを確認しています' },
+      () => claimPresentation(server, token),
+    )
+    const consequence = 'その人のアイテムの PDF と、学生に見せる範囲を変えることになります'
+    if (!(await confirmAccount(context, server, grant.title, grant.user, consequence))) return
+    const sync = '同期を始める'
+    const upload = 'アップロードだけ'
+    const released = grant.all ? `すべてのページ（${grant.pages} ページ）` : grant.released > 0 ? `${grant.released} ページ目まで` : ''
+    const answer = await vscode.window.showInformationMessage(
+      `PowerPoint で開いているファイルを PDF にして、「${grant.title}」にアップロードします。`,
+      {
+        modal: true,
+        detail: [
+          '「同期を始める」を選ぶと、スライドショーで映したページまでを学生に見せ続けます。授業の前の準備なら「アップロードだけ」を選んでください。',
+          released &&
+            `今は、${released}を学生に公開しています。同じ名前のファイルなら、この公開の範囲を引き継ぎます。1 ページ目から見せ直すときは、STEP Learn のアイテムの画面で「公開をリセット」を押してください。`,
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+      },
+      sync,
+      upload,
+    )
+    if (!answer) return
+    presentation?.dispose()
+    const session: PresentationSession = new PresentationSession(context, server, grant, powerPoint, () => {
+      if (presentation !== session) return
+      presentation = null
+      void vscode.commands.executeCommand('setContext', 'stepLearn.presentationSyncing', false)
+    })
+    presentation = session
+    await vscode.commands.executeCommand('setContext', 'stepLearn.presentationSyncing', true)
+    if (!(await session.publish(true))) return session.dispose()
+    if (answer === upload) {
+      session.dispose()
+      void vscode.window.showInformationMessage(
+        `「${grant.title}」に PDF をアップロードしました（${session.pages} ページ）。授業では、STEP Learn の「PowerPoint と同期」をもう一度押してください。`,
+      )
+      return
+    }
+    session.start()
+  } catch (e) {
+    const message = e instanceof SyncError ? e.message : `同期を始められませんでした（${e instanceof Error ? e.message : String(e)}）。`
+    void vscode.window.showErrorMessage(message)
+  }
+}
+
 async function openFromLink(context: vscode.ExtensionContext, uri: vscode.Uri) {
   const query = new URLSearchParams(uri.query)
   const server = parseServer(query.get('server') ?? '')
   const token = query.get('token') ?? ''
   if (uri.path === '/agent' && server && token) return connectAgent(context, server, token)
   if (uri.path === '/code' && server && token) return openCode(context, server, token)
+  if (uri.path === '/presentation' && server && token) return syncPresentation(context, server, token)
   if (uri.path !== '/open' || !server || !token) {
     void vscode.window.showErrorMessage('リンクが正しくありません。STEP Learn の画面からもう一度開いてください。')
     return
@@ -313,6 +382,9 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     { dispose: () => sessions.forEach((session) => session.dispose()) },
     { dispose: () => codeSessions.forEach((session) => session.dispose()) },
+    { dispose: () => presentation?.dispose() },
+    vscode.commands.registerCommand(PRESENTATION_MENU_COMMAND, () => presentation?.menu()),
+    vscode.commands.registerCommand('stepLearn.presentation.stop', () => presentation?.stop()),
     vscode.commands.registerCommand('stepLearn.code.submit', async (key?: unknown) => {
       const session = await sessionToSubmit(typeof key === 'string' ? key : undefined)
       if (!session) {

@@ -24,6 +24,7 @@ import content from './routes/content'
 import courses from './routes/courses'
 import dashboard from './routes/dashboard'
 import participants from './routes/participants'
+import presentation, { isPresentationUpload, api as presentationApi } from './routes/presentation'
 import quiz from './routes/quiz'
 import collab from './routes/collab'
 import screen from './routes/screen'
@@ -45,7 +46,7 @@ const codeBodyLimit = limitBody(CODE_BODY_LIMIT)
 app.use((c, next) =>
   (isAgentRequest(c)
     ? agentBodyLimit
-    : c.var.user
+    : c.var.user || isPresentationUpload(c)
       ? userBodyLimit
       : isSyncRequest(c)
         ? syncBodyLimit
@@ -61,8 +62,8 @@ app.use(async (c, next) => {
 })
 
 // 各ハンドラで呼ばないのは、内容を変える操作を足したときに呼び忘れると、開いている画面に反映されなくなるため
-// 完了の切り替えと、コードのアイテムの実行・保存・提出と、VS Code で開くリンク（ファイル自動配布・コーディングエージェント）の発行を除くのは、本人にしか関係がないのに、コースを開いている全員に取り直させることになるため
-const PERSONAL_POST = /\/complete$|\/items\/\d+\/code\/|\/items\/\d+\/(bundle|agent)\/launch$/
+// 完了の切り替えと、コードのアイテムの実行・保存・提出と、VS Code で開くリンク（ファイル自動配布・コーディングエージェント・発表ファイル）の発行を除くのは、本人にしか関係がないのに、コースを開いている全員に取り直させることになるため
+const PERSONAL_POST = /\/complete$|\/items\/\d+\/code\/|\/items\/\d+\/(bundle|agent|presentation)\/launch$/
 app.post('/courses/:id/*', async (c, next) => {
   await next()
   const id = Number(c.req.param('id'))
@@ -90,8 +91,10 @@ app.route('/courses', quiz)
 app.route('/courses', collab)
 app.route('/courses', bundle)
 app.route('/courses', agent)
+app.route('/courses', presentation)
 app.route('/api/vscode/agent', agentApi)
 app.route('/api/vscode/code', codeApi)
+app.route('/api/vscode/presentation', presentationApi)
 app.route('/api/vscode', vscodeApi)
 app.route('/account', account)
 app.route('/admin', admin)
