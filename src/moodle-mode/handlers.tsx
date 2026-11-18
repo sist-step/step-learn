@@ -563,6 +563,20 @@ export async function moveItem(c: C) {
   return c.redirect(editUrl(loaded, item.sectionId), 303)
 }
 
+export async function placeItem(c: C) {
+  const loaded = await manageCourse(c)
+  const item = loaded && findItem(loaded, c)
+  if (!loaded || !item) return c.notFound()
+  const fields = await readFields(c, 'itemPlace')
+  const section = fields && loaded.sections.find((s) => s.id === fields.section_id)
+  // サブセクションの中へ入れさせないのは、Moodle がサブセクションの入れ子を認めていないため
+  if (!fields || !section || (item.kind === 'subsection' && section.parentId)) return c.notFound()
+  const before = loaded.items.find((it) => it.id === fields.before && it.sectionId === section.id && it.id !== item.id)
+  await changeCourse(c, loaded, 'cm_move', [item.id], before ? { cmid: before.id } : { sectionid: section.id })
+  // 移した先のセクションの URL へ送らないのは、タイルのコースで開いているセクションの画面から離れてしまうため
+  return c.redirect(c.req.header('referer') ?? editUrl(loaded, section.id), 303)
+}
+
 export async function setItemHidden(c: C) {
   const loaded = await manageCourse(c)
   const item = loaded && findItem(loaded, c)

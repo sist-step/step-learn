@@ -537,6 +537,9 @@ const linkToken = z.object({ token: hidden(100) })
 
 const move = z.object({ dir: z.enum(['up', 'down']) })
 
+// before を失敗にしないのは、ドラッグの間に消えた行を指していても、移す先のセクションの末尾に入れれば済むため
+const itemPlace = z.object({ section_id: id(), before: z.catch(id(), 0) })
+
 const visibility = z.object({ hidden: flag() })
 
 const collapse = z.object({ open: ids(), closed: ids() })
@@ -658,6 +661,7 @@ export const FORMS = {
   next,
   linkToken,
   move,
+  itemPlace,
   visibility,
   collapse,
   itemPlacement,

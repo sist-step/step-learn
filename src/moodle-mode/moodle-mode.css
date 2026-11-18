@@ -163,7 +163,10 @@ a.sec-tile[aria-expanded='true'] { border-color: var(--c1); box-shadow: 0 0 0 1p
 /* タイルの間に出さないのは、横にも並ぶので行の上の境目が「間」にならないため。末尾の「アイテムを追加」で足せる */
 .items.is-subtiles > .item-row > .item-insert { display: none; }
 .items.is-subtiles > .item-row > :is(form, .check) { position: absolute; top: 8px; right: 8px; }
-.items.is-subtiles > .item-row > .row-actions { position: absolute; top: 4px; left: 4px; }
+/* つまみを左のボタンに続けて並べないのは、狭いタイルでボタンがアイコンに重なるため */
+.items.is-subtiles > .item-row > .row-actions { position: absolute; top: 4px; left: 4px; right: 4px; pointer-events: none; }
+.items.is-subtiles > .item-row > .row-actions > * { pointer-events: auto; }
+.items.is-subtiles > .item-row > .row-actions > .item-grip { order: 1; margin-left: auto; }
 :root[data-edit-mode] .items.is-subtiles > .item-row:has(> .row-actions) { padding-right: 0; }
 .items.is-subtiles > :is(.item-label, .item-subsection) { grid-column: 1 / -1; border: 0; background: none; }
 @media (max-width: 640px) {
