@@ -576,6 +576,22 @@ export async function moveItem(c: Context<AppEnv>) {
   return c.redirect(editUrl(access.course.id, item.sectionId), 303)
 }
 
+export async function placeItem(c: Context<AppEnv>) {
+  const access = await manageAccess(c)
+  const iid = intParam(c, 'iid')
+  if (!access || !iid) return c.notFound()
+  const item = getItem(access.course.id, iid)
+  const fields = await readFields(c, 'itemPlace')
+  if (!item || !fields || !getSection(access.course.id, fields.section_id)) return c.notFound()
+  const scope = eq(items.sectionId, fields.section_id)
+  db.update(items)
+    .set({ sectionId: fields.section_id, position: nextPosition(items, scope) })
+    .where(eq(items.id, iid))
+    .run()
+  if (fields.before) placeBefore(items, scope, iid, fields.before)
+  return c.redirect(editUrl(access.course.id, fields.section_id), 303)
+}
+
 export async function setItemHidden(c: Context<AppEnv>) {
   const access = await manageAccess(c)
   const iid = intParam(c, 'iid')

@@ -143,6 +143,25 @@ div.course-hero-cover { background: linear-gradient(150deg, var(--c2), var(--c1)
   .item-insert { display: none; }
 }
 
+/* ===== アイテムのドラッグ移動（ItemGrip） */
+.item-grip { display: grid; place-items: center; flex: none; width: 24px; height: var(--control-h-sm); color: var(--muted); cursor: grab; touch-action: none; user-select: none; -webkit-touch-callout: none; }
+:root[data-edit-mode] .item-row:has(> .row-actions > .item-grip) { user-select: none; }
+:root[data-item-dragging], :root[data-item-dragging] * { cursor: grabbing !important; }
+:root[data-item-dragging] .item-insert { display: none; }
+.is-item-dragging { opacity: 0.4; }
+.item-drag-ghost { position: fixed; z-index: 50; top: 0; left: 0; display: flex; align-items: center; gap: 8px; max-width: min(280px, calc(100vw - 16px)); padding: 6px 12px 6px 6px; border: 1px solid var(--overlay-border); border-radius: var(--radius); background: var(--surface-raised); box-shadow: var(--shadow-lg); font-size: var(--fs-sm); font-weight: 500; pointer-events: none; }
+.item-drag-ghost > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-drop-line { position: fixed; z-index: 49; border-radius: 1px; background: var(--c-ink); pointer-events: none; }
+.section-card.is-item-drop { border-color: var(--c-ink); box-shadow: 0 0 0 1px var(--c-ink); }
+.item-subsection.is-item-drop { border-radius: 14px; background: var(--c-soft); }
+@media (hover: hover) {
+  .item-grip { opacity: 0; transition: opacity 0.15s; }
+  .item-row:hover .item-grip { opacity: 1; }
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .item-grip { width: var(--tap); height: var(--tap); }
+}
+
 /* ===== アイテムを画面いっぱいに出すときのヘッダーの帯（ItemBar） */
 .item-bar { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding-left: 12px; }
 .item-bar > .item-icon { width: 32px; height: 32px; border-radius: 8px; flex: none; }

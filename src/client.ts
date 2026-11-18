@@ -1665,6 +1665,180 @@ document.addEventListener('keydown', (e) => {
   })
 })
 
+// --- 編集モードでアイテムをドラッグして移す（components/course.tsx の ItemGrip）
+type ItemDrop = { zone: HTMLElement; list: HTMLElement | null; before: HTMLElement | null; anchor: HTMLElement | null }
+
+const ITEM_DRAG_THRESHOLD = 5
+const ITEM_DRAG_EDGE = 72
+const ITEM_DRAG_SPEED = 14
+const ITEM_DRAG_IGNORE = 'button, summary, form, details.popover, .item-insert, .check, .row-actions > a'
+const itemDragging = () => document.documentElement.hasAttribute('data-item-dragging')
+const itemIdOf = (entry: Element) =>
+  (entry.matches('[data-item]') ? entry : entry.querySelector(':scope > [data-item]'))?.getAttribute('data-item')
+const isItemTile = (box: DOMRect, list: HTMLElement) => box.width < list.clientWidth * 0.6
+
+function itemDropZone(entry: HTMLElement, x: number, y: number) {
+  const zones = entry.matches('.item-subsection') ? '[data-item-drop]:not(.item-subsection)' : '[data-item-drop]'
+  // 真下だけで探さないのは、カードの間の隙間を通るたびに移動先が消えてちらつくため
+  for (const dy of [0, -8, 8]) {
+    const over = document.elementFromPoint(x, y + dy)
+    const head = over?.closest('.subsection-head')
+    const box = head?.getBoundingClientRect()
+    // 見出し全体をサブセクションの中として扱わないのは、サブセクションのすぐ前へ入れる場所がなくなるため
+    const from = head && box && y < box.top + box.height / 2 ? head.closest('li')?.parentElement : over
+    const zone = from?.closest<HTMLElement>(zones)
+    if (zone) return zone
+  }
+  return null
+}
+
+function itemDropAt(entry: HTMLElement, x: number, y: number): ItemDrop | null {
+  const zone = itemDropZone(entry, x, y)
+  if (!zone) return null
+  const list = zone.querySelector<HTMLElement>(':scope > .items')
+  const closed = zone instanceof HTMLDetailsElement && !zone.open
+  const rows = list && !closed ? $$<HTMLElement>(':scope > li', list).filter((row) => row !== entry && row.getClientRects().length > 0) : []
+  const before =
+    rows.find((row) => {
+      const box = row.getBoundingClientRect()
+      if (isItemTile(box, list!)) return y < box.top || (y <= box.bottom && x < box.left + box.width / 2)
+      return y < box.top + box.height / 2
+    }) ?? null
+  return { zone, list, before, anchor: before ?? rows.at(-1) ?? null }
+}
+
+function drawItemDropLine(line: HTMLElement, drop: ItemDrop | null, moves: boolean) {
+  line.hidden = !moves || !drop?.anchor
+  if (line.hidden || !drop?.anchor || !drop.list) return
+  const box = drop.anchor.getBoundingClientRect()
+  const edge = (start: number, end: number) => (drop.before ? start : end) - 1
+  const rect = isItemTile(box, drop.list)
+    ? { left: edge(box.left, box.right) - 3, top: box.top, width: 2, height: box.height }
+    : { left: box.left + 12, top: edge(box.top, box.bottom), width: box.width - 24, height: 2 }
+  Object.assign(line.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` })
+}
+
+function itemDragGhost(row: HTMLElement) {
+  const ghost = document.createElement('div')
+  ghost.className = 'item-drag-ghost'
+  const icon = row.querySelector('.item-icon')
+  if (icon) ghost.append(icon.cloneNode(true))
+  const label = row.querySelector('.item-title') ?? row.querySelector('.item-text')
+  ghost.append(Object.assign(document.createElement('span'), { textContent: label?.textContent?.trim() ?? '' }))
+  return ghost
+}
+
+function submitItemDrop(entry: HTMLElement, action: string, drop: ItemDrop) {
+  const [parent, next] = [entry.parentElement, entry.nextSibling]
+  // 応答を待ってから動かさないのは、Moodle モードでは保存に数秒かかり、その間ドロップが効いていないように見えるため
+  drop.list?.insertBefore(entry, drop.before)
+  void visit(new URL(action, location.href), {
+    method: 'POST',
+    body: new URLSearchParams({ section_id: drop.zone.dataset.itemDrop ?? '', before: (drop.before && itemIdOf(drop.before)) ?? '' }),
+    onFail: () => parent?.insertBefore(entry, next),
+  })
+}
+
+// HTML のドラッグ＆ドロップ（draggable）を使わないのは、タッチ端末で動かせないため
+document.addEventListener('pointerdown', (e) => {
+  const root = document.documentElement
+  const target = e.target as Element
+  const row = target.closest<HTMLElement>('.item-row')
+  const grip = row?.querySelector<HTMLElement>(':scope > .row-actions > [data-item-grip]')
+  const entry = row?.closest('li')
+  const main = row?.closest('main')
+  if (!row || !grip || !entry || !main || !root.hasAttribute('data-edit-mode')) return
+  if (e.button !== 0 || e.ctrlKey || e.metaKey || target.closest(ITEM_DRAG_IGNORE)) return
+  // 行全体で受けないのは、タッチでは行をなぞるスクロールとぶつかるため
+  if (e.pointerType !== 'mouse' && !grip.contains(target)) return
+
+  const { pointerId, clientX: startX, clientY: startY } = e
+  const action = grip.dataset.itemGrip ?? ''
+  const home = entry.parentElement?.closest<HTMLElement>('[data-item-drop]')
+  const ghost = itemDragGhost(row)
+  const line = Object.assign(document.createElement('div'), { className: 'item-drop-line', hidden: true })
+  let [x, y] = [startX, startY]
+  let started = false
+  let frame = 0
+  let drop: ItemDrop | null = null
+  let marked: HTMLElement | null = null
+
+  const moves = () => !!drop && !(drop.zone === home && drop.before === entry.nextElementSibling)
+  const mark = (zone: HTMLElement | null) => {
+    if (zone === marked) return
+    marked?.classList.remove('is-item-drop')
+    zone?.classList.add('is-item-drop')
+    marked = zone
+  }
+  const swallowClick = (click: MouseEvent) => {
+    click.preventDefault()
+    click.stopPropagation()
+  }
+  const stop = (commit: boolean, held = false) => {
+    cancelAnimationFrame(frame)
+    document.removeEventListener('pointermove', onMove)
+    document.removeEventListener('pointerup', onUp)
+    document.removeEventListener('pointercancel', onCancel)
+    document.removeEventListener('keydown', onKey)
+    if (!started) return
+    root.removeAttribute('data-item-dragging')
+    entry.classList.remove('is-item-dragging')
+    mark(null)
+    ghost.remove()
+    line.remove()
+    // すぐに外さないのは、ブラウザによってクリックが pointerup の次のタスクで届き、アイテムが開いてしまうため
+    document.addEventListener('click', swallowClick, { capture: true, once: true })
+    const allowClick = () => setTimeout(() => document.removeEventListener('click', swallowClick, true), 100)
+    // Esc のあとすぐに許さないのは、まだ押したままで、同じ行の上で離すとアイテムが開いてしまうため
+    if (held) document.addEventListener('pointerup', allowClick, { once: true })
+    else allowClick()
+    if (commit && drop && moves()) submitItemDrop(entry, action, drop)
+  }
+  const tick = () => {
+    if (!entry.isConnected) return stop(false)
+    const speed = y < ITEM_DRAG_EDGE ? -1 : y > innerHeight - ITEM_DRAG_EDGE ? 1 : 0
+    if (speed) scrollBy(0, speed * ITEM_DRAG_SPEED)
+    // タッチでポインターの右下に出さないのは、指に隠れて何を動かしているか見えなくなるため
+    const ghostY = e.pointerType === 'mouse' ? y + 12 : Math.max(8, y - ghost.offsetHeight - 24)
+    ghost.style.translate = `${Math.max(8, Math.min(x + 12, innerWidth - ghost.offsetWidth - 8))}px ${ghostY}px`
+    drop = itemDropAt(entry, x, y)
+    mark(drop && drop.zone !== home ? drop.zone : null)
+    drawItemDropLine(line, drop, moves())
+    frame = requestAnimationFrame(tick)
+  }
+  const onMove = (move: PointerEvent) => {
+    if (move.pointerId !== pointerId) return
+    ;[x, y] = [move.clientX, move.clientY]
+    if (started || Math.hypot(x - startX, y - startY) < ITEM_DRAG_THRESHOLD) return
+    started = true
+    getSelection()?.removeAllRanges()
+    root.toggleAttribute('data-item-dragging', true)
+    entry.classList.add('is-item-dragging')
+    main.append(ghost, line)
+    tick()
+  }
+  const onUp = (up: PointerEvent) => {
+    if (up.pointerId === pointerId) stop(true)
+  }
+  const onCancel = (cancel: PointerEvent) => {
+    if (cancel.pointerId === pointerId) stop(false)
+  }
+  const onKey = (key: KeyboardEvent) => {
+    if (key.key === 'Escape') stop(false, true)
+  }
+  document.addEventListener('pointermove', onMove)
+  document.addEventListener('pointerup', onUp)
+  document.addEventListener('pointercancel', onCancel)
+  document.addEventListener('keydown', onKey)
+})
+
+// 止めないと、リンクをつかんだときにブラウザのドラッグが始まり、pointermove が届かなくなる
+document.addEventListener('dragstart', (e) => {
+  const row = e.target instanceof Element ? e.target.closest('.item-row') : null
+  if (row?.querySelector(':scope > .row-actions > [data-item-grip]') && document.documentElement.hasAttribute('data-edit-mode'))
+    e.preventDefault()
+})
+
 // --- セクションの開閉状態を記憶（端末ごと。Moodle モードの折りたたみ型トピックは data-collapse-url に送って Moodle に記録する）
 const collapseUrlOf = (d: HTMLDetailsElement) => d.parentElement?.closest<HTMLElement>('[data-collapse-url]')?.dataset.collapseUrl
 const hashTarget = () => (location.hash ? document.getElementById(decodeURIComponent(location.hash.slice(1))) : null)
@@ -4850,7 +5024,8 @@ async function syncLive(run: number, revision: string | null, touched?: AiTouche
   $$('noscript', doc.body).forEach((el) => el.remove())
   await loadStyles(doc)
   const live = document.querySelector('main')
-  if (run !== liveRun || navController || document.querySelector('dialog[open]') || !live) return
+  // ドラッグ中に差分を当てないのは、つかんでいる行が置き換わって操作が切れるため
+  if (run !== liveRun || navController || itemDragging() || document.querySelector('dialog[open]') || !live) return
 
   const changes: LiveChange[] = []
   const diffable =
