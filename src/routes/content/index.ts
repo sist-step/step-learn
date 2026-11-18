@@ -10,6 +10,7 @@ import {
   editRestriction,
   moveItem,
   moveSection,
+  placeItem,
   prepareCode,
   removeItem,
   removeSection,
@@ -37,6 +38,7 @@ app.post('/:id/items', createItem)
 app.get('/:id/items/:iid/edit', editItem)
 app.post('/:id/items/:iid', updateItem)
 app.post('/:id/items/:iid/move', moveItem)
+app.post('/:id/items/:iid/place', placeItem)
 app.post('/:id/items/:iid/delete', removeItem)
 app.post('/:id/items/:iid/visibility', setItemHidden)
 app.get('/:id/items/:iid/restriction', editRestriction)

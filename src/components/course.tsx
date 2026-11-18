@@ -314,6 +314,16 @@ export const ItemIcon = ({ type }: { type: ItemType }) => {
   )
 }
 
+/** 編集モードのアイテムの行に置くつまみ。マウスは行のどこからでも動かせ、タッチはここからだけ動かせる */
+export const ItemGrip = ({ action }: { action: string }) => {
+  useStyle('/src/components/course.css')
+  return (
+    <span class="item-grip" data-item-grip={action} title="ドラッグして移動" aria-hidden="true">
+      <Icon name="grip" size={16} />
+    </span>
+  )
+}
+
 /** 編集モードでアイテムの行の上の境目に置き、ホバーで出すプラスボタン。押すと追加のモーダルを、この行の前に入れる設定で開く */
 export const ItemInsertButton = ({ modal, sectionId, before }: { modal: string; sectionId: number; before: number }) => {
   useStyle('/src/components/course.css')
