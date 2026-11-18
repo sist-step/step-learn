@@ -50,6 +50,14 @@ const svg = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string,
 
 const isColor = (v: unknown): v is string => typeof v === 'string' && /^#[0-9a-f]{3,8}$/i.test(v)
 
+const defaultValign = (d: ElData) => d.valign ?? (d.type === 'text' ? 'top' : 'middle')
+const defaultAlign = (d: ElData) => d.align ?? (d.type === 'text' ? 'left' : 'center')
+
+// 文字だけで自分のコピーかを比べないのは、文字のない図形だと、別の場所でコピーした文字と区別できないため
+const CLIPBOARD_TYPE = 'application/x-step-learn-elements'
+
+const STYLE_KEYS: Record<string, string> = { b: 'bold', i: 'italic', u: 'underline' }
+
 const intersects = (a: Rect, b: Rect) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
 
 function normalize(r: Rect): Rect {
@@ -73,6 +81,44 @@ export function applyTextDiff(ytext: Y.Text, next: string) {
   while (end < prev.length - start && end < next.length - start && prev[prev.length - 1 - end] === next[next.length - 1 - end]) end++
   if (prev.length - start - end > 0) ytext.delete(start, prev.length - start - end)
   if (next.length - start - end > 0) ytext.insert(start, next.slice(start, next.length - end))
+}
+
+export function syncTextarea(area: HTMLTextAreaElement, event: Y.YTextEvent) {
+  let start = area.selectionStart
+  let end = area.selectionEnd
+  let index = 0
+  for (const op of event.delta) {
+    if (op.retain) index += op.retain
+    else if (typeof op.insert === 'string') {
+      if (index <= start) start += op.insert.length
+      if (index <= end) end += op.insert.length
+      index += op.insert.length
+    } else if (op.delete) {
+      if (index < start) start = Math.max(index, start - op.delete)
+      if (index < end) end = Math.max(index, end - op.delete)
+    }
+  }
+  area.value = (event.target as Y.Text).toJSON()
+  area.setSelectionRange(start, end)
+}
+
+function styleBody(body: HTMLElement, d: ElData) {
+  Object.assign(body.style, {
+    fontSize: `${d.fontSize ?? 18}px`,
+    color: isColor(d.color) ? d.color : '',
+    fontWeight: d.bold ? '700' : '',
+    fontStyle: d.italic ? 'italic' : '',
+    textDecoration: d.underline ? 'underline' : '',
+    textAlign: defaultAlign(d),
+    justifyContent: { top: 'flex-start', middle: 'center', bottom: 'flex-end' }[defaultValign(d)],
+    background: d.type === 'text' && isColor(d.fill) ? d.fill : '',
+  })
+}
+
+function fillRows(body: HTMLElement, d: ElData, plain: boolean) {
+  const row = (className: string, text: string) => Object.assign(document.createElement('div'), { className, textContent: text })
+  if (!d.text && d.placeholder && !plain) return body.replaceChildren(row('el-row is-placeholder', d.placeholder))
+  body.replaceChildren(...(d.text ?? '').split('\n').map((line) => row(d.bullet && line ? 'el-row is-bullet' : 'el-row', line || '\u200b')))
 }
 
 /** 置いたもの 1 つを DOM にする（サムネイルとスライドショーでも使う）。plain のときは、空の欄の案内の文字を出さない */
@@ -129,29 +175,8 @@ export function drawElement(el: HTMLElement, d: ElData, plain = false) {
   if (hasText(d.type)) {
     const text = document.createElement('div')
     text.className = 'el-body'
-    Object.assign(text.style, {
-      fontSize: `${d.fontSize ?? 18}px`,
-      color: isColor(d.color) ? d.color : '',
-      fontWeight: d.bold ? '700' : '',
-      fontStyle: d.italic ? 'italic' : '',
-      textDecoration: d.underline ? 'underline' : '',
-      textAlign: d.align ?? (d.type === 'text' ? 'left' : 'center'),
-      justifyContent: { top: 'flex-start', middle: 'center', bottom: 'flex-end' }[d.valign ?? (d.type === 'text' ? 'top' : 'middle')],
-      background: d.type === 'text' && isColor(d.fill) ? d.fill : '',
-    })
-    if (!d.text && d.placeholder && !plain) {
-      const row = document.createElement('div')
-      row.className = 'el-row is-placeholder'
-      row.textContent = d.placeholder
-      text.append(row)
-    } else {
-      for (const line of (d.text ?? '').split('\n')) {
-        const row = document.createElement('div')
-        row.className = d.bullet && line ? 'el-row is-bullet' : 'el-row'
-        row.textContent = line || '​'
-        text.append(row)
-      }
-    }
+    styleBody(text, d)
+    fillRows(text, d, plain)
     parts.push(text)
   }
   el.replaceChildren(...parts)
@@ -170,6 +195,7 @@ export class Stage {
   private frame = 0
   private spaceDown = false
   private clipboard: ElData[] = []
+  private clipboardId = ''
   private readonly pointers = new Map<number, { x: number; y: number }>()
   private readonly resize: ResizeObserver
   private readonly cleanup: (() => void)[] = []
@@ -236,6 +262,16 @@ export class Stage {
 
   private change(fn: () => void) {
     this.o.ctx.doc.transact(fn, this.o.origin)
+  }
+
+  // change のままにしないのは、続けて行った操作が 1 回の「元に戻す」でまとめて消えてしまうため
+  private step(fn: () => void) {
+    this.o.undo?.stopCapturing()
+    this.change(fn)
+  }
+
+  focus() {
+    ;(this.editing?.area ?? this.o.host).focus({ preventScroll: true })
   }
 
   private items() {
@@ -356,6 +392,12 @@ export class Stage {
         node.key = key
       } else if (this.editing?.id === d.id) {
         Object.assign(node.el.style, { left: `${d.x}px`, top: `${d.y}px`, width: `${d.w}px`, height: `${d.h}px` })
+        const body = node.el.querySelector<HTMLElement>(':scope > .el-body')
+        if (body) {
+          styleBody(body, d)
+          fillRows(body, d, false)
+        }
+        this.styleEditor()
       }
       node.el.style.zIndex = String(i + 1)
     })
@@ -365,7 +407,7 @@ export class Stage {
       this.nodes.delete(id)
       if (this.editing?.id === id) this.stopEditing()
     }
-    if (this.selection.some((id) => !seen.has(id))) this.selection = this.selection.filter((id) => seen.has(id))
+    if (this.selection.some((id) => !seen.has(id))) this.select(this.selection.filter((id) => seen.has(id)))
     this.renderOverlay(items.map(({ d }) => d))
   }
 
@@ -443,7 +485,7 @@ export class Stage {
 
   insert(data: Omit<ElData, 'id' | 'z'> & { id?: string }) {
     const id = data.id ?? newId()
-    this.change(() => this.container.set(id, newElement({ ...data, id, z: this.topZ() })))
+    this.step(() => this.container.set(id, newElement({ ...data, id, z: this.topZ() })))
     this.select([id])
     return id
   }
@@ -463,7 +505,7 @@ export class Stage {
   patch(fields: Partial<ElData>) {
     const ids = this.editing ? [this.editing.id] : this.selection
     if (!ids.length) return
-    this.change(() => {
+    this.step(() => {
       for (const id of ids) {
         const m = this.get(id)
         if (!m) continue
@@ -486,7 +528,7 @@ export class Stage {
   remove(ids = this.selection) {
     if (!ids.length) return
     this.stopEditing()
-    this.change(() => ids.forEach((id) => this.container.delete(id)))
+    this.step(() => ids.forEach((id) => this.container.delete(id)))
     this.select([])
   }
 
@@ -502,7 +544,7 @@ export class Stage {
     if (!list.length) return
     let z = this.topZ()
     const ids: string[] = []
-    this.change(() => {
+    this.step(() => {
       for (const d of list) {
         const id = newId()
         ids.push(id)
@@ -515,7 +557,7 @@ export class Stage {
   reorder(where: 'front' | 'back') {
     const all = this.items().map(({ d }) => d.z)
     let z = where === 'front' ? Math.max(0, ...all) + 1 : Math.min(0, ...all) - this.selection.length
-    this.change(() => {
+    this.step(() => {
       for (const id of this.selection) this.get(id)?.set('z', z++)
     })
   }
@@ -556,23 +598,7 @@ export class Stage {
       this.growText(id, area)
     }
     const observer = (event: Y.YTextEvent) => {
-      if (event.transaction.origin === this.o.origin) return
-      let start = area.selectionStart
-      let end = area.selectionEnd
-      let index = 0
-      for (const op of event.delta) {
-        if (op.retain) index += op.retain
-        else if (typeof op.insert === 'string') {
-          if (index <= start) start += op.insert.length
-          if (index <= end) end += op.insert.length
-          index += op.insert.length
-        } else if (op.delete) {
-          if (index < start) start = Math.max(index, start - op.delete)
-          if (index < end) end = Math.max(index, end - op.delete)
-        }
-      }
-      area.value = ytext.toJSON()
-      area.setSelectionRange(start, end)
+      if (event.transaction.origin !== this.o.origin) syncTextarea(area, event)
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.isComposing) return
@@ -581,9 +607,17 @@ export class Stage {
         this.stopEditing()
         this.o.host.focus({ preventScroll: true })
       }
+      this.styleKey(e)
       e.stopPropagation()
     }
-    const onBlur = () => setTimeout(() => this.editing?.area === area && document.activeElement !== area && this.stopEditing(), 0)
+    const onBlur = () =>
+      setTimeout(() => {
+        if (this.editing?.area !== area || document.activeElement === area) return
+        // ツールバーの選択欄や色の欄へ移っただけで入力を終えないのは、文字の大きさを変えるたびに入力し直すことになるため
+        const control = document.activeElement?.closest('.collab-bar') ? document.activeElement : null
+        if (control) control.addEventListener('blur', onBlur, { once: true })
+        else this.stopEditing()
+      }, 0)
     area.addEventListener('input', onInput)
     area.addEventListener('keydown', onKey)
     area.addEventListener('blur', onBlur)
@@ -611,15 +645,37 @@ export class Stage {
     const m = this.get(this.editing.id)
     if (!m) return
     const d = readElement(m)
-    Object.assign(this.editing.area.style, {
+    const { area } = this.editing
+    Object.assign(area.style, {
       fontSize: `${d.fontSize ?? 18}px`,
       color: isColor(d.color) ? d.color : '',
       fontWeight: d.bold ? '700' : '',
       fontStyle: d.italic ? 'italic' : '',
       textDecoration: d.underline ? 'underline' : '',
-      textAlign: d.align ?? (d.type === 'text' ? 'left' : 'center'),
+      textAlign: defaultAlign(d),
+      background: d.type === 'text' && isColor(d.fill) ? d.fill : '',
+      paddingLeft: d.bullet ? 'calc(10px + 1.1em)' : '',
+      paddingTop: '',
     })
-    this.editing.area.dataset.type = d.type
+    area.dataset.type = d.type
+    const valign = defaultValign(d)
+    if (valign === 'top') return
+    // CSS で揃えないのは、textarea の中身は縦に揃えられないため
+    const base = parseFloat(getComputedStyle(area).paddingTop)
+    area.style.height = '0'
+    const need = area.scrollHeight
+    area.style.height = ''
+    const free = Math.max(0, area.clientHeight - need)
+    area.style.paddingTop = `${base + (valign === 'middle' ? free / 2 : free)}px`
+  }
+
+  private styleKey(e: KeyboardEvent) {
+    const cmd = (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey ? STYLE_KEYS[e.key.toLowerCase()] : undefined
+    if (!cmd || !this.first()) return false
+    e.preventDefault()
+    styleCommand(this, cmd, undefined)
+    this.o.onSelect?.(this.selection)
+    return true
   }
 
   private growText(id: string, area: HTMLTextAreaElement) {
@@ -668,6 +724,7 @@ export class Stage {
     }
     on(host, 'pointerdown', (e) => this.onPointerDown(e))
     on(host, 'dblclick', (e) => {
+      if (this.editing) return
       // e.target を使わないのは、押したときにポインターを面に取り込むので、ダブルクリックの対象がいつも面そのものになるため
       const el = document
         .elementsFromPoint(e.clientX, e.clientY)
@@ -712,29 +769,37 @@ export class Stage {
     on(host, 'copy', (e) => {
       if (this.editing || !this.selection.length) return
       e.preventDefault()
-      const list = this.copySelection()
-      e.clipboardData?.setData(
-        'text/plain',
-        list
-          .map((d) => d.text ?? '')
-          .filter(Boolean)
-          .join('\n'),
-      )
+      this.writeClipboard(e)
     })
     on(host, 'cut', (e) => {
       if (this.editing || !this.selection.length) return
       e.preventDefault()
-      this.copySelection()
+      this.writeClipboard(e)
       this.remove()
     })
     on(host, 'paste', (e) => void this.onPaste(e))
   }
 
+  private writeClipboard(e: ClipboardEvent) {
+    const list = this.copySelection()
+    this.clipboardId = newId()
+    e.clipboardData?.setData(CLIPBOARD_TYPE, this.clipboardId)
+    e.clipboardData?.setData(
+      'text/plain',
+      list
+        .map((d) => d.text ?? '')
+        .filter(Boolean)
+        .join('\n'),
+    )
+  }
+
   private async onPaste(e: ClipboardEvent) {
     if (this.editing) return
+    const own = !!this.clipboard.length && e.clipboardData?.getData(CLIPBOARD_TYPE) === this.clipboardId
     const file = [...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'))
     const text = e.clipboardData?.getData('text/plain') ?? ''
     e.preventDefault()
+    if (own) return this.paste(this.clipboard, 24)
     if (file) {
       const url = await this.o.ctx.uploadImage(file)
       if (!url) return
@@ -742,21 +807,13 @@ export class Stage {
       this.insertImage(url, await imageSize(url))
       return
     }
-    const own =
-      this.clipboard.length &&
-      text ===
-        this.clipboard
-          .map((d) => d.text ?? '')
-          .filter(Boolean)
-          .join('\n')
-    if (own) return this.paste(this.clipboard, 24)
     if (!text.trim()) return
     const c = this.o.size ? { x: this.o.size.w / 2, y: this.o.size.h / 2 } : this.center()
     this.insert({ type: 'text', x: c.x - 160, y: c.y - 20, w: 320, h: 40, fontSize: this.o.fontSize, text })
   }
 
   private onKey(e: KeyboardEvent) {
-    if (this.editing || e.isComposing) return
+    if (this.editing || e.isComposing || this.styleKey(e)) return
     const mod = e.metaKey || e.ctrlKey
     if (e.key === ' ' && this.o.mode === 'board') {
       this.spaceDown = true
@@ -831,9 +888,15 @@ export class Stage {
     } else if (this.tool === 'select') {
       const id = target?.dataset.id
       if (id) {
+        const clickToEdit = this.o.mode === 'slides' && !e.shiftKey && this.opensOnClick(id)
         if (e.shiftKey) this.select(this.selection.includes(id) ? this.selection.filter((x) => x !== id) : [...this.selection, id])
         else if (!this.selection.includes(id)) this.select([id])
-        ;[move, end] = this.moveDrag(start)
+        const [drag, drop, moved] = this.moveDrag(start)
+        move = drag
+        end = (_p, ev) => {
+          drop()
+          if (clickToEdit && !moved() && ev.type === 'pointerup') this.startEditing(id)
+        }
       } else {
         if (!e.shiftKey) this.select([])
         const base = e.shiftKey ? [...this.selection] : []
@@ -1007,6 +1070,13 @@ export class Stage {
     return this.o.penColor?.()
   }
 
+  private opensOnClick(id: string) {
+    const m = this.get(id)
+    const text = m?.get('text')
+    if (!(text instanceof Y.Text)) return false
+    return (this.selection.length === 1 && this.selection[0] === id) || (!!m?.get('placeholder') && !text.length)
+  }
+
   private pinch(e: PointerEvent) {
     const { host } = this.o
     const ids = [...this.pointers.keys()]
@@ -1072,6 +1142,7 @@ export class Stage {
         cancelAnimationFrame(raf)
         flush()
       },
+      () => moved,
     ] as const
   }
 
@@ -1135,6 +1206,12 @@ export class Stage {
 
 /** 書式のツールバー（components/collab.tsx の ShapeStyleTools）の操作。受け持たない操作なら false */
 export function styleCommand(stage: Stage, cmd: string, value: string | undefined) {
+  const handled = applyStyle(stage, cmd, value)
+  if (handled) stage.focus()
+  return handled
+}
+
+function applyStyle(stage: Stage, cmd: string, value: string | undefined) {
   const d = stage.first()
   switch (cmd) {
     case 'fontSize':
@@ -1148,6 +1225,9 @@ export function styleCommand(stage: Stage, cmd: string, value: string | undefine
       return true
     case 'underline':
       stage.patch({ underline: !d?.underline || undefined })
+      return true
+    case 'bullet':
+      stage.patch({ bullet: !d?.bullet || undefined })
       return true
     case 'color':
       stage.patch({ color: value })
@@ -1181,11 +1261,22 @@ export function syncStyleTools(stage: Stage, ctx: EditorContext) {
   ctx.setPressed('bold', !!d?.bold)
   ctx.setPressed('italic', !!d?.italic)
   ctx.setPressed('underline', !!d?.underline)
-  for (const align of ['left', 'center', 'right'])
-    ctx.setPressed('align', !!d && (d.align ?? (d.type === 'text' ? 'left' : 'center')) === align, align)
+  ctx.setPressed('bullet', !!d?.bullet)
+  for (const align of ['left', 'center', 'right']) ctx.setPressed('align', !!d && defaultAlign(d) === align, align)
   if (!d) return
-  if (d.fontSize) ctx.setValue('fontSize', String(d.fontSize))
+  if (d.fontSize) {
+    addFontSizeOption(ctx, d.fontSize)
+    ctx.setValue('fontSize', String(d.fontSize))
+  }
   if (isColor(d.color)) ctx.setValue('color', d.color)
   if (isColor(d.fill)) ctx.setValue('fill', d.fill)
   if (isColor(d.stroke)) ctx.setValue('stroke', d.stroke)
+}
+
+// 選択肢にない大きさをそのままにしないのは、選択欄が空になって今の大きさがわからなくなるため（レイアウトの 22 や読み込んだファイルの値）
+function addFontSizeOption(ctx: EditorContext, size: number) {
+  const select = ctx.root.querySelector<HTMLSelectElement>('select[data-cmd="fontSize"]')
+  if (!select || [...select.options].some((o) => Number(o.value) === size)) return
+  const next = [...select.options].find((o) => Number(o.value) > size)
+  select.add(new Option(String(size), String(size)), next ?? null)
 }

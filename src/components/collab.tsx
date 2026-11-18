@@ -272,16 +272,26 @@ const SHAPES: { value: string; label: string; path: string }[] = [
 ]
 
 // アイコンの代わりに形そのものを描くのは、Heroicons に四角形・三角形などの図形のアイコンがないため
-const ShapeMenu = ({ cmd }: { cmd: string }) => (
+const ShapeButton = ({ cmd, shape }: { cmd: string; shape: { value: string; label: string; path: string } }) => (
+  <button type="button" class="collab-shape" data-cmd={cmd} data-cmd-value={shape.value} aria-label={shape.label} title={shape.label}>
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <path d={shape.path} fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" />
+    </svg>
+  </button>
+)
+
+const LINES = [
+  { value: 'line', label: '線', path: 'M4 20L20 4' },
+  { value: 'arrow', label: '矢印', path: 'M4 20L20 4M11 4h9v9' },
+]
+
+const ShapeMenu = ({ cmd, lineCmd }: { cmd: string; lineCmd?: string }) => (
   <ToolMenu icon="squaresPlus" label="図形">
     <div class="collab-shapes">
       {SHAPES.map((s) => (
-        <button type="button" class="collab-shape" data-cmd={cmd} data-cmd-value={s.value} aria-label={s.label} title={s.label}>
-          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
-            <path d={s.path} fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
-          </svg>
-        </button>
+        <ShapeButton cmd={cmd} shape={s} />
       ))}
+      {lineCmd && LINES.map((s) => <ShapeButton cmd={lineCmd} shape={s} />)}
     </div>
   </ToolMenu>
 )
@@ -396,7 +406,7 @@ const SheetTools = () => (
 const FONT_SIZES = ['12', '14', '16', '18', '20', '24', '28', '32', '40', '48', '60', '72'].map((v) => ({ value: v, label: v }))
 
 /** 図形・テキストを選んだときに効く操作（スライドとキャンバスで同じ） */
-const ShapeStyleTools = () => (
+const ShapeStyleTools = ({ bullet }: { bullet?: boolean }) => (
   <span class="collab-tools-group" data-when-selected>
     <ToolSelect cmd="fontSize" label="文字の大きさ" options={FONT_SIZES} value="24" />
     <Tool cmd="bold" icon="bold" label="太字（⌘B）" />
@@ -408,6 +418,7 @@ const ShapeStyleTools = () => (
     <Tool cmd="align" value="left" icon="format" label="左揃え" />
     <Tool cmd="align" value="center" icon="alignCenter" label="中央揃え" />
     <Tool cmd="align" value="right" icon="indent" label="右揃え" />
+    {bullet && <Tool cmd="bullet" icon="listBullet" label="箇条書き" />}
     <ToolMenu icon="layers" label="重なりと削除">
       <MenuItem icon="arrowUp" data-cmd="front">
         最前面へ
@@ -439,16 +450,28 @@ const SlidesTools = () => (
       </MenuItem>
     </ToolMenu>
     <Tool cmd="addText" icon="pencilSquare" label="テキスト" />
-    <ShapeMenu cmd="addShape" />
+    <ShapeMenu cmd="addShape" lineCmd="addLine" />
     <Tool cmd="image" icon="photo" label="画像" />
     <Sep />
-    <ShapeStyleTools />
+    <ShapeStyleTools bullet />
     <Sep />
-    <ColorTool cmd="background" icon="photo" label="スライドの背景色" value="#ffffff" />
-    <Button size="sm" variant="ghost" icon="play" data-cmd="present">
+    <ColorTool cmd="background" icon="stop" label="スライドの背景色" value="#ffffff" />
+    <Button size="sm" variant="ghost" icon="play" data-cmd="present" aria-label="スライドショー">
       <span class="hide-sm">スライドショー</span>
     </Button>
   </>
+)
+
+// src/collab/slides.ts で組み立てないのは、アイコンをサーバーでしか描けないため
+const SlideThumbTools = () => (
+  <template data-slide-tools>
+    <div class="slides-thumb-tools">
+      <IconButton icon="arrowUp" label="前へ移動" data-slide-action="up" />
+      <IconButton icon="arrowDown" label="後ろへ移動" data-slide-action="down" />
+      <IconButton icon="copy" label="スライドを複製" data-slide-action="copy" />
+      <IconButton icon="trash" label="スライドを削除" danger data-slide-action="remove" />
+    </div>
+  </template>
 )
 
 const BoardTools = () => (
@@ -579,6 +602,7 @@ export const CollabWorkspace = ({ kind, courseId, itemId, owner, user, title, im
           <div class="collab-loading">読み込んでいます…</div>
         </div>
       </div>
+      {kind === 'slides' && <SlideThumbTools />}
       {ext && <input type="file" hidden accept={`.${ext}`} data-collab-import-file />}
       <input type="file" hidden accept="image/png,image/jpeg,image/webp,image/gif" data-collab-image-file />
     </div>
