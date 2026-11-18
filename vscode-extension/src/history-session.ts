@@ -41,7 +41,7 @@ export async function confirmSync(context: vscode.ExtensionContext, key: string,
   return true
 }
 
-type State = 'ok' | 'busy' | 'full' | 'waiting' | 'expired' | 'declined'
+type State = 'ok' | 'busy' | 'full' | 'expired' | 'declined'
 
 const STATUS: Record<State, { text: string; tooltip: string }> = {
   ok: {
@@ -53,7 +53,6 @@ const STATUS: Record<State, { text: string; tooltip: string }> = {
     text: '$(warning) STEP Learn 記録の上限',
     tooltip: '変更履歴の記録が上限に達したため、新しい変更を記録できません。先生に知らせてください。',
   },
-  waiting: { text: '$(warning) STEP Learn 同期待ち', tooltip: 'しばらくしてから、もう一度送ります。' },
   expired: {
     text: '$(warning) STEP Learn 同期できません',
     tooltip: 'STEP Learn の画面の「VS Code で開く」をもう一度押してください。',
@@ -71,6 +70,7 @@ export class HistorySession implements vscode.Disposable {
   private maxFileSize = 0
   private timer: ReturnType<typeof setTimeout> | undefined
   private busy = false
+  private retrying = false
   private stopped = false
   private watcher: vscode.FileSystemWatcher | undefined
   private readonly status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left)
@@ -108,6 +108,7 @@ export class HistorySession implements vscode.Disposable {
   }
 
   private show(state: State, detail?: string) {
+    this.retrying = false
     this.status.text = STATUS[state].text
     this.status.tooltip = [detail, STATUS[state].tooltip].filter(Boolean).join(' ')
     this.status.show()
@@ -122,7 +123,9 @@ export class HistorySession implements vscode.Disposable {
       void vscode.window.showWarningMessage(`STEP Learn: ${message}`)
       return
     }
-    this.show('waiting', message)
+    // 同期待ちを表示しないのは、送り直しは自動で行われ、利用者にできることがないため
+    this.retrying = true
+    this.status.hide()
     this.later(RETRY, retry)
   }
 
@@ -176,7 +179,8 @@ export class HistorySession implements vscode.Disposable {
       let uploaded = this.context.globalState.get<Uploaded>(uploadedKey(this.key), {})
       const changes = await collectChanges(this.folder, this.distributed(), uploaded, this.maxFileSize, all ? undefined : paths)
       if (changes.length) {
-        this.show('busy')
+        // 送り直しで同期中と出さないのは、失敗するたびに表示が現れては消えるため
+        if (!this.retrying) this.show('busy')
         const result = await pushChanges(this.server, this.token, changes, async (sent) => {
           uploaded = markUploaded(uploaded, sent)
           await this.context.globalState.update(uploadedKey(this.key), uploaded)
