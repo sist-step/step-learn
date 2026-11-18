@@ -14,12 +14,15 @@ export type DeckSlide = {
   triggers: boolean
 }
 
-export type Deck = { name: string; slides: DeckSlide[] }
+/** file は PowerPoint が返すファイルのフルパス。開いているファイルの中から同じものを見分けるのに使う */
+export type Deck = { file: string; name: string; slides: DeckSlide[] }
 
-/** PowerPoint の今の状態。click と clicks は、クリックの段階を読めない OS では null */
+/** 同期しているファイルから見た、PowerPoint の今の状態。click と clicks は、クリックの段階を読めない OS では null。otherShow は、別のファイルをスライドショーしているか */
 export type ShowState =
   | { state: 'closed' }
-  | { state: 'idle'; saved: boolean }
+  /** PowerPoint は動いているが、同期しているファイルを開いていない */
+  | { state: 'absent'; otherShow: boolean }
+  | { state: 'idle'; saved: boolean; otherShow: boolean }
   | { state: 'show'; slideId: number | null; click: number | null; clicks: number | null; saved: boolean }
   /** 読めなかった（PowerPoint がダイアログを開いている、操作の許可がないなど） */
   | { state: 'error'; message: string }
@@ -29,12 +32,18 @@ export class PowerPointError extends Error {}
 
 export const NO_PRESENTATION = 'PowerPoint でスライドのファイルを開いてから、もう一度お試しください。'
 
+export const fileNotOpen = (deck: Deck) =>
+  `同期している「${deck.name}」が PowerPoint で開かれていません。開いてから、もう一度お試しください。`
+
 /** OS ごとの、PowerPoint を読む部分 */
 export interface PowerPoint {
-  /** 開いているファイルのスライドを読み、target に PDF を書き出す。時間がかかっているときに onWaiting を 1 回呼ぶ */
-  exportPdf(target: string, onWaiting: () => void): Promise<Deck>
-  /** 状態を読み続ける。読む役のプロセスが止まったら onExit を呼ぶ */
-  watch(onState: (state: ShowState) => void, onExit: () => void): { dispose: () => void }
+  /**
+   * スライドを読み、target に PDF を書き出す。時間がかかっているときに onWaiting を 1 回呼ぶ。
+   * source を渡すとそのファイルだけを、null ならスライドショー中のファイルか、なければ前面のファイルを書き出す
+   */
+  exportPdf(target: string, onWaiting: () => void, source: Deck | null): Promise<Deck>
+  /** file の状態を読み続ける。読む役のプロセスが止まったら onExit を呼ぶ */
+  watch(file: string, onState: (state: ShowState) => void, onExit: () => void): { dispose: () => void }
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
@@ -51,7 +60,8 @@ export function parseState(line: string): ShowState | null {
   }
   if (!isObject(raw)) return null
   if (raw.state === 'closed') return { state: 'closed' }
-  if (raw.state === 'idle') return { state: 'idle', saved: raw.saved !== false }
+  if (raw.state === 'absent') return { state: 'absent', otherShow: raw.otherShow === true }
+  if (raw.state === 'idle') return { state: 'idle', saved: raw.saved !== false, otherShow: raw.otherShow === true }
   if (raw.state === 'show')
     return {
       state: 'show',

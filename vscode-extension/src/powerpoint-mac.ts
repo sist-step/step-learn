@@ -5,6 +5,7 @@ import {
   NO_PRESENTATION,
   PowerPointError,
   eachLine,
+  fileNotOpen,
   parseState,
   type Deck,
   type DeckSlide,
@@ -18,14 +19,24 @@ import {
 const EXPORT_SCRIPT = `on run argv
 	if application "Microsoft PowerPoint" is not running then return "closed"
 	set dest to POSIX file (item 1 of argv)
+	set wanted to item 2 of argv
 	tell application "Microsoft PowerPoint"
-		if (count of slide show windows) > 0 then
+		if (count of presentations) is 0 then return "none"
+		set p to missing value
+		if wanted is not "" then
+			repeat with i from 1 to count of presentations
+				if full name of presentation i is wanted then
+					set p to presentation i
+					exit repeat
+				end if
+			end repeat
+			if p is missing value then return "missing"
+		else if (count of slide show windows) > 0 then
 			set p to presentation of slide show window 1
 		else
-			if (count of presentations) is 0 then return "none"
 			set p to active presentation
 		end if
-		set resultLines to {"ok", name of p}
+		set resultLines to {"ok", full name of p, name of p}
 		set n to count of slides of p
 		repeat with i from 1 to n
 			set s to slide i of p
@@ -51,22 +62,33 @@ function write(o) {
   const data = $.NSString.alloc.initWithUTF8String(JSON.stringify(o) + '\\n').dataUsingEncoding($.NSUTF8StringEncoding)
   $.NSFileHandle.fileHandleWithStandardOutput.writeData(data)
 }
-function read(app) {
+function read(app, file) {
   if (!app.running()) return { state: 'closed' }
-  if (app.slideShowWindows.length === 0) return { state: 'idle', saved: app.presentations.length ? app.activePresentation.saved() : true }
-  const win = app.slideShowWindows[0]
-  let slideId = null
-  try {
-    slideId = win.slideshowView.slide.slideID()
-  } catch (e) {}
-  return { state: 'show', slideId: slideId, click: null, clicks: null, saved: win.presentation.saved() }
+  let otherShow = false
+  for (let i = 0; i < app.slideShowWindows.length; i++) {
+    const win = app.slideShowWindows[i]
+    if (win.presentation.fullName() !== file) {
+      otherShow = true
+      continue
+    }
+    let slideId = null
+    try {
+      slideId = win.slideshowView.slide.slideID()
+    } catch (e) {}
+    return { state: 'show', slideId: slideId, click: null, clicks: null, saved: win.presentation.saved() }
+  }
+  for (let i = 0; i < app.presentations.length; i++) {
+    const p = app.presentations[i]
+    if (p.fullName() === file) return { state: 'idle', saved: p.saved(), otherShow: otherShow }
+  }
+  return { state: 'absent', otherShow: otherShow }
 }
-function run() {
+function run(argv) {
   const app = Application('Microsoft PowerPoint')
   for (;;) {
     if ($.getppid() === 1) $.exit(0)
     try {
-      write(read(app))
+      write(read(app, argv[0]))
     } catch (e) {
       write({ state: 'error', message: String(e) })
     }
@@ -105,12 +127,12 @@ function parseSlide(line: string): DeckSlide {
 }
 
 export class MacPowerPoint implements PowerPoint {
-  async exportPdf(target: string, onWaiting: () => void): Promise<Deck> {
+  async exportPdf(target: string, onWaiting: () => void, source: Deck | null): Promise<Deck> {
     // 前の PDF を消しておくのは、書き出せなかったときに、前のファイルを新しく書き出したものと取り違えないため
     await fs.rm(target, { force: true })
     const waiting = setTimeout(onWaiting, WAITING_AFTER)
     const output = await new Promise<string>((resolve, reject) => {
-      execFile('osascript', ['-e', EXPORT_SCRIPT, target], { timeout: EXPORT_TIMEOUT }, (error, stdout, stderr) => {
+      execFile('osascript', ['-e', EXPORT_SCRIPT, target, source?.file ?? ''], { timeout: EXPORT_TIMEOUT }, (error, stdout, stderr) => {
         if (!error) return resolve(stdout)
         if (NOT_AUTHORIZED.test(stderr)) return reject(new PowerPointError(AUTOMATION_HELP))
         if (error.killed)
@@ -120,13 +142,14 @@ export class MacPowerPoint implements PowerPoint {
         reject(new PowerPointError(`PowerPoint から PDF を書き出せませんでした（${stderr.trim() || error.message}）。`))
       })
     }).finally(() => clearTimeout(waiting))
-    const [result, name, ...lines] = output.trim().split('\n')
+    const [result, file, name, ...lines] = output.trim().split('\n')
+    if (source && (result === 'closed' || result === 'none' || result === 'missing')) throw new PowerPointError(fileNotOpen(source))
     if (result === 'closed' || result === 'none') throw new PowerPointError(NO_PRESENTATION)
-    if (result !== 'ok') throw new PowerPointError('PowerPoint から受け取った内容が正しくありません。')
+    if (result !== 'ok' || !file) throw new PowerPointError('PowerPoint から受け取った内容が正しくありません。')
     // ファイルができたかを確かめるのは、PowerPoint にフォルダーへの書き込みを断られても、書き出しは成功と返るため
     for (let waited = 0; waited < FILE_WAIT; waited += 250) {
       const stat = await fs.stat(target).catch(() => null)
-      if (stat?.size) return { name, slides: lines.map(parseSlide) }
+      if (stat?.size) return { file, name, slides: lines.map(parseSlide) }
       await sleep(250)
     }
     throw new PowerPointError(
@@ -134,8 +157,8 @@ export class MacPowerPoint implements PowerPoint {
     )
   }
 
-  watch(onState: (state: ShowState) => void, onExit: () => void) {
-    const child = spawn('osascript', ['-l', 'JavaScript', '-e', WATCH_SCRIPT], { stdio: ['ignore', 'pipe', 'pipe'] })
+  watch(file: string, onState: (state: ShowState) => void, onExit: () => void) {
+    const child = spawn('osascript', ['-l', 'JavaScript', '-e', WATCH_SCRIPT, file], { stdio: ['ignore', 'pipe', 'pipe'] })
     child.stdout.on(
       'data',
       eachLine((line) => {
