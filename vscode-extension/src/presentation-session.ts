@@ -38,8 +38,10 @@ const WAITING_HINT = IS_MAC
 const MAX_RESTARTS = 3
 /** 書き出した直後のスライドショーでは、書き出し直さない（ミリ秒） */
 const FRESH_EXPORT = 10_000
-/** PowerPoint とつながらない状態がこれだけ続いたら、PowerPoint を止めたとみなす（ミリ秒） */
-const DISCONNECT_LIMIT = 300_000
+/** PowerPoint とつながらない状態がこれだけ続いたら、同期を止める（ミリ秒） */
+const DISCONNECT_LIMIT = 3000
+/** つながっているかを確かめる間隔（ミリ秒） */
+const CONNECTION_CHECK = 250
 
 const keyOf = (p: Position) => `${p.slideId}:${p.complete}`
 
@@ -74,8 +76,9 @@ export class PresentationSession {
   private readonly warnedSlides = new Set<number>()
   private toldError = ''
   private restarts = 0
-  /** PowerPoint とつながらなくなった時刻 */
-  private disconnectedAt: number | null = null
+  private connectionTimer: NodeJS.Timeout | null = null
+  /** PowerPoint とつながっていない時間（ミリ秒）。読む役のプロセスが最初に応答するまでは null */
+  private disconnectedFor: number | null = null
   private disposed = false
 
   constructor(
@@ -162,16 +165,20 @@ export class PresentationSession {
 
   start() {
     if (this.disposed || !this.deck) return
+    // 読む役の起動を待つあいだを数えないのは、Windows の PowerShell は起動だけで 1 秒近くかかり、遅い PC では 3 秒を超えて、つながっているのに止めてしまうため
+    this.disconnectedFor = null
     this.watcher = this.powerPoint.watch(
       this.deck.file,
       (state) => this.onState(state),
       () => this.onWatcherExit(),
     )
+    this.connectionTimer ??= setInterval(() => this.checkConnection(), CONNECTION_CHECK)
   }
 
   private onWatcherExit() {
     if (this.disposed) return
     this.watcher = null
+    this.disconnectedFor = null
     if (++this.restarts > MAX_RESTARTS) return this.fail('PowerPoint を読めなくなったため、同期を止めました。')
     setTimeout(() => this.start(), 2000)
   }
@@ -179,7 +186,7 @@ export class PresentationSession {
   private onState(state: ShowState) {
     if (this.disposed) return
     this.state = state
-    if (this.disconnectedTooLong(state)) return this.stopDisconnected()
+    this.disconnectedFor = state.state === 'closed' || state.state === 'error' ? (this.disconnectedFor ?? 0) : 0
     if (state.state === 'error') {
       // 同じ理由を読むたびに出さないのは、0.5 秒おきに読んでいて、通知が積み上がるため
       if (state.message && state.message !== this.toldError && /許可/.test(state.message)) {
@@ -219,22 +226,20 @@ export class PresentationSession {
     this.render()
   }
 
-  // タイマーで測らないのは、PC がスリープから戻った直後に、眠っていた時間まで切れていた時間に数えて止めてしまうため
-  private disconnectedTooLong(state: ShowState) {
+  // 状態が届いたときだけ測らないのは、PowerPoint が固まると、読む役からの応答そのものが止まるため。
+  // 時刻の差で測らないのは、PC がスリープから戻った直後に、眠っていた時間まで切れていた時間に数えて止めてしまうため
+  private checkConnection() {
+    if (this.disconnectedFor === null) return
     // 書き出し中を数えないのは、PowerPoint が許可の画面を出しているあいだは読めなくても、つながっているため
-    if (this.exporting || (state.state !== 'closed' && state.state !== 'error')) {
-      this.disconnectedAt = null
-      return false
-    }
-    const now = Date.now()
-    this.disconnectedAt ??= now
-    return now - this.disconnectedAt >= DISCONNECT_LIMIT
+    this.disconnectedFor = this.exporting ? 0 : this.disconnectedFor + CONNECTION_CHECK
+    // ちょうど上限で比べないのは、最後の応答から実際に切れるまでと次の確認までに 1 間隔ずつのずれがあり、上限に満たないうちに止めてしまうため
+    if (this.disconnectedFor > DISCONNECT_LIMIT + CONNECTION_CHECK) this.stopDisconnected()
   }
 
   // すべて公開しないのは、先生がいないところで、まだ見せていないページを学生に見せてしまうため
   private stopDisconnected() {
     void vscode.window.showWarningMessage(
-      `PowerPoint との接続が切れたままのため、「${this.grant.title}」の同期を止めました。もう一度始めるときは、STEP Learn の「PowerPoint と同期」を押してください。`,
+      `PowerPoint との接続が切れたため、「${this.grant.title}」の同期を止めました。公開の範囲はそのままです。もう一度始めるときは、STEP Learn の「PowerPoint と同期」を押してください。`,
     )
     void this.end(false)
   }
@@ -340,6 +345,7 @@ export class PresentationSession {
   dispose() {
     if (this.disposed) return
     this.disposed = true
+    if (this.connectionTimer) clearInterval(this.connectionTimer)
     this.watcher?.dispose()
     this.status.dispose()
     this.onEnd()
