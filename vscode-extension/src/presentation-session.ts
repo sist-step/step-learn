@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import * as vscode from 'vscode'
-import { PowerPointError, type PowerPoint, type ShowState } from './powerpoint'
+import { PowerPointError, type Deck, type PowerPoint, type ShowState } from './powerpoint'
 import { MacPowerPoint } from './powerpoint-mac'
 import { WindowsPowerPoint } from './powerpoint-win'
 import {
@@ -46,12 +46,14 @@ const messageOf = (e: unknown, fallback: string) =>
   e instanceof SyncError || e instanceof PowerPointError ? e.message : `${fallback}（${e instanceof Error ? e.message : String(e)}）。`
 
 /**
- * 発表ファイルのアイテム 1 つとの同期。PowerPoint で開いているファイルを PDF にして上げ、
- * スライドショーで映しているスライドを STEP Learn に送り続ける
+ * 発表ファイルのアイテム 1 つとの同期。同期を始めたときの PowerPoint のファイルを PDF にして上げ、
+ * そのファイルのスライドショーで映しているスライドを STEP Learn に送り続ける
  */
 export class PresentationSession {
   private readonly status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50)
   private watcher: { dispose: () => void } | null = null
+  /** 同期しているファイル。最初に PDF を上げたときに決まり、書き出し直しても変わらない */
+  private deck: Deck | null = null
   private tracker: PositionTracker | null = null
   private summary: PresentationSummary
   private state: ShowState | null = null
@@ -88,7 +90,7 @@ export class PresentationSession {
     this.status.show()
   }
 
-  /** PowerPoint で開いているファイルを PDF にして上げる。notices は、公開の範囲とアニメーションの扱いを知らせるか */
+  /** 同期するファイルを PDF にして上げる。notices は、同期するファイルと公開の範囲、アニメーションの扱いを知らせるか */
   async publish(notices: boolean): Promise<boolean> {
     if (this.exporting || this.disposed) return false
     this.exporting = true
@@ -97,10 +99,11 @@ export class PresentationSession {
       // いつも同じ場所に書き出すのは、Mac の PowerPoint がフォルダーごとに許可を求め、場所を変えるたびに先生に聞くことになるため
       const target = path.join(this.context.globalStorageUri.fsPath, 'presentation', 'slides.pdf')
       await fs.mkdir(path.dirname(target), { recursive: true })
-      const deck = await this.powerPoint.exportPdf(target, () => void vscode.window.showInformationMessage(WAITING_HINT))
+      const deck = await this.powerPoint.exportPdf(target, () => void vscode.window.showInformationMessage(WAITING_HINT), this.deck)
       const meta = metaOf(deck)
       if (meta.slideIds.length === 0) throw new SyncError('表示するスライドがありません。')
       this.summary = await uploadPdf(this.server, this.grant, new Uint8Array(await fs.readFile(target)), deck)
+      this.deck = deck
       this.tracker = new PositionTracker(deck)
       this.exportedAt = Date.now()
       this.dirty = false
@@ -109,6 +112,7 @@ export class PresentationSession {
       // 上げ直すと STEP Learn は先生のページを忘れるので、同じスライドのままでも送り直す
       this.lastKey = null
       if (notices) {
+        void vscode.window.showInformationMessage(`PowerPoint の「${deck.name}」を「${this.grant.title}」と同期します。`)
         this.tellReleased()
         this.tellAnimations(meta.animatedPages, meta.triggerPages)
       }
@@ -146,8 +150,9 @@ export class PresentationSession {
   }
 
   start() {
-    if (this.disposed) return
+    if (this.disposed || !this.deck) return
     this.watcher = this.powerPoint.watch(
+      this.deck.file,
       (state) => this.onState(state),
       () => this.onWatcherExit(),
     )
@@ -174,7 +179,7 @@ export class PresentationSession {
     }
     this.restarts = 0
     const inShow = state.state === 'show'
-    const saved = state.state === 'closed' ? null : state.saved
+    const saved = state.state === 'idle' || state.state === 'show' ? state.saved : null
     if (saved === false && this.wasSaved === true) {
       this.dirty = true
       if (inShow && !this.toldDirty) {
@@ -189,7 +194,8 @@ export class PresentationSession {
     // 保存していない変更があるときに始まったスライドショーでも書き出し直すのは、保存済みから変わった瞬間しか変更に気づけず、
     // 保存しないまま直し続けたスライドは、書き出したときのままかどうかが分からないため
     const stale = this.dirty || (saved === false && Date.now() - this.exportedAt > FRESH_EXPORT)
-    if (this.tracker && ((started && stale) || (ended && this.dirty))) void this.publish(false)
+    // ファイルを閉じたあとは書き出せないので、次にスライドショーを始めたときまで待つ
+    if (this.tracker && ((started && stale) || (ended && this.dirty && state.state === 'idle'))) void this.publish(false)
 
     if (this.tracker) {
       const now = Date.now()
@@ -205,7 +211,7 @@ export class PresentationSession {
   // タイマーで測らないのは、PC がスリープから戻った直後に、眠っていた時間まで切れていた時間に数えて止めてしまうため
   private disconnectedTooLong(state: ShowState) {
     // 書き出し中を数えないのは、PowerPoint が許可の画面を出しているあいだは読めなくても、つながっているため
-    if (this.exporting || state.state === 'idle' || state.state === 'show') {
+    if (this.exporting || (state.state !== 'closed' && state.state !== 'error')) {
       this.disconnectedAt = null
       return false
     }
@@ -253,18 +259,20 @@ export class PresentationSession {
     }
   }
 
-  private render() {
+  private statusText() {
     const { state } = this
-    this.status.text = this.exporting
-      ? '$(sync~spin) PDF を書き出しています'
-      : !state || state.state === 'closed'
-        ? '$(debug-pause) PowerPoint を待っています'
-        : state.state === 'error'
-          ? '$(warning) PowerPoint を読めません'
-          : state.state === 'idle'
-            ? '$(debug-pause) スライドショーを待っています'
-            : `$(broadcast) スライド同期中 ${this.page ?? '-'} / ${this.summary.pages}`
-    this.status.tooltip = `STEP Learn「${this.grant.title}」\n公開 ${this.summary.released} / ${this.summary.pages} ページ\nクリックすると、PDF の書き出し直しと、同期の停止ができます`
+    if (this.exporting) return '$(sync~spin) PDF を書き出しています'
+    if (!state || state.state === 'closed') return '$(debug-pause) PowerPoint を待っています'
+    if (state.state === 'error') return '$(warning) PowerPoint を読めません'
+    if (state.state === 'show') return `$(broadcast) スライド同期中 ${this.page ?? '-'} / ${this.summary.pages}`
+    if (state.otherShow) return '$(warning) 別のファイルを映しています'
+    return state.state === 'idle' ? '$(debug-pause) スライドショーを待っています' : '$(debug-pause) 同期するファイルを待っています'
+  }
+
+  private render() {
+    this.status.text = this.statusText()
+    const file = this.deck ? `PowerPoint「${this.deck.name}」\n` : ''
+    this.status.tooltip = `STEP Learn「${this.grant.title}」\n${file}公開 ${this.summary.released} / ${this.summary.pages} ページ\nクリックすると、PDF の書き出し直しと、同期の停止ができます`
   }
 
   async menu() {

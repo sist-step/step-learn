@@ -5,6 +5,7 @@ import {
   NO_PRESENTATION,
   PowerPointError,
   eachLine,
+  fileNotOpen,
   parseState,
   type Deck,
   type DeckSlide,
@@ -28,10 +29,16 @@ const NOT_RUNNING = '-2147221021'
 // SaveAs にしないのは、開いているファイルを PDF として保存し直すことになるため
 const EXPORT_SCRIPT = `${PRELUDE}
 $target = '__TARGET__'
+$file = '__FILE__'
 try { $app = [Runtime.InteropServices.Marshal]::GetActiveObject('PowerPoint.Application') } catch { Emit @{ result = 'closed' }; exit }
 try {
-  if ($app.SlideShowWindows.Count -gt 0) { $p = $app.SlideShowWindows.Item(1).Presentation }
-  elseif ($app.Presentations.Count -eq 0) { Emit @{ result = 'none' }; exit }
+  $p = $null
+  if ($app.Presentations.Count -eq 0) { Emit @{ result = 'none' }; exit }
+  if ($file) {
+    foreach ($c in $app.Presentations) { if ($c.FullName -ceq $file) { $p = $c; break } }
+    if ($null -eq $p) { Emit @{ result = 'missing' }; exit }
+  }
+  elseif ($app.SlideShowWindows.Count -gt 0) { $p = $app.SlideShowWindows.Item(1).Presentation }
   else { $p = $app.ActivePresentation }
   $slides = @()
   foreach ($s in $p.Slides) {
@@ -53,7 +60,7 @@ try {
     $p.SaveCopyAs($target, 32)
     $method = 'copy'
   }
-  Emit @{ result = 'ok'; name = [string]$p.Name; method = $method; slides = $slides }
+  Emit @{ result = 'ok'; file = [string]$p.FullName; name = [string]$p.Name; method = $method; slides = $slides }
 } catch { Emit @{ result = 'error'; message = $_.Exception.Message } }
 `
 
@@ -61,16 +68,23 @@ try {
 // 親のプロセスを確かめるのは、VS Code が終了したあとも読み続けないため
 const WATCH_SCRIPT = `${PRELUDE}
 $parent = __PARENT__
+$file = '__FILE__'
 while ($true) {
   if (-not (Get-Process -Id $parent -ErrorAction SilentlyContinue)) { exit }
   try {
     $app = [Runtime.InteropServices.Marshal]::GetActiveObject('PowerPoint.Application')
-    if ($app.SlideShowWindows.Count -eq 0) {
-      $saved = $true
-      if ($app.Presentations.Count -gt 0) { $saved = [bool]$app.ActivePresentation.Saved }
-      Emit @{ state = 'idle'; saved = $saved }
+    $w = $null
+    $otherShow = $false
+    foreach ($s in $app.SlideShowWindows) {
+      if ($s.Presentation.FullName -ceq $file) { $w = $s; break }
+      $otherShow = $true
+    }
+    if ($null -eq $w) {
+      $p = $null
+      foreach ($c in $app.Presentations) { if ($c.FullName -ceq $file) { $p = $c; break } }
+      if ($null -eq $p) { Emit @{ state = 'absent'; otherShow = $otherShow } }
+      else { Emit @{ state = 'idle'; saved = [bool]$p.Saved; otherShow = $otherShow } }
     } else {
-      $w = $app.SlideShowWindows.Item(1)
       $v = $w.View
       $id = $null
       $click = $null
@@ -98,6 +112,9 @@ const powershellArgs = (script: string) => [
   Buffer.from(script, 'utf16le').toString('base64'),
 ]
 
+// ' のほかの文字も重ねるのは、PowerShell が曲がった引用符も ' と同じに扱い、ファイル名に入っていると文字列がそこで切れるため
+const quoted = (s: string) => s.replace(/['‘’‚‛]/g, '$&$&')
+
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
 
 function parseSlide(raw: unknown): DeckSlide | null {
@@ -112,10 +129,11 @@ function parseSlide(raw: unknown): DeckSlide | null {
 }
 
 export class WindowsPowerPoint implements PowerPoint {
-  async exportPdf(target: string, onWaiting: () => void): Promise<Deck> {
+  async exportPdf(target: string, onWaiting: () => void, source: Deck | null): Promise<Deck> {
     await fs.rm(target, { force: true })
     const waiting = setTimeout(onWaiting, WAITING_AFTER)
-    const script = EXPORT_SCRIPT.replace('__TARGET__', target.replace(/'/g, "''"))
+    // 置き換える文字列を関数で返すのは、文字列で渡すと、パスの中の $& などが特別な意味になるため
+    const script = EXPORT_SCRIPT.replace('__TARGET__', () => quoted(target)).replace('__FILE__', () => quoted(source?.file ?? ''))
     const output = await new Promise<string>((resolve, reject) => {
       execFile('powershell.exe', powershellArgs(script), { timeout: EXPORT_TIMEOUT, windowsHide: true }, (error, stdout, stderr) => {
         if (!error) return resolve(stdout)
@@ -131,19 +149,21 @@ export class WindowsPowerPoint implements PowerPoint {
       raw = JSON.parse(output.trim().split(/\r?\n/).pop() ?? '')
     } catch {}
     if (!isObject(raw)) throw new PowerPointError('PowerPoint から受け取った内容が正しくありません。')
+    if (source && (raw.result === 'closed' || raw.result === 'none' || raw.result === 'missing'))
+      throw new PowerPointError(fileNotOpen(source))
     if (raw.result === 'closed' || raw.result === 'none') throw new PowerPointError(NO_PRESENTATION)
-    if (raw.result !== 'ok' || !Array.isArray(raw.slides))
+    if (raw.result !== 'ok' || !Array.isArray(raw.slides) || typeof raw.file !== 'string' || !raw.file)
       throw new PowerPointError(
         `PowerPoint から PDF を書き出せませんでした（${typeof raw.message === 'string' ? raw.message : '理由は分かりません'}）。`,
       )
     const stat = await fs.stat(target).catch(() => null)
     if (!stat?.size) throw new PowerPointError('PDF を書き出せませんでした。')
     const slides = raw.slides.map(parseSlide).filter((s): s is DeckSlide => s !== null)
-    return { name: typeof raw.name === 'string' ? raw.name : '', slides }
+    return { file: raw.file, name: typeof raw.name === 'string' ? raw.name : '', slides }
   }
 
-  watch(onState: (state: ShowState) => void, onExit: () => void) {
-    const script = WATCH_SCRIPT.replace('__PARENT__', String(process.pid))
+  watch(file: string, onState: (state: ShowState) => void, onExit: () => void) {
+    const script = WATCH_SCRIPT.replace('__PARENT__', String(process.pid)).replace('__FILE__', () => quoted(file))
     const child = spawn('powershell.exe', powershellArgs(script), { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
     child.stdout.on(
       'data',
