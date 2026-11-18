@@ -298,6 +298,9 @@ const ShapeMenu = ({ cmd, lineCmd }: { cmd: string; lineCmd?: string }) => (
   </ToolMenu>
 )
 
+// sheet-model.ts から読まないのは、サーバーの描画に Yjs と計算式のコードを持ち込まないため
+const SHEET_FONT_SIZES = [10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 36]
+
 const FileTools = ({ kind, canImport }: { kind: CollabKind; canImport: boolean }) => {
   const ext = COLLAB_FILE_EXTS[kind]
   if (!ext) return null
@@ -543,15 +546,36 @@ const DocTools = () => (
 
 const SheetTools = () => (
   <>
+    <ToolSelect
+      cmd="fontSize"
+      label="文字の大きさ"
+      options={[{ value: '', label: '標準' }, ...SHEET_FONT_SIZES.map((v) => ({ value: String(v), label: String(v) }))]}
+    />
     <Tool cmd="bold" icon="bold" label="太字（⌘B）" />
     <Tool cmd="italic" icon="italic" label="斜体（⌘I）" />
     <Tool cmd="underline" icon="underline" label="下線（⌘U）" />
+    <Tool cmd="strike" icon="strikethrough" label="取り消し線" />
     <ColorTool cmd="color" icon="swatch" label="文字の色" value="#d92d20" />
     <ColorTool cmd="fill" icon="paintBrush" label="塗りつぶし" value="#fde047" />
+    <ToolMenu icon="stop" label="罫線">
+      <MenuItem data-cmd="border" data-cmd-value="all">
+        すべての罫線
+      </MenuItem>
+      <MenuItem data-cmd="border" data-cmd-value="outer">
+        外枠
+      </MenuItem>
+      <MenuItem data-cmd="border" data-cmd-value="bottom">
+        下の罫線
+      </MenuItem>
+      <MenuItem data-cmd="border" data-cmd-value="none">
+        罫線を消す
+      </MenuItem>
+    </ToolMenu>
     <Sep />
     <Tool cmd="align" value="left" icon="format" label="左揃え" />
     <Tool cmd="align" value="center" icon="alignCenter" label="中央揃え" />
     <Tool cmd="align" value="right" icon="indent" label="右揃え" />
+    <Tool cmd="wrap" icon="textWrap" label="折り返して全体を表示" />
     <ToolSelect
       cmd="format"
       label="表示形式"
@@ -577,6 +601,22 @@ const SheetTools = () => (
         列を削除
       </MenuItem>
     </ToolMenu>
+    <ToolMenu icon="sort" label="並べ替え">
+      <MenuItem icon="arrowUp" data-cmd="sort" data-cmd-value="asc">
+        選んだ範囲を昇順に並べ替え
+      </MenuItem>
+      <MenuItem icon="arrowDown" data-cmd="sort" data-cmd-value="desc">
+        選んだ範囲を降順に並べ替え
+      </MenuItem>
+    </ToolMenu>
+    <ToolMenu icon="lock" label="行と列の固定">
+      <MenuItem data-cmd="freezeRows">選んだ行まで固定</MenuItem>
+      <MenuItem data-cmd="freezeCols">選んだ列まで固定</MenuItem>
+      <MenuItem data-cmd="unfreeze">固定を解除</MenuItem>
+    </ToolMenu>
+    <Tool cmd="find" icon="search" label="検索と置換（⌘F）" />
+    <Sep />
+    <Tool cmd="clearFormat" icon="backspace" label="書式をクリア" />
     <Tool cmd="clear" icon="trash" label="選んだセルを消去（Delete）" />
   </>
 )
