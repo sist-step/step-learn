@@ -14,6 +14,7 @@ import {
   ShadingType,
   Table,
   TableCell,
+  TableLayoutType,
   TableRow,
   TextRun,
   WidthType,
@@ -21,10 +22,15 @@ import {
   type ParagraphChild,
 } from 'docx'
 import mammoth from 'mammoth/mammoth.browser'
+import { DOC_FONTS } from '../lib/collab'
 import { fetchImage, fitSize, hexColor } from './office'
 
 // A4 の余白を除いた幅（ピクセル）。画像をこれより大きく入れない
 const CONTENT_WIDTH = 600
+// 同じ幅の twip（1/20 pt）。表の列の幅に使う
+const CONTENT_TWIPS = 9026
+// 画面の字下げ 1 段（2em）と同じ幅。本文の 12pt の 2 文字分
+const INDENT_TWIPS = 480
 
 const HEADINGS = { 1: HeadingLevel.HEADING_1, 2: HeadingLevel.HEADING_2, 3: HeadingLevel.HEADING_3, 4: HeadingLevel.HEADING_4 } as const
 
@@ -39,6 +45,14 @@ type Ctx = { images: Map<string, Awaited<ReturnType<typeof fetchImage>>>; lists:
 
 type Mark = { type: string; attrs?: Record<string, unknown> }
 
+/** CSS の文字の大きさ（pt か px）を、.docx の単位（半ポイント）にする */
+function halfPoints(size: unknown) {
+  const match = /^([\d.]+)(pt|px)$/.exec(String(size))
+  if (!match) return undefined
+  const points = Number(match[1]) * (match[2] === 'px' ? 0.75 : 1)
+  return Math.round(points * 2) || undefined
+}
+
 function textRun(node: JSONContent): TextRun {
   const marks = (node.marks ?? []) as Mark[]
   const has = (type: string) => marks.some((m) => m.type === type)
@@ -46,6 +60,7 @@ function textRun(node: JSONContent): TextRun {
   const highlight = marks.find((m) => m.type === 'highlight')?.attrs
   const color = hexColor(style?.color as string | undefined)
   const fill = highlight ? (hexColor(highlight.color as string | undefined) ?? 'FFFF00') : null
+  const font = DOC_FONTS.find((f) => f.css === style?.fontFamily)?.docx
   return new TextRun({
     text: node.text ?? '',
     bold: has('bold') || undefined,
@@ -54,7 +69,8 @@ function textRun(node: JSONContent): TextRun {
     strike: has('strike') || undefined,
     color: color ?? (has('link') ? '1D4ED8' : undefined),
     shading: fill ? { type: ShadingType.CLEAR, fill, color: 'auto' } : undefined,
-    font: has('code') ? 'Consolas' : undefined,
+    font: has('code') ? 'Consolas' : font,
+    size: halfPoints(style?.fontSize),
   })
 }
 
@@ -72,13 +88,21 @@ function inline(nodes: JSONContent[] | undefined, ctx: Ctx): ParagraphChild[] {
 function imageRuns(node: JSONContent, ctx: Ctx): ParagraphChild[] {
   const image = ctx.images.get(String(node.attrs?.src))
   if (!image) return []
-  return [new ImageRun({ type: image.type, data: image.data, transformation: fitSize(image.width, image.height, CONTENT_WIDTH) })]
+  const width = Number(node.attrs?.width) || image.width
+  const height = Number(node.attrs?.height) || (image.height * width) / image.width
+  return [new ImageRun({ type: image.type, data: image.data, transformation: fitSize(width, height, CONTENT_WIDTH) })]
 }
 
 const alignmentOf = (node: JSONContent) => ALIGNMENTS[node.attrs?.textAlign as keyof typeof ALIGNMENTS]
 
 function paragraph(node: JSONContent, ctx: Ctx, extra: IParagraphOptions = {}) {
-  return new Paragraph({ children: inline(node.content, ctx), alignment: alignmentOf(node), ...extra })
+  const indent = Number(node.attrs?.indent) || 0
+  return new Paragraph({
+    children: inline(node.content, ctx),
+    alignment: alignmentOf(node),
+    indent: indent ? { left: indent * INDENT_TWIPS } : undefined,
+    ...extra,
+  })
 }
 
 function listItems(node: JSONContent, ctx: Ctx, reference: string, level: number, instance: number): (Paragraph | Table)[] {
@@ -93,7 +117,25 @@ function listItems(node: JSONContent, ctx: Ctx, reference: string, level: number
   )
 }
 
+const cellColumns = (cell: JSONContent) => {
+  const widths = cell.attrs?.colwidth as (number | null)[] | null | undefined
+  return Array.from({ length: Number(cell.attrs?.colspan) || 1 }, (_, i) => widths?.[i] ?? null)
+}
+
+/** 画面で列の幅を変えた表の、幅の決め方。変えていなければ null（均等に任せる） */
+function columnSizing(node: JSONContent) {
+  const columns = (node.content?.[0]?.content ?? []).flatMap(cellColumns)
+  if (!columns.some(Boolean)) return null
+  const known = columns.reduce<number>((sum, w) => sum + (w ?? 0), 0)
+  const unknown = columns.filter((w) => !w).length
+  const fallback = unknown ? Math.max((CONTENT_WIDTH - known) / unknown, 40) : 0
+  const total = known + unknown * fallback
+  const twips = (w: number | null) => Math.round(((w ?? fallback) / total) * CONTENT_TWIPS)
+  return { grid: columns.map(twips), cell: (cell: JSONContent) => cellColumns(cell).reduce<number>((sum, w) => sum + twips(w), 0) }
+}
+
 function table(node: JSONContent, ctx: Ctx) {
+  const sizing = columnSizing(node)
   const rows = (node.content ?? []).map(
     (row) =>
       new TableRow({
@@ -103,12 +145,18 @@ function table(node: JSONContent, ctx: Ctx) {
             children: children.length ? children : [new Paragraph('')],
             columnSpan: Number(cell.attrs?.colspan) || undefined,
             rowSpan: Number(cell.attrs?.rowspan) || undefined,
+            width: sizing ? { size: sizing.cell(cell), type: WidthType.DXA } : undefined,
             shading: cell.type === 'tableHeader' ? { type: ShadingType.CLEAR, fill: 'F1F5F9', color: 'auto' } : undefined,
           })
         }),
       }),
   )
-  return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE } })
+  return new Table({
+    rows,
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    columnWidths: sizing?.grid,
+    layout: sizing ? TableLayoutType.FIXED : undefined,
+  })
 }
 
 function blocks(nodes: JSONContent[], ctx: Ctx): (Paragraph | Table)[] {
@@ -167,7 +215,16 @@ export async function docToDocx(json: JSONContent) {
   const images = new Map(await Promise.all(sources.map(async (src) => [src, await fetchImage(src)] as const)))
   const children = blocks(json.content ?? [], { images, lists: 0 })
   const document = new Document({
-    styles: { default: { document: { run: { font: 'Yu Gothic', size: 21 } } } },
+    // 本文と見出しの大きさは、画面（本文 16px = 12pt）の見た目に合わせる
+    styles: {
+      default: {
+        document: { run: { font: 'Yu Gothic', size: 24 } },
+        heading1: { run: { size: 48, bold: true } },
+        heading2: { run: { size: 36, bold: true } },
+        heading3: { run: { size: 29, bold: true } },
+        heading4: { run: { size: 24, bold: true } },
+      },
+    },
     numbering: {
       config: [
         { reference: 'bullets', levels: LIST_LEVELS(LevelFormat.BULLET, (l) => ['●', '○', '■'][l % 3]) },
@@ -184,7 +241,8 @@ export async function docxToHtml(file: File, upload: (blob: Blob) => Promise<str
   const result = await mammoth.convertToHtml(
     { arrayBuffer: await file.arrayBuffer() },
     {
-      styleMap: ['u => u', 'strike => s'],
+      // 見出し 5・6 を 4 にまとめるのは、文書の見出しが 4 段までで、そのままだと本文になってしまうため
+      styleMap: ['u => u', 'strike => s', "p[style-name='heading 5'] => h4:fresh", "p[style-name='heading 6'] => h4:fresh"],
       convertImage: mammoth.images.imgElement(async (image) => {
         const url = await upload(new Blob([await image.readAsArrayBuffer()], { type: image.contentType }))
         return url ? { src: url } : { src: '' }
