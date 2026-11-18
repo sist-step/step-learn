@@ -177,6 +177,8 @@ function itemDetail(item: Item) {
         file_type: item.fileType,
         description: item.body.slice(0, MAX_BODY_LENGTH),
       }
+    // PDF の中身を返さないのは、学生にまだ見せていないページまで読めてしまうため
+    case 'presentation':
     case 'screen':
       return { description: item.body.slice(0, MAX_BODY_LENGTH) }
     case 'code': {
@@ -497,6 +499,7 @@ const BODY_LABELS: Record<Item['type'], string> = {
   code: '問題文',
   link: '説明',
   file: '説明',
+  presentation: '説明',
   screen: '説明',
   bundle: '説明',
   agent: '説明',

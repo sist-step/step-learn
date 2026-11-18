@@ -24,7 +24,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `components/course.tsx` | `CourseCard` / `CourseIcon` / `CourseHeader` / `CourseLiveSync` / `ItemBar` / `ItemEditActions` / `LessonBadge` / `LessonJump` / `OutlineToggle` など | コース配下の画面は `CourseHeader` でタブを出す |
 | `components/code.tsx` | `CodeInput` / `CodeField` / `CodeWorkspace` と編集画面のカード | コードを受け取る欄は `TextAreaField` ではなく `CodeField` |
 | `components/quiz.tsx` / `quiz-animal.tsx` | 小テストの編集欄・解答・結果・動物のキャラクター | |
-| `components/bundle.tsx` / `restriction.tsx` / `ai-panel.tsx` / `pdf.tsx` | ファイル自動配布・アクセス制限・AI のパネル・PDF | |
+| `components/bundle.tsx` / `restriction.tsx` / `ai-panel.tsx` / `pdf.tsx` / `presentation.tsx` | ファイル自動配布・アクセス制限・AI のパネル・PDF・発表ファイル | |
 | `components/mascot.tsx` | `Mascot` / `MascotYard` / `WalkingMascot` | 飾りなので、伝える情報のない空きにだけ置く |
 
 クラス名を条件で組み立てるときは `components/cx.ts` の `cx('a', cond && 'b')`。

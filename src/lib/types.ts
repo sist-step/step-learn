@@ -30,6 +30,8 @@ export type AppEnv = {
     aiPanel?: () => Child
     /** 操作ログに残す利用者。ログインした要求と、既にあるアカウントでのログインの失敗では、user がまだ空のため（lib/operation-log.ts） */
     logUserId?: number
+    /** 操作ログに残すコースと対象の名前。拡張機能からの要求では、URL にコースもアイテムも入っていないため（lib/operation-log.ts） */
+    logTarget?: { courseId: number; title: string }
     /** 操作ログに、URL で決まるものとは別の操作として残すとき（lib/operation-log.ts の logAs） */
     logAs?: LogAs
   }
@@ -43,7 +45,7 @@ export type CodeItem = typeof codeItems.$inferSelect
 
 export type QuizItem = typeof quizItems.$inferSelect
 
-export const ITEM_TYPES = ['page', 'link', 'file', 'screen', 'code', 'quiz', 'collab', 'bundle', 'agent'] as const
+export const ITEM_TYPES = ['page', 'link', 'file', 'presentation', 'screen', 'code', 'quiz', 'collab', 'bundle', 'agent'] as const
 
 export type ItemType = (typeof ITEM_TYPES)[number]
 
@@ -51,6 +53,7 @@ export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   page: 'ページ',
   link: 'リンク',
   file: 'ファイル',
+  presentation: '発表ファイル',
   screen: '画面共有',
   code: 'コーディング問題',
   quiz: '小テスト',

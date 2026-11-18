@@ -1,0 +1,51 @@
+/* ==========================================================================
+   発表ファイル（帯の公開の状態・公開の範囲で止まるビューアー）
+   ========================================================================== */
+
+/* ===== ヘッダーの帯（components/course.tsx の ItemBar）に置く公開の状態と操作 */
+.presentation-state { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+.presentation-state .chip[hidden] { display: none; }
+.presentation-count { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.presentation-release-panel { width: min(300px, 80vw); }
+.presentation-release-form { display: flex; flex-direction: column; gap: 10px; }
+.presentation-release-form .btn { align-self: flex-end; }
+
+/* ===== ビューアー */
+.presentation-tail { margin: 4px 0 0; padding: 12px; text-align: center; }
+.presentation-tail[hidden] { display: none; }
+.presentation-return {
+  position: absolute;
+  left: 50%;
+  bottom: 76px;
+  z-index: 2;
+  translate: -50% 0;
+  box-shadow: var(--shadow-lg);
+}
+.pdf-viewer[data-thumbs-open] .presentation-return { left: calc(50% + var(--pdf-thumbs-w) / 2); }
+.pdf-viewer[data-thumbs-motion] .presentation-return { transition: left 0.25s var(--ease); }
+
+/* 教師にだけ見える、まだ学生に見せていないページ */
+.pdf-page.is-unreleased::after {
+  content: '未公開';
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  padding: 2px 10px;
+  border: 1px solid var(--overlay-border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  box-shadow: var(--shadow-card);
+}
+.pdf-thumb.is-unreleased .pdf-thumb-page { opacity: 0.45; }
+/* 先生が映しているページ */
+.pdf-thumb.is-presenting .pdf-thumb-num::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 50%; background: var(--danger-text); vertical-align: middle; }
+
+@media (max-width: 640px) {
+  .presentation-count { display: none; }
+  .pdf-viewer[data-thumbs-open] .presentation-return { left: 50%; }
+  .presentation-return { bottom: 72px; }
+}

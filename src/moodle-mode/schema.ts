@@ -325,3 +325,27 @@ export const collabDocs = sqliteTable(
   },
   (t) => [uniqueIndex('collab_docs_key_owner').on(t.key, t.owner)],
 )
+
+/**
+ * 発表ファイルのアイテム（extra-kinds.tsx の presentation）の PDF と公開の状態。通常モードの presentation_items に、PDF の保存先を足した形。
+ * 完全移行では引き継がない
+ */
+export const presentationItems = sqliteTable('presentation_items', {
+  // extra_items の data に入れないのは、教師がアイテムを保存するたびに種類の toData が data を作り直し、PDF と公開の状態が消えるため
+  key: text('key')
+    .primaryKey()
+    .references(() => extraItems.key, { onDelete: 'cascade' }),
+  fileKey: text('file_key'),
+  fileSize: integer('file_size').notNull().default(0),
+  version: integer('version').notNull().default(0),
+  slideIds: text('slide_ids', { mode: 'json' }).$type<number[]>().notNull().default([]),
+  animatedPages: text('animated_pages', { mode: 'json' }).$type<number[]>().notNull().default([]),
+  triggerPages: text('trigger_pages', { mode: 'json' }).$type<number[]>().notNull().default([]),
+  sourceName: text('source_name').notNull().default(''),
+  releasedSlideIds: text('released_slide_ids', { mode: 'json' }).$type<number[]>().notNull().default([]),
+  releasedPage: integer('released_page').notNull().default(0),
+  currentPage: integer('current_page'),
+  allReleased: integer('all_released').notNull().default(0),
+  syncedAt: integer('synced_at'),
+  exportedAt: integer('exported_at'),
+})
