@@ -314,6 +314,12 @@ export const ItemIcon = ({ type }: { type: ItemType }) => {
   )
 }
 
+export const AddSectionButton = ({ modal }: { modal: string }) => (
+  <button type="button" class="add-item add-section edit-only" popovertarget={modal}>
+    <Icon name="plus" size={16} /> セクションを追加
+  </button>
+)
+
 /** 編集モードでアイテムの行の上の境目に置き、ホバーで出すプラスボタン。押すと追加のモーダルを、この行の前に入れる設定で開く */
 export const ItemInsertButton = ({ modal, sectionId, before }: { modal: string; sectionId: number; before: number }) => {
   useStyle('/src/components/course.css')

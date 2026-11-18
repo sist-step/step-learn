@@ -1,4 +1,5 @@
 import {
+  AddSectionButton,
   CourseForm,
   CompletionField,
   CourseHeader,
@@ -689,6 +690,7 @@ export const CoursePage = ({
             })}
           </div>
         )}
+        {manage && sectionList.length > 0 && <AddSectionButton modal={ADD_SECTION_MODAL} />}
 
         {manage && <AddSectionModal courseId={id} />}
         {manage && sectionList.length > 0 && (
