@@ -1,24 +1,30 @@
 import type { Child } from 'hono/jsx'
 import type { FieldErrors } from '../lib/forms'
 import {
+  LINES_MODES,
+  LINES_MODE_LABELS,
   MAX_QUIZ_ATTEMPTS,
-  QUIZ_DEFAULT_PROMPTS,
+  ORDER_ASKS,
+  ORDER_ASK_LABELS,
   QUIZ_KEY_SLOT,
   QUIZ_KINDS,
   QUIZ_KIND_DESCRIPTIONS,
   QUIZ_KIND_LABELS,
   QUIZ_LOOK_LABELS,
   answerField,
+  blankFormRow,
   codeLines,
-  indentedCode,
   isSameCell,
   lineAt,
   parseSteps,
   quizStars,
+  type BlankPart,
+  type OrderAsk,
   type QuizFormRow,
   type QuizKind,
   type QuizLook,
   type QuizReviewItem,
+  type QuizReviewStatus,
   type QuizScore,
   type QuizTakeQuestion,
 } from '../lib/quiz'
@@ -35,12 +41,12 @@ import { Alert, Chip, EmptyState, formatDateTime } from './ui'
 
 const KIND_ICONS: Record<QuizKind, IconName> = {
   choice: 'listBullet',
-  output: 'terminal',
+  short: 'terminal',
+  blank: 'variable',
   order: 'sort',
-  bug: 'bug',
-  flow: 'play',
-  indent: 'indent',
-  table: 'table',
+  lines: 'bug',
+  match: 'arrowLongRight',
+  essay: 'pencilSquare',
 }
 
 // ---------------------------------------------------------------- 編集画面
@@ -54,144 +60,411 @@ const control = (k: string, field: string, errors: FieldErrors) => ({
 
 const codeAttrs = { class: 'qz-code', spellcheck: false, autocapitalize: 'none', autocomplete: 'off' } as const
 
-const QzChoice = ({ k, text, checked }: { k: string; text: string; checked: boolean }) => (
-  <li class="qz-choice" data-qz-choice>
-    <input type="radio" name={`${k}.answer`} checked={checked} class="qz-choice-radio" aria-label="この選択肢を正解にする" />
-    <Input name={`${k}.choice`} value={text} placeholder="選択肢" aria-label="選択肢" autocomplete="off" data-qz-choice-text />
-    <IconButton icon="x" label="この選択肢を消す" data-qz-choice-remove />
+type ListColumn = { label: string; placeholder: string; code?: boolean }
+
+const QzItem = ({
+  k,
+  field,
+  cells,
+  columns,
+  check,
+}: {
+  k: string
+  field: string
+  cells: string[]
+  columns: ListColumn[]
+  check?: { label: string; checked: boolean }
+}) => (
+  <li class="qz-item" data-qz-item>
+    {check && <input type="checkbox" checked={check.checked} class="qz-item-check" aria-label={check.label} data-qz-item-check />}
+    {columns.map((column, i) =>
+      column.code ? (
+        <Textarea
+          name={`${k}.${field}-item`}
+          value={cells[i] ?? ''}
+          rows={1}
+          {...codeAttrs}
+          placeholder={column.placeholder}
+          aria-label={column.label}
+          data-qz-cell
+        />
+      ) : (
+        <Input
+          name={`${k}.${field}-item`}
+          value={cells[i] ?? ''}
+          placeholder={column.placeholder}
+          aria-label={column.label}
+          autocomplete="off"
+          data-qz-cell
+        />
+      ),
+    )}
+    <IconButton icon="x" label="消す" data-qz-item-remove />
   </li>
 )
 
 /**
- * 選択肢の欄。エラーは fieldset（name="<k>.choices"）に出す。行ごとの入力欄は同じ名前が並ぶので、エラーの置き場所にできないため
+ * 行を足し引きできる欄（選択肢・短答の正しい答え・組み合わせ）。エラーは fieldset（name="<k>.<field>"）に出す。
+ * 行ごとの入力欄は同じ名前が並ぶので、エラーの置き場所にできないため
  */
-const QzChoices = ({ row, errors }: { row: QuizFormRow; errors: FieldErrors }) => {
-  const { k } = row
-  const id = `${k}-choices`
-  const error = errors[`${k}.choices`]
+const QzList = ({
+  k,
+  field,
+  legend,
+  hint,
+  items,
+  columns,
+  check,
+  addLabel,
+  errors,
+}: {
+  k: string
+  field: string
+  legend: string
+  hint?: string
+  items: { cells: string[]; checked?: boolean }[]
+  columns: ListColumn[]
+  /** 行ごとに付ける印（選択の正解）の読み上げの名前 */
+  check?: string
+  addLabel: string
+  errors: FieldErrors
+}) => {
+  const id = `${k}-${field}`
+  const error = errors[`${k}.${field}`]
   return (
     <fieldset
-      name={`${k}.choices`}
+      name={`${k}.${field}`}
       id={id}
-      class={cx('field qz-choices', error && 'has-error')}
+      class={cx('field qz-items', error && 'has-error')}
       aria-invalid={error ? 'true' : undefined}
       aria-describedby={`${id}-error`}
-      data-qz-choices
+      data-qz-items={field}
     >
-      <legend>選択肢</legend>
-      <p class="field-hint">左の丸で、正解の選択肢を 1 つ選びます。学生には、この順のまま出します。</p>
-      <ol class="qz-choice-list" data-qz-choice-list>
-        {row.choices.map((text, i) => (
-          <QzChoice k={k} text={text} checked={String(i) === row.answer} />
+      <legend>{legend}</legend>
+      {hint && <p class="field-hint">{hint}</p>}
+      <ol class="qz-item-list" data-qz-item-list>
+        {items.map((item) => (
+          <QzItem
+            k={k}
+            field={field}
+            cells={item.cells}
+            columns={columns}
+            check={check ? { label: check, checked: !!item.checked } : undefined}
+          />
         ))}
       </ol>
-      <div class="qz-choice-foot">
-        <Button size="sm" icon="plus" data-qz-choice-add>
-          選択肢を追加
+      <div class="qz-item-foot">
+        <Button size="sm" icon="plus" data-qz-item-add>
+          {addLabel}
         </Button>
       </div>
       <FieldError id={id} error={error} />
-      <template data-qz-choice-template>
-        <QzChoice k={k} text="" checked={false} />
+      <template data-qz-item-template>
+        <QzItem k={k} field={field} cells={[]} columns={columns} check={check ? { label: check, checked: false } : undefined} />
       </template>
     </fieldset>
   )
 }
 
+/** 問題ごとの選び方（ラジオボタンの組）。値は client.ts が、選ばれているものを読む */
+const QzSegment = ({
+  k,
+  field,
+  legend,
+  options,
+  value,
+  hint,
+}: {
+  k: string
+  field: string
+  legend: string
+  options: { value: string; label: string }[]
+  value: string
+  hint?: string
+}) => (
+  <fieldset class="field qz-segment">
+    <legend>{legend}</legend>
+    <SegmentedControl
+      name={`${k}.${field}`}
+      label={legend}
+      options={options}
+      value={options.some((o) => o.value === value) ? value : options[0].value}
+    />
+    {hint && <p class="field-hint">{hint}</p>}
+  </fieldset>
+)
+
+const DISTINGUISH = [
+  { value: '0', label: '区別する' },
+  { value: '1', label: '区別しない' },
+]
+
 const lineNote = (line: string | null) => (line === null ? '' : line.trim() || '（空の行）')
 
-const CODE_LABELS: Record<Exclude<QuizKind, 'order'>, string> = {
-  choice: 'コード（任意）',
-  output: 'コード',
-  bug: 'コード',
-  flow: 'コード',
-  indent: '正しく字下げしたコード',
-  table: 'コード',
+const BLANK_HINTS = {
+  code: '答えさせたいところを {{正解}} と書きます。別解は {{正解|別解}} のように | で区切ります（| そのものは \\| と書きます）。空白と、引用符の種類（\' と "）の違いは区別せずに採点します。',
+  table:
+    '1 行目に見出し、2 行目からは中身を、| で区切って書きます。答えさせたいマスは {{正解}} と書きます。別解は {{正解|別解}} のように区切ります。',
+} as const
+
+const BLANK_PLACEHOLDERS = {
+  code: 'total = 0\nfor i in range(1, 4):\n    total {{+=}} i\nprint({{total}})',
+  table: '回 | i | total\n1 | {{1}} | {{1}}\n2 | {{2}} | {{3}}\n3 | {{3}} | {{6}}',
+} as const
+
+type WhenField = 'layout' | 'fill' | 'ask'
+
+/** 問題ごとの選び方（field）が value のときだけ出す部分。選び直したときの切り替えは client.ts（qzWhen） */
+const When = ({
+  row,
+  field,
+  value,
+  block,
+  children,
+}: {
+  row: QuizFormRow
+  field: WhenField
+  value: string
+  block?: boolean
+  children: Child
+}) =>
+  block ? (
+    <div data-qz-when={`${field}=${value}`} hidden={row[field] !== value}>
+      {children}
+    </div>
+  ) : (
+    <span data-qz-when={`${field}=${value}`} hidden={row[field] !== value}>
+      {children}
+    </span>
+  )
+
+const ORDER_HINTS: Record<OrderAsk, string> = {
+  order: '1 行ずつ、正しい順に書きます。学生には順を混ぜて出し、字下げはそのまま見せます。正しい順が 1 つに決まるコードにしてください。',
+  indent: '正しい字下げを付けたまま、正しい順に書きます。学生には順はそのままで字下げを消して出し、行ごとに付け直してもらいます。',
+  both: '正しい字下げを付けたまま、正しい順に書きます。学生には順を混ぜ、字下げを消して出します。空白の数ではなく、字下げの深さが合っていれば正解です。',
 }
-
-const INDENT_HINT =
-  '学生には字下げを消して出し、行ごとに字下げを付け直してもらいます。空白の数ではなく、字下げの深さが合っていれば正解です。空の行は出しません。'
-
-const TABLE_PLACEHOLDER = 'i | total\n1 | 1\n2 | 3\n3 | 6'
 
 function QzFields({ row, errors }: { row: QuizFormRow; errors: FieldErrors }) {
   const { k, kind } = row
   const error = (field: string) => errors[`${k}.${field}`]
+  const codeHint =
+    kind === 'blank'
+      ? '本文の前に見せるコードです。変数の値を表に書かせるときは、ここに追うコードを書きます。'
+      : kind === 'lines'
+        ? '学生には、行の番号を付けて出します。'
+        : undefined
   return (
     <div class="qz-fields">
       <FormField id={`${k}-prompt`} label="問題文" error={error('prompt')}>
         <Textarea {...control(k, 'prompt', errors)} value={row.prompt} rows={2} />
       </FormField>
-      {kind !== 'order' && (
-        <FormField id={`${k}-code`} label={CODE_LABELS[kind]} error={error('code')} hint={kind === 'indent' ? INDENT_HINT : undefined}>
-          <Textarea {...control(k, 'code', errors)} {...codeAttrs} value={row.code} rows={kind === 'choice' ? 3 : 6} data-qz-code />
-        </FormField>
+      <FormField id={`${k}-code`} label={kind === 'lines' ? 'コード' : 'コード（任意）'} error={error('code')} hint={codeHint}>
+        <Textarea {...control(k, 'code', errors)} {...codeAttrs} value={row.code} rows={kind === 'lines' ? 6 : 3} data-qz-code />
+      </FormField>
+      {kind === 'choice' && (
+        <>
+          <QzSegment
+            k={k}
+            field="multiple"
+            legend="選び方"
+            options={[
+              { value: '0', label: '1 つ選ぶ' },
+              { value: '1', label: '複数選ぶ' },
+            ]}
+            value={row.multiple}
+            hint="複数選ぶときは、正解をすべて選んだ答えだけを正解にします。"
+          />
+          <QzList
+            k={k}
+            field="choices"
+            legend="選択肢"
+            hint="左の四角で、正解の選択肢に印を付けます。学生には、この順のまま出します。"
+            items={row.choices.map((text, i) => ({ cells: [text], checked: row.correct[i] }))}
+            columns={[{ label: '選択肢', placeholder: '選択肢' }]}
+            check="この選択肢を正解にする"
+            addLabel="選択肢を追加"
+            errors={errors}
+          />
+        </>
       )}
-      {kind === 'choice' && <QzChoices row={row} errors={errors} />}
-      {kind === 'output' && (
-        <FormField
-          id={`${k}-answer`}
-          label="正しい出力"
-          error={error('answer')}
-          hint="行末の空白、前後の空行、全角と半角の違いは区別せずに採点します。"
-        >
-          <Textarea {...control(k, 'answer', errors)} {...codeAttrs} value={row.answer} rows={3} />
-        </FormField>
+      {kind === 'short' && (
+        <>
+          <QzList
+            k={k}
+            field="answers"
+            legend="正しい答え"
+            hint="どれか 1 つと合えば正解です。行末の空白、前後の空行、全角と半角の違いは区別しません。複数行の答え（出力など）も書けます。"
+            items={row.answers.map((text) => ({ cells: [text] }))}
+            columns={[{ label: '正しい答え', placeholder: '正しい答え', code: true }]}
+            addLabel="正しい答えを追加"
+            errors={errors}
+          />
+          <div class="qz-segments">
+            <QzSegment k={k} field="space" legend="空白" options={DISTINGUISH} value={row.space} />
+            <QzSegment k={k} field="case" legend="大文字と小文字" options={DISTINGUISH} value={row.case} />
+          </div>
+        </>
+      )}
+      {kind === 'blank' && (
+        <>
+          <div class="qz-segments">
+            <QzSegment
+              k={k}
+              field="layout"
+              legend="本文の形"
+              options={[
+                { value: 'code', label: 'コード' },
+                { value: 'table', label: '表' },
+              ]}
+              value={row.layout}
+            />
+            <QzSegment
+              k={k}
+              field="fill"
+              legend="答え方"
+              options={[
+                { value: 'type', label: '打ちこむ' },
+                { value: 'pick', label: '選ぶ' },
+              ]}
+              value={row.fill}
+            />
+          </div>
+          <FormField
+            id={`${k}-text`}
+            label="空欄のある本文"
+            error={error('text')}
+            hint={
+              <>
+                <When row={row} field="layout" value="code">
+                  {BLANK_HINTS.code}
+                </When>
+                <When row={row} field="layout" value="table">
+                  {BLANK_HINTS.table}
+                </When>
+              </>
+            }
+          >
+            <Textarea
+              {...control(k, 'text', errors)}
+              {...codeAttrs}
+              value={row.text}
+              rows={6}
+              placeholder={BLANK_PLACEHOLDERS[row.layout === 'table' ? 'table' : 'code']}
+              data-placeholder-code={BLANK_PLACEHOLDERS.code}
+              data-placeholder-table={BLANK_PLACEHOLDERS.table}
+              data-qz-blank-text
+            />
+          </FormField>
+          <When row={row} field="fill" value="pick" block>
+            <FormField
+              id={`${k}-extras`}
+              label="選択肢に混ぜるもの（任意）"
+              error={error('extras')}
+              hint="選んで答えるときの選択肢は、すべての空欄の正解（最初に書いたもの）です。まぎらわしいものを、1 行に 1 つ書いて足せます。"
+            >
+              <Textarea {...control(k, 'extras', errors)} {...codeAttrs} value={row.extras} rows={3} />
+            </FormField>
+          </When>
+        </>
       )}
       {kind === 'order' && (
-        <FormField
-          id={`${k}-lines`}
-          label="正しい順に並べた行"
-          error={error('lines')}
-          hint="1 行ずつ、正しい順に書きます。学生には順を混ぜて出し、字下げはそのまま見せます。正しい順が 1 つに決まるコードにしてください。"
-        >
-          <Textarea {...control(k, 'lines', errors)} {...codeAttrs} value={row.lines} rows={6} />
-        </FormField>
-      )}
-      {kind === 'bug' && (
-        <FormField id={`${k}-answer`} label="間違っている行の番号" error={error('answer')}>
-          <div class="qz-bug-row">
-            <Input
-              {...control(k, 'answer', errors)}
-              value={row.answer}
-              inputmode="numeric"
-              autocomplete="off"
-              class="qz-bug-no"
-              data-qz-bug-no
-            />
-            <code class="qz-bug-line truncate" data-qz-bug-line>
-              {lineNote(lineAt(row.code, row.answer))}
-            </code>
-          </div>
-        </FormField>
-      )}
-      {kind === 'flow' && (
-        <FormField
-          id={`${k}-answer`}
-          label="実行される順（行の番号）"
-          error={error('answer')}
-          hint="実行される順に、行の番号をカンマで区切って書きます。繰り返しで何度も実行される行は、その回数だけ書きます。"
-        >
-          <Input {...control(k, 'answer', errors)} value={row.answer} autocomplete="off" placeholder="例: 4, 1, 2, 5" data-qz-flow-answer />
-          <ol class="qz-flow-steps" data-qz-flow-steps>
-            {(parseSteps(row.answer) ?? []).map((n) => (
-              <li>
-                <span class="qz-flow-no">{n}</span>
-                <code class="truncate">{lineNote(lineAt(row.code, n)) || '（行がありません）'}</code>
-              </li>
+        <>
+          <QzSegment
+            k={k}
+            field="ask"
+            legend="答えさせるもの"
+            options={ORDER_ASKS.map((ask) => ({ value: ask, label: ORDER_ASK_LABELS[ask] }))}
+            value={row.ask}
+          />
+          <FormField
+            id={`${k}-lines`}
+            label="正しい順の行"
+            error={error('lines')}
+            hint={ORDER_ASKS.map((ask) => (
+              <When row={row} field="ask" value={ask}>
+                {ORDER_HINTS[ask]}
+              </When>
             ))}
-          </ol>
-        </FormField>
+          >
+            <Textarea {...control(k, 'lines', errors)} {...codeAttrs} value={row.lines} rows={6} data-qz-order-lines />
+          </FormField>
+          <FormField
+            id={`${k}-extras`}
+            label="使わない行（任意）"
+            error={error('extras')}
+            hint="まぎらわしい行を、1 行に 1 つ書くと混ぜて出します。学生はそれを「使わない」にします。"
+          >
+            <Textarea {...control(k, 'extras', errors)} {...codeAttrs} value={row.extras} rows={2} />
+          </FormField>
+        </>
       )}
-      {kind === 'table' && (
-        <FormField
-          id={`${k}-answer`}
-          label="変数の値の表"
-          error={error('answer')}
-          hint={`1 行目に変数の名前、2 行目からは各回の値を、| で区切って書きます。学生には変数の名前と行の数だけを見せます。空白と、引用符の種類（' と "）の違いは区別せずに採点します。`}
-        >
-          <Textarea {...control(k, 'answer', errors)} {...codeAttrs} value={row.answer} rows={5} placeholder={TABLE_PLACEHOLDER} />
-        </FormField>
+      {kind === 'lines' && (
+        <>
+          <QzSegment
+            k={k}
+            field="mode"
+            legend="選び方"
+            options={LINES_MODES.map((mode) => ({ value: mode, label: LINES_MODE_LABELS[mode] }))}
+            value={row.mode}
+            hint="「実行される順に」では、学生は実行される順に行を押していきます。繰り返しで何度も実行される行は、その回数だけ押します。"
+          />
+          <FormField
+            id={`${k}-steps`}
+            label="正解の行の番号"
+            error={error('steps')}
+            hint="行の番号をカンマで区切って書きます。「実行される順に」では、実行される順に、何度も実行される行はその回数だけ書きます。"
+          >
+            <Input {...control(k, 'steps', errors)} value={row.steps} autocomplete="off" placeholder="例: 4, 1, 2, 5" data-qz-steps />
+            <ol class="qz-flow-steps" data-qz-flow-steps>
+              {(parseSteps(row.steps) ?? []).map((n) => (
+                <li>
+                  <span class="qz-flow-no">{n}</span>
+                  <code class="truncate">{lineNote(lineAt(row.code, n)) || '（行がありません）'}</code>
+                </li>
+              ))}
+            </ol>
+          </FormField>
+        </>
+      )}
+      {kind === 'match' && (
+        <>
+          <QzList
+            k={k}
+            field="pairs"
+            legend="組み合わせ"
+            hint="左の項目と、それに合う右の項目を書きます。学生には、右の項目を混ぜて選択肢にして出します。右は同じものを何度使ってもかまいません。"
+            items={row.pairs.map((pair) => ({ cells: pair }))}
+            columns={[
+              { label: '左の項目', placeholder: '左' },
+              { label: '右の項目', placeholder: '右' },
+            ]}
+            addLabel="組み合わせを追加"
+            errors={errors}
+          />
+          <FormField
+            id={`${k}-extras`}
+            label="選択肢に混ぜるもの（任意）"
+            error={error('extras')}
+            hint="どの左にも合わない右の項目を、1 行に 1 つ書いて足せます。"
+          >
+            <Textarea {...control(k, 'extras', errors)} value={row.extras} rows={2} />
+          </FormField>
+        </>
+      )}
+      {kind === 'essay' && (
+        <>
+          <FormField
+            id={`${k}-keywords`}
+            label="自動で正解にするキーワード（任意）"
+            error={error('keywords')}
+            hint="すべて含む答えを、自動で正解にします。含まない答えと、キーワードがないときは「採点待ち」になり、受験結果の画面で教師が採点します。自動で正解にした答えも、あとから変えられます。1 行かカンマで区切って書きます。"
+          >
+            <Textarea {...control(k, 'keywords', errors)} value={row.keywords} rows={2} placeholder="例: 合計, 繰り返し" />
+          </FormField>
+          <FormField id={`${k}-sample`} label="解答例（任意）" error={error('sample')} hint="採点のあとに、正解として見せます。">
+            <Textarea {...control(k, 'sample', errors)} value={row.sample} rows={3} />
+          </FormField>
+        </>
       )}
       <FormField id={`${k}-explanation`} label="解説（任意）" error={error('explanation')}>
         <Textarea {...control(k, 'explanation', errors)} value={row.explanation} rows={2} />
@@ -217,17 +490,6 @@ const QzQuestion = ({ row, errors }: { row: QuizFormRow; errors: FieldErrors }) 
     <QzFields row={row} errors={errors} />
   </li>
 )
-
-const blankRow = (kind: QuizKind): QuizFormRow => ({
-  k: QUIZ_KEY_SLOT,
-  kind,
-  prompt: QUIZ_DEFAULT_PROMPTS[kind],
-  code: '',
-  choices: kind === 'choice' ? ['', '', '', ''] : [],
-  answer: '',
-  lines: '',
-  explanation: '',
-})
 
 /**
  * 問題の欄。送るのは questions（client.ts が問題の行から組み立てる JSON）で、
@@ -268,14 +530,15 @@ export const QuizQuestionsField = ({
       </div>
       {QUIZ_KINDS.map((kind) => (
         <template data-qz-template={kind}>
-          <QzQuestion row={blankRow(kind)} errors={{}} />
+          <QzQuestion row={blankFormRow(QUIZ_KEY_SLOT, kind)} errors={{}} />
         </template>
       ))}
     </div>
   )
 }
 
-const QUESTIONS_DESCRIPTION = '採点は正解との照合で行います。問題を書き換えても、すでに受けた学生の点数は変わりません。'
+const QUESTIONS_DESCRIPTION =
+  '記述のほかは、正解との照合で採点します。記述は教師が採点します（キーワードを決めておくと自動で正解にできます）。問題を書き換えても、すでに受けた学生の点数は変わりません。'
 
 /** 通常モードの編集画面の「問題」のカード */
 export const QuizEditor = ({ rows, errors = {} }: { rows: QuizFormRow[]; errors?: FieldErrors }) => (
@@ -296,7 +559,7 @@ const GradingInputs = ({ passPercent, showAnswers, errors, idPrefix = 'f' }: Gra
       error={errors.pass_percent}
       inputmode="numeric"
       autocomplete="off"
-      hint="正解の割合がこれ以上の受験を合格にします。"
+      hint="正解の割合がこれ以上の受験を合格にします。採点待ちの記述は、採点されるまで正解に数えません。"
     />
     <fieldset class="field">
       <legend>不正解だった問題の正解と解説</legend>
@@ -334,7 +597,8 @@ const LookInputs = ({ look, legend }: { look: QuizLook; legend: string }) => (
       value={look}
     />
     <p class="field-hint">
-      ゲームは中学生向けの見た目です。3D のダンジョンで、問題ごとの扉を正解して開けながら進みます。点数は、問題ごとの最初の答えで数えます。
+      ゲームは中学生向けの見た目です。3D
+      のダンジョンで、問題ごとの扉を正解して開けながら進みます。点数は、問題ごとの最初の答えで数えます。記述の扉は、答えを書けば開きます。
     </p>
   </fieldset>
 )
@@ -373,7 +637,9 @@ const CodeBlock = ({ code }: { code: string }) => (
   </pre>
 )
 
-type LineMark = 'right' | 'wrong' | 'answer'
+type LineMark = 'right' | 'wrong' | 'answer' | 'picked'
+
+const LINE_MARK_LABELS: Record<LineMark, string> = { right: '答え', wrong: '答え', answer: '正解の行', picked: '答え' }
 
 const LineBody = ({ no, line }: { no: number; line: string }) => (
   <>
@@ -382,32 +648,34 @@ const LineBody = ({ no, line }: { no: number; line: string }) => (
   </>
 )
 
-/** 行番号付きのコード。pick を渡すと行を 1 つ選べ、marks を渡すと結果の印を付ける */
+/** 行番号付きのコード。pick を渡すと行を選べ（multiple なら複数）、marks を渡すと結果の印を付ける */
 const CodeLines = ({
   code,
   pick,
+  multiple = false,
   marks = {},
   who = 'あなた',
 }: {
   code: string
   pick?: string
+  multiple?: boolean
   marks?: Partial<Record<number, LineMark>>
   who?: string
 }) => (
-  <ol class="quiz-lines" role={pick ? 'radiogroup' : undefined} aria-label={pick ? '間違っている行' : undefined}>
+  <ol class="quiz-lines" role={pick && !multiple ? 'radiogroup' : pick ? 'group' : undefined} aria-label={pick ? '行' : undefined}>
     {codeLines(code).map((line, i) => {
       const mark = marks[i + 1]
       const body = (
         <>
           <LineBody no={i + 1} line={line} />
-          {mark && <span class="quiz-line-mark">{mark === 'answer' ? '間違っている行' : `${who}の答え`}</span>}
+          {mark && <span class="quiz-line-mark">{mark === 'answer' ? LINE_MARK_LABELS.answer : `${who}の${LINE_MARK_LABELS[mark]}`}</span>}
         </>
       )
       return (
         <li class={cx('quiz-line', mark && `is-${mark}`)}>
           {pick && line.trim() ? (
             <label>
-              <input type="radio" name={pick} value={i + 1} class="sr-only" />
+              <input type={multiple ? 'checkbox' : 'radio'} name={pick} value={i + 1} class="sr-only" />
               {body}
             </label>
           ) : (
@@ -419,7 +687,7 @@ const CodeLines = ({
   </ol>
 )
 
-/** 実行の順番の解答。行を押すたびに、その行の番号を順番の最後に足す（client.ts） */
+/** 実行される順に行を選ぶ解答。行を押すたびに、その行の番号を順番の最後に足す（client.ts） */
 const FlowPicker = ({ code, name }: { code: string; name: string }) => (
   <div class="quiz-flow" data-quiz-flow>
     <input type="hidden" name={name} data-quiz-flow-value />
@@ -454,6 +722,69 @@ const FlowPicker = ({ code, name }: { code: string; name: string }) => (
 
 const range = (n: number) => Array.from({ length: n }, (_, i) => i)
 
+const textAttrs = { autocomplete: 'off', autocapitalize: 'none', spellcheck: false } as const
+
+/** 穴埋めの空欄 1 つの入力欄。選んで答えるときは選択肢の一覧 */
+const BlankInput = ({ name, no, options }: { name: string; no: number; options: string[] }) =>
+  options.length ? (
+    <select name={name} class="quiz-blank-input" aria-label={`空欄 ${no}`} data-quiz-blank>
+      <option value="">選ぶ</option>
+      {options.map((o) => (
+        <option value={o}>{o}</option>
+      ))}
+    </select>
+  ) : (
+    <input name={name} class="quiz-blank-input" aria-label={`空欄 ${no}`} {...textAttrs} data-quiz-blank />
+  )
+
+type BlankCellView = (part: number) => Child
+
+/** 穴埋めの本文。空欄の中身は blank が描く（解答の入力欄か、結果の答え） */
+function BlankSheet({ q, blank }: { q: Extract<QuizTakeQuestion, { kind: 'blank' }>; blank: BlankCellView }) {
+  const parts = (cell: BlankPart[]) =>
+    cell.map((part) =>
+      typeof part === 'number' ? (
+        <span class="quiz-blank">
+          <span class="quiz-blank-no" aria-hidden="true">
+            {part + 1}
+          </span>
+          {blank(part)}
+        </span>
+      ) : (
+        part
+      ),
+    )
+  if (q.layout === 'code')
+    return (
+      <pre class="quiz-code quiz-blank-code">
+        <code>{q.rows.flatMap((cells, r) => [...(r > 0 ? ['\n'] : []), ...parts(cells[0] ?? [])])}</code>
+      </pre>
+    )
+  const [head = [], ...body] = q.rows
+  return (
+    <div class="quiz-table-wrap">
+      <table class="quiz-table">
+        <thead>
+          <tr>
+            {head.map((cell) => (
+              <th scope="col">{parts(cell)}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {body.map((cells) => (
+            <tr>
+              {cells.map((cell) => (
+                <td>{parts(cell)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function TakeBody({ q }: { q: QuizTakeQuestion }) {
   const name = answerField(q)
   switch (q.kind) {
@@ -461,105 +792,111 @@ function TakeBody({ q }: { q: QuizTakeQuestion }) {
       return (
         <>
           {q.code && <CodeBlock code={q.code} />}
-          <div class="quiz-choices" role="radiogroup" aria-label="選択肢">
+          {q.multiple && <p class="quiz-note muted small">当てはまるものをすべて選んでください。</p>}
+          <div class="quiz-choices" role={q.multiple ? 'group' : 'radiogroup'} aria-label="選択肢">
             {q.choices.map((text, i) => (
               <label class="quiz-choice">
-                <input type="radio" name={name} value={i} />
+                <input type={q.multiple ? 'checkbox' : 'radio'} name={name} value={i} />
                 <span>{text}</span>
               </label>
             ))}
           </div>
         </>
       )
-    case 'output':
+    case 'short':
       return (
         <>
-          <CodeBlock code={q.code} />
-          <Textarea name={name} rows={3} {...codeAttrs} class="quiz-output" placeholder="出力を入力" aria-label="出力" />
+          {q.code && <CodeBlock code={q.code} />}
+          {q.multiline ? (
+            <Textarea name={name} rows={3} {...codeAttrs} class="quiz-output" placeholder="答えを入力" aria-label="答え" data-quiz-text />
+          ) : (
+            <Input name={name} {...textAttrs} class="quiz-short" placeholder="答えを入力" aria-label="答え" data-quiz-text />
+          )}
         </>
       )
-    case 'order':
-      return (
-        <ol class="quiz-order" data-quiz-order>
-          {q.lines.map((line) => (
-            <li class="quiz-order-line" data-quiz-line>
-              <span class="quiz-order-grip" data-quiz-grip aria-hidden="true">
-                <Icon name="grip" size={16} />
-              </span>
-              <input type="hidden" name={name} value={line} />
-              <code>{line}</code>
-              <IconButton icon="arrowUp" label="上へ移動" data-quiz-line-move="up" />
-              <IconButton icon="arrowDown" label="下へ移動" data-quiz-line-move="down" />
-            </li>
-          ))}
-        </ol>
-      )
-    case 'bug':
-      return <CodeLines code={q.code} pick={name} />
-    case 'flow':
-      return <FlowPicker code={q.code} name={name} />
-    case 'indent':
-      return (
-        <ol class="quiz-indent">
-          {q.lines.map((line) => (
-            <li class="quiz-indent-line" data-quiz-indent-line style="--level: 0">
-              <input type="hidden" name={name} value="0" />
-              <IconButton icon="chevronLeft" label="字下げを浅くする" data-quiz-indent-move="-1" disabled />
-              <IconButton icon="chevronRight" label="字下げを深くする" data-quiz-indent-move="1" />
-              <code>{line}</code>
-            </li>
-          ))}
-        </ol>
-      )
-    case 'table':
+    case 'blank':
       return (
         <>
-          <CodeBlock code={q.code} />
-          <div class="quiz-table-wrap">
-            <table class="quiz-table">
-              <thead>
-                <tr>
-                  <th scope="col">回</th>
-                  {q.columns.map((column) => (
-                    <th scope="col">
-                      <code>{column}</code>
-                    </th>
+          {q.code && <CodeBlock code={q.code} />}
+          <BlankSheet q={q} blank={(i) => <BlankInput name={name} no={i + 1} options={q.options} />} />
+        </>
+      )
+    case 'order': {
+      const reorder = q.ask !== 'indent'
+      const indent = q.ask !== 'order'
+      return (
+        <>
+          {q.code && <CodeBlock code={q.code} />}
+          {q.unused && <p class="quiz-note muted small">使わない行が混ざっています。使わない行は「使わない」にしてください。</p>}
+          <ol class={cx('quiz-order', indent && 'is-indent', !reorder && 'is-fixed')} data-quiz-order>
+            {q.lines.map((line) => (
+              <li class="quiz-order-line" data-quiz-line data-line={line} style={indent ? '--level: 0' : undefined}>
+                {reorder && (
+                  <span class="quiz-order-grip" data-quiz-grip aria-hidden="true">
+                    <Icon name="grip" size={16} />
+                  </span>
+                )}
+                <input type="hidden" name={name} value={line} data-quiz-line-value />
+                {indent && <IconButton icon="chevronLeft" label="字下げを浅くする" data-quiz-indent-move="-1" disabled />}
+                {indent && <IconButton icon="chevronRight" label="字下げを深くする" data-quiz-indent-move="1" />}
+                <code>{line}</code>
+                {q.unused && (
+                  <Button size="sm" variant="ghost" class="quiz-order-use" aria-pressed="false" data-quiz-line-use>
+                    使わない
+                  </Button>
+                )}
+                {reorder && <IconButton icon="arrowUp" label="上へ移動" data-quiz-line-move="up" />}
+                {reorder && <IconButton icon="arrowDown" label="下へ移動" data-quiz-line-move="down" />}
+              </li>
+            ))}
+          </ol>
+        </>
+      )
+    }
+    case 'lines':
+      if (q.mode === 'sequence') return <FlowPicker code={q.code} name={name} />
+      return (
+        <>
+          {q.mode === 'many' && <p class="quiz-note muted small">当てはまる行をすべて選んでください。</p>}
+          <CodeLines code={q.code} pick={name} multiple={q.mode === 'many'} />
+        </>
+      )
+    case 'match':
+      return (
+        <>
+          {q.code && <CodeBlock code={q.code} />}
+          <ol class="quiz-match">
+            {q.lefts.map((left) => (
+              <li class="quiz-match-row">
+                <span class="quiz-match-left">{left}</span>
+                <Icon name="arrowLongRight" size={18} class="quiz-match-arrow" />
+                <select name={name} class="input quiz-match-pick" aria-label={`「${left}」に合うもの`} data-quiz-match>
+                  <option value="">選ぶ</option>
+                  {q.options.map((o) => (
+                    <option value={o}>{o}</option>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {range(q.rowCount).map((r) => (
-                  <tr>
-                    <th scope="row">{r + 1}</th>
-                    {q.columns.map((column) => (
-                      <td>
-                        <Input
-                          compact
-                          name={name}
-                          class="quiz-cell"
-                          autocomplete="off"
-                          autocapitalize="none"
-                          spellcheck={false}
-                          aria-label={`${r + 1} 回目の ${column}`}
-                        />
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </select>
+              </li>
+            ))}
+          </ol>
+        </>
+      )
+    case 'essay':
+      return (
+        <>
+          {q.code && <CodeBlock code={q.code} />}
+          <Textarea name={name} rows={5} class="quiz-essay" placeholder="答えを入力" aria-label="答え" data-quiz-text />
         </>
       )
   }
 }
 
-type QuestionStatus = 'right' | 'wrong' | 'none'
-
-const STATUS_LABELS: Record<QuizLook, Record<QuestionStatus, string>> = {
-  plain: { right: '正解', wrong: '不正解', none: '未採点' },
-  game: { right: 'せいかい！', wrong: 'おしい…', none: '未採点' },
+const STATUS_LABELS: Record<QuizLook, Record<QuizReviewStatus, string>> = {
+  plain: { right: '正解', wrong: '不正解', pending: '採点待ち', none: '未採点' },
+  game: { right: 'せいかい！', wrong: 'おしい…', pending: '先生が採点中', none: '未採点' },
 }
+
+const STATUS_ICONS: Partial<Record<QuizReviewStatus, IconName>> = { right: 'check', wrong: 'x', pending: 'clock' }
 
 const Question = ({
   no,
@@ -570,28 +907,31 @@ const Question = ({
 }: {
   no: number
   q: QuizTakeQuestion
-  status?: QuestionStatus
+  status?: QuizReviewStatus
   look?: QuizLook
   children: Child
-}) => (
-  <li class={cx('quiz-q', status && `is-${status}`)} data-quiz-q={q.kind}>
-    <div class="quiz-q-head">
-      {look === 'game' && (
-        <QuizAnimal kind={q.kind} size={44} mood={status === 'right' ? 'happy' : status === 'wrong' ? 'sad' : 'normal'} />
-      )}
-      <span class="quiz-q-num">{look === 'game' ? `ステージ ${no}` : `問 ${no}`}</span>
-      <span class="quiz-q-kind muted small">{QUIZ_KIND_LABELS[q.kind]}</span>
-      {status && (
-        <span class="quiz-mark">
-          {status !== 'none' && <Icon name={status === 'right' ? 'check' : 'x'} size={14} />}
-          {STATUS_LABELS[look][status]}
-        </span>
-      )}
-    </div>
-    <p class="quiz-prompt">{q.prompt}</p>
-    {children}
-  </li>
-)
+}) => {
+  const icon = status && STATUS_ICONS[status]
+  return (
+    <li class={cx('quiz-q', status && `is-${status}`)} data-quiz-q={q.kind}>
+      <div class="quiz-q-head">
+        {look === 'game' && (
+          <QuizAnimal kind={q.kind} size={44} mood={status === 'right' ? 'happy' : status === 'wrong' ? 'sad' : 'normal'} />
+        )}
+        <span class="quiz-q-num">{look === 'game' ? `ステージ ${no}` : `問 ${no}`}</span>
+        <span class="quiz-q-kind muted small">{QUIZ_KIND_LABELS[q.kind]}</span>
+        {status && (
+          <span class="quiz-mark">
+            {icon && <Icon name={icon} size={14} />}
+            {STATUS_LABELS[look][status]}
+          </span>
+        )}
+      </div>
+      <p class="quiz-prompt">{q.prompt}</p>
+      {children}
+    </li>
+  )
+}
 
 const passCount = (total: number, passPercent: number) => Math.ceil((total * passPercent) / 100)
 
@@ -610,6 +950,7 @@ const TakeForm = ({ quiz, action }: { quiz: QuizView; action?: string }) => {
     <>
       <p class="quiz-lead muted">
         全 {questions.length} 問。{passCount(questions.length, passPercent)} 問以上の正解で合格です。
+        {questions.some((q) => q.kind === 'essay') && '記述の問題は、先生が採点します。'}
       </p>
       {action ? (
         <form method="post" action={action} class="quiz-form" data-quiz-form data-loading-form>
@@ -631,13 +972,13 @@ const TakeForm = ({ quiz, action }: { quiz: QuizView; action?: string }) => {
 
 /** 答えと正解を左右に並べる。正解は、不正解で、見せてよいときだけ出す */
 const Compare = ({
-  wrong,
+  status,
   mine,
   answer,
   correct,
   solution,
 }: {
-  wrong: boolean
+  status: QuizReviewStatus
   /** 答えの見出し */
   mine: string
   answer: Child
@@ -646,11 +987,11 @@ const Compare = ({
   solution: Child
 }) => (
   <div class="quiz-compare">
-    <div class={cx('quiz-compare-side', wrong ? 'is-wrong' : 'is-right')}>
+    <div class={cx('quiz-compare-side', status === 'wrong' ? 'is-wrong' : status === 'right' ? 'is-right' : 'is-plain')}>
       <span class="quiz-compare-label">{mine}</span>
       {answer ?? <p class="muted small">答えていません。</p>}
     </div>
-    {wrong && solution && (
+    {status !== 'right' && solution && (
       <div class="quiz-compare-side is-answer">
         <span class="quiz-compare-label">{correct}</span>
         {solution}
@@ -670,162 +1011,244 @@ const Steps = ({ steps, compare }: { steps: readonly number[]; compare?: readonl
 
 const numbersOf = (v: unknown) => (Array.isArray(v) && v.every((n) => typeof n === 'number') ? v : null)
 const stringsOf = (v: unknown) => (Array.isArray(v) && v.every((s) => typeof s === 'string') ? v : null)
+const tablesOf = (v: unknown) => (Array.isArray(v) && v.every((s) => Array.isArray(s)) ? (v as string[][]) : null)
+const picksOf = (v: unknown) => (typeof v === 'number' ? [v] : (numbersOf(v) ?? []))
+
+const NotAnswered = ({ answer }: { answer: unknown }) => (answer === null ? <p class="muted small">答えていません。</p> : null)
 
 function ReviewBody({ item, who }: { item: QuizReviewItem; who: string }) {
-  const { question: q, answer, correct, solution } = item
-  const wrong = correct === false
+  const { question: q, answer, status, solution } = item
   switch (q.kind) {
-    case 'choice':
+    case 'choice': {
+      const picked = picksOf(answer)
+      const right = solution ? picksOf(solution.answer) : null
       return (
         <>
           {q.code && <CodeBlock code={q.code} />}
           <ul class="quiz-choices is-review">
             {q.choices.map((text, i) => {
-              const picked = answer === i
-              const right = solution?.answer === i
+              const mine = picked.includes(i)
+              const good = right?.includes(i)
+              const mark = mine
+                ? right
+                  ? good
+                    ? 'is-right'
+                    : 'is-wrong'
+                  : status === 'right'
+                    ? 'is-right'
+                    : 'is-picked'
+                : good && 'is-answer'
               return (
-                <li class={cx('quiz-choice', picked && (wrong ? 'is-wrong' : 'is-right'), !picked && right && 'is-answer')}>
+                <li class={cx('quiz-choice', mark)}>
                   <span class="quiz-choice-dot" aria-hidden="true" />
                   <span>{text}</span>
-                  {picked && <span class="quiz-line-mark">{who}の答え</span>}
-                  {!picked && right && <span class="quiz-line-mark">正解</span>}
+                  {mine && <span class="quiz-line-mark">{who}の答え</span>}
+                  {!mine && good && <span class="quiz-line-mark">正解</span>}
                 </li>
               )
             })}
           </ul>
+          <NotAnswered answer={answer} />
         </>
       )
-    case 'output':
+    }
+    case 'short': {
+      const right = stringsOf(solution?.answer)
       return (
         <>
-          <CodeBlock code={q.code} />
+          {q.code && <CodeBlock code={q.code} />}
           <Compare
-            wrong={wrong}
+            status={status}
             mine={`${who}の答え`}
             answer={typeof answer === 'string' ? <CodeBlock code={answer} /> : null}
-            correct="正しい出力"
-            solution={typeof solution?.answer === 'string' ? <CodeBlock code={solution.answer} /> : null}
+            correct={right && right.length > 1 ? '正しい答え（どれか 1 つ）' : '正しい答え'}
+            solution={right && right.map((a) => <CodeBlock code={a} />)}
           />
         </>
       )
+    }
+    case 'blank': {
+      const mine = stringsOf(answer)
+      const right = tablesOf(solution?.answer)
+      return (
+        <>
+          {q.code && <CodeBlock code={q.code} />}
+          <BlankSheet
+            q={q}
+            blank={(i) => {
+              const value = mine?.[i] ?? ''
+              const expected = right?.[i]
+              const same = expected ? isSameCell(value, expected) : status === 'right' ? true : null
+              return (
+                <span class={cx('quiz-blank-value', same === true && 'is-right', same === false && 'is-wrong')}>
+                  <code>{value || '—'}</code>
+                  {same === false && expected && <span class="quiz-cell-answer">正: {expected[0]}</span>}
+                </span>
+              )
+            }}
+          />
+          <NotAnswered answer={answer} />
+        </>
+      )
+    }
     case 'order': {
       const mine = stringsOf(answer)
       const right = stringsOf(solution?.answer)
       return (
-        <Compare
-          wrong={wrong}
-          mine={`${who}の並び`}
-          answer={mine && <CodeBlock code={mine.join('\n')} />}
-          correct="正しい並び"
-          solution={right && <CodeBlock code={right.join('\n')} />}
-        />
-      )
-    }
-    case 'bug': {
-      const marks: Partial<Record<number, LineMark>> = {}
-      if (typeof solution?.answer === 'number') marks[solution.answer] = 'answer'
-      if (typeof answer === 'number') marks[answer] = wrong ? 'wrong' : 'right'
-      return (
         <>
-          <CodeLines code={q.code} marks={marks} who={who} />
-          {answer === null && <p class="muted small">答えていません。</p>}
-        </>
-      )
-    }
-    case 'flow': {
-      const mine = numbersOf(answer)
-      const right = numbersOf(solution?.answer)
-      return (
-        <>
-          <CodeLines code={q.code} />
+          {q.code && <CodeBlock code={q.code} />}
           <Compare
-            wrong={wrong}
-            mine={`${who}の順番`}
-            answer={mine && <Steps steps={mine} compare={wrong ? (right ?? undefined) : undefined} />}
-            correct="正しい順番"
-            solution={right && <Steps steps={right} />}
+            status={status}
+            mine={`${who}の並び`}
+            answer={mine && <CodeBlock code={mine.join('\n')} />}
+            correct="正しい並び"
+            solution={right && <CodeBlock code={right.join('\n')} />}
           />
         </>
       )
     }
-    case 'indent': {
-      const mine = numbersOf(answer)
+    case 'lines': {
       const right = numbersOf(solution?.answer)
+      if (q.mode === 'sequence') {
+        const mine = numbersOf(answer)
+        return (
+          <>
+            <CodeLines code={q.code} />
+            <Compare
+              status={status}
+              mine={`${who}の順番`}
+              answer={mine && <Steps steps={mine} compare={status === 'wrong' ? (right ?? undefined) : undefined} />}
+              correct="正しい順番"
+              solution={right && <Steps steps={right} />}
+            />
+          </>
+        )
+      }
+      const marks: Partial<Record<number, LineMark>> = {}
+      for (const n of right ?? []) marks[n] = 'answer'
+      for (const n of picksOf(answer)) marks[n] = right ? (right.includes(n) ? 'right' : 'wrong') : status === 'right' ? 'right' : 'picked'
       return (
-        <Compare
-          wrong={wrong}
-          mine={`${who}の字下げ`}
-          answer={mine && <CodeBlock code={indentedCode(q.lines, mine)} />}
-          correct="正しい字下げ"
-          solution={right && <CodeBlock code={indentedCode(q.lines, right)} />}
-        />
+        <>
+          <CodeLines code={q.code} marks={marks} who={who} />
+          <NotAnswered answer={answer} />
+        </>
       )
     }
-    case 'table': {
+    case 'match': {
       const mine = stringsOf(answer)
       const right = stringsOf(solution?.answer)
       return (
         <>
-          <CodeBlock code={q.code} />
-          <div class="quiz-table-wrap">
-            <table class="quiz-table is-review">
-              <thead>
-                <tr>
-                  <th scope="col">回</th>
-                  {q.columns.map((column) => (
-                    <th scope="col">
-                      <code>{column}</code>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {range(q.rowCount).map((r) => (
-                  <tr>
-                    <th scope="row">{r + 1}</th>
-                    {q.columns.map((_, col) => {
-                      const at = r * q.columns.length + col
-                      const value = mine?.[at] ?? ''
-                      const expected = right?.[at]
-                      const same = expected === undefined ? null : isSameCell(value, expected)
-                      return (
-                        <td class={cx(same === true && 'is-right', same === false && 'is-wrong')}>
-                          <code>{value || '—'}</code>
-                          {same === false && <span class="quiz-cell-answer">正: {expected}</span>}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {q.code && <CodeBlock code={q.code} />}
+          <ol class="quiz-match is-review">
+            {q.lefts.map((left, i) => {
+              const value = mine?.[i] ?? ''
+              const expected = right?.[i]
+              const same = expected !== undefined ? value === expected : status === 'right' ? true : null
+              return (
+                <li class={cx('quiz-match-row', same === true && 'is-right', same === false && 'is-wrong')}>
+                  <span class="quiz-match-left">{left}</span>
+                  <Icon name="arrowLongRight" size={18} class="quiz-match-arrow" />
+                  <span class="quiz-match-value">
+                    {value || '—'}
+                    {same === false && <span class="quiz-cell-answer">正: {expected}</span>}
+                  </span>
+                </li>
+              )
+            })}
+          </ol>
+          <NotAnswered answer={answer} />
+        </>
+      )
+    }
+    case 'essay': {
+      const sample = typeof solution?.answer === 'string' && solution.answer ? solution.answer : null
+      return (
+        <>
+          {q.code && <CodeBlock code={q.code} />}
+          <div class={cx('quiz-essay-answer', status === 'right' && 'is-right', status === 'wrong' && 'is-wrong')}>
+            <span class="quiz-compare-label">{who}の答え</span>
+            {typeof answer === 'string' ? <p>{answer}</p> : <p class="muted small">答えていません。</p>}
           </div>
-          {answer === null && <p class="muted small">答えていません。</p>}
+          {status === 'pending' && <p class="muted small">先生の採点を待っています。</p>}
+          {sample && (
+            <div class="quiz-essay-answer is-answer">
+              <span class="quiz-compare-label">解答例</span>
+              <p>{sample}</p>
+            </div>
+          )}
         </>
       )
     }
   }
 }
 
+/** 教師が記述の問題を採点するボタン。押すと、その問題の正誤を変えて点数を数え直す */
+const GradeButtons = ({
+  action,
+  attemptId,
+  questionId,
+  status,
+}: {
+  action: string
+  attemptId: number
+  questionId: string
+  status: QuizReviewStatus
+}) => (
+  <form method="post" action={action} class="quiz-grade" data-loading-form>
+    <input type="hidden" name="attempt" value={attemptId} />
+    <input type="hidden" name="q" value={questionId} />
+    <span class="muted small">{status === 'pending' ? 'この答えを採点してください。' : '採点を変えられます。'}</span>
+    <Button
+      type="submit"
+      size="sm"
+      name="verdict"
+      value="right"
+      icon="check"
+      aria-pressed={String(status === 'right')}
+      variant={status === 'right' ? 'primary' : 'default'}
+    >
+      正解
+    </Button>
+    <Button
+      type="submit"
+      size="sm"
+      name="verdict"
+      value="wrong"
+      icon="x"
+      aria-pressed={String(status === 'wrong')}
+      variant={status === 'wrong' ? 'primary' : 'default'}
+    >
+      不正解
+    </Button>
+  </form>
+)
+
 /** 問題ごとの結果。学生の結果の画面と、教師が学生の受験を見る画面で使う */
 export const QuizReview = ({
   items,
   who = 'あなた',
   look = 'plain',
+  grade,
 }: {
   items: QuizReviewItem[]
   /** 答えた人の呼び方（「あなたの答え」「学生の答え」） */
   who?: string
   /** 教師が学生の受験を見る画面では、どの見た目の小テストでも標準のまま出す */
   look?: QuizLook
+  /** 教師が記述を採点するときの送り先と、受験の ID */
+  grade?: { action: string; attemptId: number }
 }) => {
   useStyle('/src/components/form.css', '/src/components/quiz.css')
   return (
     <ol class="quiz-questions">
       {items.map((item, i) => (
-        <Question no={i + 1} q={item.question} status={item.correct === null ? 'none' : item.correct ? 'right' : 'wrong'} look={look}>
+        <Question no={i + 1} q={item.question} status={item.status} look={look}>
           <ReviewBody item={item} who={who} />
-          {item.correct === null && <p class="muted small">この問題は、受けたあとに足されました。</p>}
+          {item.status === 'none' && <p class="muted small">この問題は、受けたあとに足されました。</p>}
+          {grade && item.question.kind === 'essay' && item.status !== 'none' && (
+            <GradeButtons action={grade.action} attemptId={grade.attemptId} questionId={item.question.id} status={item.status} />
+          )}
           {item.solution?.explanation && (
             <div class="quiz-explanation">
               <span class="quiz-explanation-label">
@@ -841,11 +1264,15 @@ export const QuizReview = ({
   )
 }
 
-/** 受験 1 回の点数。合格なら「合格」のチップを付ける */
-export const QuizScoreChip = ({ score, passed }: { score: QuizScore; passed: boolean }) =>
+/** 受験 1 回の点数。合格なら「合格」、採点待ちの記述があれば「採点待ち」のチップを付ける */
+export const QuizScoreChip = ({ score, passed, pending = 0 }: { score: QuizScore; passed: boolean; pending?: number }) =>
   passed ? (
     <Chip tone="success" icon="check">
       {score.correct} / {score.total} 合格
+    </Chip>
+  ) : pending > 0 ? (
+    <Chip tone="accent" icon="clock">
+      {score.correct} / {score.total} 採点待ち {pending}
     </Chip>
   ) : (
     <span class="score">
@@ -854,27 +1281,29 @@ export const QuizScoreChip = ({ score, passed }: { score: QuizScore; passed: boo
   )
 
 const Result = ({ quiz, mine, latest }: { quiz: QuizView; mine: NonNullable<QuizView['mine']>; latest: QuizAttemptView }) => {
-  const { score, passed } = latest
+  const { score, passed, pending } = latest
   const full = mine.count >= MAX_QUIZ_ATTEMPTS
+  const waiting = !passed && pending > 0
   return (
     <>
-      <div class={cx('quiz-score', passed ? 'is-passed' : 'is-failed')}>
-        <Mascot act={passed ? 'cheer' : 'advise'} size={72} stand={false} />
+      <div class={cx('quiz-score', passed ? 'is-passed' : waiting ? 'is-pending' : 'is-failed')}>
+        <Mascot act={passed ? 'cheer' : waiting ? 'think' : 'advise'} size={72} stand={false} />
         <div class="quiz-score-text">
           <p class="quiz-score-value">
             <strong>{score.correct}</strong> / {score.total} 問正解
-            <Chip tone={passed ? 'success' : 'default'} icon={passed ? 'check' : undefined}>
-              {passed ? '合格' : '不合格'}
+            <Chip tone={passed ? 'success' : waiting ? 'accent' : 'default'} icon={passed ? 'check' : waiting ? 'clock' : undefined}>
+              {passed ? '合格' : waiting ? '採点待ち' : '不合格'}
             </Chip>
           </p>
           <p class="muted small">
             {formatDateTime(latest.createdAt)} · {mine.count} 回目
             {mine.count > 1 && mine.best && ` · これまでの最高 ${mine.best.correct} / ${mine.best.total}`}
-            {!passed && ` · ${passCount(score.total, quiz.passPercent)} 問以上の正解で合格`}
+            {waiting && ` · ${pending} 問は先生の採点を待っています`}
+            {!passed && !waiting && ` · ${passCount(score.total, quiz.passPercent)} 問以上の正解で合格`}
           </p>
         </div>
         {!full && (
-          <Button href={`${quiz.itemUrl}?retake=1`} icon="arrowPath" variant={passed ? 'default' : 'primary'}>
+          <Button href={`${quiz.itemUrl}?retake=1`} icon="arrowPath" variant={passed || waiting ? 'default' : 'primary'}>
             もう一度受ける
           </Button>
         )}
@@ -1108,11 +1537,12 @@ const GameTake = ({ quiz, action }: { quiz: QuizView; action?: string }) => {
 const CONFETTI = 16
 
 const GameResult = ({ quiz, mine, latest }: { quiz: QuizView; mine: NonNullable<QuizView['mine']>; latest: QuizAttemptView }) => {
-  const { score, passed } = latest
+  const { score, passed, pending } = latest
   const stars = quizStars(score, passed)
   const full = mine.count >= MAX_QUIZ_ATTEMPTS
   const kinds = QUIZ_KINDS.filter((kind) => latest.review.some((item) => item.question.kind === kind))
   const need = passCount(score.total, quiz.passPercent) - score.correct
+  const waiting = !passed && pending > 0
   return (
     <>
       <div class={cx('qg-result', passed && 'is-clear')}>
@@ -1137,7 +1567,9 @@ const GameResult = ({ quiz, mine, latest }: { quiz: QuizView; mine: NonNullable<
             ))}
           </div>
         </div>
-        <p class="qg-result-title">{stars === 3 ? 'パーフェクト！' : passed ? 'ステージクリア！' : 'あとすこし！'}</p>
+        <p class="qg-result-title">
+          {stars === 3 ? 'パーフェクト！' : passed ? 'ステージクリア！' : waiting ? '先生の採点を待っているよ' : 'あとすこし！'}
+        </p>
         {/* 星の数を文字でも置くのは、3D に切り替わると 2D の星を隠すので、読み上げで数が伝わらなくなるため */}
         <p class="sr-only">星 {stars} つ（3 つ中）</p>
         <p class="qg-result-score">
@@ -1146,10 +1578,11 @@ const GameResult = ({ quiz, mine, latest }: { quiz: QuizView; mine: NonNullable<
         <p class="muted small">
           {formatDateTime(latest.createdAt)} · {mine.count} 回目のチャレンジ
           {mine.count > 1 && mine.best && ` · これまでの最高 ${mine.best.correct} / ${mine.best.total}`}
-          {!passed && need > 0 && ` · あと ${need} 問でクリア`}
+          {waiting && ` · ${pending} 問は先生が採点するよ`}
+          {!passed && !waiting && need > 0 && ` · あと ${need} 問でクリア`}
         </p>
         {!full && (
-          <Button href={`${quiz.itemUrl}?retake=1`} size="lg" icon="arrowPath" variant={passed ? 'default' : 'primary'}>
+          <Button href={`${quiz.itemUrl}?retake=1`} size="lg" icon="arrowPath" variant={passed || waiting ? 'default' : 'primary'}>
             もう一度チャレンジ
           </Button>
         )}
