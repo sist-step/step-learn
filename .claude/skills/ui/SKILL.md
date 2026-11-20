@@ -66,7 +66,7 @@ Moodle モードの種類ごとの入力欄（`moodle-mode/extra-kinds.tsx`）�
 | --- | --- | --- |
 | `src/styles/base.css` | デザイントークン・リセット・共通ユーティリティ・アニメーション | 常に |
 | `src/components/<部品>.css` | その部品の見た目 | 部品が `useStyle` で登録したとき |
-| `src/routes/<ルート>/<ルート>.css` | その画面だけで使うクラス | 画面が `<Styles use={[...]} />` で登録したとき |
+| `src/features/<機能>/<機能>.css`・`src/features/<機能>/components/<部品>.css` | その画面だけで使うクラス | 画面が `<Styles use={[...]} />` で登録したとき |
 
 - CSS ファイルを足したら `components/style.tsx` の `STYLESHEETS` に追加する。並びがカスケードの順なので、上書きしたいファイルより後ろに置く
 - 新しいクラスを作る前に `grep -rn "^\.<名前>" src --include='*.css'` で似たものを探す。よく使うのは `stack` `stack-lg` `row` `grid-2` `toolbar` `form-actions` `back-link` `muted` `small` `strong` `truncate` `eyebrow` `sr-only` `hide-sm`

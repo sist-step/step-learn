@@ -55,9 +55,10 @@ npm run dev:users    # 開発用のユーザー admin / teacher / student（パ�
 
 ```
 src/                 アプリ本体（src/index.tsx が入口）
-src/routes/<ルート>/ 画面ごとのルーティング・処理・ビュー・CSS
-src/components/      レイアウトと UI 部品
-src/lib/             DB・認証・設定などの共通処理
+src/features/<機能>/ 機能ごとのルーティング・処理・画面・部品・CSS・クライアントの JS
+src/components/      いくつもの機能で使う UI 部品
+src/lib/             いくつもの機能で使う処理（DB・認証・設定など）
+src/client/          いくつもの機能で使うクライアントの JS
 src/moodle-mode/     Moodle モード（完全移行のあとは削除する）
 migrations/          drizzle-kit が生成するマイグレーション
 migrations-moodle/   Moodle モードの DB のマイグレーション

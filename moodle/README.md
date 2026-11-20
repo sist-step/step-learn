@@ -22,12 +22,16 @@ Moodle 側は下の「本番の Moodle での設定」のとおりにプラグ�
 
 ### 完全移行したら削除するもの
 
-
 - `src/moodle-mode/`・`migrations-moodle/`・`drizzle.moodle.config.ts`・`moodle/`
 - `src/index.tsx` のモードの切り替え（`./app` だけを読み込む形に戻す）と、`src/server.ts`・`vite.config.ts` の `config.moodle` の分岐
 - `src/lib/config.ts` の `moodle` / `moodleDatabasePath` / `moodleMigrate`、`src/lib/db.ts` の Moodle モードのガード、`src/components/style.tsx` の `moodle-mode.css`
 - `src/moodle/remote.ts` と `src/cli.ts` の `moodle:migrate`、`src/lib/forms.ts` の `extraItemFields` / `extraItem` / `extraCode`、`src/features/bundle/bundle.ts` の `BUNDLE_MODULE`、`src/client.ts` の `setKindOnly`
 - コーディング問題を 2 つのモードで使い回すための分け方（`src/features/code/handlers.tsx` の `CodeBackend`、`src/features/code/code-store.ts` の `CodeStore`、`src/features/code/code-grader.ts` の `createGrader`、`src/features/code/views.tsx` の `CodePage`）は、通常モードの実装（`src/features/code/backend.ts`・`src/features/code/code-items.ts`・`src/features/code/code-grading.ts`）だけになるので、まとめてかまいません
+- ほかの機能の、2 つのモードのための分け方も同じです。実装が 1 つになるので、`backend.ts` の中身をハンドラに入れ、型だけのインターフェースは消してかまいません
+  - `src/features/<機能>/backend.ts` と `create<機能>Handlers(backend)` の組（agent・bundle・code・collab・presentation・quiz・mcp・ai の `AiBackend`・admin の `AiAdminBackend`）
+  - Store のインターフェース（`CodeStore`・`QuizStore`・`BundleStore`・`BundleSyncStore`・`AgentStore`・`PresentationStore`・`CollabStore`）
+  - socket の Backend（`ShareBackend`・`CollabSocketBackend`・`PresentationSocketBackend`）と、通常モードの `*-access.ts`
+  - DB とテーブルを受け取って作る `createOAuthStore`・`createAiLedger`・`createAiChatStore`
 - `package.json` の `moodle:migrate` / `db:generate:moodle` / `db:check:moodle`、CI の「Check Moodle mode migrations」、`Dockerfile` の `migrations-moodle`、`.dockerignore` の `moodle`
 
 ## Moodle から直接取り込む

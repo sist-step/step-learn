@@ -44,12 +44,59 @@ npm run docs:index -- --docs ../step-docs/src/content/docs --out ai-docs  # AI �
 
 - JavaScript は必須。無効な環境では全画面で「JavaScript を有効にしてください」だけを出す（`src/renderer.tsx` の noscript）ので、JS なしの代替は作らない
 - データを変える操作はフォーム送信（POST → 303 リダイレクト）で作り、`src/client.ts` が再読み込みなしの遷移にする
-- クライアント JS は `src/client.ts` に書く。重いライブラリを使うものだけ別のファイルにし、使う画面でだけ `client.ts` が `import()` で読み込む。画面が直接読み込むのは画面共有の `src/features/screen/client.ts` だけで、増やさない
+- クライアント JS の入口は `src/client.ts` の 1 つ。機能ごとの処理は `src/features/<機能>/client.ts` や `src/client/` に書いて `client.ts` から読み込み、重いライブラリを使うものだけ、使う画面でだけ `import()` で読み込む。画面が直接読み込むのは画面共有の `src/features/screen/client.ts` だけで、増やさない
 - 権限がないリソースは 403 ではなく `c.notFound()` を返す（存在を知らせない）
 - 入力の検証は `src/lib/forms.ts` の zod スキーマに書き、サーバー（`validate`）とクライアント（フォームの `validateWith`）で同じものを使う。HTML の `required` / `maxlength` などは書かない
 - DB の読み書きは Drizzle のクエリビルダーで書く。生 SQL の文字列は書かず、`sql` テンプレートを使うときも値を文字列連結しない
 - 既存のマイグレーションは編集しない。スキーマは `src/lib/schema.ts` を変えて生成する
 - README.md に機能の一覧や仕様を書き足さない。運用の手順は `docs/` か、そのディレクトリの README に、コードからわからない手順だけを書く（分け方は CONTRIBUTING.md の「ドキュメントの置き場所」）
+
+## 構成
+
+ファイルは機能ごとに置く（Vertical Slice）。1 つの機能を直すときに、1 つのフォルダーを読めば済むようにするため。
+
+```
+src/features/<機能>/   1 つの機能だけで使うもの
+  index.ts             ルーティング（パスとハンドラの対応だけ）
+  handlers.tsx         権限の確認・入力の検証・DB の読み書き
+  views.tsx            画面（props だけで受け取り、DB に触らない）
+  backend.ts           通常モードと Moodle モードで差し替える読み書き（両方のモードで使う機能だけ。2 月に Moodle モードを消したら中に入れる）
+  <機能>.ts            その機能の型と、DB を読まない処理（ブラウザと Moodle モードからも読める）
+  <機能>-items.ts など DB を読み書きする処理
+  components/          その機能だけで使う部品と CSS
+  client.ts            その機能のクライアントの JS（src/client.ts が読み込む）
+src/lib/               いくつもの機能で使う処理（http・forms・db・schema・認証・権限・ストレージ）
+src/components/        いくつもの機能で使う UI 部品
+src/client/            いくつもの機能で使うクライアントの JS（core.ts・dom.ts など）
+src/moodle-mode/       Moodle モード。2 月の完全移行で消すので、書き写しを直したり新しい抽象化を足したりしない
+```
+
+- 新しいコードは、使うのが 1 つの機能だけなら `features/<機能>/` に置く。2 つ目の機能で使うようになったら `lib/`・`components/`・`client/` に移す
+- 機能どうしは、相手の `<機能>.ts`・`-items.ts` などの処理と `components/` だけを import してよい。相手のルートのファイル（index・handlers・views・backend）は import しない
+- `lib/` と `components/` からは `features/` を import しない。例外は、機能ごとの定義を集める `lib/schema.ts`・`lib/forms.ts`・`lib/item-kinds.ts`・`lib/availability.ts` と、AI のボタンを置く `components/layout.tsx` だけ
+- アイテムの種類を足すときは `lib/item-kinds.ts` の `ITEM_KINDS` と、`features/content/handlers.tsx` の `EDIT_DATA`・`VIEW_DATA` に 1 行ずつ足す（Record なので、足し忘れは型エラーになる）
+
+### 共通の部品を使う
+
+同じ処理を 2 か所目に書きたくなったら、まず次を探す。なければ共通の場所に作ってから使う。前の機能から写して書かない。
+
+| したいこと | 使うもの |
+| --- | --- |
+| URL の ID を読む | `intParam`（`lib/http.ts`） |
+| コースの権限・管理者か教師か | `getCourseAccess` / `manageAccess`（`lib/courses.ts`） |
+| 種類を指定してアイテムを開けるか確かめる | `openItem`（URL から）/ `openItemFor`（拡張機能などセッションのない要求）（`lib/item-access.ts`） |
+| 拡張機能の参照・持ち主を読む | `itemIdOfRef` / `findUser`（`lib/item-access.ts`） |
+| フォーム・JSON の本文を読む | `readForm`（`{ all: true }` で配列）/ `readFields` / `readJson`（`lib/http.ts`） |
+| リダイレクトとトースト・戻り先 | `redirectWith` / `sameOriginReferer`（`lib/http.ts`） |
+| アップロードされたファイルを置けるか | `uploadProblem`（`lib/storage.ts`） |
+| アイテムを作る・消すときのファイル | `insertItem` / `storedFilesOf` / `deleteStoredFiles`（`lib/item-kinds.ts`） |
+| VS Code の拡張機能の鍵 | `signToken` / `verifyBearer` / `launchClaimer`（`lib/vscode-token.ts`） |
+| JSON を読めなければ null | `parseJson`（`lib/json.ts`） |
+| クライアントで要素を集める・JSON で送る・動きを減らす設定 | `$$` / `fetchJson` / `reducedMotion`（`client/dom.ts`） |
+| クライアントのトースト・確認 | `toast` / `confirmNear`（`client/core.ts`） |
+
+- 種類ごとに分かれる処理は、`Record<種類, …>` か全部の `case` を書いた `switch` にする。`default` や三項演算子の最後に「残り全部」を受けさせない
+- export するのは、ほかのファイルが使うものだけ
 
 ## 書き方
 
