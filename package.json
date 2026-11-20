@@ -24,6 +24,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^1.7.0",
     "@hono/node-server": "^2.1.6",
+    "@modelcontextprotocol/server": "^2.4.0",
     "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.17",

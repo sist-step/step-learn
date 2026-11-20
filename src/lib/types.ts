@@ -28,6 +28,8 @@ export type AppEnv = {
     styles?: Set<string>
     /** AI のパネルを描く。AI を使えない利用者や Moodle モードでは未設定か null を返す（app.tsx） */
     aiPanel?: () => Child
+    /** ユーザーメニューに「AI アプリとの接続」を出すか。MCP を使える教師だけ（routes/mcp） */
+    mcpApps?: boolean
     /** 操作ログに残す利用者。ログインした要求と、既にあるアカウントでのログインの失敗では、user がまだ空のため（lib/operation-log.ts） */
     logUserId?: number
     /** 操作ログに残すコースと対象の名前。拡張機能からの要求では、URL にコースもアイテムも入っていないため（lib/operation-log.ts） */

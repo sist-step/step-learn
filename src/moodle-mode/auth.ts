@@ -48,7 +48,7 @@ async function readSessionId(c: Context) {
   return typeof token === 'string' ? sha256(token) : null
 }
 
-const toUser = (row: { id: number; email: string; name: string; username: string; siteAdmin: number }): User => ({
+export const toUser = (row: { id: number; email: string; name: string; username: string; siteAdmin: number }): User => ({
   id: row.id,
   email: row.email,
   name: row.name,

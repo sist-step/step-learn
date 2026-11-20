@@ -1,0 +1,17 @@
+/* ===== AI アプリとの接続 ===== */
+.mcp-layout { display: flex; flex-direction: column; gap: 16px; max-width: 760px; }
+.mcp-heading { font-size: var(--fs-lg); font-weight: 650; letter-spacing: -0.005em; }
+.mcp-steps { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; }
+.mcp-steps dd { margin: 0; }
+@media (max-width: 640px) {
+  .mcp-steps { grid-template-columns: 1fr; gap: 2px; }
+  .mcp-steps dd + dt { margin-top: 8px; }
+}
+
+/* ===== 同意の画面 ===== */
+.mcp-permissions { padding: 12px 14px; border: 1px solid var(--card-border); border-radius: var(--radius-field); background: var(--surface); }
+.mcp-permissions ul { margin: 6px 0 0; padding-left: 1.2em; }
+.mcp-consent-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .mcp-consent-actions > .btn { flex: 1 1 0; }
+}
