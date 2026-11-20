@@ -52,7 +52,7 @@ Moodle モードの種類ごとの入力欄（`moodle-mode/extra-kinds.tsx`）�
 - 新しい部品は、描画時に `useStyle('/src/components/<部品>.css')` で自分の CSS を登録する
 - 2 か所に足さないと動かないものがある
   - マスコットの足場: `mascot.css` の `.mascot-yard-block.is-<名前>` と、`client.ts` の `WALKER_GROUNDS`
-  - 小テストの出題形式: `lib/quiz.ts` の `QUIZ_KINDS` と種類ごとの分岐、`components/quiz.tsx` の編集欄・解答・結果、`client.ts` の `quizAnswered`
+  - 小テストの出題形式: `lib/quiz.ts` の `QUIZ_KINDS` と種類ごとの分岐（前の形式は `upgradeQuestion` で読み替える）、`components/quiz.tsx` の編集欄・解答・結果、`client.ts` の `quizAnswered`、`quiz-world.ts` の部屋の部品と `GUIDES`
   - 小テストの動物: `quiz-animal.tsx` の `QUIZ_ANIMALS` と `quiz-game.css` の色
   - AI のツールが変えた内容をその場で反映する画面: 画面の要素に `data-ai-watch`（`item:<id>`。コースは `CourseLiveSync` が `course:<id>` を持つ）と、ツールの `success` の 3 つ目に `lib/ai-tool-kit.ts` の `inCourse` / `inItem`
 
