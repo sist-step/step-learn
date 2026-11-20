@@ -613,3 +613,65 @@ export const operationLogs = sqliteTable(
     check('operation_logs_kind', sql`${t.kind} IN ('view', 'change', 'important')`),
   ],
 )
+
+/** MCP の OAuth で登録したクライアント（Claude・ChatGPT・手元のエディターなど）。id がクライアント ID */
+export const oauthClients = sqliteTable('oauth_clients', {
+  id: text('id').primaryKey(),
+  /** 登録のときにクライアントが名乗った名前。同意の画面と接続中のアプリの一覧に出す */
+  name: text('name').notNull().default(''),
+  redirectUris: text('redirect_uris', { mode: 'json' }).$type<string[]>().notNull(),
+  createdAt: integer('created_at').notNull().default(now),
+})
+
+/** 同意した直後に発行し、トークンと 1 回だけ交換できる認可コード。id はコードの SHA-256 */
+export const oauthCodes = sqliteTable(
+  'oauth_codes',
+  {
+    id: text('id').primaryKey(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    redirectUri: text('redirect_uri').notNull(),
+    /** PKCE の S256 のチャレンジ */
+    codeChallenge: text('code_challenge').notNull(),
+    resource: text('resource').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+  },
+  (t) => [index('oauth_codes_expires').on(t.expiresAt)],
+)
+
+/**
+ * 利用者がクライアントに許可した接続。アクセストークンとリフレッシュトークンは SHA-256 だけを持ち、使うたびに入れ替える。
+ * 消すと接続が解除される
+ */
+export const oauthGrants = sqliteTable(
+  'oauth_grants',
+  {
+    id: integer('id').primaryKey(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    resource: text('resource').notNull(),
+    accessHash: text('access_hash').notNull(),
+    accessExpiresAt: integer('access_expires_at').notNull(),
+    refreshHash: text('refresh_hash').notNull(),
+    /** 1 つ前のリフレッシュトークン。これがもう一度使われたら、漏れたとみなして接続ごと消す */
+    previousRefreshHash: text('previous_refresh_hash'),
+    refreshExpiresAt: integer('refresh_expires_at').notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+    lastUsedAt: integer('last_used_at').notNull().default(now),
+  },
+  (t) => [
+    index('oauth_grants_user').on(t.userId),
+    index('oauth_grants_client').on(t.clientId),
+    uniqueIndex('oauth_grants_access_hash').on(t.accessHash),
+    uniqueIndex('oauth_grants_refresh_hash').on(t.refreshHash),
+    index('oauth_grants_previous_refresh_hash').on(t.previousRefreshHash),
+  ],
+)

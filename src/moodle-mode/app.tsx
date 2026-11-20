@@ -16,8 +16,9 @@ import { createPresentationHandlers, isPresentationUpload, presentationApi, pres
 import { CODE_BODY_LIMIT, codeRoutes, codeVscodeApi, createCodeHandlers, isCodeRequest } from '../routes/code/handlers'
 import { createQuizHandlers, quizRoutes } from '../routes/quiz/handlers'
 import { collabRoutes, createCollabHandlers } from '../routes/collab/handlers'
+import { createMcpHandlers, mcpRoutes } from '../routes/mcp/handlers'
 import { agentBackend } from './agent'
-import { canUseMoodleAi, moodleAssistant } from './ai-assistant'
+import { canUseMoodleAi, isMoodleAiTeacher, moodleAssistant } from './ai-assistant'
 import { aiLedger, usageByUser } from './ai-usage'
 import { bundleBackend } from './bundle'
 import { destroySession, requireAuth, session, type MoodleEnv } from './auth'
@@ -27,6 +28,7 @@ import * as h from './handlers'
 import { presentationBackend } from './presentation'
 import { quizBackend } from './quiz'
 import { collabBackend } from './collab'
+import { mcpBackend } from './mcp'
 import { ErrorPage, errorContent, type ErrorContent } from './views'
 
 const app = new Hono<MoodleEnv>()
@@ -66,6 +68,7 @@ app.use(async (c, next) => {
   // 失敗しても要求ごと止めないのは、Moodle に一時的につながらないだけで、パネルのない画面は描けるため
   const allowed = user ? await canUseMoodleAi(c).catch(() => false) : false
   if (user && allowed) c.set('aiPanel', () => aiHandlers.renderPanel(user))
+  if (user && c.req.method === 'GET') c.set('mcpApps', await isMoodleAiTeacher(c).catch(() => false))
   await next()
 })
 
@@ -84,6 +87,7 @@ app.route('/api/vscode/agent', agentApi(agentBackend))
 app.route('/api/vscode/code', codeVscodeApi(codeBackend))
 app.route('/api/vscode/presentation', presentationApi(presentationBackend))
 app.route('/api/vscode', vscodeApi(bundleBackend))
+app.route('/', mcpRoutes(createMcpHandlers(mcpBackend)))
 
 const auth = new Hono<MoodleEnv>()
 auth.use(requireAuth)

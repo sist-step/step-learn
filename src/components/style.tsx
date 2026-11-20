@@ -33,6 +33,7 @@ export const STYLESHEETS = [
   '/src/routes/participants/participants.css',
   '/src/routes/content/content.css',
   '/src/routes/account/account.css',
+  '/src/routes/mcp/mcp.css',
   '/src/routes/admin/admin.css',
   '/src/routes/screen/screen.css',
   '/src/routes/code/code.css',
