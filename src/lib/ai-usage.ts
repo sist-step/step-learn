@@ -13,8 +13,11 @@ export const aiLedger = createAiLedger({ db, aiUsage, appSettings })
 
 export const { getMonthlyLimit, setLimits, recordUsage, getQuota, aiOverview } = aiLedger
 
-export function canUseAi(user: User) {
-  if (!AI_PROVIDERS.some(isProviderEnabled) || !hasAiEmail(user.email)) return false
+export const canUseAi = (user: User) => AI_PROVIDERS.some(isProviderEnabled) && isAiTeacher(user)
+
+/** AI_EMAIL_DOMAIN のメールで、管理者・全体のロールが教師・いずれかのコースの教師のどれか。MCP はこれだけで決める（AI の費用は利用者の AI が持つため） */
+export function isAiTeacher(user: User) {
+  if (!hasAiEmail(user.email)) return false
   if (user.role !== 'student') return true
   const teaching = db
     .select({ courseId: enrollments.courseId })

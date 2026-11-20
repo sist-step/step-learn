@@ -83,6 +83,11 @@ export type CodeBackend = {
   resolve: (c: C) => Promise<CodeContext | null>
   /** 拡張機能からの要求で、userId の人が ref のアイテムを今も開けるなら返す。開けなければ null */
   targetOf: (ref: string, userId: number) => Promise<CodeTarget | null>
+  /**
+   * 半年使える鍵に入れる、userId の人の今の印。印が変わると、それより前に渡した鍵は使えない。
+   * Moodle モードは使うたびに Moodle のトークンで権限を確かめ直すので、渡さない
+   */
+  stampOf?: (userId: number) => string | undefined
   grader: Grader
   /** ブラウザエディターの画面（showPage） */
   pageUrl: (courseId: number, itemId: number) => string
@@ -709,7 +714,7 @@ function readUpload(
 }
 
 /** 拡張機能が呼ぶ API。ログインのセッションの代わりに、リンクの鍵と、それと引き換えた鍵で確かめる */
-export function codeVscodeApi({ targetOf, grader, pageUrl }: Pick<CodeBackend, 'targetOf' | 'grader' | 'pageUrl'>) {
+export function codeVscodeApi({ targetOf, stampOf, grader, pageUrl }: Pick<CodeBackend, 'targetOf' | 'stampOf' | 'grader' | 'pageUrl'>) {
   // 上限を付けるのは、ログインしていなくても呼べ、鍵を総当たりで試されないようにするため
   const claimLimit = rateLimiter({ limit: 30, windowSec: 60 })
   // 拡張機能は保存から少し待ってまとめて送るので、普通に使っていて届く回数ではない
@@ -719,8 +724,9 @@ export function codeVscodeApi({ targetOf, grader, pageUrl }: Pick<CodeBackend, '
   // 送るたびにアイテムを確かめるのは、鍵が半年使え、そのあいだにコースから外れたり、アイテムが非表示になったりするため
   async function targetFrom(c: C) {
     const claims = verifyCode(bearer(c))
-    const target = claims && (await targetOf(claims.ref, claims.userId))
-    if (!claims || !target || !target.store.findUser(claims.userId) || (target.isStudent && !isSolvable(target.stage))) return null
+    if (!claims || claims.stamp !== stampOf?.(claims.userId)) return null
+    const target = await targetOf(claims.ref, claims.userId)
+    if (!target || !target.store.findUser(claims.userId) || (target.isStudent && !isSolvable(target.stage))) return null
     return { ...target, userId: claims.userId, limitKey: `${claims.ref} ${claims.userId}` }
   }
 
@@ -748,7 +754,7 @@ export function codeVscodeApi({ targetOf, grader, pageUrl }: Pick<CodeBackend, '
       ref: claims.ref,
       course: target.course,
       user: { id: user.id, name: user.name },
-      token: signCode({ ref: claims.ref, userId: claims.userId }),
+      token: signCode({ ref: claims.ref, userId: claims.userId, stamp: stampOf?.(claims.userId) }),
     })
   })
 

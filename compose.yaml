@@ -1,10 +1,25 @@
 name: step-learn
 
+# 既定の json-file を上限なしのままにしないのは、ログが消えずに溜まり続け、小さな VPS のディスクを使い切るため
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '3'
+
 services:
   app:
     build: .
-    image: step-learn:latest
+    # 名前を固定しないのは、デプロイでは CI がビルドして GHCR に置いたイメージを使い、サーバーではビルドしないため（.github/workflows/deploy.yml）
+    image: ${APP_IMAGE:-step-learn:latest}
     restart: unless-stopped
+    logging: *logging
+    # 上限を付けないままにしないのは、ホストのメモリが足りなくなったとき、カーネルが一番大きい app を落とすため。
+    # ヒープの上限を一緒に下げないと、Node は上限に気づかずにヒープを広げ、GC が走る前にコンテナごと落とされる
+    mem_limit: ${APP_MEM_LIMIT:-512m}
+    memswap_limit: ${APP_MEM_LIMIT:-512m}
+    # 既定の 10 秒にしないのは、終了の合図のあと、共同編集の保存と処理中の要求（AI の応答など）を待つため（src/server.ts の shutdown）
+    stop_grace_period: 30s
     env_file:
       - path: ${ENV_FILE:-.env}
         required: false
@@ -12,6 +27,7 @@ services:
     environment:
       PORT: 3000
       DATA_DIR: /app/data
+      NODE_OPTIONS: --max-old-space-size=${APP_HEAP_MB:-320}
       SANDBOX_URL: unix:/run/sandbox/sandbox.sock
       BROWSER_URL: unix:/run/browser/browser.sock
     # 0.0.0.0 を既定にしないのは、Docker の公開ポートはホストの ufw / firewalld を素通りし、リバースプロキシを経由しない直接アクセスで APP_ORIGIN の CSRF 検証と TLS を迂回されるため
@@ -28,8 +44,9 @@ services:
   # こちらには env_file もデータのボリュームも渡さず、乗っ取られても持ち出せるものがない状態にする
   sandbox:
     build: ./sandbox
-    image: step-learn-sandbox:latest
+    image: ${SANDBOX_IMAGE:-step-learn-sandbox:latest}
     restart: unless-stopped
+    logging: *logging
     # ネットワークでつながないのは、内部ネットワークでも app の 3000 番にリバースプロキシを通さずに届いてしまうため。app とは共有ボリュームのソケットで話す
     network_mode: none
     # init を挟まないと、実行中のコードが残したプロセスの終了を誰も回収せず、プロセス数の上限を使い切る
@@ -53,8 +70,8 @@ services:
       - no-new-privileges:true
     runtime: ${SANDBOX_RUNTIME:-runc}
     pids_limit: 256
-    mem_limit: 512m
-    memswap_limit: 512m
+    mem_limit: ${SANDBOX_MEM_LIMIT:-512m}
+    memswap_limit: ${SANDBOX_MEM_LIMIT:-512m}
     cpus: 1
     # 1 つにまとめないのは、ある実行が容量を使い切っても、同時に動いているほかの実行が書けなくならないようにするため。
     # 同時に実行できる数はこの行の数で決まる（8 まで。uid と gid は 20000 + 番号）
@@ -70,8 +87,11 @@ services:
   # sandbox と分けるのは、Chromium は動かすのに多くのプロセスとメモリが要り、Python の実行ごとの制限（プロセス 16 個など）に収まらないため
   browser:
     build: ./browser
-    image: step-learn-browser:latest
+    image: ${BROWSER_IMAGE:-step-learn-browser:latest}
     restart: unless-stopped
+    logging: *logging
+    environment:
+      BROWSER_SLOTS: ${BROWSER_SLOTS:-2}
     # sandbox と同じく、ネットワークにつながず、app とは共有ボリュームのソケットで話す
     network_mode: none
     init: true
@@ -83,8 +103,8 @@ services:
       - no-new-privileges:true
     runtime: ${SANDBOX_RUNTIME:-runc}
     pids_limit: 512
-    mem_limit: 1g
-    memswap_limit: 1g
+    mem_limit: ${BROWSER_MEM_LIMIT:-1g}
+    memswap_limit: ${BROWSER_MEM_LIMIT:-1g}
     cpus: 1
     # Chromium のプロファイルとキャッシュを置く。実行ごとに作って消すので、ディスクには何も残さない
     tmpfs:

@@ -237,8 +237,10 @@ export async function updateCourseImage(c: Context<AppEnv>) {
   if (!form.ok) return redirectWith(c, back, firstError(form.errors), 'error')
   const result = await putImage(courseImagePrefix(id, kind), form.values.image)
   if ('error' in result) return redirectWith(c, back, result.error, 'error')
+  // access.course の画像を消さないのは、画像を受け取る（await）あいだに別のタブで差し替えられていると、その画像が消されずに残るため
+  const latest = db.select().from(courses).where(eq(courses.id, id)).get()
   db.update(courses).set(imageColumn(kind, result.key)).where(eq(courses.id, id)).run()
-  inBackground(deleteKeys([currentImage(access.course, kind)]))
+  inBackground(deleteKeys([latest && currentImage(latest, kind)]))
   return redirectWith(c, back, `${COURSE_IMAGE_LABELS[kind]}を設定しました。`)
 }
 

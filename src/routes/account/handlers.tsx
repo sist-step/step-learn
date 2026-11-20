@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
-import { USERNAME_TAKEN, destroyOtherSessions, hasPassword, hashPassword, isUsernameTaken, verifyPassword } from '../../lib/auth'
+import { USERNAME_TAKEN, revokeOtherCredentials, hasPassword, hashPassword, isUsernameTaken, verifyPassword } from '../../lib/auth'
 import { config } from '../../lib/config'
 import { db } from '../../lib/db'
 import { validate, type FieldErrors } from '../../lib/forms'
@@ -82,7 +82,7 @@ export async function changePassword(c: Context<AppEnv>) {
 
   const passwordHash = await hashPassword(password)
   db.update(users).set({ passwordHash }).where(eq(users.id, user.id)).run()
-  await destroyOtherSessions(c, user.id)
+  await revokeOtherCredentials(c, user.id)
   return redirectWith(c, '/account', 'パスワードを変更しました。')
 }
 
@@ -103,7 +103,7 @@ async function setPassword(c: Context<AppEnv>, form: Form, stored: string) {
     .where(and(eq(users.id, user.id), eq(users.passwordHash, stored)))
     .run()
   if (!res.changes) return redirectWith(c, '/account', 'パスワードはすでに設定されています。', 'info')
-  await destroyOtherSessions(c, user.id)
+  await revokeOtherCredentials(c, user.id)
   return redirectWith(c, '/account', 'パスワードを設定しました。')
 }
 

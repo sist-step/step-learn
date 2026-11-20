@@ -690,7 +690,7 @@ const qgEntries = (stage: HTMLElement) =>
 
 /**
  * 3D のゲームの「こたえる」（扉のレバー）: サーバーで答えを確かめ、正解ならステージに扉を開ける印（data-qg-passed）を付ける（src/quiz-world.ts が見て扉を開く）。
- * まちがえたら、最初の答えを first[] としてフォームに残し、ゴールの採点に使う。まちがえたあとに正解したら、解説を出す
+ * 最初に確かめた答えはサーバーが覚え、ゴールの採点に使う（routes/quiz/handlers.tsx の check）。まちがえたあとに正解したら、解説を出す
  */
 async function qgCheck(game: HTMLElement, stage: HTMLElement) {
   qgSettle(stage)
@@ -723,13 +723,7 @@ async function qgCheck(game: HTMLElement, stage: HTMLElement) {
     if (stage.hasAttribute('data-qg-missed') && result.explanation) qgExplain(game, result.explanation)
     return
   }
-  if (!stage.hasAttribute('data-qg-missed')) {
-    stage.setAttribute('data-qg-missed', '')
-    if (game instanceof HTMLFormElement)
-      stage.append(
-        Object.assign(document.createElement('input'), { type: 'hidden', name: 'first[]', value: JSON.stringify({ id, fields: entries }) }),
-      )
-  }
+  stage.setAttribute('data-qg-missed', '')
   // 3D のゲームは、扉の前で動物とレバーの動きで知らせる（preventDefault する）。ノートだけで答えているときはトーストで知らせる
   if (stage.dispatchEvent(new CustomEvent('qg:wrong', { bubbles: true, cancelable: true })))
     toast('ざんねん、ちがうみたい。もう一度考えてみよう。', 'error')

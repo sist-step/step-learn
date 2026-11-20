@@ -83,6 +83,11 @@ const UserMenu = ({ editable }: { editable?: boolean }) => {
         <MenuItem href="/account" icon="user">
           アカウント設定
         </MenuItem>
+        {c.var.mcpApps && (
+          <MenuItem href="/account/apps" icon="link">
+            AI アプリとの接続
+          </MenuItem>
+        )}
         <Switch class="menu-item" icon="moon" label="ダークモード" checked={false} data-theme-toggle />
         {editable && <Switch class="menu-item" icon="pencil" label="編集モード" checked={false} data-edit-mode-toggle />}
       </div>
