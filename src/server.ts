@@ -1,12 +1,31 @@
 // 本番用の Node.js エントリ。開発時は Vite（@hono/vite-dev-server）が src/index.tsx を直接読み込む。
+import fs from 'node:fs'
 import type { Server as HttpServer } from 'node:http'
+import path from 'node:path'
 import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
+import { sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import app from './index'
 import { config } from './lib/config'
+import { closeDatabases } from './lib/sqlite'
+
+// 両方を静的に import しないのは、読み込んだ時点でそれぞれの DB を開くため、使わないほうのモードの DB まで作られるため
+const { db } = config.moodle ? await import('./moodle-mode/db') : await import('./lib/db')
 
 const server = new Hono()
+
+// ログイン画面を描いて確かめないのは、DB が読めなくなっても、ディスクがいっぱいでも、画面は描けてしまうため
+server.get('/healthz', (c) => {
+  try {
+    db.run(sql`select 1`)
+    fs.accessSync(path.dirname(config.databasePath), fs.constants.W_OK)
+    return c.text('ok')
+  } catch (e) {
+    console.error('ヘルスチェックに失敗しました', e)
+    return c.text('unhealthy', 503)
+  }
+})
 
 // ビルド済みの CSS/JS はファイル名にハッシュが付くので長期キャッシュできる
 server.use(
@@ -34,13 +53,26 @@ const presentation = config.moodle ? await import('./moodle-mode/presentation') 
 const presentationIo = presentation.attach(httpServer as HttpServer)
 const { flushCollabRooms } = await import('./lib/collab-server')
 
+// 処理中の要求を待ち続けないのは、AI の応答のストリームなどが終わらないと、Docker が待ち切れずに強制終了し（compose.yaml の stop_grace_period）、DB を閉じられないため
+const SHUTDOWN_DEADLINE = 20_000
+
+const exit = () => {
+  closeDatabases()
+  process.exit(0)
+}
+
+let stopping = false
 // httpServer.close だけにしないのは、開いたままの socket.io の接続が残って終了できなくなるため
 const shutdown = () => {
+  if (stopping) return
+  stopping = true
   // 接続を閉じる前に保存するのは、閉じたあとの保存は部屋ごとに切断の順で走り、終わる前に process.exit が来ることがあるため
   flushCollabRooms()
+  setTimeout(exit, SHUTDOWN_DEADLINE)
   void presentationIo.close()
   void collabIo.close()
-  void io.close(() => process.exit(0))
+  void io.close(exit)
+  ;(httpServer as HttpServer).closeIdleConnections()
 }
 process.on('SIGINT', shutdown)
 process.on('SIGTERM', shutdown)

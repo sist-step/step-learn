@@ -4,6 +4,7 @@ import { deleteCookie, getCookie, getSignedCookie, setSignedCookie } from 'hono/
 import { createMiddleware } from 'hono/factory'
 import { parseSigned } from 'hono/utils/cookie'
 import type { AppEnv, Role, User } from './types'
+import { credentialStamp } from './bundle-token'
 import { config } from './config'
 import { isInPeriod } from './course-period'
 import { db } from './db'
@@ -97,9 +98,13 @@ async function readSessionToken(c: Context) {
 export async function createSession(c: Context<AppEnv>, userId: number) {
   const token = randomToken()
   const id = await sessionIdFromToken(token)
-  db.insert(sessions)
-    .values({ id, userId, expiresAt: now() + SESSION_TTL })
-    .run()
+  // ログインのときに消すのは、期限が切れた行はほかに消す機会がなく、ログインのたびに増え続けるため
+  db.transaction((tx) => {
+    tx.delete(sessions).where(lte(sessions.expiresAt, now())).run()
+    tx.insert(sessions)
+      .values({ id, userId, expiresAt: now() + SESSION_TTL })
+      .run()
+  })
   await setSessionCookie(c, token)
   c.set('logUserId', userId)
 }
@@ -216,13 +221,23 @@ export async function resetPassword(userId: number, password: string) {
   })
 }
 
-/** 現在のセッション以外を無効化する（パスワード変更時など） */
-export async function destroyOtherSessions(c: Context<AppEnv>, userId: number) {
+/** パスワードを変えたあと、現在のセッション以外と、発行済みの再設定用のトークンを無効化する */
+export async function revokeOtherCredentials(c: Context<AppEnv>, userId: number) {
   const token = await readSessionToken(c)
   const current = token ? await sessionIdFromToken(token) : ''
-  db.delete(sessions)
-    .where(and(eq(sessions.userId, userId), ne(sessions.id, current)))
-    .run()
+  // セッションだけにしないのは、変える前に発行した再設定のリンクが残っていると、そのメールを読める人が、変えたあとのパスワードを上書きできるため
+  db.transaction((tx) => {
+    tx.delete(sessions)
+      .where(and(eq(sessions.userId, userId), ne(sessions.id, current)))
+      .run()
+    tx.delete(passwordResets).where(eq(passwordResets.userId, userId)).run()
+  })
+}
+
+/** VS Code の拡張機能に渡す半年使える鍵の印。パスワードを変える・再設定すると変わり、それより前に渡した鍵が使えなくなる */
+export function credentialStampOf(userId: number) {
+  const row = db.select({ passwordHash: users.passwordHash }).from(users).where(eq(users.id, userId)).get()
+  return row && credentialStamp(row.passwordHash)
 }
 
 const userColumns = { id: users.id, email: users.email, name: users.name, username: users.username, role: users.role }

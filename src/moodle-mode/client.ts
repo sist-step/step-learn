@@ -61,6 +61,16 @@ async function send(url: string, init: RequestInit) {
   }
 }
 
+// JSON として読めないまま投げないのは、メンテナンス中の Moodle は 200 で HTML の画面を返すので、接続できないときの案内（isUnavailable）が出せなくなるため
+async function readJson(res: Response): Promise<unknown> {
+  try {
+    return await res.json()
+  } catch (e) {
+    console.error('[moodle]', e)
+    throw new MoodleError('unavailable', 'Moodle の応答を読めませんでした')
+  }
+}
+
 /** site の Moodle を呼ぶ。Moodle モードでない移行ツールからも使うので、MOODLE_URL の Moodle とは限らない */
 export async function callSite<T>(site: string, token: string, wsfunction: string, params: Record<string, Param> = {}): Promise<T> {
   const body = flatten(params)
@@ -68,7 +78,7 @@ export async function callSite<T>(site: string, token: string, wsfunction: strin
   body.set('wsfunction', wsfunction)
   const res = await send(`${site}/webservice/rest/server.php?moodlewsrestformat=json`, { method: 'POST', body })
   if (!res.ok) throw new MoodleError('unavailable', `Moodle が ${res.status} を返しました`)
-  const data = (await res.json()) as unknown
+  const data = await readJson(res)
   if (data && typeof data === 'object' && 'exception' in data) {
     const { errorcode, message, debuginfo } = data as { errorcode?: string; message?: string; debuginfo?: string }
     throw new MoodleError(errorcode ?? 'unknown', message ?? '', debuginfo)
@@ -106,7 +116,7 @@ export async function uploadDraft(token: string, file: File) {
   body.set('file_1', file, file.name)
   const res = await send(`${moodle.url}/webservice/upload.php`, { method: 'POST', body })
   type Uploaded = { itemid?: number; error?: string; errorcode?: string }
-  const data = (await res.json()) as Uploaded[] | Uploaded
+  const data = (await readJson(res)) as Uploaded[] | Uploaded
   const first = Array.isArray(data) ? data[0] : data
   if (!first?.itemid) throw new MoodleError(first?.errorcode ?? 'uploadfailed', first?.error ?? '')
   return first.itemid

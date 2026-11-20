@@ -1,4 +1,5 @@
 import { and, eq } from 'drizzle-orm'
+import { credentialStampOf } from '../../lib/auth'
 import { canOpenItem } from '../../lib/availability'
 import { grader } from '../../lib/code-grading'
 import { codeStore, getCodeItem } from '../../lib/code-items'
@@ -53,6 +54,7 @@ function completionOf(userId: number, itemId: number, access: CourseAccess, comp
 /** 通常モード: 設定・書きかけのコード・提出を step-learn.db に置き、権限をコースの参加者とアイテムのアクセス制限から確かめる */
 export const backend: CodeBackend = {
   grader,
+  stampOf: credentialStampOf,
   pageUrl: (courseId, itemId) => `/courses/${courseId}/items/${itemId}/code`,
   itemUrl: (courseId, itemId) => `/courses/${courseId}/items/${itemId}`,
   async resolve(c) {
