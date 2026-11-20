@@ -4,6 +4,13 @@ import BetterSqlite3 from 'better-sqlite3'
 import { type BetterSQLite3Database, drizzle } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
 
+const opened: BetterSqlite3.Database[] = []
+
+/** 終了する前に、開いたデータベースを閉じる。閉じるときに WAL の中身を本体へ書き戻す */
+export const closeDatabases = () => {
+  for (const sqlite of opened.splice(0)) sqlite.close()
+}
+
 export function openDatabase<S extends Record<string, unknown>>(
   file: string,
   migrationsFolder: string,
@@ -26,5 +33,6 @@ export function openDatabase<S extends Record<string, unknown>>(
     throw new Error('マイグレーション後に外部キーの整合性が崩れています。data/ のバックアップから戻してください')
   }
   sqlite.exec('PRAGMA foreign_keys = ON')
+  opened.push(sqlite)
   return db
 }
