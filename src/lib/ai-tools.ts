@@ -30,7 +30,6 @@ import {
   CODE_FILES,
   CODE_LANGUAGES,
   CODE_LANGUAGE_LABELS,
-  DEFAULT_STARTER,
   MAX_CODE_LENGTH,
   MAX_STDIN_LENGTH,
   filesFor,
@@ -40,11 +39,12 @@ import {
 import { unixToDateInput } from './course-period'
 import { getCourseAccessFor, nextPosition, touchCourse } from './courses'
 import { contains, db } from './db'
+import { insertItem, itemFileColumns } from './item-kinds'
 import { isHttpUrl } from './forms'
 import { getQuizSettings } from './quiz-items'
 import { availableCodeLanguages } from './sandbox'
 import { bundleFiles, codeItems, courses, enrollments, items, sections } from './schema'
-import { deleteKeys, inBackground, storage, type StoredFile } from './storage'
+import { deleteKeys, inBackground, storage } from './storage'
 import { ITEM_TYPE_LABELS, LINK_TARGET_LABELS, LINK_TARGETS, type Item, type User } from './types'
 
 const MAX_LISTED_COURSES = 100
@@ -313,9 +313,6 @@ const createSection = defineConfirmTool(
 
 const CREATABLE_TYPES = ['page', 'link', 'file', 'code'] as const
 
-const fileColumns = (stored: StoredFile | null | undefined) =>
-  stored ? { fileKey: stored.key, fileName: stored.name, fileSize: stored.size, fileType: stored.type } : {}
-
 const createItemArgs = z.object({
   section_id: id('追加先のセクションの ID'),
   type: z
@@ -395,42 +392,20 @@ const createItem = defineConfirmTool(
     const courseId = course.id
     const stored = upload && (await adoptUpload(upload, courseId))
 
-    const created = db.transaction((tx) => {
-      const row = tx
-        .insert(items)
-        .values({
-          courseId,
-          sectionId: args.section_id,
-          type: args.type,
-          title,
-          body: args.body ?? '',
-          url: args.type === 'link' ? url : '',
-          linkTarget: args.type === 'link' ? (args.link_target ?? 'new') : 'new',
-          ...fileColumns(stored),
-          hidden: 1,
-          position: nextPosition(items, eq(items.sectionId, args.section_id)),
-        })
-        .returning({ id: items.id })
-        .get()
-      if (args.type === 'code')
-        tx.insert(codeItems)
-          .values({
-            itemId: row.id,
-            language,
-            starter: DEFAULT_STARTER[language],
-            criteria: args.criteria ?? '',
-            constraints: toConstraints(args.constraints ?? []),
-            stage: 'draft',
-          })
-          .run()
-      return row
+    const id = insertItem({
+      courseId,
+      sectionId: args.section_id,
+      type: args.type,
+      title,
+      body: args.body ?? '',
+      url,
+      linkTarget: args.link_target,
+      hidden: 1,
+      file: stored,
+      code: { language, criteria: args.criteria ?? '', constraints: toConstraints(args.constraints ?? []) },
     })
     touchCourse(courseId)
-    return success(
-      { item_id: created.id, hidden: true },
-      `「${title}」を追加しました（非表示）`,
-      inItem(courseId, created.id, args.section_id),
-    )
+    return success({ item_id: id, hidden: true }, `「${title}」を追加しました（非表示）`, inItem(courseId, id, args.section_id))
   },
 )
 
@@ -689,7 +664,7 @@ const updateItem = defineConfirmTool(
           body: args.body ?? item.body,
           url: args.url?.trim() ?? item.url,
           linkTarget: args.link_target ?? item.linkTarget,
-          ...fileColumns(stored),
+          ...itemFileColumns(stored),
           ...(moving && { sectionId: args.section_id, position: nextPosition(items, eq(items.sectionId, args.section_id!)) }),
         })
         .where(eq(items.id, item.id))

@@ -1,4 +1,4 @@
-import { and, eq, isNotNull } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 import {
   courseRevision,
@@ -22,12 +22,11 @@ import { agentStore, saveAgentOptions, savedAgentModel } from '../../lib/agent-i
 import { agentOpenRouterModels, resolveAgentModel } from '../../lib/agent-model'
 import { canOpenItem, courseAvailability, restrictionChoices } from '../../lib/availability'
 import { bundleBase } from '../../lib/bundle'
-import { bundleKeysOf, bundleStore, bundleSyncStore } from '../../lib/bundle-items'
+import { bundleStore, bundleSyncStore } from '../../lib/bundle-items'
 import { syncStateOf } from '../../lib/bundle-sync'
 import {
   CODE_FILE_KEYS,
   CODE_LANGUAGE_LABELS,
-  DEFAULT_STARTER,
   MAX_CODE_LENGTH,
   MAX_CONSTRAINT_LABEL_LENGTH,
   MAX_CONSTRAINT_LENGTH,
@@ -39,7 +38,7 @@ import {
   publicSolutionOf,
   type CodeFiles,
 } from '../../lib/code'
-import { COLLAB_KIND, type CollabView } from '../../lib/collab'
+import type { CollabView } from '../../lib/collab'
 import { collabStore, getCollabSettings } from '../../lib/collab-items'
 import { gradingEnabled, submissionsOf } from '../../lib/code-grader'
 import { currentJudge, grader, judgeSwitchable, preparer, setJudge } from '../../lib/code-grading'
@@ -47,6 +46,7 @@ import { codeStore, duplicateCodeItem, getCodeItem, setCodeStage, updateCodeItem
 import { dateTimeInputToUnix } from '../../lib/course-period'
 import { db } from '../../lib/db'
 import { completionError, firstError, isFile, readConstraints, solutionOf, validate, type FieldErrors } from '../../lib/forms'
+import { ITEM_KINDS, deleteStoredFiles, insertItem, itemFileColumns, sectionStoredFiles, storedFilesOf } from '../../lib/item-kinds'
 import { field, fileField, intParam, readFields, readForm, redirectWith, sameOriginReferer, wantsJson, type Form } from '../../lib/http'
 import { presentationStore } from '../../lib/presentation-items'
 import { previewKind } from '../../lib/preview'
@@ -54,9 +54,9 @@ import { DEFAULT_PASS_PERCENT, MAX_QUIZ_JSON_LENGTH, isQuizLook, readQuizForm } 
 import { getQuizSettings, quizStore, saveQuizSettings } from '../../lib/quiz-items'
 import { quizViewOf } from '../../lib/quiz-store'
 import { availableCodeLanguages } from '../../lib/sandbox'
-import { codeItems, collabItems, completions, items, sections } from '../../lib/schema'
+import { completions, items, sections } from '../../lib/schema'
 import { isSharing } from '../../lib/screen-share'
-import { deleteKeys, inBackground, putCourseFile, storage, uploadProblem, type StoredFile } from '../../lib/storage'
+import { deleteKeys, inBackground, putCourseFile, storage, uploadProblem } from '../../lib/storage'
 import {
   MAX_RESTRICTION_JSON_LENGTH,
   checkRestrictionChoices,
@@ -68,7 +68,7 @@ import {
   type RestrictionFormNode,
   type RestrictionSet,
 } from '../../lib/restriction'
-import type { AppEnv, CodeItem, Completion } from '../../lib/types'
+import type { AppEnv, CodeItem, Completion, ItemType } from '../../lib/types'
 import { ItemEditPage, ItemPage, TEXT_PREVIEW_MAX, editUrl, type ItemInput, type OutlineItem, type RestrictedOutline } from './views'
 
 function bundleView(c: Context<AppEnv>, access: CourseAccess, itemId: number): BundleView {
@@ -101,6 +101,38 @@ function collabView(access: CourseAccess, itemId: number): CollabView | undefine
   if (!settings) return undefined
   const students = access.canManage && settings.scope === 'student' ? collabStore(access.course.id, itemId).students() : undefined
   return { settings, href: `/courses/${access.course.id}/items/${itemId}/collab`, students }
+}
+
+type KindData<P> = (c: Context<AppEnv>, access: CourseAccess, itemId: number) => Partial<P> | Promise<Partial<P>>
+type EditData = Pick<Parameters<typeof ItemEditPage>[0], 'bundle' | 'presentation' | 'agent' | 'quiz' | 'collab' | 'agentModels'>
+type ViewData = Pick<Parameters<typeof ItemPage>[0], 'bundle' | 'agent' | 'quiz' | 'collab'>
+const nothing = () => ({})
+
+// Record にするのは、種類を足したときに、編集画面とアイテムの画面に渡すデータの決め忘れを型エラーにするため
+const EDIT_DATA: Record<ItemType, KindData<EditData>> = {
+  page: nothing,
+  link: nothing,
+  file: nothing,
+  presentation: (_c, _access, itemId) => ({ presentation: presentationSummary(itemId) }),
+  screen: nothing,
+  code: nothing,
+  quiz: (_c, _access, itemId) => ({ quiz: getQuizSettings(itemId) }),
+  collab: (_c, _access, itemId) => ({ collab: getCollabSettings(itemId) ?? undefined }),
+  bundle: (c, access, itemId) => ({ bundle: bundleView(c, access, itemId) }),
+  agent: async (c, access, itemId) => ({ agent: agentView(c, access, itemId), agentModels: await agentOpenRouterModels() }),
+}
+
+const VIEW_DATA: Record<ItemType, KindData<ViewData>> = {
+  page: nothing,
+  link: nothing,
+  file: nothing,
+  presentation: nothing,
+  screen: nothing,
+  code: nothing,
+  quiz: (c, access, itemId) => ({ quiz: quizView(c, access, itemId) }),
+  collab: (_c, access, itemId) => ({ collab: collabView(access, itemId) }),
+  bundle: (c, access, itemId) => ({ bundle: bundleView(c, access, itemId) }),
+  agent: (c, access, itemId) => ({ agent: agentView(c, access, itemId) }),
 }
 
 const getItem = (courseId: number, itemId: number) =>
@@ -183,28 +215,15 @@ export async function removeSection(c: Context<AppEnv>) {
   const access = await manageAccess(c)
   const sid = intParam(c, 'sid')
   if (!access || !sid) return c.notFound()
-  const files = db
-    .select({ fileKey: items.fileKey })
-    .from(items)
-    .where(and(eq(items.sectionId, sid), eq(items.courseId, access.course.id), isNotNull(items.fileKey)))
-    .all()
-  const bundles = db
-    .select({ id: items.id })
-    .from(items)
-    .where(and(eq(items.sectionId, sid), eq(items.courseId, access.course.id), eq(items.type, 'bundle')))
-    .all()
-  const bundleKeys = bundleKeysOf(bundles.map((b) => b.id))
+  const files = sectionStoredFiles(access.course.id, sid)
   db.delete(sections)
     .where(and(eq(sections.id, sid), eq(sections.courseId, access.course.id)))
     .run()
-  inBackground(deleteKeys([...files.map((r) => r.fileKey!), ...bundleKeys]))
+  deleteStoredFiles(files)
   return redirectWith(c, editUrl(access.course.id), 'セクションを削除しました。', 'info')
 }
 
 // ---------------------------------------------------------------- アイテム作成・更新
-
-const fileColumns = (stored: StoredFile | null) =>
-  stored ? { fileKey: stored.key, fileName: stored.name, fileSize: stored.size, fileType: stored.type } : {}
 
 // field() を使わないのは、前後の空白を削ると、コードの字下げや末尾の改行が変わるため
 const sourceField = (form: Form, key: string, max: number) => {
@@ -295,60 +314,26 @@ export async function createItem(c: Context<AppEnv>) {
   if (uploadError) return redirectWith(c, editUrl(courseId, sectionId), uploadError, 'error')
 
   const stored = file && (await putCourseFile(courseId, file))
-
-  const position = nextPosition(items, eq(items.sectionId, sectionId))
-  const created = db.transaction((tx) => {
-    const row = tx
-      .insert(items)
-      .values({
-        courseId,
-        sectionId,
-        type,
-        title: input.title,
-        body: input.body,
-        url: type === 'link' ? input.url : '',
-        linkTarget: type === 'link' ? input.link_target : 'new',
-        hidden,
-        completion: access.course.completionEnabled ? (input.completion ?? 'none') : 'none',
-        ...fileColumns(stored),
-        position,
-      })
-      .returning({ id: items.id })
-      .get()
-    if (type === 'code') tx.insert(codeItems).values({ itemId: row.id, language, starter: DEFAULT_STARTER[language], stage: 'draft' }).run()
-    if (type === COLLAB_KIND) tx.insert(collabItems).values({ itemId: row.id, kind: collabKind, scope: collabScope }).run()
-    return row
+  const id = insertItem({
+    courseId,
+    sectionId,
+    before: placement.values.before || undefined,
+    type,
+    title: input.title,
+    body: input.body,
+    url: input.url,
+    linkTarget: input.link_target,
+    hidden,
+    completion: access.course.completionEnabled ? (input.completion ?? 'none') : 'none',
+    file: stored,
+    code: { language },
+    collab: { kind: collabKind, scope: collabScope },
   })
-  if (placement.values.before) placeBefore(items, eq(items.sectionId, sectionId), created.id, placement.values.before)
-  // ファイル自動配布は、ファイルを置くまで学生に配れないので、アップロードする編集画面へ進める
-  if (type === 'bundle')
-    return redirectWith(
-      c,
-      `/courses/${courseId}/items/${created.id}/edit`,
-      `「${input.title}」を追加しました。配るファイルをアップロードしてください。`,
-    )
-  if (type === 'code')
-    return redirectWith(
-      c,
-      `/courses/${courseId}/items/${created.id}/edit`,
-      `「${input.title}」を追加しました。問題文と最初のコードを設定してください。`,
-    )
-  if (type === 'agent')
-    return redirectWith(
-      c,
-      `/courses/${courseId}/items/${created.id}/edit`,
-      `「${input.title}」を追加しました。使える期間と上限を設定してください。`,
-    )
-  if (type === 'quiz')
-    return redirectWith(c, `/courses/${courseId}/items/${created.id}/edit`, `「${input.title}」を追加しました。問題を作ってください。`)
-  // 発表ファイルは、PDF を上げるまで学生に見せるものがないので、同期を始めるアイテムの画面へ進める
-  if (type === 'presentation')
-    return redirectWith(
-      c,
-      `/courses/${courseId}/items/${created.id}`,
-      `「${input.title}」を追加しました。「PowerPoint と同期」から PDF をアップロードしてください。`,
-    )
-  const next = placement.values.after === 'view' ? `/courses/${courseId}/items/${created.id}` : editUrl(courseId, sectionId)
+  const itemUrl = `/courses/${courseId}/items/${id}`
+  const after = ITEM_KINDS[type].afterCreate
+  if (after)
+    return redirectWith(c, after.page === 'edit' ? `${itemUrl}/edit` : itemUrl, `「${input.title}」を追加しました。${after.message}`)
+  const next = placement.values.after === 'view' ? itemUrl : editUrl(courseId, sectionId)
   return redirectWith(c, next, `「${input.title}」を追加しました。`)
 }
 
@@ -364,12 +349,7 @@ export async function editItem(c: Context<AppEnv>) {
       item={item}
       code={getCodeItem(iid)}
       preparing={preparer.isRunning(iid)}
-      bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
-      presentation={item.type === 'presentation' ? presentationSummary(iid) : undefined}
-      agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
-      quiz={item.type === 'quiz' ? getQuizSettings(iid) : undefined}
-      collab={item.type === COLLAB_KIND ? (getCollabSettings(iid) ?? undefined) : undefined}
-      agentModels={item.type === 'agent' ? await agentOpenRouterModels() : undefined}
+      {...await EDIT_DATA[item.type](c, access, iid)}
       gradingEnabled={gradingEnabled}
       judge={judgeSwitchable ? currentJudge() : undefined}
       sections={listSections(access.course.id)}
@@ -425,12 +405,7 @@ export async function updateItem(c: Context<AppEnv>) {
         access={access}
         item={item}
         code={code}
-        bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
-        presentation={item.type === 'presentation' ? presentationSummary(iid) : undefined}
-        agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
-        quiz={item.type === 'quiz' ? getQuizSettings(iid) : undefined}
-        collab={item.type === COLLAB_KIND ? (getCollabSettings(iid) ?? undefined) : undefined}
-        agentModels={item.type === 'agent' ? await agentOpenRouterModels() : undefined}
+        {...await EDIT_DATA[item.type](c, access, iid)}
         gradingEnabled={gradingEnabled}
         judge={judgeSwitchable ? currentJudge() : undefined}
         sections={listSections(courseId)}
@@ -463,7 +438,7 @@ export async function updateItem(c: Context<AppEnv>) {
       linkTarget: item.type === 'link' ? input.link_target : 'new',
       hidden,
       completion,
-      ...fileColumns(stored),
+      ...itemFileColumns(stored),
       ...(sectionId !== item.sectionId && { sectionId, position: nextPosition(items, eq(items.sectionId, sectionId)) }),
     })
     .where(and(eq(items.id, iid), eq(items.courseId, courseId)))
@@ -601,15 +576,16 @@ export async function removeItem(c: Context<AppEnv>) {
   const access = await manageAccess(c)
   const iid = intParam(c, 'iid')
   if (!access || !iid) return c.notFound()
-  const bundleKeys = bundleKeysOf([iid])
+  const target = getItem(access.course.id, iid)
+  if (!target) return c.notFound()
+  const files = storedFilesOf([target])
   const item = db
     .delete(items)
     .where(and(eq(items.id, iid), eq(items.courseId, access.course.id)))
-    .returning({ sectionId: items.sectionId, fileKey: items.fileKey, title: items.title, type: items.type })
+    .returning({ sectionId: items.sectionId, title: items.title })
     .get()
   if (!item) return c.notFound()
-  inBackground(deleteKeys([item.fileKey, ...bundleKeys]))
-  if (item.type === COLLAB_KIND) inBackground(storage.deletePrefix(`${collabStore(access.course.id, iid).imagePrefix}/`))
+  deleteStoredFiles(files)
   return redirectWith(c, editUrl(access.course.id, item.sectionId), `「${item.title}」を削除しました。`, 'info')
 }
 
@@ -802,10 +778,7 @@ export async function showItem(c: Context<AppEnv>) {
       sharing={isSharing(item.id)}
       textPreview={textPreview}
       code={code}
-      bundle={item.type === 'bundle' ? bundleView(c, access, iid) : undefined}
-      agent={item.type === 'agent' ? agentView(c, access, iid) : undefined}
-      quiz={item.type === 'quiz' ? quizView(c, access, iid) : undefined}
-      collab={item.type === COLLAB_KIND ? collabView(access, iid) : undefined}
+      {...await VIEW_DATA[item.type](c, access, iid)}
       revision={revision}
     />,
     { title: item.title },
