@@ -35,7 +35,7 @@ import { clientIp, intParam, readFields, readJson, redirectWith, wantsJson } fro
 import { rateLimiter } from '../../lib/rate-limit'
 import { deleteKeys, inBackground, isExecutable, storage } from '../../lib/storage'
 import type { AppEnv } from '../../lib/types'
-import { ZipError, buildZip, listZip, type ZipItem } from '../../lib/zip'
+import { ZipError, listZip, zipStream, type ZipItem } from '../../lib/zip'
 import { SyncHistoryPage, SyncStudentsPage, type SyncFileRow } from './views'
 
 type C = Context<AppEnv>
@@ -209,17 +209,14 @@ export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: B
     const ctx = await resolve(c)
     if (!ctx) return c.notFound()
     const folder = folderNameOf(ctx.title)
-    const files = ctx.store.list()
-    const entries = await Promise.all(
-      files.map(async (f) => ({
-        path: `${folder}/${f.path}`,
-        data: f.size ? ((await storage.read(f.fileKey, f.size)) ?? new Uint8Array()) : new Uint8Array(),
-      })),
-    )
+    const sources = ctx.store.list().map((f) => ({
+      path: `${folder}/${f.path}`,
+      read: async () => (f.size ? ((await storage.read(f.fileKey, f.size)) ?? new Uint8Array()) : new Uint8Array()),
+    }))
     c.header('Content-Type', 'application/zip')
     c.header('Content-Disposition', `attachment;filename*=UTF-8''${encodeURIComponent(`${folder}.zip`)}`)
     c.header('Cache-Control', 'private, no-store')
-    return c.body(new Uint8Array(buildZip(entries)))
+    return c.body(zipStream(sources))
   }
 
   async function launch(c: C) {
