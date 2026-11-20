@@ -9,6 +9,7 @@ import sparklesSvg from 'heroicons/24/outline/sparkles.svg?raw'
 import { bundlePath, isExcludedPath } from './lib/bundle'
 import { agentModelFacts, isAgentClaudeModel, type AgentModel } from './lib/agent'
 import type { AiAgentEvent, AiUsageMeter } from './lib/ai-agent'
+import { AI_BUDDY_LABELS, AI_BUDDY_LOOKS, type AiBuddyState } from './lib/ai-buddy'
 import type { AiTouched } from './lib/ai-tool-kit'
 import { formatBytes } from './lib/bytes'
 import { formatClock } from './lib/clock'
@@ -2527,17 +2528,19 @@ function animateMascot(el: HTMLElement) {
     return 450
   })
   repeatRandomly(el, 1200, 4000, () => flagFor(el, 'data-glance', pickFrom(MASCOT_GLANCES), randomIn(700, 2200)))
+  // data-steady のあいだ気まぐれに動かさないのは、AI のパネルのマスコットが作業の様子を見せているときに、関係のない表情や動きが混ざるため
   repeatRandomly(el, 3500, 9000, () => {
+    if (el.hasAttribute('data-steady')) return 0
     const quirk = pickKey(MASCOT_QUIRKS)
     return flagFor(el, 'data-quirk', quirk, MASCOT_QUIRKS[quirk])
   })
   repeatRandomly(el, 6000, 14_000, () => {
     const mood = el.dataset.mood
     const reaction = pickKey(MASCOT_REACTIONS)
-    if (!mood || mood === reaction || mood === 'sleepy') return 0
+    if (!mood || mood === reaction || mood === 'sleepy' || el.hasAttribute('data-steady')) return 0
     el.dataset.mood = reaction
     setTimeout(() => {
-      if (el.dataset.mood === reaction) el.dataset.mood = mood
+      if (el.dataset.mood === reaction && !el.hasAttribute('data-steady')) el.dataset.mood = mood
     }, MASCOT_REACTIONS[reaction])
     return MASCOT_REACTIONS[reaction]
   })
@@ -3493,7 +3496,17 @@ async function refreshAiPanel(model?: string) {
   const chosen = model ?? current.querySelector<HTMLInputElement>('input[name=model]:checked')?.value
   const hard = current.querySelector('[data-ai-hard]')?.getAttribute('aria-pressed')
   const focus = aiFocusField(current)?.value ? current.querySelector('[data-ai-focus]') : null
+  const buddy = aiBuddy(current)
+  const buddyBox = buddy && !buddy.hidden ? aiMascotBox(buddy) : null
   current.replaceWith(document.adoptNode(next))
+  // 作業していたマスコットを持ち越すのは、描き直したものに替えると、見せていた反応や動きが途中で切れて、飛び移ったように見えるため
+  const nextBuddy = aiBuddy(next)
+  if (buddy && buddyBox && nextBuddy && !nextBuddy.hidden) nextBuddy.replaceWith(buddy)
+  else if (buddyBox) {
+    const introMascot = next.querySelector<HTMLElement>('[data-ai-intro]:not([hidden]) .mascot')
+    if (introMascot) flyAiBuddy(buddyBox, introMascot)
+  }
+  settleAiBuddy(next)
   // 選ぼうとしているアイテムを持ち越すのは、最初の発言を断られて入力欄に戻ったとき、送り直すとアイテムを選ばずに始まるため
   const nextFocus = next.querySelector('[data-ai-focus]')
   const focusField = aiFocusField(next)
@@ -3574,6 +3587,101 @@ aiChannel.addEventListener('message', () => void syncAiPanel())
 document.addEventListener('visibilitychange', () => void syncAiPanel())
 addEventListener('focus', () => void syncAiPanel())
 
+// --- AI のパネルのヘッダーで作業するマスコット（components/ai-panel.tsx の AiBuddy）
+// 状態を保存せずにクライアントで持つのは、応答を作っているあいだの細かな動きは、流れてくるイベントからしか分からないため
+const AI_BUDDY_FLASH_MS: Partial<Record<AiBuddyState, number>> = { applied: 1400, done: 2200, error: 3000, stopped: 1400 }
+const AI_BUDDY_BREAK_AFTER = 25_000
+const AI_BUDDY_DOZE_AFTER = 120_000
+const AI_BUDDY_FLY_MS = 750
+// ツールを終えた時点で「考えています」に戻さないのは、ツールの多くは一瞬で終わり、何を見ていたのかが見えないまま次へ移るため
+const AI_BUDDY_HOLD_MS = 1600
+let aiBuddyBase: AiBuddyState = 'idle'
+let aiBuddyFlashTimer = 0
+let aiBuddyReady = false
+const aiBuddyIdleTimers: number[] = []
+
+const aiBuddy = (root: ParentNode | null = aiPanel()) => root?.querySelector<HTMLElement>('[data-ai-buddy]') ?? null
+
+function paintAiBuddy(state: AiBuddyState) {
+  const buddy = aiBuddy()
+  const mascot = buddy?.querySelector<HTMLElement>('[data-mascot]')
+  if (!buddy || !mascot || buddy.dataset.state === state) return
+  buddy.dataset.state = state
+  Object.assign(mascot.dataset, AI_BUDDY_LOOKS[state])
+  mascot.toggleAttribute('data-steady', state !== 'idle')
+  mascot.removeAttribute('data-quirk')
+  for (const mark of $$<HTMLElement>('[data-ai-buddy-mark]', buddy)) mark.hidden = mark.dataset.aiBuddyMark !== state
+}
+
+/** マスコットの今の状態を決める。applied などの反応を見せているあいだは、反応を見せ終えてからこの状態に移る */
+function setAiBuddy(state: AiBuddyState) {
+  aiBuddyBase = state
+  aiBuddyIdleTimers.splice(0).forEach((t) => clearTimeout(t))
+  if (!aiBuddyFlashTimer) paintAiBuddy(state)
+  if (state !== 'idle') return
+  const rest = (next: AiBuddyState) => () => {
+    if (aiBuddyBase === 'idle' && !aiBuddyFlashTimer) paintAiBuddy(next)
+  }
+  aiBuddyIdleTimers.push(window.setTimeout(rest('break'), AI_BUDDY_BREAK_AFTER), window.setTimeout(rest('doze'), AI_BUDDY_DOZE_AFTER))
+}
+
+/** 少しのあいだだけ反応を見せて、setAiBuddy で決めた状態に戻る */
+function flashAiBuddy(state: keyof typeof AI_BUDDY_FLASH_MS) {
+  clearTimeout(aiBuddyFlashTimer)
+  paintAiBuddy(state)
+  aiBuddyFlashTimer = window.setTimeout(() => {
+    aiBuddyFlashTimer = 0
+    setAiBuddy(aiBuddyBase)
+  }, AI_BUDDY_FLASH_MS[state])
+}
+
+/** 確認やファイルを待つカードがあればそれを待つ状態に、なければ手が空いた状態にする */
+function restAiBuddy(panel: HTMLElement) {
+  const pending = $$<HTMLElement>('.ai-card[data-state=pending]', panel)
+  setAiBuddy(pending.some((c) => !c.matches('.ai-file-card')) ? 'ask' : pending.length > 0 ? 'wait-file' : 'idle')
+}
+
+/** 描いたパネルの様子にマスコットを合わせる */
+function settleAiBuddy(panel: HTMLElement) {
+  if (panel.hasAttribute('data-busy')) setAiBuddy('think')
+  else restAiBuddy(panel)
+}
+
+/** ヘッダーのマスコットを出すか隠す。チャットがないあいだは、代わりにアイコンを出す */
+function showAiBuddy(panel: HTMLElement, shown: boolean) {
+  const buddy = aiBuddy(panel)
+  const mark = panel.querySelector<HTMLElement>('[data-ai-mark]')
+  if (buddy) buddy.hidden = !shown
+  if (mark) mark.hidden = shown
+}
+
+// 位置を変える要素そのものではなく見た目だけを動かすのは、ヘッダーとチャットの始まりの画面の並びを、飛んでいるあいだも崩さないため
+/** from の位置から to のマスコットのいる場所まで、弧を描いて飛ばす */
+function flyAiBuddy(from: DOMRect, to: HTMLElement) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const end = to.getBoundingClientRect()
+  if (!from.width || !end.width) return
+  const dx = from.left - end.left
+  const dy = from.top - end.top
+  const scale = from.width / end.width
+  const lift = Math.min(60, Math.abs(dy) / 3 + 20)
+  to.animate(
+    [
+      { transformOrigin: '0 0', transform: `translate(${dx}px, ${dy}px) scale(${scale})` },
+      {
+        transformOrigin: '0 0',
+        transform: `translate(${dx * 0.45}px, ${Math.min(dy, 0) * 0.45 - lift}px) scale(${(scale + 1) / 2}) rotate(-10deg)`,
+        offset: 0.45,
+      },
+      { transformOrigin: '0 0', transform: 'scale(1.12, 0.88)', offset: 0.85 },
+      { transformOrigin: '0 0', transform: 'none' },
+    ],
+    { duration: AI_BUDDY_FLY_MS, easing: 'cubic-bezier(0.4, 0, 0.3, 1)' },
+  )
+}
+
+const aiMascotBox = (root: Element | null) => root?.querySelector('.mascot-svg')?.getBoundingClientRect() ?? null
+
 type AiStreamHooks = { onRetract?: () => void; onChat?: (id: number) => void }
 
 /**
@@ -3583,7 +3691,7 @@ type AiStreamHooks = { onRetract?: () => void; onChat?: (id: number) => void }
 async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiStreamHooks = {}) {
   const panel = aiPanel()
   const log = panel?.querySelector<HTMLElement>('[data-ai-log]')
-  const outcome = { closed: false, retracted: false, confirmed: false, outdated: false, errors: [] as string[] }
+  const outcome = { closed: false, retracted: false, confirmed: false, outdated: false, stopped: false, errors: [] as string[] }
   if (!panel || !log) return outcome
   data.set('page', location.pathname)
   data.set('revision', panel.dataset.revision ?? '')
@@ -3597,19 +3705,43 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
   let bubble: HTMLElement | null = null
   let markdown = ''
   let thinkingTimer = 0
+  let activity: AiBuddyState = 'think'
+  let answered = false
+  let failed = false
+  let holdUntil = 0
+  let holdTimer = 0
+  const work = (next: AiBuddyState) => {
+    clearTimeout(holdTimer)
+    activity = next
+    setAiBuddy(next)
+    if (pendingLabel) pendingLabel.textContent = AI_BUDDY_LABELS[next] ?? thinkingText
+  }
+  work('think')
   // 本文が届いた時点で消したままにしないのは、本文のあとにツールを呼ぶあいだ、何も動いていないように見えるため
   const updateThinking = (writing: boolean) => {
     clearTimeout(thinkingTimer)
     pending.hidden = writing
-    if (writing) thinkingTimer = window.setTimeout(() => (pending.hidden = false), AI_THINKING_AFTER_TEXT)
+    if (writing)
+      thinkingTimer = window.setTimeout(() => {
+        pending.hidden = false
+        setAiBuddy(activity)
+      }, AI_THINKING_AFTER_TEXT)
   }
   const handle = (event: AiAgentEvent) => {
     // 書き足したあとに最下部か確かめないのは、続きの依頼のような高さのある塊を足すと、最下部から離れたと見なされて止まるため
     const following = aiLogAtBottom(log)
     updateThinking(event.type === 'text')
-    if (pendingLabel) pendingLabel.textContent = event.type === 'compacting' ? 'これまでの会話を要約しています…' : thinkingText
-    if (event.type === 'compacting') return
+    if (event.type === 'compacting') return work('summarize')
+    if (event.type === 'working') {
+      holdUntil = performance.now() + AI_BUDDY_HOLD_MS
+      return work(event.activity)
+    }
     if (event.type === 'text') {
+      clearTimeout(holdTimer)
+      answered = true
+      activity = 'think'
+      if (pendingLabel) pendingLabel.textContent = thinkingText
+      setAiBuddy('write')
       if (!bubble) {
         bubble = aiTemplate('assistant')
         pending.before(bubble)
@@ -3617,6 +3749,10 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
       markdown += event.text
       bubble.querySelector('[data-ai-text]')!.innerHTML = renderMarkdown(markdown)
     } else if (event.type === 'tool' || event.type === 'confirm') {
+      answered = true
+      const left = holdUntil - performance.now()
+      if (left > 0) holdTimer = window.setTimeout(() => work('think'), left)
+      else work('think')
       bubble = null
       markdown = ''
       if (event.type === 'tool') pending.before(aiToolLine(event.label, event.touched))
@@ -3628,6 +3764,7 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
       }
       outcome.errors.push(event.message)
       pending.before(aiTemplate('error', event.message))
+      flashAiBuddy('error')
     } else if (event.type === 'chat') {
       panel.dataset.chat = String(event.id)
       onChat?.(event.id)
@@ -3638,12 +3775,16 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
       onRetract?.()
     } else if (event.type === 'applied') {
       showAiChange(event.touched)
+      if (activity === 'apply') work('think')
+      flashAiBuddy('applied')
     } else if (event.type === 'replies') {
       pending.before(aiReplies(event.replies))
     } else if (event.type === 'compacted') {
       const sent = $$<HTMLElement>('.ai-msg-user', log).at(-1)
       sent?.before(aiTemplate('compacted'))
     } else if (event.type === 'stopped') {
+      outcome.stopped = true
+      flashAiBuddy('stopped')
       if (event.retract) {
         outcome.retracted = true
         onRetract?.()
@@ -3673,9 +3814,14 @@ async function streamAi(url: string, data: FormData, { onRetract, onChat }: AiSt
     }
   } catch {
     pending.before(aiTemplate('error', 'AI と通信できませんでした。少し待ってから、もう一度お試しください。'))
+    failed = true
+    flashAiBuddy('error')
   } finally {
     clearTimeout(thinkingTimer)
+    clearTimeout(holdTimer)
     pending.remove()
+    restAiBuddy(panel)
+    if (answered && !failed && !outcome.confirmed && !outcome.stopped && outcome.errors.length === 0) flashAiBuddy('done')
     // 入力欄に移すのは、押した停止のボタンが隠れてフォーカスが消え、キーボードで続きを打てなくなるため
     const stopFocused = !!document.activeElement?.matches('[data-ai-stop]')
     panel.removeAttribute('data-busy')
@@ -3865,7 +4011,13 @@ async function sendAiMessage(retried = false, model = aiPanel()?.dataset.model) 
   const dismissing = !!log.querySelector('.ai-card[data-state=pending]')
   const replies = $$<HTMLElement>('[data-ai-replies]', log)
   replies.forEach((el) => (el.hidden = true))
+  const introMascot = intro && !intro.hidden ? aiMascotBox(intro) : null
   if (intro) intro.hidden = true
+  const buddy = aiBuddy(panel)
+  if (started && buddy) {
+    showAiBuddy(panel, true)
+    if (introMascot) flyAiBuddy(introMascot, buddy)
+  }
   const sent = aiTemplate('user', text)
   const sentImage = sent.querySelector<HTMLAnchorElement>('[data-ai-image-link]')
   if (image && sentImage) {
@@ -3882,7 +4034,13 @@ async function sendAiMessage(retried = false, model = aiPanel()?.dataset.model) 
     onRetract: () => {
       sent.remove()
       replies.forEach((el) => (el.hidden = false))
-      if (intro && !log.querySelector('.ai-msg')) intro.hidden = false
+      if (intro && !log.querySelector('.ai-msg')) {
+        const from = aiMascotBox(aiBuddy(panel))
+        intro.hidden = false
+        showAiBuddy(panel, false)
+        const to = intro.querySelector<HTMLElement>('.mascot')
+        if (from && to) flyAiBuddy(from, to)
+      }
       if (!input.value) input.value = text
       fitAiInput(input)
       if (image && !aiImage) {
@@ -4101,6 +4259,12 @@ async function runAiTask(task: () => Promise<void>) {
 }
 
 function initAiPanel() {
+  const panel = aiPanel()
+  // 画面を移るたびに合わせ直さないのは、パネルは移っても残る（data-keep）ので、応答を作っている最中の動きを最初の状態に戻してしまうため
+  if (panel && !aiBuddyReady) {
+    aiBuddyReady = true
+    settleAiBuddy(panel)
+  }
   const open = document.documentElement.hasAttribute('data-ai-open')
   $$('.ai-panel-toggle').forEach((el) => el.setAttribute('aria-expanded', String(open)))
   showAiVoice()

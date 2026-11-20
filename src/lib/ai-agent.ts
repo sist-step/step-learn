@@ -61,6 +61,7 @@ import { ROLE_LABELS } from './types'
 export type AiAgentEvent =
   | { type: 'chat'; id: number }
   | { type: 'text'; text: string }
+  | { type: 'working'; activity: AiActivity }
   | { type: 'tool'; label: string; touched?: AiTouched }
   | { type: 'applied'; touched: AiTouched }
   | { type: 'confirm' }
@@ -74,6 +75,30 @@ export type AiAgentEvent =
   | { type: 'done'; usage: AiUsageMeter[]; hardOff: string | null; revision: string; context: number }
 
 type Emit = (event: AiAgentEvent) => void
+
+/** AI がツールでしていること。client.ts が、パネルのマスコットの動きと作成中の文言をこれに合わせる */
+export type AiActivity = 'courses' | 'course' | 'item' | 'file' | 'docs' | 'doc' | 'create' | 'arrange' | 'propose' | 'request' | 'apply'
+
+// ツールの定義に持たせないのは、通常モード・Moodle モード・STEP Docs のツールで名前がそろっていて、ここで 1 つの表にすれば足りるため
+const TOOL_ACTIVITIES: Record<string, AiActivity> = {
+  list_courses: 'courses',
+  get_course: 'course',
+  get_item: 'item',
+  read_file: 'file',
+  search_docs: 'docs',
+  read_doc: 'doc',
+  create_section: 'create',
+  create_item: 'create',
+  reorder_sections: 'arrange',
+  reorder_items: 'arrange',
+  update_section: 'propose',
+  update_item: 'propose',
+  set_visibility: 'propose',
+  request_file: 'request',
+}
+
+const toolActivity = (name: string, tool?: AiAgentTool): AiActivity =>
+  TOOL_ACTIVITIES[name] ?? (tool?.kind === 'confirm' ? 'propose' : 'course')
 
 /** 1 回の発言で、AI がツールを呼んで考え直せる回数 */
 const MAX_ROUNDS = 10
@@ -513,6 +538,7 @@ export function createAiAgent({
     const { messages, labels, cards, touched: touchedBy } = chat.content
     const tool = tools.find((t) => t.tool.name === call.name)
     const args = parseJson(call.arguments)
+    emit({ type: 'working', activity: toolActivity(call.name, tool) })
     let result: AiToolResult
     if (call.name === REQUEST_FILE && files) {
       const parsed = requestArgs.safeParse(args)
@@ -815,6 +841,7 @@ export function createAiAgent({
         return false
       }
       delete chat.content.replies
+      if (approve) emit({ type: 'working', activity: 'apply' })
       const result: AiToolResult = !approve
         ? card.request
           ? failure('利用者がファイルを選ばずに取り消しました。受け取っていません。', '取り消しました')
@@ -840,6 +867,7 @@ export function createAiAgent({
       delete chat.content.replies
       // 1 つ失敗しても残りを実行するのは、利用者がすべてを見たうえで承認していて、失敗したカードだけを結果で伝えれば足りるため
       for (const [callId, card] of targets) {
+        emit({ type: 'working', activity: 'apply' })
         const result = await approveCard(c, card)
         closeCard(chat, callId, emit, result.isError ? 'failed' : 'approved', result)
       }
