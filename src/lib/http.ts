@@ -14,9 +14,14 @@ const checkOrigin = csrf(config.appOrigin ? { origin: config.appOrigin } : undef
 /**
  * フォーム POST の Origin を検証する（SameSite=Lax Cookie と合わせた CSRF 対策）。
  * VS Code の拡張機能が呼ぶ API（/api/vscode/）を除くのは、Cookie ではなく Bearer のトークンや鍵で確かめるので CSRF の対象にならず、
- * 本文のない POST（コーディングエージェントのトークンの取り消し）が Content-Type のないフォームの送信とみなされて拒まれるため
+ * 本文のない POST（コーディングエージェントのトークンの取り消し）が Content-Type のないフォームの送信とみなされて拒まれるため。
+ * MCP の OAuth のトークンと登録（routes/mcp）を除くのは、Cookie を使わず、AI アプリのサーバーが Origin なしのフォームで送ってくるため
  */
-export const csrfGuard = createMiddleware((c, next) => (c.req.path.startsWith('/api/vscode/') ? next() : checkOrigin(c, next)))
+const CSRF_EXEMPT = new Set(['/oauth/token', '/oauth/register'])
+
+export const csrfGuard = createMiddleware((c, next) =>
+  c.req.path.startsWith('/api/vscode/') || CSRF_EXEMPT.has(c.req.path) ? next() : checkOrigin(c, next),
+)
 
 const FLASH_COOKIE = 'flash'
 

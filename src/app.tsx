@@ -7,6 +7,7 @@ import { EmptyState } from './components/ui'
 import { session } from './lib/auth'
 import { AGENT_BODY_LIMIT } from './lib/agent'
 import { SYNC_BODY_LIMIT } from './lib/bundle-sync'
+import { isAiTeacher } from './lib/ai-usage'
 import { touchCourse } from './lib/courses'
 import { csrfGuard, flashMiddleware, limitBody, readFields } from './lib/http'
 import { operationLog, recordPrefetchedView } from './lib/operation-log'
@@ -23,6 +24,7 @@ import code, { CODE_BODY_LIMIT, isCodeRequest, api as codeApi } from './routes/c
 import content from './routes/content'
 import courses from './routes/courses'
 import dashboard from './routes/dashboard'
+import mcp from './routes/mcp'
 import participants from './routes/participants'
 import presentation, { isPresentationUpload, api as presentationApi } from './routes/presentation'
 import quiz from './routes/quiz'
@@ -58,6 +60,7 @@ app.use(renderer)
 // 要求ごとに描いておかず、AppShell が呼ぶまで待つのは、JSON やファイルを返す要求のたびに会話を復号することになるため
 app.use(async (c, next) => {
   c.set('aiPanel', () => renderAiPanel(c.var.user))
+  if (c.var.user && c.req.method === 'GET') c.set('mcpApps', isAiTeacher(c.var.user))
   await next()
 })
 
@@ -81,6 +84,7 @@ app.post('/views', async (c) => {
 app.get('/', (c) => c.redirect(c.var.user ? '/dashboard' : '/login'))
 
 app.route('/', auth)
+app.route('/', mcp)
 app.route('/dashboard', dashboard)
 app.route('/courses', courses)
 app.route('/courses', content)

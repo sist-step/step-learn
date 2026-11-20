@@ -15,6 +15,8 @@ import {
   id,
   inCourse,
   inItem,
+  reorderProposal,
+  sameMembers,
   sameSnapshot,
   success,
   toConstraints,
@@ -265,16 +267,29 @@ export const readItemFile: AiFileReader = async (c, itemId) => {
   return { title: item.title, name: fileName ?? '', size: fileSize ?? 0, read: () => storage.read(fileKey, fileSize ?? 0) }
 }
 
-// ---------------------------------------------------------------- 追加・並べ替え（すぐ実行する）
+// ---------------------------------------------------------------- 追加・並べ替え（利用者が確認してから実行する）
+// 追加と並べ替えもすぐ実行しないのは、AI が読んだ教材（ほかの教師が書いたもの）に指示を仕込まれると、利用者の知らないうちに、
+// ほかのコースの非公開の内容を書き写したアイテムを作らせたり、ほかのコースの並びを変えさせたりできるため
 
-const createSection = defineTool(
+const createSection = defineConfirmTool(
   'create_section',
-  'コースの末尾にセクションを追加する。学生には非表示の状態で作られる。',
+  'コースの末尾にセクションを追加する。学生には非表示の状態で作られる。利用者が確認カードで承認してから実行される。',
   z.object({
     course_id: id('コースの ID'),
     title: describedString('セクション名', 120, 1),
     summary: z.optional(describedString('セクションの説明（Markdown）', 2000)),
   }),
+  async (c, { course_id, title, summary }) => {
+    const access = await manageable(c.var.user!, course_id)
+    if (!access) return failure(NOT_FOUND, 'セクションを追加できませんでした')
+    const name = title.trim()
+    if (!name) return failure('セクション名が空です。', 'セクションを追加できませんでした')
+    return {
+      title: `「${access.course.title}」にセクションを追加する（学生には非表示）`,
+      changes: [{ label: 'セクション名', before: '', after: name }, ...changed('説明', '', summary?.trim(), true)],
+      snapshot: null,
+    }
+  },
   async (c, { course_id, title, summary }) => {
     const access = await manageable(c.var.user!, course_id)
     if (!access) return failure(NOT_FOUND, 'セクションを追加できませんでした')
@@ -301,52 +316,83 @@ const CREATABLE_TYPES = ['page', 'link', 'file', 'code'] as const
 const fileColumns = (stored: StoredFile | null | undefined) =>
   stored ? { fileKey: stored.key, fileName: stored.name, fileSize: stored.size, fileType: stored.type } : {}
 
-const createItem = defineTool(
+const createItemArgs = z.object({
+  section_id: id('追加先のセクションの ID'),
+  type: z
+    .enum(CREATABLE_TYPES)
+    .check(z.describe('page: ページ（Markdown の本文） / link: リンク / file: ファイル / code: コーディング問題')),
+  title: describedString('タイトル', 200, 1),
+  body: z.optional(describedString('ページは本文、コードは問題文、リンクとファイルは説明（いずれも Markdown）', 100_000)),
+  file_id: z.optional(fileId('ファイルのアイテムに置くファイル。ファイルでは必須')),
+  url: z.optional(describedString('リンクの URL（http:// か https:// で始まる）。リンクでは必須', 2000)),
+  link_target: z.optional(
+    z.enum(LINK_TARGETS).check(z.describe('リンクの開き方。new: 新しいタブ / same: 同じタブ / embed: ページに埋め込む')),
+  ),
+  language: z.optional(
+    z
+      .enum(CODE_LANGUAGES)
+      .check(
+        z.describe(`コードの言語。web: HTML / CSS / JavaScript、python: Python。今作れるのは ${availableCodeLanguages.join('・')} だけ`),
+      ),
+  ),
+  constraints: z.optional(
+    constraintsSchema('コーディング問題の制約。AI が提出を制約ごとに判定し、すべてできていればクリアになる。コーディング問題では必須'),
+  ),
+  criteria: z.optional(
+    describedString('コーディング問題の補足。制約にしにくい観点（読みやすさなど）。AI の判定に使い、学生には見せない', 5000),
+  ),
+})
+
+/** 追加するアイテムの引数を確かめる。提案と実行のどちらでも、そのときの権限とファイルで確かめ直す */
+async function checkNewItem(c: AiToolContext, args: z.output<typeof createItemArgs>) {
+  const found = await sectionOf(c.var.user!, args.section_id)
+  if (!found) return failure(NOT_FOUND, 'アイテムを追加できませんでした')
+  const fail = (message: string) => failure(message, 'アイテムを追加できませんでした')
+  const title = args.title.trim()
+  if (!title) return fail('タイトルが空です。')
+  const url = args.url?.trim() ?? ''
+  if (args.type === 'link' && !isHttpUrl(url)) return fail('リンクには http:// か https:// で始まる URL が必要です。')
+  const language = args.language ?? 'web'
+  if (args.type === 'code' && !args.constraints?.length) return fail('コーディング問題には制約（constraints）を 1 つ以上渡してください。')
+  if (args.type === 'code' && !availableCodeLanguages.includes(language))
+    return fail(
+      `${CODE_LANGUAGE_LABELS[language]} のコードは作れません。今は ${availableCodeLanguages.map((l) => CODE_LANGUAGE_LABELS[l]).join('・')} だけ作れます。`,
+    )
+  const upload = args.type === 'file' && args.file_id ? findUpload(c.var.user!.id, args.file_id) : undefined
+  if (args.type === 'file' && !upload) return fail(args.file_id ? UPLOAD_NOT_FOUND : 'ファイルには file_id を渡してください。')
+  return { section: found.section, course: found.access.course, title, url, language, upload }
+}
+
+const createItem = defineConfirmTool(
   'create_item',
-  'セクションの末尾にアイテムを追加する。作れるのはページ・リンク・ファイル（request_file で受け取ったもの）・コーディング問題（学生がブラウザでコードを書いて提出し、AI が制約ごとに判定する課題）。学生には非表示の状態で作られる。',
-  z.object({
-    section_id: id('追加先のセクションの ID'),
-    type: z
-      .enum(CREATABLE_TYPES)
-      .check(z.describe('page: ページ（Markdown の本文） / link: リンク / file: ファイル / code: コーディング問題')),
-    title: describedString('タイトル', 200, 1),
-    body: z.optional(describedString('ページは本文、コードは問題文、リンクとファイルは説明（いずれも Markdown）', 100_000)),
-    file_id: z.optional(fileId('ファイルのアイテムに置くファイル。ファイルでは必須')),
-    url: z.optional(describedString('リンクの URL（http:// か https:// で始まる）。リンクでは必須', 2000)),
-    link_target: z.optional(
-      z.enum(LINK_TARGETS).check(z.describe('リンクの開き方。new: 新しいタブ / same: 同じタブ / embed: ページに埋め込む')),
-    ),
-    language: z.optional(
-      z
-        .enum(CODE_LANGUAGES)
-        .check(
-          z.describe(`コードの言語。web: HTML / CSS / JavaScript、python: Python。今作れるのは ${availableCodeLanguages.join('・')} だけ`),
-        ),
-    ),
-    constraints: z.optional(
-      constraintsSchema('コーディング問題の制約。AI が提出を制約ごとに判定し、すべてできていればクリアになる。コーディング問題では必須'),
-    ),
-    criteria: z.optional(
-      describedString('コーディング問題の補足。制約にしにくい観点（読みやすさなど）。AI の判定に使い、学生には見せない', 5000),
-    ),
-  }),
+  'セクションの末尾にアイテムを追加する。作れるのはページ・リンク・ファイル（request_file で受け取ったもの）・コーディング問題（学生がブラウザでコードを書いて提出し、AI が制約ごとに判定する課題）。学生には非表示の状態で作られる。利用者が確認カードで承認してから実行される。',
+  createItemArgs,
   async (c, args) => {
-    const found = await sectionOf(c.var.user!, args.section_id)
-    if (!found) return failure(NOT_FOUND, 'アイテムを追加できませんでした')
-    const courseId = found.section.courseId
-    const title = args.title.trim()
-    const fail = (message: string) => failure(message, 'アイテムを追加できませんでした')
-    if (!title) return fail('タイトルが空です。')
-    const url = args.url?.trim() ?? ''
-    if (args.type === 'link' && !isHttpUrl(url)) return fail('リンクには http:// か https:// で始まる URL が必要です。')
-    const language = args.language ?? 'web'
-    if (args.type === 'code' && !args.constraints?.length) return fail('コーディング問題には制約（constraints）を 1 つ以上渡してください。')
-    if (args.type === 'code' && !availableCodeLanguages.includes(language))
-      return fail(
-        `${CODE_LANGUAGE_LABELS[language]} のコードは作れません。今は ${availableCodeLanguages.map((l) => CODE_LANGUAGE_LABELS[l]).join('・')} だけ作れます。`,
-      )
-    const upload = args.type === 'file' && args.file_id ? findUpload(c.var.user!.id, args.file_id) : undefined
-    if (args.type === 'file' && !upload) return fail(args.file_id ? UPLOAD_NOT_FOUND : 'ファイルには file_id を渡してください。')
+    const checked = await checkNewItem(c, args)
+    if ('content' in checked) return checked
+    const { section, course, title, url, language, upload } = checked
+    const link = args.type === 'link'
+    const code = args.type === 'code'
+    return {
+      title: `「${course.title}」の「${section.title}」に${ITEM_TYPE_LABELS[args.type]}を追加する（学生には非表示）`,
+      changes: [
+        { label: 'タイトル', before: '', after: title },
+        ...changed(BODY_LABELS[args.type], '', args.body, true),
+        ...(link ? [{ label: 'URL', before: '', after: url }] : []),
+        ...(link ? [{ label: '開き方', before: '', after: LINK_TARGET_LABELS[args.link_target ?? 'new'] }] : []),
+        ...(upload ? [fileChange({ name: '', size: 0 }, upload)] : []),
+        ...(code ? [{ label: '言語', before: '', after: CODE_LANGUAGE_LABELS[language] }] : []),
+        ...(code ? changed('制約', '', constraintLines(toConstraints(args.constraints ?? [])), true) : []),
+        ...(code ? changed('補足', '', args.criteria, true) : []),
+      ],
+      snapshot: null,
+    }
+  },
+  async (c, args) => {
+    const checked = await checkNewItem(c, args)
+    if ('content' in checked) return checked
+    const { course, title, url, language, upload } = checked
+    const courseId = course.id
     const stored = upload && (await adoptUpload(upload, courseId))
 
     const created = db.transaction((tx) => {
@@ -388,65 +434,80 @@ const createItem = defineTool(
   },
 )
 
-/** ids が今の並びと同じ顔ぶれなら、その順に position を振り直す */
-function reorder(table: typeof sections | typeof items, current: number[], ids: number[]) {
-  const same = ids.length === current.length && new Set(ids).size === ids.length && ids.every((i) => current.includes(i))
-  if (!same) return false
+const SECTIONS_MISMATCH =
+  'section_ids がコースのセクションと一致しません。get_course で確かめてから、すべての ID を 1 回ずつ並べてください。'
+const ITEMS_MISMATCH = 'item_ids がセクションのアイテムと一致しません。get_course で確かめてから、すべての ID を 1 回ずつ並べてください。'
+
+const sectionRows = (courseId: number) =>
+  db
+    .select({ id: sections.id, title: sections.title })
+    .from(sections)
+    .where(eq(sections.courseId, courseId))
+    .orderBy(asc(sections.position), asc(sections.id))
+    .all()
+
+const itemRows = (sectionId: number) =>
+  db
+    .select({ id: items.id, title: items.title })
+    .from(items)
+    .where(eq(items.sectionId, sectionId))
+    .orderBy(asc(items.position), asc(items.id))
+    .all()
+
+function reorder(table: typeof sections | typeof items, ids: number[]) {
   db.transaction((tx) => {
     ids.forEach((rowId, position) => tx.update(table).set({ position }).where(eq(table.id, rowId)).run())
   })
-  return true
 }
 
-const reorderSections = defineTool(
+const reorderSections = defineConfirmTool(
   'reorder_sections',
-  'コースのセクションを並べ替える。section_ids には、コースのすべてのセクションの ID を新しい順に並べる。',
+  'コースのセクションを並べ替える。section_ids には、コースのすべてのセクションの ID を新しい順に並べる。利用者が確認カードで承認してから実行される。',
   z.object({
     course_id: id('コースの ID'),
     section_ids: z.array(id('セクションの ID')).check(z.describe('すべてのセクションの ID を新しい順に')),
   }),
   async (c, { course_id, section_ids }) => {
+    const label = 'セクションを並べ替えられませんでした'
     const access = await manageable(c.var.user!, course_id)
-    if (!access) return failure(NOT_FOUND, 'セクションを並べ替えられませんでした')
-    const current = db.select({ id: sections.id }).from(sections).where(eq(sections.courseId, course_id)).all()
-    if (
-      !reorder(
-        sections,
-        current.map((s) => s.id),
-        section_ids,
-      )
-    )
-      return failure(
-        'section_ids がコースのセクションと一致しません。get_course で確かめてから、すべての ID を 1 回ずつ並べてください。',
-        'セクションを並べ替えられませんでした',
-      )
+    if (!access) return failure(NOT_FOUND, label)
+    const rows = sectionRows(course_id)
+    return reorderProposal(`「${access.course.title}」のセクションを並べ替える`, rows, section_ids, SECTIONS_MISMATCH, label)
+  },
+  async (c, { course_id, section_ids }, snapshot) => {
+    const label = 'セクションを並べ替えられませんでした'
+    const access = await manageable(c.var.user!, course_id)
+    if (!access) return failure(NOT_FOUND, label)
+    const current = sectionRows(course_id).map((r) => r.id)
+    if (!sameSnapshot(current, snapshot)) return failure(STALE, label)
+    if (!sameMembers(section_ids, current)) return failure(SECTIONS_MISMATCH, label)
+    reorder(sections, section_ids)
     touchCourse(course_id)
     return success({ ok: true }, `「${access.course.title}」のセクションを並べ替えました`, inCourse(course_id))
   },
 )
 
-const reorderItems = defineTool(
+const reorderItems = defineConfirmTool(
   'reorder_items',
-  'セクションの中のアイテムを並べ替える。item_ids には、そのセクションのすべてのアイテムの ID を新しい順に並べる。別のセクションへ移すときは update_item を使う。',
+  'セクションの中のアイテムを並べ替える。item_ids には、そのセクションのすべてのアイテムの ID を新しい順に並べる。別のセクションへ移すときは update_item を使う。利用者が確認カードで承認してから実行される。',
   z.object({
     section_id: id('セクションの ID'),
     item_ids: z.array(id('アイテムの ID')).check(z.describe('セクションのすべてのアイテムの ID を新しい順に')),
   }),
   async (c, { section_id, item_ids }) => {
+    const label = 'アイテムを並べ替えられませんでした'
     const found = await sectionOf(c.var.user!, section_id)
-    if (!found) return failure(NOT_FOUND, 'アイテムを並べ替えられませんでした')
-    const current = db.select({ id: items.id }).from(items).where(eq(items.sectionId, section_id)).all()
-    if (
-      !reorder(
-        items,
-        current.map((i) => i.id),
-        item_ids,
-      )
-    )
-      return failure(
-        'item_ids がセクションのアイテムと一致しません。get_course で確かめてから、すべての ID を 1 回ずつ並べてください。',
-        'アイテムを並べ替えられませんでした',
-      )
+    if (!found) return failure(NOT_FOUND, label)
+    return reorderProposal(`「${found.section.title}」のアイテムを並べ替える`, itemRows(section_id), item_ids, ITEMS_MISMATCH, label)
+  },
+  async (c, { section_id, item_ids }, snapshot) => {
+    const label = 'アイテムを並べ替えられませんでした'
+    const found = await sectionOf(c.var.user!, section_id)
+    if (!found) return failure(NOT_FOUND, label)
+    const current = itemRows(section_id).map((r) => r.id)
+    if (!sameSnapshot(current, snapshot)) return failure(STALE, label)
+    if (!sameMembers(item_ids, current)) return failure(ITEMS_MISMATCH, label)
+    reorder(items, item_ids)
     touchCourse(found.section.courseId)
     return success({ ok: true }, `「${found.section.title}」のアイテムを並べ替えました`, inCourse(found.section.courseId, section_id))
   },

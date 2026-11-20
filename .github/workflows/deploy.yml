@@ -11,19 +11,72 @@ concurrency:
   group: deploy
   cancel-in-progress: false
 
+env:
+  IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+  IMAGE_TAG: ${{ github.event.workflow_run.head_sha || github.sha }}
+
 jobs:
-  deploy:
-    name: deploy (beta)
+  # サーバーで docker compose build しないのは、本番が動いたままの小さな VPS で npm ci と vite build を走らせると、メモリが足りなくなるため
+  build:
+    name: build images
     # conclusion だけで判定しないのは、PR の CI 完了でも workflow_run が発火するため
     if: >-
       (github.event_name == 'workflow_run'
         && github.event.workflow_run.conclusion == 'success'
         && github.event.workflow_run.event == 'push')
       || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - name: step-learn
+            context: .
+          - name: step-learn-sandbox
+            context: ./sandbox
+          - name: step-learn-browser
+            context: ./browser
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.IMAGE_TAG }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}/${{ matrix.name }}:${{ env.IMAGE_TAG }}
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+  deploy:
+    name: deploy (beta)
+    needs: build
     runs-on: [self-hosted, linux, beta]
     environment: beta
     timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
     env:
+      APP_IMAGE: ghcr.io/${{ github.repository }}/step-learn:${{ github.event.workflow_run.head_sha || github.sha }}
+      SANDBOX_IMAGE: ghcr.io/${{ github.repository }}/step-learn-sandbox:${{ github.event.workflow_run.head_sha || github.sha }}
+      BROWSER_IMAGE: ghcr.io/${{ github.repository }}/step-learn-browser:${{ github.event.workflow_run.head_sha || github.sha }}
+      # 空なら compose.yaml の既定を使う。1GB の VPS での目安は README の「小さな VPS で動かす」
+      APP_MEM_LIMIT: ${{ vars.DEPLOY_APP_MEM_LIMIT }}
+      APP_HEAP_MB: ${{ vars.DEPLOY_APP_HEAP_MB }}
+      SANDBOX_MEM_LIMIT: ${{ vars.DEPLOY_SANDBOX_MEM_LIMIT }}
+      BROWSER_MEM_LIMIT: ${{ vars.DEPLOY_BROWSER_MEM_LIMIT }}
+      BROWSER_SLOTS: ${{ vars.DEPLOY_BROWSER_SLOTS }}
       # 既定の step-learn にしないのは、beta のデータが入っているボリューム step-learn-beta_data を使い続けるため
       COMPOSE_PROJECT_NAME: step-learn-beta
       HOST_PORT: ${{ vars.DEPLOY_HOST_PORT || '3000' }}
@@ -33,7 +86,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ env.IMAGE_TAG }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Write env file
         env:
           SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
@@ -74,17 +132,24 @@ jobs:
             esac
             printf "%s='%s'\n" "$name" "$value" >> "$ENV_FILE"
           done
-      - name: Build image
-        run: docker compose build
+      - name: Pull images
+        run: docker compose pull
       - name: Start
-        run: docker compose up -d --wait --wait-timeout 60
+        run: docker compose up -d --no-build --wait --wait-timeout 60
       # ログを出さないのは、SMTP 未設定のときはパスワード再設定や登録のリンク（トークン付き）が標準出力に出ていて、
       # Actions のログを読める人に渡ってしまうため。ログはサーバー上で docker compose logs を実行して見る
       - name: Show status
         if: failure()
         run: docker compose ps -a
+      # 3 日より新しいものを残すのは、直前の版に戻したいときに pull し直さずに済むようにするため。
+      # ビルドキャッシュも消すのは、サーバーでビルドしていたころのキャッシュが残り続けるため
       - name: Prune old images
-        run: docker image prune -f
+        run: |
+          docker image prune -af --filter "until=72h"
+          docker builder prune -af
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout ghcr.io
       - name: Remove env file
         if: always()
         run: rm -f "$RUNNER_TEMP/step-learn.env"

@@ -303,6 +303,62 @@ export const appSettings = sqliteTable('app_settings', {
   value: text('value').notNull(),
 })
 
+/** MCP の OAuth で登録したクライアント。通常モードの oauth_clients と同じ形。完全移行では引き継がない */
+export const oauthClients = sqliteTable('oauth_clients', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull().default(''),
+  redirectUris: text('redirect_uris', { mode: 'json' }).$type<string[]>().notNull(),
+  createdAt: integer('created_at').notNull().default(now),
+})
+
+/** 認可コード。通常モードの oauth_codes と同じ形 */
+export const oauthCodes = sqliteTable(
+  'oauth_codes',
+  {
+    id: text('id').primaryKey(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    redirectUri: text('redirect_uri').notNull(),
+    codeChallenge: text('code_challenge').notNull(),
+    resource: text('resource').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+  },
+  (t) => [index('oauth_codes_expires').on(t.expiresAt)],
+)
+
+/** 利用者がクライアントに許可した接続。通常モードの oauth_grants と同じ形。完全移行では引き継がず、つなぎ直してもらう */
+export const oauthGrants = sqliteTable(
+  'oauth_grants',
+  {
+    id: integer('id').primaryKey(),
+    clientId: text('client_id')
+      .notNull()
+      .references(() => oauthClients.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    resource: text('resource').notNull(),
+    accessHash: text('access_hash').notNull(),
+    accessExpiresAt: integer('access_expires_at').notNull(),
+    refreshHash: text('refresh_hash').notNull(),
+    previousRefreshHash: text('previous_refresh_hash'),
+    refreshExpiresAt: integer('refresh_expires_at').notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+    lastUsedAt: integer('last_used_at').notNull().default(now),
+  },
+  (t) => [
+    index('oauth_grants_user').on(t.userId),
+    index('oauth_grants_client').on(t.clientId),
+    uniqueIndex('oauth_grants_access_hash').on(t.accessHash),
+    uniqueIndex('oauth_grants_refresh_hash').on(t.refreshHash),
+    index('oauth_grants_previous_refresh_hash').on(t.previousRefreshHash),
+  ],
+)
+
 /**
  * 共同編集のアイテム（extra-kinds.tsx の collab）のファイル。通常モードの collab_docs と同じ形で、key は extra_items の key。
  * 種類と持ち主の分け方は extra_items の data に置く。完全移行では引き継がない

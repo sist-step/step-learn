@@ -1031,38 +1031,6 @@ export const scoreOf = (records: readonly QuizAnswerRecord[]) => ({
   pending: records.filter((r) => r.correct === null).length,
 })
 
-/** ゲームの見た目で、1 問ずつ確かめたときの最初の答え（client.ts の qgCheck が送る first[]）の欄の名前 */
-export const FIRST_ANSWER_FIELD = 'first[]'
-
-/**
- * ゲームの見た目で、扉のレバーを引いて最初にまちがえた答えを、問題の ID ごとの「送られた欄」にする。
- * 扉は正解するまで開かないので、最後の答えはいつも正解になる。最初の答えで採点して、まちがえた問題を点数に残す
- */
-export function readFirstAnswers(raw: unknown): Map<string, Record<string, string | string[]>> {
-  const firsts = new Map<string, Record<string, string | string[]>>()
-  for (const text of stringList(raw)) {
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(text)
-    } catch {
-      continue
-    }
-    if (!parsed || typeof parsed !== 'object') continue
-    const { id, fields } = parsed as { id?: unknown; fields?: unknown }
-    if (typeof id !== 'string' || !Array.isArray(fields) || firsts.has(id)) continue
-    const form: Record<string, string | string[]> = {}
-    for (const entry of fields) {
-      if (!Array.isArray(entry) || typeof entry[0] !== 'string' || typeof entry[1] !== 'string') continue
-      const [name, value] = entry as [string, string]
-      if (name !== `a.${id}` && name !== `a.${id}[]`) continue
-      const prev = form[name]
-      form[name] = name.endsWith('[]') ? [...(Array.isArray(prev) ? prev : []), value] : value
-    }
-    firsts.set(id, form)
-  }
-  return firsts
-}
-
 export const quizPercent = ({ correct, total }: QuizScore) => (total > 0 ? (correct / total) * 100 : 0)
 
 export const isQuizPassed = (score: QuizScore, passPercent: number) => score.total > 0 && quizPercent(score) >= passPercent

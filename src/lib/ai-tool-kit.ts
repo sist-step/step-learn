@@ -179,3 +179,25 @@ export const changed = (label: string, before: string, after: string | undefined
 
 // JSON の文字列で比べるのは、snapshot は DB に保存した会話から読み戻した値で、元の型を持っていないため
 export const sameSnapshot = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+
+/** ids が current と同じ顔ぶれを 1 回ずつ並べたものか */
+export const sameMembers = (ids: number[], current: number[]) =>
+  ids.length === current.length && new Set(ids).size === ids.length && ids.every((i) => current.includes(i))
+
+/**
+ * 並べ替えの確認カード。rows は今の並びで、snapshot にはその ID の並びを入れる。
+ * ids が今と同じ顔ぶれでなければ mismatch を、同じ並びなら並べ替えるところがないことを、label の失敗の結果で返す
+ */
+export function reorderProposal(
+  title: string,
+  rows: { id: number; title: string }[],
+  ids: number[],
+  mismatch: string,
+  label: string,
+): AiProposal | AiToolResult {
+  const current = rows.map((r) => r.id)
+  if (!sameMembers(ids, current)) return failure(mismatch, label)
+  if (ids.every((rowId, i) => rowId === current[i])) return failure('今と同じ並び順なので、並べ替えるところがありません。', label)
+  const lines = (order: number[]) => order.map((rowId) => rows.find((r) => r.id === rowId)?.title ?? '').join('\n')
+  return { title, changes: [{ label: '並び順', before: lines(current), after: lines(ids), long: true }], snapshot: current }
+}

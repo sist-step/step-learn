@@ -2,21 +2,20 @@
 // モードごとの DB と権限の確認は QuizBackend として受け取る（通常モードは ./backend.ts、Moodle モードは moodle-mode/quiz.ts）
 import { Hono, type Context } from 'hono'
 import type { CourseAccess } from '../../lib/courses'
-import { intParam, readFields, readForm, redirectWith } from '../../lib/http'
+import { type Form, intParam, readFields, readForm, redirectWith } from '../../lib/http'
 import {
-  FIRST_ANSWER_FIELD,
   MAX_QUIZ_ATTEMPTS,
   answerField,
   bestScore,
   gradeQuiz,
   isCorrectAnswer,
-  readFirstAnswers,
   readQuizAnswer,
   reviewQuiz,
   scoreOf,
   type QuizSettings,
 } from '../../lib/quiz'
 import type { QuizAttemptSummary, QuizStore } from '../../lib/quiz-store'
+import { rateLimiter } from '../../lib/rate-limit'
 import type { AppEnv } from '../../lib/types'
 import { ResultPage, ResultsPage, resultsUrl, type QuestionStat, type ResultRow } from './views'
 
@@ -35,7 +34,25 @@ export type QuizBackend = {
   resolve: (c: C) => Promise<QuizContext | null>
 }
 
+// 短くしないのは、遊んでいる途中で休んでも、最初の答えを忘れないようにするため
+const FIRST_ANSWER_TTL = 6 * 60 * 60 * 1000
+
 export function createQuizHandlers({ resolve }: QuizBackend) {
+  // ゲームの見た目で、学生が扉で問題ごとに最初に確かめた答え。ゴールの採点に使う。
+  // ブラウザが送る「最初の答え」で採点しないのは、扉で正解を確かめてから、最初から正解していたと偽って送れるため。
+  // DB に残さないのは、遊んでいる途中の 1 回分だけの状態で、再起動で忘れても、その回が最後の答えで採点されるだけのため
+  const firstAnswers = new Map<string, { at: number; answers: Map<string, Form> }>()
+  // 扉は 1 問に何回も押せるが、普通に遊んで届く回数ではない。総当たりで正解を探させないため
+  const checkLimit = rateLimiter({ limit: 30, windowSec: 60 })
+
+  const playKey = (ctx: QuizContext, userId: number) => `${ctx.access.course.id}:${ctx.item.id}:${userId}`
+
+  function firstAnswersOf(key: string) {
+    const now = Date.now()
+    for (const [k, v] of firstAnswers) if (now - v.at > FIRST_ANSWER_TTL) firstAnswers.delete(k)
+    return firstAnswers.get(key)?.answers ?? new Map<string, Form>()
+  }
+
   async function open(c: C) {
     const ctx = await resolve(c)
     return ctx && { ...ctx, page: `/courses/${ctx.access.course.id}/items/${ctx.item.id}` }
@@ -54,12 +71,15 @@ export function createQuizHandlers({ resolve }: QuizBackend) {
     const { settings, store, page } = ctx
     const userId = c.var.user!.id
     if (settings.questions.length === 0) return redirectWith(c, page, '問題がまだありません。', 'error')
+    const form = await readForm(c)
+    // 本文を読む前に数えないのは、読む（await）あいだに同時に送られた分が、どれも上限の前として通ってしまうため
     if (store.listOf(userId).length >= MAX_QUIZ_ATTEMPTS)
       return redirectWith(c, page, `受けられる回数の上限（${MAX_QUIZ_ATTEMPTS} 回）に達しました。`, 'error')
-    const form = await readForm(c)
-    const firsts = settings.look === 'game' ? readFirstAnswers(form[FIRST_ANSWER_FIELD]) : new Map()
+    const key = playKey(ctx, userId)
+    const firsts = settings.look === 'game' ? firstAnswersOf(key) : new Map<string, Form>()
     const graded = gradeQuiz(settings.questions, (field, q) => (firsts.get(q.id) ?? form)[field])
     const passed = store.record(userId, graded, settings.passPercent)
+    firstAnswers.delete(key)
     const waiting = !passed && graded.pending > 0 ? `${graded.pending} 問は先生の採点を待っています。` : ''
     return redirectWith(
       c,
@@ -76,12 +96,22 @@ export function createQuizHandlers({ resolve }: QuizBackend) {
   async function check(c: C) {
     const ctx = await open(c)
     if (!ctx || ctx.settings.look !== 'game') return c.notFound()
+    const userId = c.var.user!.id
+    const key = playKey(ctx, userId)
+    if (checkLimit.retryAfter(key)) return c.json({ error: 'しばらく待ってから、もう一度ためしてね。' }, 429)
+    checkLimit.hit(key)
     const form = await readForm(c)
     const q = ctx.settings.questions.find((other) => other.id === form.q)
     if (!q) return c.notFound()
-    const answer = readQuizAnswer(q, form[answerField(q)])
+    const field = answerField(q)
+    const answer = readQuizAnswer(q, form[field])
     // 採点待ちの記述も扉を開けるのは、教師が採点するまで先へ進めなくなるため（点数はゴールで残し、あとで教師が採点する）
     const correct = isCorrectAnswer(q, answer) ?? answer !== null
+    if (ctx.access.role === 'student') {
+      const answers = firstAnswersOf(key)
+      if (!answers.has(q.id)) answers.set(q.id, { [field]: form[field] ?? '' })
+      firstAnswers.set(key, { at: Date.now(), answers })
+    }
     return c.json(correct ? { correct, explanation: q.explanation } : { correct })
   }
 

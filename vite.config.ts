@@ -82,7 +82,7 @@ export default defineConfig(({ command }) => ({
         ssr: true,
         copyPublicDir: false,
         rollupOptions: {
-          input: { index: 'src/server.ts', cli: 'src/cli.ts' },
+          input: { index: 'src/server.ts', cli: 'src/cli.ts', backup: 'src/backup.ts' },
           output: {
             entryFileNames: '[name].js',
             // 既定のままにしないのは、共有のチャンク（lib/db.ts を含む auth など）を補助コードのために読み込んだだけで、そのチャンクの
