@@ -97,9 +97,13 @@ async function readSessionToken(c: Context) {
 export async function createSession(c: Context<AppEnv>, userId: number) {
   const token = randomToken()
   const id = await sessionIdFromToken(token)
-  db.insert(sessions)
-    .values({ id, userId, expiresAt: now() + SESSION_TTL })
-    .run()
+  // ログインのときに消すのは、期限が切れた行はほかに消す機会がなく、ログインのたびに増え続けるため
+  db.transaction((tx) => {
+    tx.delete(sessions).where(lte(sessions.expiresAt, now())).run()
+    tx.insert(sessions)
+      .values({ id, userId, expiresAt: now() + SESSION_TTL })
+      .run()
+  })
   await setSessionCookie(c, token)
   c.set('logUserId', userId)
 }
