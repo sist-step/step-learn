@@ -11,6 +11,8 @@
   "rules": {
     "no-unused-vars": ["error", { "ignoreRestSiblings": true }],
     "no-unused-expressions": ["error", { "allowTernary": true, "allowShortCircuit": true }],
-    "typescript/no-misused-spread": "off"
+    "typescript/no-misused-spread": "off",
+    "typescript/no-explicit-any": "error",
+    "typescript/consistent-type-imports": ["error", { "disallowTypeAnnotations": false, "fixStyle": "inline-type-imports" }]
   }
 }

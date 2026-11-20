@@ -34,7 +34,7 @@ import { AGENT_KIND, DEFAULT_AGENT_MODEL, agentBase, agentViewOf, type AgentMode
 import { agentOpenRouterModels, cachedAgentOpenRouterModels, resolveAgentModel } from '../lib/agent-model'
 import {
   CODE_FILE_KEYS,
-  CODE_LANGUAGES,
+  type CodeLanguage,
   CODE_LANGUAGE_LABELS,
   DEFAULT_STARTER,
   filesFor,
@@ -344,7 +344,7 @@ const code: ExtraKind = {
     return { values: { ...values, stage: values.finalize === 1 ? 'preparing' : stage, guides } }
   },
   toData(values) {
-    const language = isCodeLanguage(str(values.language)) ? (values.language as (typeof CODE_LANGUAGES)[number]) : 'web'
+    const language = isCodeLanguage(str(values.language)) ? (values.language as CodeLanguage) : 'web'
     const edited = values.starter_set === 1
     const stage = typeof values.stage === 'string' ? { stage: values.stage, guides: values.guides } : {}
     const data = {
