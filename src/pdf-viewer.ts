@@ -22,6 +22,7 @@ import {
   type PresentationView,
 } from './lib/presentation'
 import { getSetting, setSetting } from './lib/settings'
+import { fetchJson } from './client/dom'
 
 GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -762,7 +763,7 @@ export function mountPresentation(root: HTMLElement) {
 
   async function readState() {
     try {
-      const res = await fetch(`${base}/state`, { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      const res = await fetchJson(`${base}/state`, { cache: 'no-store' })
       if (stopped) return
       if (res.ok) await apply((await res.json()) as PresentationView)
       else if (res.status === 404) {

@@ -4,6 +4,7 @@ import type { Awareness } from 'y-protocols/awareness'
 import * as Y from 'yjs'
 import { exportFileName, isCollabKind, presenceColor, type CollabKind } from '../lib/collab'
 import { CollabProvider, type ConnectionState } from './provider'
+import { fetchJson } from '../client/dom'
 
 export type Toast = (message: string, type?: 'success' | 'error' | 'info') => void
 
@@ -199,7 +200,7 @@ export async function mountCollab(root: HTMLElement, toast: Toast, confirmNear: 
     const body = new FormData()
     body.append('file', file, file instanceof File ? file.name : 'image')
     try {
-      const res = await fetch(imageBase, { method: 'POST', body, headers: { Accept: 'application/json' } })
+      const res = await fetchJson(imageBase, { method: 'POST', body })
       const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string }
       if (res.ok && data.url) return data.url
       toast(data.error ?? '画像を置けませんでした。', 'error')

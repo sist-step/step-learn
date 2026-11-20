@@ -67,6 +67,7 @@ import {
 import { dateTimeInputToUnix, isDateTimeInput } from './lib/course-period'
 import { diffLines } from './lib/diff'
 import type { RunResult } from './lib/sandbox'
+import { fetchJson, reducedMotion } from './client/dom'
 
 type Toast = (message: string, type?: 'success' | 'error' | 'info') => void
 
@@ -521,7 +522,7 @@ type SuggestReply = { draft?: { starter: CodeFiles; solution: CodeFiles; stdin: 
 
 const DEFAULT_FILES: CodeFiles = { ...DEFAULT_STARTER.web, ...DEFAULT_STARTER.python }
 
-const scrollBehavior = (): ScrollBehavior => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth')
+const scrollBehavior = (): ScrollBehavior => (reducedMotion() ? 'auto' : 'smooth')
 
 function formField(form: HTMLFormElement, name: string) {
   const control = form.elements.namedItem(name)
@@ -581,7 +582,7 @@ function mountSuggest(button: HTMLButtonElement, toast: Toast, confirmNear: Conf
     const status = button.closest('.code-suggest')?.querySelector<HTMLElement>('[data-code-suggest-status]')
     await whileSuggesting(button, status, 'AI が下書きを作っています。30 秒ほどお待ちください…', async () => {
       try {
-        const res = await fetch(action, { method: 'POST', body, headers: { Accept: 'application/json' } })
+        const res = await fetchJson(action, { method: 'POST', body })
         const data = (await res.json().catch(() => null)) as SuggestReply | null
         if (!data?.draft) return toast(data?.error ?? '下書きを作れませんでした。', 'error')
         if (!button.isConnected) return
@@ -623,7 +624,7 @@ async function suggestConstraints(root: HTMLElement, button: HTMLButtonElement, 
   const status = root.querySelector<HTMLElement>('[data-code-constraints-status]')
   await whileSuggesting(button, status, 'AI が問題文と最初のコードから制約を作っています…', async () => {
     try {
-      const res = await fetch(action, { method: 'POST', body, headers: { Accept: 'application/json' } })
+      const res = await fetchJson(action, { method: 'POST', body })
       const data = (await res.json().catch(() => null)) as ConstraintsReply | null
       if (!data?.constraints) return toast(data?.error ?? '制約を作れませんでした。', 'error')
       if (!root.isConnected) return
@@ -809,7 +810,7 @@ function mountTrial(root: HTMLElement, toast: Toast) {
     const status = root.querySelector<HTMLElement>('[data-code-trial-status]')
     await whileSuggesting(button, status, 'AI が解答例と最初のコードを判定しています。30 秒ほどお待ちください…', async () => {
       try {
-        const res = await fetch(action, { method: 'POST', body, headers: { Accept: 'application/json' } })
+        const res = await fetchJson(action, { method: 'POST', body })
         // 結果を JSON で受け取って組み立てないのは、サーバーが描く判定の一覧と同じ見た目を、ここでもう一度作ることになるため
         if (!res.ok || !res.headers.get('content-type')?.includes('text/html')) {
           const data = (await res.json().catch(() => null)) as { error?: string } | null
@@ -990,7 +991,7 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
 
   const fetchState = async () => {
     try {
-      const res = await fetch(`${base}/state`, { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      const res = await fetchJson(`${base}/state`, { cache: 'no-store' })
       return res.ok ? ((await res.json()) as { files: CodeFiles; stdin: string }) : null
     } catch {
       return null
@@ -1023,10 +1024,9 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
     dirty = false
     setStatus('保存中…')
     try {
-      const res = await fetch(`${base}/draft`, {
+      const res = await fetchJson(`${base}/draft`, {
         method: 'POST',
         body: new FormData(form),
-        headers: { Accept: 'application/json' },
         keepalive,
       })
       const data = (await res.json().catch(() => null)) as { saved?: boolean; error?: string } | null
@@ -1056,7 +1056,7 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
     // サーバーが実行の前に同じ内容を保存するので、重ねて送らない
     discardPending()
     try {
-      const res = await fetch(`${base}/run`, { method: 'POST', body: new FormData(form), headers: { Accept: 'application/json' } })
+      const res = await fetchJson(`${base}/run`, { method: 'POST', body: new FormData(form) })
       const data = (await res.json()) as { result?: RunResult; error?: string }
       if (data.result) {
         showRunResult(output, data.result)
@@ -1189,7 +1189,7 @@ function watchGrading(card: HTMLElement, toast: Toast) {
   const check = async () => {
     if (!card.isConnected) return
     try {
-      const res = await fetch(url, { headers: { Accept: 'application/json' }, cache: 'no-store' })
+      const res = await fetchJson(url, { cache: 'no-store' })
       const { pending, ahead } = (await res.json()) as { pending: boolean; ahead: number }
       if (!pending) return await showGrade(card, toast)
       const waiting = card.querySelector('[data-code-grade-ahead]')
