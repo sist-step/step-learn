@@ -37,7 +37,54 @@
 :root[data-ai-open] .ai-panel-toggle { background: var(--c-soft); color: var(--c-ink); }
 
 .ai-panel-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 16px; border-bottom: 1px solid var(--border); }
-.ai-panel-mark { flex: none; color: var(--c-ink); }
+.ai-panel-mark { display: flex; flex: none; color: var(--c-ink); }
+.ai-panel-mark[hidden] { display: none; }
+
+/* ----- ヘッダーで作業するマスコット（AiBuddy。状態は client.ts の setAiBuddy） */
+/* ヘッダーの高さに合わせて縮めないのは、小物（ノートパソコン・本・虫めがね）が見分けられなくなるため。上下の余白にはみ出させて収める */
+.ai-buddy { position: relative; z-index: 2; flex: none; width: 44px; height: 43px; margin: -2px 2px -4px -6px; }
+.ai-buddy[hidden] { display: none; }
+.ai-buddy .mascot { display: block; }
+.ai-buddy-mark {
+  position: absolute;
+  top: -6px;
+  right: -12px;
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border: 1px solid var(--overlay-border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-sm);
+  color: var(--c-ink);
+  animation: ai-buddy-mark 0.35s cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+.ai-buddy-mark[hidden] { display: none; }
+.ai-buddy-mark .ai-dots { width: 15px; height: 6px; background: radial-gradient(circle, currentColor 2px, transparent 2.5px) 0 50% / 5px 6px repeat-x; }
+.ai-buddy:is([data-state='ask'], [data-state='wait-file']) .ai-buddy-mark { background: var(--warning-soft); color: var(--warning-text); animation: ai-buddy-mark 0.35s cubic-bezier(0.3, 1.4, 0.5, 1) both, ai-buddy-call 0.9s 0.35s ease-in-out infinite alternate; }
+.ai-buddy[data-state='applied'] .ai-buddy-mark { background: var(--success-soft); color: var(--success-text); }
+.ai-buddy[data-state='error'] .ai-buddy-mark { background: var(--danger-soft); color: var(--danger-text); }
+/* 状態ごとの細かな動き。mascot.css が transform で付けるポーズを消さないように、rotate / translate / scale で重ねる */
+.ai-buddy:is([data-state='courses'], [data-state='docs']) .mascot-gaze { animation: ai-buddy-scan 1.6s ease-in-out infinite; }
+.ai-buddy[data-state='courses'] .mascot-arm-r { animation: ai-buddy-sweep 1.6s ease-in-out infinite; }
+.ai-buddy[data-state='docs'] .mascot-arm-r { animation: ai-buddy-sweep 2.4s ease-in-out infinite; }
+.ai-buddy[data-state='course'] .mascot-actor { animation: ai-buddy-peek 2s ease-in-out infinite; }
+.ai-buddy[data-state='file'] .mascot-prop-book { animation-duration: 1.2s; }
+.ai-buddy:is([data-state='create'], [data-state='apply']) .mascot[data-pose='type'] :is(.mascot-arm-l, .mascot-arm-r) { animation-duration: 0.18s; }
+.ai-buddy:is([data-state='create'], [data-state='apply']) .mascot-actor { animation: ai-buddy-pump 0.9s ease-in-out infinite; }
+.ai-buddy[data-state='propose'] .mascot[data-pose='type'] :is(.mascot-arm-l, .mascot-arm-r) { animation-duration: 0.5s; }
+.ai-buddy[data-state='arrange'] .mascot-actor { animation: ai-buddy-shuffle 1.2s ease-in-out infinite; }
+.ai-buddy[data-state='stopped'] .mascot-actor { animation: ai-buddy-halt 0.5s ease-out; }
+@keyframes ai-buddy-mark { from { opacity: 0; scale: 0.4; translate: -6px 6px; } }
+@keyframes ai-buddy-call { to { translate: 0 -3px; } }
+@keyframes ai-buddy-scan { 0%, 100% { translate: -4px 0; } 50% { translate: 4px 0; } }
+@keyframes ai-buddy-sweep { 0%, 100% { rotate: -14deg; } 50% { rotate: 12deg; } }
+@keyframes ai-buddy-peek { 0%, 100% { rotate: 0deg; } 40%, 70% { rotate: 7deg; translate: 3px 0; } }
+@keyframes ai-buddy-pump { 0%, 100% { scale: 1; } 50% { scale: 1.04 0.97; } }
+@keyframes ai-buddy-shuffle { 0%, 100% { translate: -3px 0; } 50% { translate: 3px 0; } }
+@keyframes ai-buddy-halt { 30% { scale: 1.08 0.9; } 60% { scale: 0.96 1.05; } }
 .ai-close { position: relative; z-index: 1; }
 .ai-close .icon-btn[hidden] { display: none; }
 .ai-close .icon-btn::after {
