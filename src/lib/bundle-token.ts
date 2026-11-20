@@ -12,14 +12,18 @@ export const GRANT_TTL = 15 * 60
 /** 変更履歴を送るための鍵の有効期間。学期のあいだ、STEP Learn の画面から開き直さなくても送り続けられる長さにする */
 export const SYNC_TTL = 180 * 24 * 60 * 60
 
-/** ref はモードごとのアイテムの識別子（backend の storeOf に渡す）。course と title は、展開先のフォルダー名に使う */
+/** ref はモードごとのアイテムの識別子（backend の itemOf / targetOf に渡す）。course と title は、展開先のフォルダー名に使う */
 export type LaunchClaims = { kind: 'launch'; ref: string; userId: number; course: string; title: string; nonce: string; exp: number }
 export type GrantClaims = { kind: 'grant'; ref: string; userId: number; exp: number }
-export type SyncClaims = { kind: 'sync'; ref: string; userId: number; exp: number }
+/**
+ * stamp は backend の stampOf が返す、発行したときの利用者の印。半年使える鍵を、パスワードを変えたときに取り消すのに使う。
+ * DB に鍵を保存して取り消せるようにしないのは、保存しなくても、印が変われば発行済みの鍵をまとめて使えなくできるため
+ */
+export type SyncClaims = { kind: 'sync'; ref: string; userId: number; stamp?: string; exp: number }
 /** コードのアイテムを VS Code で開くリンクの鍵。ファイル自動配布の鍵と kind を分け、取り違えて引き換えられないようにする */
 export type CodeLaunchClaims = { kind: 'code-launch'; ref: string; userId: number; nonce: string; exp: number }
 /** 拡張機能が書きかけのコードを送る・提出するための鍵 */
-export type CodeClaims = { kind: 'code'; ref: string; userId: number; exp: number }
+export type CodeClaims = { kind: 'code'; ref: string; userId: number; stamp?: string; exp: number }
 /** 発表ファイルの「PowerPoint と同期」のリンクの鍵 */
 export type PresentationLaunchClaims = { kind: 'presentation-launch'; ref: string; userId: number; nonce: string; exp: number }
 /** 拡張機能が PDF を上げ、映しているスライドを送るための鍵 */
@@ -30,6 +34,9 @@ type Claims = LaunchClaims | GrantClaims | SyncClaims | CodeLaunchClaims | CodeC
 export const PRESENTATION_TTL = 12 * 60 * 60
 
 const mac = (body: string) => crypto.createHmac('sha256', key).update(body).digest('base64url')
+
+/** 鍵に入れる利用者の印。パスワードのハッシュをそのまま入れないのは、鍵の中身は拡張機能から読めるため */
+export const credentialStamp = (passwordHash: string) => mac(`stamp\0${passwordHash}`).slice(0, 16)
 
 const nowSec = () => Math.floor(Date.now() / 1000)
 
