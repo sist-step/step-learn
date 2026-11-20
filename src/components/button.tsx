@@ -3,8 +3,8 @@ import { cx } from './cx'
 import { Icon, type IconName } from './icons'
 import { useStyle } from './style'
 
-export type ButtonVariant = 'default' | 'primary' | 'ghost' | 'danger' | 'danger-outline' | 'success'
-export type ButtonSize = 'sm' | 'md' | 'lg'
+type ButtonVariant = 'default' | 'primary' | 'ghost' | 'danger' | 'danger-outline' | 'success'
+type ButtonSize = 'sm' | 'md' | 'lg'
 
 const ICON_SIZES: Record<ButtonSize, number> = { sm: 14, md: 16, lg: 18 }
 
@@ -18,7 +18,7 @@ type ButtonOwnProps = {
   children?: Child
 }
 
-export type ButtonProps = ButtonOwnProps &
+type ButtonProps = ButtonOwnProps &
   (
     | ({ href: string; as?: undefined } & JSX.IntrinsicElements['a'])
     | ({ href?: undefined; as: 'span' } & JSX.IntrinsicElements['span'])
@@ -65,7 +65,7 @@ type IconButtonOwnProps = {
   class?: string
 }
 
-export type IconButtonProps = IconButtonOwnProps &
+type IconButtonProps = IconButtonOwnProps &
   (
     | ({ href: string; as?: undefined } & JSX.IntrinsicElements['a'])
     | ({ href?: undefined; as: 'summary' } & JSX.IntrinsicElements['summary'])

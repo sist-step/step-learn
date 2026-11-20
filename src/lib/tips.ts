@@ -1,8 +1,8 @@
 import type { MascotAct } from '../components/mascot'
 
-export type Tip = { text: string; act: MascotAct }
+type Tip = { text: string; act: MascotAct }
 
-export const PROGRAMMING_TIPS: readonly Tip[] = [
+const PROGRAMMING_TIPS: readonly Tip[] = [
   { act: 'advise', text: '変数名は「中に何が入っているか」が伝わる名前にしてみよう。あとで読む自分がきっと助かるよ！' },
   { act: 'cheer', text: 'エラーメッセージは怖がらずに最後まで読んでみよう。原因や行番号がちゃんと書いてあることが多いよ！' },
   { act: 'think', text: 'うまく動かないときは、問題を小さく分けて一つずつ確かめてみよう。意外とすぐ見つかるよ！' },

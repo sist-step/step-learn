@@ -359,7 +359,7 @@ const ExtraOptionBody = ({ kind }: { kind: ExtraKind }) => (
 
 const CHOICES = ['none', 'manual', 'view'] as const
 
-export const MoodleCompletionField = ({ id, value = 'none', error }: { id?: string; value?: string; error?: string }) => (
+const MoodleCompletionField = ({ id, value = 'none', error }: { id?: string; value?: string; error?: string }) => (
   <SelectField
     label="完了の条件"
     name="completion"
@@ -896,7 +896,7 @@ export const CoursePage = ({
 
   return (
     <AppShell editable={manage} tone={access.course.color}>
-      <Styles use={['/src/routes/courses/courses.css', '/src/components/restriction.css', '/src/moodle-mode/moodle-mode.css']} />
+      <Styles use={['/src/features/courses/courses.css', '/src/components/restriction.css', '/src/moodle-mode/moodle-mode.css']} />
       <CourseHeader
         access={access}
         tab="content"
@@ -1069,7 +1069,7 @@ export const ItemPage = ({
 
   return (
     <AppShell tone={access.course.color} topbar={pdfBar}>
-      <Styles use={['/src/routes/content/content.css', '/src/moodle-mode/moodle-mode.css']} />
+      <Styles use={['/src/features/content/content.css', '/src/moodle-mode/moodle-mode.css']} />
       {pdf ? <PdfStage src={previewUrl} title={item.fileName} /> : immersive ? <immersive.Stage item={item} access={access} /> : crumbs}
       <div class="reader" data-outline-kind={outlineKind(item)}>
         <article class="reader-main" data-ai-watch={`item:${item.id}`}>
@@ -1264,7 +1264,7 @@ export const ItemPage = ({
 
 // ---------------------------------------------------------------- 編集
 
-export type ItemEditValues = { title: string; url: string; linkTarget: string; hidden: number; sectionId: number; completion: string }
+type ItemEditValues = { title: string; url: string; linkTarget: string; hidden: number; sectionId: number; completion: string }
 
 export const ItemEditPage = ({
   access,
@@ -1315,7 +1315,7 @@ export const ItemEditPage = ({
         </ItemBar>
       }
     >
-      <Styles use={['/src/routes/content/content.css']} />
+      <Styles use={['/src/features/content/content.css']} />
       <div class="item-editor">
         <form
           id={ITEM_FORM}

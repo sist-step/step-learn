@@ -2,13 +2,14 @@ import type { Child } from 'hono/jsx'
 import { useRequestContext } from 'hono/jsx-renderer'
 import { ROLE_LABELS, type AppEnv, type Flash } from '../lib/types'
 import { Icon, type IconName } from './icons'
-import { AiPanelToggle } from './ai-panel'
+import { AiPanelToggle } from '../features/ai/components/ai-panel'
 import { IconButton } from './button'
 import { cx } from './cx'
 import { Switch } from './form'
 import { ConfirmChip, MenuItem, Popover } from './overlay'
 import { useStyle } from './style'
-import { Avatar, CourseIcon, Person } from './ui'
+import { CourseIcon } from './course'
+import { Avatar, Person } from './ui'
 
 type ToastType = Flash['type']
 
@@ -53,7 +54,7 @@ type NavItem = { href: string; icon: IconName; label: string; active: boolean }
 
 const navCurrent = (path: string, l: NavItem) => (path === l.href ? 'page' : l.active ? 'location' : undefined)
 
-export const Brand = () => (
+const Brand = () => (
   <a href="/" class="brand">
     <img src="/favicon.png" alt="" class="brand-mark" width={32} height={32} />
     <span class="brand-name">STEP Learn</span>

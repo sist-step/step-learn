@@ -39,7 +39,7 @@
 
 - [ ] なし
 - [ ] マイグレーションを追加した（`migrations/` のファイル名を記載）
-- [ ] 環境変数を追加・変更した（`.env.example` と README を更新済み）
+- [ ] 環境変数を追加・変更した（`.env.example` と `docs/production.md` を更新済み）
 
 ## 補足
 

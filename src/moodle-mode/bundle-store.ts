@@ -1,6 +1,6 @@
 import { and, count, desc, eq, inArray, max, sql } from 'drizzle-orm'
-import type { BundleFile, BundleStore } from '../lib/bundle'
-import { MAX_LISTED_VERSIONS, type BundleSyncStore } from '../lib/bundle-sync'
+import type { BundleFile, BundleStore } from '../features/bundle/bundle'
+import { MAX_LISTED_VERSIONS, type BundleSyncStore } from '../features/bundle/bundle-sync'
 import { db } from './db'
 import { bundleFiles, bundleItems, bundleSyncVersions, users } from './schema'
 

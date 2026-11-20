@@ -1,4 +1,4 @@
-export const USERNAME_MAX_LENGTH = 30
+const USERNAME_MAX_LENGTH = 30
 export const USERNAME_HINT = `半角英数字と . _ - で3〜${USERNAME_MAX_LENGTH}文字。ログインにも使えます`
 
 // 入力のまま保存して COLLATE NOCASE に任せないのは、同じユーザー名でも入力した人によって大文字小文字の違う表示になるため

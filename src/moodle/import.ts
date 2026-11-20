@@ -9,7 +9,7 @@ import { type StoredFile, deleteCourseFiles, isExecutable, putCourseFile } from 
 import { COMPLETION_LABELS, COURSE_ROLE_LABELS, ITEM_TYPE_LABELS, LINK_TARGET_LABELS, type ItemType } from '../lib/types'
 import { type Backup, type BackupItem, type BackupParticipant, moduleLabel } from './backup'
 
-export type PlannedParticipant = BackupParticipant & {
+type PlannedParticipant = BackupParticipant & {
   existingId: number | null
   /** 新規ユーザーに設定するユーザー名。設定しないなら null */
   newUsername: string | null
@@ -211,7 +211,7 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
 
 // ---------------------------------------------------------------- 書き込み
 
-export type ImportResult = { courseId: number; sections: number; items: number; createdUsers: number; enrolled: number }
+type ImportResult = { courseId: number; sections: number; items: number; createdUsers: number; enrolled: number }
 
 export async function runImport(plan: Plan, progress: (message: string) => void): Promise<ImportResult> {
   const { backup } = plan

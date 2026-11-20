@@ -1,6 +1,6 @@
 import { and, eq, gte, lt } from 'drizzle-orm'
 import type { Context } from 'hono'
-import type { AiFileStore } from '../lib/ai-tool-kit'
+import type { AiFileStore } from '../features/ai/ai-tool-kit'
 import type { MoodleEnv } from './auth'
 import { uploadDraft } from './client'
 import { db } from './db'
@@ -8,7 +8,7 @@ import { aiUploads } from './schema'
 
 export type MoodleAiUpload = typeof aiUploads.$inferSelect
 
-// 通常モード（lib/ai-uploads.ts）と同じ期限にしないのは、Moodle が 4 日より古い下書き領域を消し、その後に使うと中身のないファイルの活動ができるため
+// 通常モード（features/ai/ai-uploads.ts）と同じ期限にしないのは、Moodle が 4 日より古い下書き領域を消し、その後に使うと中身のないファイルの活動ができるため
 const AI_UPLOAD_TTL = 3 * 86_400
 
 const unixNow = () => Math.floor(Date.now() / 1000)

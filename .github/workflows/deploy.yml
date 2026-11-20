@@ -71,7 +71,7 @@ jobs:
       APP_IMAGE: ghcr.io/${{ github.repository }}/step-learn:${{ github.event.workflow_run.head_sha || github.sha }}
       SANDBOX_IMAGE: ghcr.io/${{ github.repository }}/step-learn-sandbox:${{ github.event.workflow_run.head_sha || github.sha }}
       BROWSER_IMAGE: ghcr.io/${{ github.repository }}/step-learn-browser:${{ github.event.workflow_run.head_sha || github.sha }}
-      # 空なら compose.yaml の既定を使う。1GB の VPS での目安は README の「小さな VPS で動かす」
+      # 空なら compose.yaml の既定を使う。1GB の VPS での目安は docs/docker.md の「小さな VPS で動かす」
       APP_MEM_LIMIT: ${{ vars.DEPLOY_APP_MEM_LIMIT }}
       APP_HEAP_MB: ${{ vars.DEPLOY_APP_HEAP_MB }}
       SANDBOX_MEM_LIMIT: ${{ vars.DEPLOY_SANDBOX_MEM_LIMIT }}

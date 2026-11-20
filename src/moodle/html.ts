@@ -1,6 +1,6 @@
 import { decodeEntities } from './xml'
 
-export type Converted = { markdown: string; images: number; tables: number }
+type Converted = { markdown: string; images: number; tables: number }
 
 const SKIPPED = new Set(['script', 'style', 'head', 'title', 'noscript', 'template', 'svg', 'math', 'object', 'iframe', 'video', 'audio'])
 const BLOCKS = new Set([

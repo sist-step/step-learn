@@ -3,11 +3,11 @@ import { cx } from './cx'
 import { Icon } from './icons'
 import { useStyle } from './style'
 
-export const MASCOT_MOODS = ['normal', 'happy', 'sad', 'surprised', 'thinking', 'sleepy'] as const
-export const MASCOT_POSES = ['idle', 'wave', 'greet', 'cheer', 'point', 'raise', 'open', 'type', 'hold', 'sip'] as const
-export const MASCOT_MOTIONS = ['none', 'float', 'bounce', 'hop', 'wiggle', 'nod', 'tilt', 'shake', 'walk', 'swing'] as const
-export const MASCOT_LOOKS = ['front', 'left', 'right', 'up', 'down'] as const
-export const MASCOT_PROPS = ['none', 'laptop', 'book', 'mug', 'magnifier', 'notes'] as const
+const MASCOT_MOODS = ['normal', 'happy', 'sad', 'surprised', 'thinking', 'sleepy'] as const
+const MASCOT_POSES = ['idle', 'wave', 'greet', 'cheer', 'point', 'raise', 'open', 'type', 'hold', 'sip'] as const
+const MASCOT_MOTIONS = ['none', 'float', 'bounce', 'hop', 'wiggle', 'nod', 'tilt', 'shake', 'walk', 'swing'] as const
+const MASCOT_LOOKS = ['front', 'left', 'right', 'up', 'down'] as const
+const MASCOT_PROPS = ['none', 'laptop', 'book', 'mug', 'magnifier', 'notes'] as const
 
 export type MascotMood = (typeof MASCOT_MOODS)[number]
 export type MascotPose = (typeof MASCOT_POSES)[number]
@@ -17,7 +17,7 @@ export type MascotProp = (typeof MASCOT_PROPS)[number]
 
 type MascotState = { mood: MascotMood; pose: MascotPose; motion: MascotMotion; look: MascotLook }
 
-export const MASCOT_ACTS = {
+const MASCOT_ACTS = {
   greet: { mood: 'happy', pose: 'greet', motion: 'float', look: 'front' },
   cheer: { mood: 'happy', pose: 'cheer', motion: 'hop', look: 'front' },
   advise: { mood: 'happy', pose: 'point', motion: 'float', look: 'right' },
@@ -48,7 +48,7 @@ type MascotOwnProps = {
   class?: string
 }
 
-export type MascotProps = MascotOwnProps & Omit<JSX.IntrinsicElements['div'], keyof MascotOwnProps>
+type MascotProps = MascotOwnProps & Omit<JSX.IntrinsicElements['div'], keyof MascotOwnProps>
 
 const WIDTH = 200
 const HEIGHT_WITH_STAND = 220
@@ -229,6 +229,7 @@ export const WalkingMascot = () => {
 }
 
 /** マスコットの遊び場。伝える情報のない空きに置く。ガラスの足場（床・棚・箱）の上を `WalkingMascot` が歩き、跳び移る */
+// 足場を同じクラスにまとめないのは、client.ts の WALKER_GROUNDS がセレクターごとに最初の 1 つだけを足場にするため
 export const MascotYard = () => {
   useStyle('/src/components/mascot.css')
   return (

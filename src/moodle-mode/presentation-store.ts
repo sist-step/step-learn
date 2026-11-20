@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { EMPTY_PRESENTATION, type PresentationStore } from '../lib/presentation'
+import { EMPTY_PRESENTATION, type PresentationStore } from '../features/presentation/presentation'
 import { db } from './db'
 import { presentationItems } from './schema'
 

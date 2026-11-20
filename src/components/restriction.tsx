@@ -33,7 +33,7 @@ type FormSet = Extract<RestrictionFormNode, { c: RestrictionFormNode[] }>
 type FormLeaf = Exclude<RestrictionFormNode, FormSet>
 
 /** client.ts が行を複製するときに、新しい行の目印に置き換える文字 */
-export const RESTRICTION_KEY_SLOT = '__K__'
+const RESTRICTION_KEY_SLOT = '__K__'
 
 const KIND_ICONS: Record<RestrictionKind | 'set' | 'other', IconName> = {
   date: 'calendar',
@@ -330,7 +330,7 @@ export const RestrictionNote = ({ text, class: cls }: { text: string; class?: st
   )
 }
 
-export type RestrictionTarget = {
+type RestrictionTarget = {
   kind: 'section' | 'item'
   title: string
   /** 保存の送信先 */
@@ -365,7 +365,7 @@ export const RestrictionPage = ({
   /** 右の列の「現在の制限」のカードに足すもの */
   side?: Child
 }) => {
-  useStyle('/src/components/course.css', '/src/components/restriction.css', '/src/routes/content/content.css')
+  useStyle('/src/components/course.css', '/src/components/restriction.css', '/src/features/content/content.css')
   const kindLabel = target.kind === 'section' ? 'セクション' : 'アイテム'
   return (
     <AppShell tone={tone}>

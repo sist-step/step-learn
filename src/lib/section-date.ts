@@ -16,7 +16,7 @@ const todayOf = (now: Date) => {
 }
 
 /** タイトルの「第3回 (6/30)」「6月30日」などから、その日を 1970-01-01 からの日数にする。年がなければ今日にいちばん近い年とみなす */
-export function sectionDay(title: string, now = new Date()) {
+function sectionDay(title: string, now = new Date()) {
   const m = title.match(DATE_IN_TITLE)
   if (!m) return null
   const [month, date] = [Number(m[2]), Number(m[3])]
@@ -28,7 +28,7 @@ export function sectionDay(title: string, now = new Date()) {
 }
 
 export type LessonWhen = 'prev' | 'today' | 'next'
-export type Lesson = { id: number; title: string; when: LessonWhen; date: string }
+type Lesson = { id: number; title: string; when: LessonWhen; date: string }
 export type Lessons = { prev?: Lesson; today?: Lesson; next?: Lesson }
 
 const DAY_LABEL = new Intl.DateTimeFormat('ja-JP', { timeZone: 'UTC', month: 'numeric', day: 'numeric' })

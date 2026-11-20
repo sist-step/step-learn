@@ -1,6 +1,6 @@
 import type { Context } from 'hono'
 import { intParam } from '../lib/http'
-import type { CodeBackend } from '../routes/code/handlers'
+import type { CodeBackend } from '../features/code/handlers'
 import { storedToken, type MoodleEnv } from './auth'
 import { isAccessDenied, isNotFound, isTokenError } from './client'
 import { codePeriodOf, codeSettingsOf, codeStageOf, codeStore, grader, preparer, restartPreparation } from './code-store'

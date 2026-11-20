@@ -1,10 +1,10 @@
 import type { Context } from 'hono'
-import { AI_PROVIDERS, hasAiEmail, isProviderEnabled } from '../lib/ai'
-import { createAiAgent } from '../lib/ai-agent'
-import { createAiChatStore } from '../lib/ai-chat'
-import { DOCS_ABILITIES, docsTools } from '../lib/ai-docs'
-import { pageTarget } from '../lib/ai-suggestions'
-import type { AiToolContext } from '../lib/ai-tool-kit'
+import { AI_PROVIDERS, hasAiEmail, isProviderEnabled } from '../features/ai/ai'
+import { createAiAgent } from '../features/ai/ai-agent'
+import { createAiChatStore } from '../features/ai/ai-chat'
+import { DOCS_ABILITIES, docsTools } from '../features/ai/ai-docs'
+import { pageTarget } from '../features/ai/ai-suggestions'
+import type { AiToolContext } from '../features/ai/ai-tool-kit'
 import { aiLedger } from './ai-usage'
 import { codeKind, kindLabel, MOODLE_AI_TOOLS, readMoodleItemFile } from './ai-tools'
 import { moodleAiUploadStore } from './ai-uploads'
@@ -13,10 +13,10 @@ import { loadCourse, myCourses, outlineOf } from './data'
 import { db } from './db'
 import { aiChats } from './schema'
 
-/** サイト管理者か、いずれかのコースを管理できる人。通常モードの canUseAi（lib/ai-usage.ts）と同じ条件を、Moodle のロールで確かめる */
+/** サイト管理者か、いずれかのコースを管理できる人。通常モードの canUseAi（features/ai/ai-usage.ts）と同じ条件を、Moodle のロールで確かめる */
 export const canUseMoodleAi = async (c: Context<MoodleEnv>) => AI_PROVIDERS.some(isProviderEnabled) && (await isMoodleAiTeacher(c))
 
-/** AI_EMAIL_DOMAIN のメールで、サイト管理者かいずれかのコースを管理できる人。MCP はこれだけで決める（lib/ai-usage.ts の isAiTeacher と同じ） */
+/** AI_EMAIL_DOMAIN のメールで、サイト管理者かいずれかのコースを管理できる人。MCP はこれだけで決める（features/ai/ai-usage.ts の isAiTeacher と同じ） */
 export async function isMoodleAiTeacher(c: Context<MoodleEnv>) {
   const user = c.var.user
   if (!user || !hasAiEmail(user.email)) return false

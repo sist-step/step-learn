@@ -1,8 +1,8 @@
 // extra-kinds.tsx からも読み込むので、extra-kinds.tsx を読み込むモジュール（./code.ts など）を import しない
 import { and, desc, eq, sql } from 'drizzle-orm'
-import { CODE_STAGES, isCodeLanguage, type CodeConstraint, type CodeFiles, type CodeStage, type SubmitPeriod } from '../lib/code'
-import { createGrader, createPreparer } from '../lib/code-grader'
-import type { CodeSettings, CodeStore } from '../lib/code-store'
+import { CODE_STAGES, isCodeLanguage, type CodeConstraint, type CodeFiles, type CodeStage, type SubmitPeriod } from '../features/code/code'
+import { createGrader, createPreparer } from '../features/code/code-grader'
+import type { CodeSettings, CodeStore } from '../features/code/code-store'
 import { aiLedger } from './ai-usage'
 import { db, type MoodleDB } from './db'
 import { codeDrafts, codeSubmissions, extraItems, users } from './schema'

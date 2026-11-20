@@ -11,7 +11,7 @@ import { bundleFiles, extraItems } from './schema'
 export const newExtraKey = () => crypto.randomBytes(16).toString('base64url')
 
 /** 専用の活動に置き換える前の形（/m/<key> の URL の活動）で残っているアイテム。もう開けないので、Moodle からも消す */
-export type RetiredItem = { cmid: number; key: string }
+type RetiredItem = { cmid: number; key: string }
 
 /**
  * extra のアイテムに中身を付ける。ほかのコースで作った中身（Moodle でコピーされた活動）と、なくなった種類の中身は付けない。

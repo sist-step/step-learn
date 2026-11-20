@@ -1,6 +1,6 @@
 // サーバーの handlers と client.ts の両方が読み込むので、DB や Node の API を使うモジュールを import しない
 import * as z from 'zod/mini'
-import { MAX_AGENT_INSTRUCTIONS, MAX_AGENT_LIMIT, MAX_AGENT_PERIOD, isAgentClaudeModel } from './agent'
+import { MAX_AGENT_INSTRUCTIONS, MAX_AGENT_LIMIT, MAX_AGENT_PERIOD, isAgentClaudeModel } from '../features/agent/agent'
 import {
   CODE_LANGUAGES,
   MAX_CODE_LENGTH,
@@ -12,12 +12,12 @@ import {
   JUDGES,
   type CodeConstraint,
   type CodeFiles,
-} from './code'
-import { COLLAB_KINDS, COLLAB_SCOPES } from './collab'
+} from '../features/code/code'
+import { COLLAB_KINDS, COLLAB_SCOPES } from '../features/collab/collab'
 import { dateInputToUnix, dateTimeInputToUnix, isDateInput, isDateTimeInput } from './course-period'
 import { checkPassword } from './password'
 import { isMediaFile } from './preview'
-import { QUIZ_LOOKS, readQuizForm } from './quiz'
+import { QUIZ_LOOKS, readQuizForm } from '../features/quiz/quiz'
 import { readRestrictionForm } from './restriction'
 import { COMPLETIONS, COURSE_COLORS, COURSE_ROLES, ITEM_TYPES, LINK_TARGETS, ROLES, type Completion, type ItemType } from './types'
 import { checkUsername, normalizeUsername } from './username'
@@ -500,7 +500,7 @@ const aiSettings = z.object({
   'claude-sonnet-5-5_share': percent('Claude Sonnet 5.5 の週の枠'),
 })
 
-export const MAX_AI_MESSAGE_LENGTH = 4000
+const MAX_AI_MESSAGE_LENGTH = 4000
 
 const aiMessage = z.object({
   message: text('メッセージ', MAX_AI_MESSAGE_LENGTH, { required: true }),
@@ -511,7 +511,7 @@ const aiMessage = z.object({
   revision: hidden(50),
   /** 新しいチャットで選ぶアイテム（コース ID/アイテム ID）。コーディング問題の編集画面のボタンから始めたときだけ送る */
   focus: hidden(50),
-  /** 発言に添えた画像。種類と大きさは中身を読まないと分からないので、lib/ai-agent.ts で確かめる */
+  /** 発言に添えた画像。種類と大きさは中身を読まないと分からないので、features/ai/ai-agent.ts で確かめる */
   image: z.transform((v: unknown) => (isFile(v) ? v : null)),
 })
 
@@ -631,10 +631,10 @@ const aiChat = z.object({ chat: hidden(20) })
 
 const aiSuggestions = z.object({ page: hidden(500) })
 
-// 形式と大きさをここで確かめないのは、受け取れる形式が文字起こしの提供元の都合で決まり、lib/ai-voice.ts にまとめておくため
+// 形式と大きさをここで確かめないのは、受け取れる形式が文字起こしの提供元の都合で決まり、features/ai/ai-voice.ts にまとめておくため
 const aiVoice = z.object({ audio: file('音声がありません。') })
 
-export const FORMS = {
+const FORMS = {
   login,
   register,
   completeRegister,
@@ -699,7 +699,7 @@ export type FormInput = Record<string, unknown>
 
 export type FormValues<N extends FormName> = z.output<(typeof FORMS)[N]>
 
-export type Validated<N extends FormName> = { ok: true; values: FormValues<N> } | { ok: false; errors: FieldErrors }
+type Validated<N extends FormName> = { ok: true; values: FormValues<N> } | { ok: false; errors: FieldErrors }
 
 export const firstError = (errors: FieldErrors) => Object.values(errors).find((m) => !!m) ?? ''
 

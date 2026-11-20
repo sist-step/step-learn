@@ -11,7 +11,7 @@ export const MAX_FILE_SIZE = 30 * 1024 * 1024 // 30MB
 
 export const FILE_TOO_LARGE = `ファイルサイズは ${formatBytes(MAX_FILE_SIZE)} までです。`
 
-export const EXECUTABLE_NOT_ALLOWED = '実行ファイル（.exe など）はアップロードできません。'
+const EXECUTABLE_NOT_ALLOWED = '実行ファイル（.exe など）はアップロードできません。'
 
 // .js・.sh・.py などのスクリプトを含めないのは、プログラミングの授業で教材として配るため
 const EXECUTABLE_NAME =
@@ -39,6 +39,15 @@ export async function isExecutable(file: File) {
   // Java の .class も CAFEBABE で始まるので、続く値（Mach-O は CPU の数、Java は 45 以上のバージョン）で見分ける
   const universal = startsWith(head, [0xca, 0xfe, 0xba, 0xbe]) || startsWith(head, [0xca, 0xfe, 0xba, 0xbf])
   return universal && head.length >= 8 && new DataView(head.buffer).getUint32(4) < 45
+}
+
+// lib/forms.ts で確かめないのは、上限の値がストレージの設定にあり、実行ファイルかどうかは中身を読まないと分からないため
+/** アップロードされたファイルを置けないなら、画面に出す理由。ファイルがなければ null */
+export async function uploadProblem(file: File | null) {
+  if (!file) return null
+  if (file.size > MAX_FILE_SIZE) return FILE_TOO_LARGE
+  if (await isExecutable(file)) return EXECUTABLE_NOT_ALLOWED
+  return null
 }
 
 export type StoredFile = { key: string; name: string; size: number; type: string }
@@ -158,7 +167,7 @@ async function putFile(prefix: string, file: File): Promise<StoredFile> {
 export const putCourseFile = (courseId: number, file: File) => putFile(`courses/${courseId}`, file)
 
 // コースの下に置かないのは、受け取った時点では、どのコースで使うかが決まっていないため
-/** AI が受け取ったファイル（lib/ai-uploads.ts）を、コースで使うまで置いておく */
+/** AI が受け取ったファイル（features/ai/ai-uploads.ts）を、コースで使うまで置いておく */
 export const putAiUpload = (userId: number, file: File) => putFile(`ai-uploads/${userId}`, file)
 
 /** 置いてあるファイルをコースのファイルにする。コースを消したときに一緒に消えるよう、コースの下へ移す */

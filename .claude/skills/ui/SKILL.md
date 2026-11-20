@@ -5,7 +5,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 
 # UI の作り方
 
-方針は「SSR ＋ 小さなクライアント JS」。CSS フレームワークや UI ライブラリは入れない。JS は `src/client.ts` の 1 ファイルで、重いライブラリを使うものだけ別のファイルにして、使う画面でだけ `client.ts` が動的に読み込む（一覧は AGENTS.md）。
+方針は「SSR ＋ 小さなクライアント JS」。CSS フレームワークや UI ライブラリは入れない。クライアント JS の置き場所は AGENTS.md の「守ること」。
 
 このスキルには、コードを読んでも気づきにくい規則だけを書く。部品の props や挙動は、その部品の `.tsx` を読む。
 
@@ -22,9 +22,9 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `components/overlay.tsx` | `Modal` / `Popover` / `MenuItem` / `ConfirmChip` | 行の「その他の操作」は `Popover class="row-menu"` に `MenuItem` を並べ、危険な操作は `class="is-danger"`。`ConfirmChip` は `AppShell` が置いていて、自分では置かない |
 | `components/ui.tsx` | `PageHeader` / `Tabs` / `TabPanel` / `Chip` / `Alert` / `Breadcrumbs` / `Person` / `EmptyState` / `Avatar` / `Progress` / `ProgressRing` / `formatDate` | `Tabs` を置いた画面では中身を必ず `TabPanel` で包む。一覧が空なら `EmptyState` |
 | `components/course.tsx` | `CourseCard` / `CourseIcon` / `CourseHeader` / `CourseLiveSync` / `ItemBar` / `ItemEditActions` / `LessonBadge` / `LessonJump` / `OutlineToggle` など | コース配下の画面は `CourseHeader` でタブを出す |
-| `components/code.tsx` | `CodeInput` / `CodeField` / `CodeWorkspace` と編集画面のカード | コードを受け取る欄は `TextAreaField` ではなく `CodeField` |
-| `components/quiz.tsx` / `quiz-animal.tsx` | 小テストの編集欄・解答・結果・動物のキャラクター | |
-| `components/bundle.tsx` / `restriction.tsx` / `ai-panel.tsx` / `pdf.tsx` / `presentation.tsx` | ファイル自動配布・アクセス制限・AI のパネル・PDF・発表ファイル | |
+| `features/code/components/code.tsx` | `CodeInput` / `CodeField` / `CodeWorkspace` と編集画面のカード | コードを受け取る欄は `TextAreaField` ではなく `CodeField` |
+| `features/quiz/components/quiz.tsx` / `quiz-animal.tsx` | 小テストの編集欄・解答・結果・動物のキャラクター | |
+| `features/bundle/components/bundle.tsx` / `restriction.tsx` / `ai-panel.tsx` / `pdf.tsx` / `presentation.tsx` | ファイル自動配布・アクセス制限・AI のパネル・PDF・発表ファイル | |
 | `components/mascot.tsx` | `Mascot` / `MascotYard` / `WalkingMascot` | 飾りなので、伝える情報のない空きにだけ置く |
 
 クラス名を条件で組み立てるときは `components/cx.ts` の `cx('a', cond && 'b')`。
@@ -50,11 +50,9 @@ Moodle モードの種類ごとの入力欄（`moodle-mode/extra-kinds.tsx`）�
 - 残りの属性は `...rest` で要素に渡し、型は `JSX.IntrinsicElements['button']` などと交差させる
 - 部品が出すクラスや `data-*` は `client.ts` も参照している。名前を変えるときは `client.ts` も検索する
 - 新しい部品は、描画時に `useStyle('/src/components/<部品>.css')` で自分の CSS を登録する
-- 2 か所に足さないと動かないものがある
-  - マスコットの足場: `mascot.css` の `.mascot-yard-block.is-<名前>` と、`client.ts` の `WALKER_GROUNDS`
-  - 小テストの出題形式: `lib/quiz.ts` の `QUIZ_KINDS` と種類ごとの分岐（前の形式は `upgradeQuestion` で読み替える）、`components/quiz.tsx` の編集欄・解答・結果、`client.ts` の `quizAnswered`、`quiz-world.ts` の部屋の部品と `GUIDES`
-  - 小テストの動物: `quiz-animal.tsx` の `QUIZ_ANIMALS` と `quiz-game.css` の色
-  - AI のツールが変えた内容をその場で反映する画面: 画面の要素に `data-ai-watch`（`item:<id>`。コースは `CourseLiveSync` が `course:<id>` を持つ）と、ツールの `success` の 3 つ目に `lib/ai-tool-kit.ts` の `inCourse` / `inItem`
+- 種類ごとに分かれる処理（小テストの形式など）は、`Record<種類, …>` か全部の `case` を書いた `switch` にして、種類を足したら型エラーで足し忘れがわかるようにする。`default` や三項演算子の最後に「残り全部」を受けさせない
+- 型で縛れないつながり（CSS のクラスと `client.ts` のセレクターなど）は、片方の定義の場所に「なぜまとめないか」のコメントを書き、スキルには書き足さない
+- AI のツールが変えた内容をその場で反映する画面には、要素に `data-ai-watch`（`item:<id>`。コースは `CourseLiveSync` が `course:<id>` を持つ）を付ける。ツールは `success` の 3 つ目に `features/ai/ai-tool-kit.ts` の `inCourse` / `inItem` を渡す
 
 ### アイコン
 
@@ -68,7 +66,7 @@ Moodle モードの種類ごとの入力欄（`moodle-mode/extra-kinds.tsx`）�
 | --- | --- | --- |
 | `src/styles/base.css` | デザイントークン・リセット・共通ユーティリティ・アニメーション | 常に |
 | `src/components/<部品>.css` | その部品の見た目 | 部品が `useStyle` で登録したとき |
-| `src/routes/<ルート>/<ルート>.css` | その画面だけで使うクラス | 画面が `<Styles use={[...]} />` で登録したとき |
+| `src/features/<機能>/<機能>.css`・`src/features/<機能>/components/<部品>.css` | その画面だけで使うクラス | 画面が `<Styles use={[...]} />` で登録したとき |
 
 - CSS ファイルを足したら `components/style.tsx` の `STYLESHEETS` に追加する。並びがカスケードの順なので、上書きしたいファイルより後ろに置く
 - 新しいクラスを作る前に `grep -rn "^\.<名前>" src --include='*.css'` で似たものを探す。よく使うのは `stack` `stack-lg` `row` `grid-2` `toolbar` `form-actions` `back-link` `muted` `small` `strong` `truncate` `eyebrow` `sr-only` `hide-sm`

@@ -3,7 +3,7 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream } from 'node:stream/web'
-import { BUNDLE_MODULE } from '../lib/bundle'
+import { BUNDLE_MODULE } from '../features/bundle/bundle'
 import { isHttpUrl } from '../lib/forms'
 import type { Completion } from '../lib/types'
 import { callSite, fetchSiteFile, type MoodleCourse, type MoodleModule, type MoodleSection } from '../moodle-mode/client'
@@ -12,7 +12,7 @@ import { LIMITS, RESTRICTION_NOTE, cut, moduleLabel, type Backup, type BackupFil
 import { linkTargetOf } from './display'
 import { toMarkdown, toPlainText } from './html'
 
-export type MoodleSite = { url: string; token: string }
+type MoodleSite = { url: string; token: string }
 
 type Content = NonNullable<MoodleModule['contents']>[number]
 

@@ -1,8 +1,8 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import type { CourseAccess } from './courses'
-import { isCleared, verdictCounts } from './code'
+import { isCleared, verdictCounts } from '../features/code/code'
 import { db } from './db'
-import { quizGradesOf } from './quiz-items'
+import { quizGradesOf } from '../features/quiz/quiz-items'
 import {
   RESTRICTION_KINDS,
   checkRestriction,

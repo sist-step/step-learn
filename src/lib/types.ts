@@ -1,6 +1,6 @@
 import type { Child } from 'hono/jsx'
 import type { LogAs } from './operation-log'
-import type { codeItems, courses, items, quizItems, sections } from './schema'
+import type { codeItems, courses, items, sections } from './schema'
 
 export const ROLES = ['admin', 'teacher', 'student'] as const
 export type Role = (typeof ROLES)[number]
@@ -44,8 +44,6 @@ export type Section = typeof sections.$inferSelect
 export type Item = typeof items.$inferSelect
 
 export type CodeItem = typeof codeItems.$inferSelect
-
-export type QuizItem = typeof quizItems.$inferSelect
 
 export const ITEM_TYPES = ['page', 'link', 'file', 'presentation', 'screen', 'code', 'quiz', 'collab', 'bundle', 'agent'] as const
 

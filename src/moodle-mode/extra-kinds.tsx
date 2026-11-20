@@ -7,8 +7,8 @@ import {
   AgentModelFields,
   AgentOpen,
   AgentPeriodFields,
-} from '../components/agent'
-import { BundleEditPanel, BundleOpen, type BundleView } from '../components/bundle'
+} from '../features/agent/components/agent'
+import { BundleEditPanel, BundleOpen, type BundleView } from '../features/bundle/components/bundle'
 import { Button } from '../components/button'
 import { LinkCard } from '../components/card'
 import {
@@ -21,20 +21,20 @@ import {
   CodeStageFields,
   CodeStarterFields,
   type ConstraintRow,
-} from '../components/code'
+} from '../features/code/components/code'
 import { SelectField } from '../components/form'
 import type { IconName } from '../components/icons'
 import { Markdown, MarkdownEditor } from '../components/markdown'
-import { QuizFields, QuizPanel } from '../components/quiz'
-import { CollabFacts, CollabPanel, CollabPickFields } from '../components/collab'
-import { COLLAB_KIND, collabSettingsOf, isCollabKind, isCollabScope, type CollabView } from '../lib/collab'
-import { PresentationBar, PresentationEditNote, PresentationStage } from '../components/presentation'
+import { QuizFields, QuizPanel } from '../features/quiz/components/quiz'
+import { CollabFacts, CollabPanel, CollabPickFields } from '../features/collab/components/collab'
+import { COLLAB_KIND, collabSettingsOf, isCollabKind, isCollabScope, type CollabView } from '../features/collab/collab'
+import { PresentationBar, PresentationEditNote, PresentationStage } from '../features/presentation/components/presentation'
 import { Chip, type Crumb } from '../components/ui'
-import { AGENT_KIND, DEFAULT_AGENT_MODEL, agentBase, agentViewOf, type AgentModel, type AgentView } from '../lib/agent'
-import { agentOpenRouterModels, cachedAgentOpenRouterModels, resolveAgentModel } from '../lib/agent-model'
+import { AGENT_KIND, DEFAULT_AGENT_MODEL, agentBase, agentViewOf, type AgentModel, type AgentView } from '../features/agent/agent'
+import { agentOpenRouterModels, cachedAgentOpenRouterModels, resolveAgentModel } from '../features/agent/agent-model'
 import {
   CODE_FILE_KEYS,
-  CODE_LANGUAGES,
+  type CodeLanguage,
   CODE_LANGUAGE_LABELS,
   DEFAULT_STARTER,
   filesFor,
@@ -43,13 +43,13 @@ import {
   isFinalized,
   publicSolutionOf,
   type CodeFiles,
-} from '../lib/code'
+} from '../features/code/code'
 import { dateTimeInputToUnix, isDateTimeInput, unixToDateTimeInput } from '../lib/course-period'
-import { BUNDLE_KIND, bundleBase } from '../lib/bundle'
-import { BUNDLE_MODULE } from '../lib/bundle'
-import { PRESENTATION_KIND, presentationBase } from '../lib/presentation'
-import { syncStateOf } from '../lib/bundle-sync'
-import { gradingEnabled, submissionsOf } from '../lib/code-grader'
+import { BUNDLE_KIND, bundleBase } from '../features/bundle/bundle'
+import { BUNDLE_MODULE } from '../features/bundle/bundle'
+import { PRESENTATION_KIND, presentationBase } from '../features/presentation/presentation'
+import { syncStateOf } from '../features/bundle/bundle-sync'
+import { gradingEnabled, submissionsOf } from '../features/code/code-grader'
 import type { CourseAccess } from '../lib/courses'
 import { readConstraints, type FieldErrors, type FormName } from '../lib/forms'
 import {
@@ -61,10 +61,10 @@ import {
   readQuizForm,
   upgradeQuestions,
   type QuizFormRow,
-} from '../lib/quiz'
-import { quizViewOf, type QuizView } from '../lib/quiz-store'
-import { availableCodeLanguages } from '../lib/sandbox'
-import { isSharing } from '../lib/screen-share'
+} from '../features/quiz/quiz'
+import { quizViewOf, type QuizView } from '../features/quiz/quiz-store'
+import { availableCodeLanguages } from '../features/code/sandbox'
+import { isSharing } from '../features/screen/screen-share'
 import { ITEM_TYPE_LABELS, type AppEnv } from '../lib/types'
 import { agentModelData, agentModelOfData, agentPeriodOf, agentStore } from './agent-store'
 import { bundleStore, bundleSyncStore } from './bundle-store'
@@ -84,7 +84,7 @@ export type ExtraData = Record<string, unknown>
  */
 /** 編集画面で開いているアイテム。itemId は活動の cmid */
 /** 編集しているアイテム。key は moodle-mode.db の extra_items の key */
-export type ExtraTarget = { courseId: number; itemId: number; title: string; key: string }
+type ExtraTarget = { courseId: number; itemId: number; title: string; key: string }
 
 export type ExtraKind = {
   label: string
@@ -344,7 +344,7 @@ const code: ExtraKind = {
     return { values: { ...values, stage: values.finalize === 1 ? 'preparing' : stage, guides } }
   },
   toData(values) {
-    const language = isCodeLanguage(str(values.language)) ? (values.language as (typeof CODE_LANGUAGES)[number]) : 'web'
+    const language = isCodeLanguage(str(values.language)) ? (values.language as CodeLanguage) : 'web'
     const edited = values.starter_set === 1
     const stage = typeof values.stage === 'string' ? { stage: values.stage, guides: values.guides } : {}
     const data = {
@@ -608,7 +608,7 @@ const quiz: ExtraKind = {
   description: 'コードを読んで答える問題で理解を確かめる',
   icon: 'clipboardCheck',
   form: 'extraQuiz',
-  // 中身の読み取りは lib/quiz.ts の quizSettingsOf
+  // 中身の読み取りは features/quiz/quiz.ts の quizSettingsOf
   toData(values) {
     const edited = values.quiz_set === 1
     const read = values.questions as ReturnType<typeof readQuizForm>
@@ -652,7 +652,7 @@ const collab: ExtraKind = {
   description: '文書・表計算・スライド・キャンバスを、みんなで同時に編集する',
   icon: 'userGroup',
   form: 'extraCollab',
-  // 中身の読み取りは lib/collab.ts の collabSettingsOf
+  // 中身の読み取りは features/collab/collab.ts の collabSettingsOf
   toData: (values) => ({
     title: str(values.title),
     body: str(values.body),
@@ -740,7 +740,7 @@ const presentation: ExtraKind = {
   },
 }
 
-export const EXTRA_KINDS: Record<string, ExtraKind> = {
+const EXTRA_KINDS: Record<string, ExtraKind> = {
   screen,
   [PRESENTATION_KIND]: presentation,
   [CODE_KIND]: code,

@@ -1,8 +1,8 @@
 import { sql } from 'drizzle-orm'
 import { blob, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import type { CodeFiles, ConstraintResult, GradingStatus } from '../lib/code'
-import type { QuizAnswerRecord } from '../lib/quiz'
-import type { RunResult } from '../lib/sandbox'
+import type { CodeFiles, ConstraintResult, GradingStatus } from '../features/code/code'
+import type { QuizAnswerRecord } from '../features/quiz/quiz'
+import type { RunResult } from '../features/code/sandbox'
 
 const now = sql`(unixepoch())`
 
@@ -191,7 +191,7 @@ export const agentItems = sqliteTable('agent_items', {
   key: text('key')
     .primaryKey()
     .references(() => extraItems.key, { onDelete: 'cascade' }),
-  /** Anthropic の API キーを AES-256-GCM で暗号化したもの（lib/agent-secret.ts）。NULL は未設定 */
+  /** Anthropic の API キーを AES-256-GCM で暗号化したもの（features/agent/agent-secret.ts）。NULL は未設定 */
   apiKey: blob('api_key', { mode: 'buffer' }),
   apiKeyHint: text('api_key_hint').notNull().default(''),
   /** OpenRouter の API キー（api_key と同じく暗号化したもの）。教師が OpenRouter のモデルを選んだときに使う */
@@ -237,7 +237,7 @@ export const agentUsage = sqliteTable(
 )
 
 /**
- * AI の呼び出しごとの使用量。月の上限と週の枠の計算（lib/ai-ledger.ts）に使う。完全移行では引き継がない。
+ * AI の呼び出しごとの使用量。月の上限と週の枠の計算（features/ai/ai-ledger.ts）に使う。完全移行では引き継がない。
  * 通常モードの ai_usage（lib/schema.ts）と同じ形にしておく（ai-ledger.ts が両方のテーブルを同じ型で受け取る）
  */
 export const aiUsage = sqliteTable(
@@ -257,7 +257,7 @@ export const aiUsage = sqliteTable(
 )
 
 /**
- * AI エージェントのチャット（lib/ai-chat.ts）。完全移行では引き継がない。
+ * AI エージェントのチャット（features/ai/ai-chat.ts）。完全移行では引き継がない。
  * 通常モードの ai_chats（lib/schema.ts）と同じ形にしておく（ai-chat.ts が両方のテーブルを同じ型で受け取る）
  */
 export const aiChats = sqliteTable(

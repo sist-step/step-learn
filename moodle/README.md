@@ -1,12 +1,53 @@
-# Moodle モード用のプラグインと検証環境
+# Moodle モードとプラグイン
 
-STEP Learn の Moodle モード（README の「Moodle モード」）で使う Moodle 側のものです。完全移行のあとはディレクトリごと削除します。
+STEP Learn の Moodle モードと、Moodle の Web サービスからの取り込み（`npm run moodle:migrate`）で使うものです。完全移行のあとはディレクトリごと削除します。
 
 ```
 local_steplearn/   Moodle 5.1 のプラグイン（public/local/steplearn/ に置く）
 mod_stepbundle/    活動「ファイル自動配布」のプラグイン（public/mod/stepbundle/ に置く。local_steplearn が要る）
 dev/               手元で試すための Moodle 5.1（Docker）
 ```
+
+## Moodle モードで動かす
+
+`MOODLE_URL` を設定すると、STEP Learn を Moodle 5.1 のフロントエンドとして動かします。データは Moodle にあり、STEP Learn は画面と、Moodle モードだけにある種類のアイテムの中身（`data/moodle-mode.db`）を受け持ちます。完全移行までの一時的な運用です。
+
+Moodle 側は下の「本番の Moodle での設定」のとおりにプラグインを入れて設定し、STEP Learn には次の環境変数を設定して起動します。
+
+| 環境変数 | 内容 |
+| --- | --- |
+| `MOODLE_URL` | Moodle の URL（例 `https://moodle.example.ac.jp`）。設定すると Moodle モードになります |
+| `MOODLE_EXCHANGE_TOKEN` | ログインのコードを交換する専用アカウントのトークン（必須） |
+| `MOODLE_BACKCHANNEL_SECRET` | Moodle からの通知（ログアウト・コースの内容の変更）を検証し、STEP Learn からのログアウトに署名する鍵（32 文字以上。プラグインの設定と同じ値）。未設定なら通知を受け付けず、ログアウトのたびに Moodle の確認画面が出て、Moodle の画面で変えた内容が出るまで最大 40 秒ほどかかります |
+
+### 完全移行したら削除するもの
+
+- `src/moodle-mode/`・`migrations-moodle/`・`drizzle.moodle.config.ts`・`moodle/`
+- `src/index.tsx` のモードの切り替え（`./app` だけを読み込む形に戻す）と、`src/server.ts`・`vite.config.ts` の `config.moodle` の分岐
+- `src/lib/config.ts` の `moodle` / `moodleDatabasePath` / `moodleMigrate`、`src/lib/db.ts` の Moodle モードのガード、`src/components/style.tsx` の `moodle-mode.css`
+- `src/moodle/remote.ts` と `src/cli.ts` の `moodle:migrate`、`src/lib/forms.ts` の `extraItemFields` / `extraItem` / `extraCode`、`src/features/bundle/bundle.ts` の `BUNDLE_MODULE`、`src/client.ts` の `setKindOnly`
+- コーディング問題を 2 つのモードで使い回すための分け方（`src/features/code/handlers.tsx` の `CodeBackend`、`src/features/code/code-store.ts` の `CodeStore`、`src/features/code/code-grader.ts` の `createGrader`、`src/features/code/views.tsx` の `CodePage`）は、通常モードの実装（`src/features/code/backend.ts`・`src/features/code/code-items.ts`・`src/features/code/code-grading.ts`）だけになるので、まとめてかまいません
+- ほかの機能の、2 つのモードのための分け方も同じです。実装が 1 つになるので、`backend.ts` の中身をハンドラに入れ、型だけのインターフェースは消してかまいません
+  - `src/features/<機能>/backend.ts` と `create<機能>Handlers(backend)` の組（agent・bundle・code・collab・presentation・quiz・mcp・ai の `AiBackend`・admin の `AiAdminBackend`）
+  - Store のインターフェース（`CodeStore`・`QuizStore`・`BundleStore`・`BundleSyncStore`・`AgentStore`・`PresentationStore`・`CollabStore`）
+  - socket の Backend（`ShareBackend`・`CollabSocketBackend`・`PresentationSocketBackend`）と、通常モードの `*-access.ts`
+  - DB とテーブルを受け取って作る `createOAuthStore`・`createAiLedger`・`createAiChatStore`
+- `package.json` の `moodle:migrate` / `db:generate:moodle` / `db:check:moodle`、CI の「Check Moodle mode migrations」、`Dockerfile` の `migrations-moodle`、`.dockerignore` の `moodle`
+
+## Moodle から直接取り込む
+
+.mbz を使わず、Moodle の Web サービスからコースを読んで取り込むこともできます。取り込むのはコース・セクションと URL・ファイル・フォルダーだけです（参加者・ページ・ラベル・課題などは取り込みません）。
+
+```sh
+MOODLE_MIGRATE_URL=https://moodle.example.ac.jp MOODLE_MIGRATE_TOKEN=<トークン> \
+  npm run moodle:migrate -- 12 13 --dry-run   # コース ID 12 と 13 のプレビューだけを表示する
+```
+
+- Moodle に `local_steplearn` のプラグインが入っている必要があります（Moodle モードと同じもの）
+- トークンは、すべてのコースを見られるアカウント（システムのコンテキストで「マネージャー」を割り当てたアカウントなど）のものを、外部サービス「STEP Learn」で発行します
+- コースごとにプレビューを表示し、確認してから取り込みます。`--yes`・`--verbose` は `moodle:import`（[docs/moodle-import.md](../docs/moodle-import.md)）と同じです
+- サブセクションは、親のセクションのすぐ後ろに「親 › 子」という名前のセクションとして並べます
+- Moodle モードで追加した、STEP Learn にしかない種類のアイテムは引き継ぎません
 
 ## プラグインがすること
 

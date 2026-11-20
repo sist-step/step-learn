@@ -1,11 +1,19 @@
 import type { Server as HttpServer } from 'node:http'
 import { and, eq, isNotNull } from 'drizzle-orm'
 import type { Context } from 'hono'
-import { COLLAB_KIND, collabSettingsOf, ownerFor, ownerUserId, startsFromTemplate, type CollabOwner, type CollabStore } from '../lib/collab'
-import type { CollabAuth } from '../lib/collab-protocol'
-import { attachCollab } from '../lib/collab-server'
+import {
+  COLLAB_KIND,
+  collabSettingsOf,
+  ownerFor,
+  ownerUserId,
+  startsFromTemplate,
+  type CollabOwner,
+  type CollabStore,
+} from '../features/collab/collab'
+import type { CollabAuth } from '../features/collab/collab-protocol'
+import { attachCollab } from '../features/collab/collab-server'
 import { intParam } from '../lib/http'
-import type { CollabBackend } from '../routes/collab/handlers'
+import type { CollabBackend } from '../features/collab/handlers'
 import { sessionFromCookieHeader, type MoodleEnv } from './auth'
 import { isAccessDenied, isNotFound, isTokenError } from './client'
 import { loadCourse, loadCourseAs, outlineOf, type LoadedCourse } from './data'

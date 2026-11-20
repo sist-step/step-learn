@@ -1,6 +1,6 @@
 import type { Server as HttpServer } from 'node:http'
-import { attachScreenShare } from '../lib/screen-share'
-import type { ShareMode } from '../lib/screen-share-protocol'
+import { attachScreenShare } from '../features/screen/screen-share'
+import type { ShareMode } from '../features/screen/screen-share-protocol'
 import { sessionFromCookieHeader } from './auth'
 import { isAccessDenied, isNotFound, isTokenError } from './client'
 import { loadCourseAs, outlineOf, type LoadedCourse } from './data'

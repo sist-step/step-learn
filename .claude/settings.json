@@ -17,6 +17,10 @@
     ],
     "deny": ["Read(**/.env)", "Read(**/.env.*)", "Read(**/data/session-secret)", "Edit(**/migrations/**)"]
   },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "hooks": {
     "Stop": [
       {

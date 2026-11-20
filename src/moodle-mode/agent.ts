@@ -1,8 +1,8 @@
 import { desc, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
-import { AGENT_KIND, agentModelLabel, type AgentItemRow } from '../lib/agent'
+import { AGENT_KIND, agentModelLabel, type AgentItemRow } from '../features/agent/agent'
 import { intParam } from '../lib/http'
-import type { AgentBackend, AgentTarget } from '../routes/agent/handlers'
+import type { AgentBackend, AgentTarget } from '../features/agent/handlers'
 import {
   agentKeyStates,
   agentModelOfData,

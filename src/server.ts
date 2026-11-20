@@ -45,13 +45,15 @@ const httpServer = serve({ fetch: server.fetch, port: config.port }, (info) => {
   console.log(`STEP Learn listening on http://localhost:${info.port}`)
 })
 // 両方を静的に import しないのは、通常モードの権限の確認が step-learn.db を開くので、Moodle モードでも作られてしまうため
-const { attach } = config.moodle ? await import('./moodle-mode/screen-share') : await import('./lib/screen-share-access')
+const { attach } = config.moodle ? await import('./moodle-mode/screen-share') : await import('./features/screen/screen-share-access')
 const io = attach(httpServer as HttpServer)
-const collab = config.moodle ? await import('./moodle-mode/collab') : await import('./lib/collab-access')
+const collab = config.moodle ? await import('./moodle-mode/collab') : await import('./features/collab/collab-access')
 const collabIo = collab.attach(httpServer as HttpServer)
-const presentation = config.moodle ? await import('./moodle-mode/presentation') : await import('./lib/presentation-access')
+const presentation = config.moodle
+  ? await import('./moodle-mode/presentation')
+  : await import('./features/presentation/presentation-access')
 const presentationIo = presentation.attach(httpServer as HttpServer)
-const { flushCollabRooms } = await import('./lib/collab-server')
+const { flushCollabRooms } = await import('./features/collab/collab-server')
 
 // 処理中の要求を待ち続けないのは、AI の応答のストリームなどが終わらないと、Docker が待ち切れずに強制終了し（compose.yaml の stop_grace_period）、DB を閉じられないため
 const SHUTDOWN_DEADLINE = 20_000

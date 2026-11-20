@@ -5,7 +5,7 @@ import { Link } from 'vite-ssr-components/hono'
 import type { AppEnv } from '../lib/types'
 
 // 並びはカスケードの順。同じ詳細度のルールがぶつかると後ろのファイルが勝つので、ページごとに読み込む組み合わせが変わってもこの順で出す
-export const STYLESHEETS = [
+const STYLESHEETS = [
   '/src/styles/base.css',
   '/src/components/button.css',
   '/src/components/form.css',
@@ -18,30 +18,30 @@ export const STYLESHEETS = [
   '/src/components/card.css',
   '/src/components/course.css',
   '/src/components/pdf.css',
-  '/src/components/presentation.css',
-  '/src/components/code.css',
-  '/src/components/bundle.css',
-  '/src/components/agent.css',
-  '/src/components/quiz.css',
-  '/src/components/quiz-game.css',
-  '/src/components/collab.css',
+  '/src/features/presentation/components/presentation.css',
+  '/src/features/code/components/code.css',
+  '/src/features/bundle/components/bundle.css',
+  '/src/features/agent/components/agent.css',
+  '/src/features/quiz/components/quiz.css',
+  '/src/features/quiz/components/quiz-game.css',
+  '/src/features/collab/components/collab.css',
   '/src/components/restriction.css',
-  '/src/components/ai-panel.css',
+  '/src/features/ai/components/ai-panel.css',
   '/src/components/auth.css',
-  '/src/routes/dashboard/dashboard.css',
-  '/src/routes/courses/courses.css',
-  '/src/routes/participants/participants.css',
-  '/src/routes/content/content.css',
-  '/src/routes/account/account.css',
-  '/src/routes/mcp/mcp.css',
-  '/src/routes/admin/admin.css',
-  '/src/routes/screen/screen.css',
-  '/src/routes/code/code.css',
-  '/src/routes/bundle/bundle.css',
+  '/src/features/dashboard/dashboard.css',
+  '/src/features/courses/courses.css',
+  '/src/features/participants/participants.css',
+  '/src/features/content/content.css',
+  '/src/features/account/account.css',
+  '/src/features/mcp/mcp.css',
+  '/src/features/admin/admin.css',
+  '/src/features/screen/screen.css',
+  '/src/features/code/code.css',
+  '/src/features/bundle/bundle.css',
   '/src/moodle-mode/moodle-mode.css',
 ] as const
 
-export type StyleSheet = (typeof STYLESHEETS)[number]
+type StyleSheet = (typeof STYLESHEETS)[number]
 
 const BASE: StyleSheet = '/src/styles/base.css'
 const PLACEHOLDER = '<!--stylesheets-->'
