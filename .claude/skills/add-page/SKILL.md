@@ -7,7 +7,7 @@ description: "STEP Learn に画面・ルート・フォーム処理を追加ま�
 
 STEP Learn は MPA。サーバーで HTML を返し、操作はすべて `<form method="post">` の送信と 303 リダイレクト（PRG）で完結させる。`client.ts` がこの送信を fetch に置き換えて再読み込みなしで遷移させる。
 
-手本は `src/routes/participants/`（一覧・追加・変更・削除がそろっていて小さい）。入力欄ごとにエラーを出すフォームは `src/routes/courses/handlers.tsx` の作成・編集。書き始める前に読み、同じ形にする。
+手本は `src/features/participants/`（一覧・追加・変更・削除がそろっていて小さい）。入力欄ごとにエラーを出すフォームは `src/features/courses/handlers.tsx` の作成・編集。書き始める前に読み、同じ形にする。
 
 ## 置き場所
 
@@ -30,7 +30,7 @@ Moodle モード（`MOODLE_URL` を設定したとき）は `src/moodle-mode/` �
 
 - Moodle モードから `src/lib/db.ts` を（間接的にも）読み込むと起動時にエラーになる
 - 両方のモードで使うルートは `backend.ts`（`ai/` は `handlers.tsx` の `AiBackend`）を持っている。その `handlers.tsx` と `views.tsx` からは DB を開くモジュールを import せず、モードごとの DB と権限の確認は `XxxBackend` に書く
-- AI のツールは通常モードが `lib/ai-tools.ts`、Moodle モードが `moodle-mode/ai-tools.ts`。どちらも `lib/ai-tool-kit.ts` の `defineTool`（すぐ実行）か `defineConfirmTool`（確認カード）で作る
+- AI のツールは通常モードが `features/ai/ai-tools.ts`、Moodle モードが `moodle-mode/ai-tools.ts`。どちらも `features/ai/ai-tool-kit.ts` の `defineTool`（すぐ実行）か `defineConfirmTool`（確認カード）で作る
 - `src/routes/` のビューや `src/components/` の部品を変えたら、Moodle モードの画面（`src/moodle-mode/views.tsx` と、使い回している `CoursesPage` / `DashboardPage`）も崩れないか確かめる
 
 ## ハンドラ

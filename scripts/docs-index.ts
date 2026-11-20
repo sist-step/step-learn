@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { parseArgs } from 'node:util'
-import type { DocsChunk, DocsDocument, DocsIndex } from '../src/lib/ai-docs'
+import type { DocsChunk, DocsDocument, DocsIndex } from '../src/features/ai/ai-docs'
 
 // npm の依存を使わないのは、step-docs のワークフローが step-learn の依存を入れずに、このファイルだけを node で動かすため
 const USAGE = `使い方: node scripts/docs-index.ts --docs <step-docs の src/content/docs> --out <索引を置くディレクトリ> [--dry-run]
@@ -18,7 +18,7 @@ STEP Docs の Markdown を読み、パスワードなどを伏せて見出しご
 const INDEX_FILE = 'step-docs.json'
 const SITE_URL = 'https://step-docs.siststep.workers.dev'
 
-// src/lib/ai-docs.ts に置かないのは、モデル・次元・指示文を索引に書いて渡すので、サーバーと値をそろえ忘れる余地がないため
+// src/features/ai/ai-docs.ts に置かないのは、モデル・次元・指示文を索引に書いて渡すので、サーバーと値をそろえ忘れる余地がないため
 const MODEL = 'qwen/qwen3-embedding-8b'
 // 4096 次元のまま持たないのは、検索のたびに全断片と比べるので、索引の大きさと計算を抑えたいため。Qwen3-Embedding は先頭の次元だけで使えるように学習されている
 const DIMENSIONS = 1024
@@ -221,7 +221,7 @@ const sha = (text: string) => createHash('sha256').update(text).digest('hex').sl
 
 // ---------------------------------------------------------------- 埋め込み
 
-// src/lib/ai-docs.ts の関数を使わないのは、拡張子なしの import を node がそのままでは解決できないため。ベクトルの作り方はそちらに合わせる
+// src/features/ai/ai-docs.ts の関数を使わないのは、拡張子なしの import を node がそのままでは解決できないため。ベクトルの作り方はそちらに合わせる
 function toVector(values: number[]) {
   const head = values.slice(0, DIMENSIONS)
   const norm = Math.hypot(...head) || 1

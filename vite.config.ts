@@ -56,13 +56,13 @@ export default defineConfig(({ command }) => ({
         httpServer?.once('listening', async () => {
           const { config } = await server.ssrLoadModule('/src/lib/config.ts')
           const { attach } = await server.ssrLoadModule(
-            config.moodle ? '/src/moodle-mode/screen-share.ts' : '/src/lib/screen-share-access.ts',
+            config.moodle ? '/src/moodle-mode/screen-share.ts' : '/src/features/screen/screen-share-access.ts',
           )
           attach(httpServer)
-          const collab = await server.ssrLoadModule(config.moodle ? '/src/moodle-mode/collab.ts' : '/src/lib/collab-access.ts')
+          const collab = await server.ssrLoadModule(config.moodle ? '/src/moodle-mode/collab.ts' : '/src/features/collab/collab-access.ts')
           collab.attach(httpServer)
           const presentation = await server.ssrLoadModule(
-            config.moodle ? '/src/moodle-mode/presentation.ts' : '/src/lib/presentation-access.ts',
+            config.moodle ? '/src/moodle-mode/presentation.ts' : '/src/features/presentation/presentation-access.ts',
           )
           presentation.attach(httpServer)
         })

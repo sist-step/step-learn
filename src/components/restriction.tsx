@@ -365,7 +365,7 @@ export const RestrictionPage = ({
   /** 右の列の「現在の制限」のカードに足すもの */
   side?: Child
 }) => {
-  useStyle('/src/components/course.css', '/src/components/restriction.css', '/src/routes/content/content.css')
+  useStyle('/src/components/course.css', '/src/components/restriction.css', '/src/features/content/content.css')
   const kindLabel = target.kind === 'section' ? 'セクション' : 'アイテム'
   return (
     <AppShell tone={tone}>

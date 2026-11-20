@@ -4,17 +4,17 @@
 
 import checkSvg from 'heroicons/24/outline/check.svg?raw'
 import sparklesSvg from 'heroicons/24/outline/sparkles.svg?raw'
-import { bundlePath, isExcludedPath } from './lib/bundle'
-import type { AiTouched } from './lib/ai-tool-kit'
+import { bundlePath, isExcludedPath } from './features/bundle/bundle'
+import type { AiTouched } from './features/ai/ai-tool-kit'
 import { formatBytes } from './lib/bytes'
 import { getSetting, setSetting, updateSetting, type Theme } from './lib/settings'
 import { applyEditMode, carriesFiles, codeEditor, confirmDialog, confirmNear, dismissLater, initCodeEditors, toast } from './client/core'
 import { initRestrictionEditors } from './client/restriction'
-import './client/quiz'
+import './features/quiz/client'
 import './client/datetime'
 import { initMascots, initWalkers } from './client/mascot'
-import { aiDocked, aiHooks, initAiPanel, setAiOpen } from './client/ai'
-import { initAgentModelPickers } from './client/agent'
+import { aiDocked, aiHooks, initAiPanel, setAiOpen } from './features/ai/client'
+import { initAgentModelPickers } from './features/agent/client'
 import { $$, fetchJson, reducedMotion } from './client/dom'
 
 // --- モバイルのメニュー
@@ -1026,7 +1026,7 @@ document.addEventListener('click', (e) => {
   input.focus()
 })
 
-// --- ファイル自動配布のアップロード（components/bundle.tsx の BundleFilesCard）
+// --- ファイル自動配布のアップロード（features/bundle/components/bundle.tsx の BundleFilesCard）
 // ファイル選択の部品（FileInput）を使わないのは、フォルダーの中の場所をファイルと一緒に送る必要があり、input の files ではそれを持てないため
 // archive は、選んだりドロップしたりした zip（フォルダーの中の zip は、展開せずにそのまま配る）
 type BundleUpload = { file: File; path: string; archive?: boolean }
@@ -1144,7 +1144,7 @@ document.addEventListener('drop', (e) => {
   })()
 })
 
-// --- VS Code で開く（components/bundle.tsx の BundleOpen）
+// --- VS Code で開く（features/bundle/components/bundle.tsx の BundleOpen）
 // リンクを画面に描いておかないのは、中の鍵が数分で切れ、開いたままの画面から押すと使えなくなっているため
 document.addEventListener('submit', async (e) => {
   const form = e.target as HTMLFormElement
@@ -1214,25 +1214,25 @@ document.addEventListener(
 
 // --- ログイン画面の 3D アニメーション（components/layout.tsx の AuthShell）
 // ここに直接 import しないのは、three.js が大きく、ログイン後の画面でも毎回読み込むことになるため
-let authArt: Promise<typeof import('./auth-art')> | null = null
+let authArt: Promise<typeof import('./features/auth/art')> | null = null
 function initAuthArt() {
   const host = document.querySelector<HTMLElement>('[data-auth-art]')
   // 隠れているとき（スマホ幅）に読み込まないのは、見えない絵のために three.js を取りに行くことになるため
   if (!authArt && !host?.offsetWidth) return
-  authArt ??= import('./auth-art')
+  authArt ??= import('./features/auth/art')
   // 失敗してもトーストを出さないのは、飾りが出ないだけで操作には困らないため
   authArt.then(({ showAuthArt }) => showAuthArt(host)).catch(() => {})
 }
 
-// --- 小テストのゲームの見た目の 3D の世界（components/quiz.tsx の GameTake / GameResult）
+// --- 小テストのゲームの見た目の 3D の世界（features/quiz/components/quiz.tsx の GameTake / GameResult）
 // ここに直接 import しないのは、three.js が大きく、小テストのない画面でも毎回読み込むことになるため
-let quizWorld: Promise<typeof import('./quiz-world')> | null = null
+let quizWorld: Promise<typeof import('./features/quiz/world')> | null = null
 function initQuizWorlds() {
   void quizWorld?.then(({ releaseDetachedQuizWorlds }) => releaseDetachedQuizWorlds())
   const hosts = $$<HTMLElement>('[data-qg-world]:not([data-ready])')
   // 動きを減らす設定で読み込まないのは、3D を描かずに 2D の表示を残すので、three.js を取りに行くだけ無駄になるため
   if (!hosts.length || reducedMotion()) return
-  quizWorld ??= import('./quiz-world')
+  quizWorld ??= import('./features/quiz/world')
   // 失敗してもトーストを出さないのは、2D の道のりが残っていて、解答には困らないため
   quizWorld.then(({ mountQuizWorld }) => hosts.forEach(mountQuizWorld)).catch(() => hosts.forEach((host) => (host.dataset.flat = '')))
 }
@@ -1253,7 +1253,7 @@ function initPdfViewers() {
     })
 }
 
-// --- 発表ファイルのビューアー（components/presentation.tsx の PresentationStage）
+// --- 発表ファイルのビューアー（features/presentation/components/presentation.tsx の PresentationStage）
 // PDF の表示方法（applyPdfMode）の対象にしないのは、「ブラウザ」での表示では、まだ公開していないページまで見えてしまうため
 function initPresentations() {
   void pdfViewer?.then(({ releaseDetachedPdfViewers }) => releaseDetachedPdfViewers())
@@ -1268,14 +1268,14 @@ function initPresentations() {
     })
 }
 
-// --- 共同編集のエディター（components/collab.tsx の CollabWorkspace）
+// --- 共同編集のエディター（features/collab/components/collab.tsx の CollabWorkspace）
 // ここに直接 import しないのは、Yjs と種類ごとのエディター（TipTap や Office の形式の読み書き）が大きく、共同編集のない画面でも毎回読み込むことになるため
-let collabApp: Promise<typeof import('./collab/app')> | null = null
+let collabApp: Promise<typeof import('./features/collab/editor/app')> | null = null
 function initCollabs() {
   void collabApp?.then(({ releaseDetachedCollabs }) => releaseDetachedCollabs())
   const roots = $$<HTMLElement>('[data-collab]:not([data-collab-ready])')
   if (!roots.length) return
-  collabApp ??= import('./collab/app')
+  collabApp ??= import('./features/collab/editor/app')
   collabApp
     .then(({ mountCollab }) => roots.forEach((root) => void mountCollab(root, toast, confirmNear)))
     .catch(() => {
@@ -1453,7 +1453,7 @@ function prepareArrival(flight: Flight) {
   }
 }
 
-// --- AI が変えたところを、開いている画面にすぐ反映して強調する（lib/ai-tool-kit.ts の AiTouched）
+// --- AI が変えたところを、開いている画面にすぐ反映して強調する（features/ai/ai-tool-kit.ts の AiTouched）
 // 反映を CourseLiveSync の確認の間隔に任せないのは、頼んだ結果がどこに出たのかを、変えた直後に見せるため
 /** touch は文字などを塗り、frame は大きな入れ物（差し替えたエディターのカードなど）を塗らずに縁だけ光らせる */
 type AiMark = 'enter' | 'move' | 'touch' | 'frame' | 'spot'

@@ -1,5 +1,5 @@
 import type { CourseCardData } from '../components/ui'
-import { BUNDLE_MODULE } from '../lib/bundle'
+import { BUNDLE_MODULE } from '../features/bundle/bundle'
 import type { CourseAccess } from '../lib/courses'
 import { isHttpUrl } from '../lib/forms'
 import { RESTRICTION_KINDS, parseRestriction, type RestrictionChoices, type RestrictionKind, type RestrictionSet } from '../lib/restriction'

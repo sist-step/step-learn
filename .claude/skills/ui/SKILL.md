@@ -22,9 +22,9 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `components/overlay.tsx` | `Modal` / `Popover` / `MenuItem` / `ConfirmChip` | 行の「その他の操作」は `Popover class="row-menu"` に `MenuItem` を並べ、危険な操作は `class="is-danger"`。`ConfirmChip` は `AppShell` が置いていて、自分では置かない |
 | `components/ui.tsx` | `PageHeader` / `Tabs` / `TabPanel` / `Chip` / `Alert` / `Breadcrumbs` / `Person` / `EmptyState` / `Avatar` / `Progress` / `ProgressRing` / `formatDate` | `Tabs` を置いた画面では中身を必ず `TabPanel` で包む。一覧が空なら `EmptyState` |
 | `components/course.tsx` | `CourseCard` / `CourseIcon` / `CourseHeader` / `CourseLiveSync` / `ItemBar` / `ItemEditActions` / `LessonBadge` / `LessonJump` / `OutlineToggle` など | コース配下の画面は `CourseHeader` でタブを出す |
-| `components/code.tsx` | `CodeInput` / `CodeField` / `CodeWorkspace` と編集画面のカード | コードを受け取る欄は `TextAreaField` ではなく `CodeField` |
-| `components/quiz.tsx` / `quiz-animal.tsx` | 小テストの編集欄・解答・結果・動物のキャラクター | |
-| `components/bundle.tsx` / `restriction.tsx` / `ai-panel.tsx` / `pdf.tsx` / `presentation.tsx` | ファイル自動配布・アクセス制限・AI のパネル・PDF・発表ファイル | |
+| `features/code/components/code.tsx` | `CodeInput` / `CodeField` / `CodeWorkspace` と編集画面のカード | コードを受け取る欄は `TextAreaField` ではなく `CodeField` |
+| `features/quiz/components/quiz.tsx` / `quiz-animal.tsx` | 小テストの編集欄・解答・結果・動物のキャラクター | |
+| `features/bundle/components/bundle.tsx` / `restriction.tsx` / `ai-panel.tsx` / `pdf.tsx` / `presentation.tsx` | ファイル自動配布・アクセス制限・AI のパネル・PDF・発表ファイル | |
 | `components/mascot.tsx` | `Mascot` / `MascotYard` / `WalkingMascot` | 飾りなので、伝える情報のない空きにだけ置く |
 
 クラス名を条件で組み立てるときは `components/cx.ts` の `cx('a', cond && 'b')`。
@@ -52,7 +52,7 @@ Moodle モードの種類ごとの入力欄（`moodle-mode/extra-kinds.tsx`）�
 - 新しい部品は、描画時に `useStyle('/src/components/<部品>.css')` で自分の CSS を登録する
 - 種類ごとに分かれる処理（小テストの形式など）は、`Record<種類, …>` か全部の `case` を書いた `switch` にして、種類を足したら型エラーで足し忘れがわかるようにする。`default` や三項演算子の最後に「残り全部」を受けさせない
 - 型で縛れないつながり（CSS のクラスと `client.ts` のセレクターなど）は、片方の定義の場所に「なぜまとめないか」のコメントを書き、スキルには書き足さない
-- AI のツールが変えた内容をその場で反映する画面には、要素に `data-ai-watch`（`item:<id>`。コースは `CourseLiveSync` が `course:<id>` を持つ）を付ける。ツールは `success` の 3 つ目に `lib/ai-tool-kit.ts` の `inCourse` / `inItem` を渡す
+- AI のツールが変えた内容をその場で反映する画面には、要素に `data-ai-watch`（`item:<id>`。コースは `CourseLiveSync` が `course:<id>` を持つ）を付ける。ツールは `success` の 3 つ目に `features/ai/ai-tool-kit.ts` の `inCourse` / `inItem` を渡す
 
 ### アイコン
 

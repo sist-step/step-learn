@@ -7,8 +7,8 @@ import {
   type AgentModel,
   type AgentProvider,
   type AgentStore,
-} from '../lib/agent'
-import { agentTokenHash, apiKeyHintOf, newAgentToken, openApiKey, sealApiKey } from '../lib/agent-secret'
+} from '../features/agent/agent'
+import { agentTokenHash, apiKeyHintOf, newAgentToken, openApiKey, sealApiKey } from '../features/agent/agent-secret'
 import { db } from './db'
 import { agentItems, agentTokens, agentUsage, users } from './schema'
 

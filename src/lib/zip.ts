@@ -24,7 +24,7 @@ function dosDateTime(date: Date) {
  * ファイルを 1 つずつ読んで縮めながら zip を流す。
  * 全部を読んでから組み立てないのは、アイテム 1 つで数十 MB あり、何人も同時にダウンロードするとメモリを使い切るため
  */
-// ZIP64 に対応しないのは、アイテム 1 つの上限（lib/bundle.ts の MAX_BUNDLE_SIZE・MAX_BUNDLE_FILES）が ZIP の 4GB・65535 件に届かないため
+// ZIP64 に対応しないのは、アイテム 1 つの上限（features/bundle/bundle.ts の MAX_BUNDLE_SIZE・MAX_BUNDLE_FILES）が ZIP の 4GB・65535 件に届かないため
 export function zipStream(sources: ZipSource[], modified = new Date()): ReadableStream<Uint8Array> {
   const { time, day } = dosDateTime(modified)
   const centrals: Buffer[] = []

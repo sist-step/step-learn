@@ -249,9 +249,9 @@ document.addEventListener('drop', (e) => {
   input.dispatchEvent(new Event('change', { bubbles: true }))
 })
 
-// --- コードのエディター（components/code.tsx の CodeInput / CodeWorkspace）
+// --- コードのエディター（features/code/components/code.tsx の CodeInput / CodeWorkspace）
 // ここに直接 import しないのは、CodeMirror と各言語の文法が大きく、コードの入力欄のない画面でも毎回読み込むことになるため
-export let codeEditor: Promise<typeof import('../code-editor')> | null = null
+export let codeEditor: Promise<typeof import('../features/code/editor')> | null = null
 export function initCodeEditors() {
   void codeEditor?.then(({ releaseDetachedCodeEditors }) => releaseDetachedCodeEditors())
   if (
@@ -260,7 +260,7 @@ export function initCodeEditors() {
     )
   )
     return
-  codeEditor ??= import('../code-editor')
+  codeEditor ??= import('../features/code/editor')
   codeEditor
     .then(({ mountCodeEditors }) => mountCodeEditors(toast, confirmNear))
     .catch(() => {

@@ -167,7 +167,7 @@ async function putFile(prefix: string, file: File): Promise<StoredFile> {
 export const putCourseFile = (courseId: number, file: File) => putFile(`courses/${courseId}`, file)
 
 // コースの下に置かないのは、受け取った時点では、どのコースで使うかが決まっていないため
-/** AI が受け取ったファイル（lib/ai-uploads.ts）を、コースで使うまで置いておく */
+/** AI が受け取ったファイル（features/ai/ai-uploads.ts）を、コースで使うまで置いておく */
 export const putAiUpload = (userId: number, file: File) => putFile(`ai-uploads/${userId}`, file)
 
 /** 置いてあるファイルをコースのファイルにする。コースを消したときに一緒に消えるよう、コースの下へ移す */

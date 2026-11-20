@@ -20,7 +20,7 @@ import {
   STATE_INTERVAL,
   type PresentationServerEvents,
   type PresentationView,
-} from './lib/presentation'
+} from './features/presentation/presentation'
 import { getSetting, setSetting } from './lib/settings'
 import { fetchJson } from './client/dom'
 
@@ -635,7 +635,7 @@ function createViewer(root: HTMLElement, { source, limit = Infinity, errorText }
   }
 }
 
-// --- 発表ファイル（components/presentation.tsx の PresentationStage）
+// --- 発表ファイル（features/presentation/components/presentation.tsx の PresentationStage）
 const NO_PDF_FOR_TEACHER =
   'PDF はまだありません。パソコンで「PowerPoint と同期」を押すと、VS Code の拡張機能が、PowerPoint で開いているファイルを PDF にしてアップロードします。'
 

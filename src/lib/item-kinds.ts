@@ -1,8 +1,8 @@
 import { and, eq } from 'drizzle-orm'
-import { bundleKeysOf } from './bundle-items'
-import { DEFAULT_STARTER, type CodeConstraint, type CodeLanguage } from './code'
-import type { CollabKind, CollabScope } from './collab'
-import { collabStore } from './collab-items'
+import { bundleKeysOf } from '../features/bundle/bundle-items'
+import { DEFAULT_STARTER, type CodeConstraint, type CodeLanguage } from '../features/code/code'
+import type { CollabKind, CollabScope } from '../features/collab/collab'
+import { collabStore } from '../features/collab/collab-items'
 import { nextPosition, placeBefore } from './courses'
 import { db, type DB } from './db'
 import { codeItems, collabItems, items } from './schema'
@@ -34,7 +34,7 @@ type AfterCreate = { page: 'edit' | 'view'; message: string } | null
 
 /**
  * アイテムの種類ごとの決まり。種類を足したら、ここに 1 行足す（Record なので、足し忘れると型エラーになる）。
- * 画面の見た目の違いは views.tsx、編集・表示に渡すデータは routes/content/handlers.tsx の EDIT_DATA / VIEW_DATA にある
+ * 画面の見た目の違いは views.tsx、編集・表示に渡すデータは features/content/handlers.tsx の EDIT_DATA / VIEW_DATA にある
  */
 type ItemKind = {
   /** 作成と同じトランザクションで足す、種類ごとの行 */

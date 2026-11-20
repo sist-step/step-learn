@@ -1,13 +1,13 @@
 import { count, desc, eq, gte } from 'drizzle-orm'
-import { createAiLedger, type AiUserUsage } from '../lib/ai-ledger'
-import { aiPeriod, type AiPeriod } from '../lib/ai-quota'
+import { createAiLedger, type AiUserUsage } from '../features/ai/ai-ledger'
+import { aiPeriod, type AiPeriod } from '../features/ai/ai-quota'
 import { db } from './db'
 import { aiUsage, appSettings, users } from './schema'
 
 /** Moodle モード（moodle-mode.db）の AI の月の上限と使用量 */
 export const aiLedger = createAiLedger({ db, aiUsage, appSettings })
 
-// 通常モードの usageByUser（lib/ai-usage.ts）と共通にしないのは、ユーザーのテーブルが DB ごとに違う形で、まとめると型で結果を確かめられなくなるため
+// 通常モードの usageByUser（features/ai/ai-usage.ts）と共通にしないのは、ユーザーのテーブルが DB ごとに違う形で、まとめると型で結果を確かめられなくなるため
 export function usageByUser({ monthStart, start }: AiPeriod = aiPeriod(Math.floor(Date.now() / 1000))): AiUserUsage[] {
   const { totalCost, weekCost } = aiLedger
   return db

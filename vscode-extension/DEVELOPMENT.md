@@ -20,4 +20,4 @@ npm run package     # step-learn-for-vscode-<バージョン>.vsix を作る（�
 2. [Marketplace の管理画面](https://marketplace.visualstudio.com/manage) で publisher `mint1535` を作る
 3. `cd vscode-extension && npm ci && npx vsce login mint1535`（トークンを入力）→ `npm run publish`。`npm ci` を省くと、グローバルに入っている古い vsce が使われて `unknown option '--skip-license'` で失敗することがある。更新するときは `package.json` の `version` を上げてから `npm run publish`
 
-publisher か名前を変えるときは、`src/lib/bundle.ts` の `VSCODE_EXTENSION_ID` もそろえてください。そろっていないと、「VS Code で開く」のリンクが拡張機能に届きません。
+publisher か名前を変えるときは、`src/features/bundle/bundle.ts` の `VSCODE_EXTENSION_ID` もそろえてください。そろっていないと、「VS Code で開く」のリンクが拡張機能に届きません。

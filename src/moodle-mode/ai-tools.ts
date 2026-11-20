@@ -24,7 +24,7 @@ import {
   type AiAgentTool,
   type AiFileReader,
   type AiToolContext,
-} from '../lib/ai-tool-kit'
+} from '../features/ai/ai-tool-kit'
 import {
   CODE_FILES,
   CODE_LANGUAGES,
@@ -34,10 +34,10 @@ import {
   MAX_STDIN_LENGTH,
   filesFor,
   isFinalized,
-} from '../lib/code'
+} from '../features/code/code'
 import { config } from '../lib/config'
 import { isHttpUrl } from '../lib/forms'
-import { availableCodeLanguages } from '../lib/sandbox'
+import { availableCodeLanguages } from '../features/code/sandbox'
 import { LINK_TARGET_LABELS, LINK_TARGETS } from '../lib/types'
 import { consumeUpload, findUpload, type MoodleAiUpload } from './ai-uploads'
 import type { MoodleEnv } from './auth'
@@ -197,7 +197,7 @@ const getItem = defineTool(
   },
 )
 
-/** read_file（lib/ai-agent.ts）で読む、利用者が管理しているファイルのアイテム（Moodle のファイルの活動） */
+/** read_file（features/ai/ai-agent.ts）で読む、利用者が管理しているファイルのアイテム（Moodle のファイルの活動） */
 export const readMoodleItemFile: AiFileReader = async (c, itemId, courseId) => {
   const found = await courseOfItem(c, itemId, courseId)
   if (!found) return failure(NOT_FOUND, 'ファイルを開けませんでした')

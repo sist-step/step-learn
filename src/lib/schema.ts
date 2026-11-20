@@ -1,9 +1,16 @@
 import { sql } from 'drizzle-orm'
 import { blob, check, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import { CODE_LANGUAGES, CODE_STAGES, GRADING_STATUSES, type CodeConstraint, type CodeFiles, type ConstraintResult } from './code'
-import { COLLAB_KINDS, COLLAB_SCOPES } from './collab'
-import { DEFAULT_PASS_PERCENT, QUIZ_LOOKS, type QuizAnswerRecord, type QuizQuestion } from './quiz'
-import type { RunResult } from './sandbox'
+import {
+  CODE_LANGUAGES,
+  CODE_STAGES,
+  GRADING_STATUSES,
+  type CodeConstraint,
+  type CodeFiles,
+  type ConstraintResult,
+} from '../features/code/code'
+import { COLLAB_KINDS, COLLAB_SCOPES } from '../features/collab/collab'
+import { DEFAULT_PASS_PERCENT, QUIZ_LOOKS, type QuizAnswerRecord, type QuizQuestion } from '../features/quiz/quiz'
+import type { RunResult } from '../features/code/sandbox'
 import { LOG_KINDS } from './types'
 
 const now = sql`(unixepoch())`
@@ -225,7 +232,7 @@ export const aiUsage = sqliteTable(
   (t) => [index('ai_usage_created').on(t.createdAt), index('ai_usage_user').on(t.userId, t.createdAt)],
 )
 
-/** AI エージェントのチャット。閉じたら消し、閉じずに置かれたものも最後の発言から AI_CHAT_TTL で消す（lib/ai-chat.ts） */
+/** AI エージェントのチャット。閉じたら消し、閉じずに置かれたものも最後の発言から AI_CHAT_TTL で消す（features/ai/ai-chat.ts） */
 export const aiChats = sqliteTable(
   'ai_chats',
   {
@@ -235,7 +242,7 @@ export const aiChats = sqliteTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     // CHECK を付けないのは、モデルを入れ替えたときに、それまでに始めたチャットの行が制約に引っかかるため
     model: text('model').notNull(),
-    /** AES-256-GCM で暗号化した会話（lib/ai-chat.ts の sealChat） */
+    /** AES-256-GCM で暗号化した会話（features/ai/ai-chat.ts の sealChat） */
     content: blob('content', { mode: 'buffer' }).notNull(),
     createdAt: integer('created_at').notNull().default(now),
     updatedAt: integer('updated_at')
@@ -247,7 +254,7 @@ export const aiChats = sqliteTable(
 )
 
 /**
- * AI が request_file で受け取ったファイル（lib/ai-uploads.ts）。アイテムに使うと、ファイルをコースの下へ移して行を消す。
+ * AI が request_file で受け取ったファイル（features/ai/ai-uploads.ts）。アイテムに使うと、ファイルをコースの下へ移して行を消す。
  * 使われないまま AI_CHAT_TTL を過ぎたものは、ファイルごと消す
  */
 export const aiUploads = sqliteTable(
@@ -367,7 +374,7 @@ export const agentItems = sqliteTable('agent_items', {
     .primaryKey()
     .references(() => items.id, { onDelete: 'cascade' }),
   // 環境変数の CLAUDE_API_KEY を使わないのは、アイテムごとに請求先と上限を分け、管理者が入れたアイテムだけで使えるようにするため
-  /** Anthropic の API キーを AES-256-GCM で暗号化したもの（lib/agent.ts）。NULL は未設定 */
+  /** Anthropic の API キーを AES-256-GCM で暗号化したもの（features/agent/agent.ts）。NULL は未設定 */
   apiKey: blob('api_key', { mode: 'buffer' }),
   /** 入れたキーの末尾の数文字。キーそのものは画面に出さないので、どのキーかを見分けるのに使う */
   apiKeyHint: text('api_key_hint').notNull().default(''),
@@ -375,10 +382,10 @@ export const agentItems = sqliteTable('agent_items', {
   openrouterApiKey: blob('openrouter_api_key', { mode: 'buffer' }),
   openrouterApiKeyHint: text('openrouter_api_key_hint').notNull().default(''),
   // CHECK を付けないのは、OpenRouter のモデルの ID も入り、決まった値の集合にならないため
-  /** 教師が選んだモデル。Claude のモデルの ID（lib/agent.ts の AGENT_CLAUDE_MODELS）か、OpenRouter のモデルの ID */
+  /** 教師が選んだモデル。Claude のモデルの ID（features/agent/agent.ts の AGENT_CLAUDE_MODELS）か、OpenRouter のモデルの ID */
   model: text('model').notNull().default('claude-haiku-5-5'),
   // 使うたびにモデル一覧から引かないのは、一覧から消えたり料金が変わったりしても、教師が選び直すまで同じ条件で使えるようにするため
-  /** OpenRouter のモデルを選んだときの、モデル一覧の情報（JSON。lib/ai-models.ts の OpenRouterModelInfo） */
+  /** OpenRouter のモデルを選んだときの、モデル一覧の情報（JSON。features/ai/ai-models.ts の OpenRouterModelInfo） */
   openrouterModel: text('openrouter_model', { mode: 'json' }),
   /** 使える期間（UNIX 秒） */
   opensAt: integer('opens_at'),
@@ -545,7 +552,7 @@ export const collabDocs = sqliteTable(
     itemId: integer('item_id')
       .notNull()
       .references(() => items.id, { onDelete: 'cascade' }),
-    /** 持ち主（lib/collab.ts の CollabOwner）。course・template・user:<id> */
+    /** 持ち主（features/collab/collab.ts の CollabOwner）。course・template・user:<id> */
     owner: text('owner').notNull(),
     /** 持ち主の学生。学生のアカウントを消したときに、その学生のファイルも消すために持つ */
     userId: integer('user_id').references(() => users.id, { onDelete: 'cascade' }),
@@ -560,7 +567,7 @@ export const collabDocs = sqliteTable(
 )
 
 /**
- * 発表ファイルのアイテムの、PDF とスライドの対応と公開の状態（lib/presentation.ts）。行がなければ、PDF がまだない。
+ * 発表ファイルのアイテムの、PDF とスライドの対応と公開の状態（features/presentation/presentation.ts）。行がなければ、PDF がまだない。
  * PDF そのものは items の file_key に置く
  */
 export const presentationItems = sqliteTable('presentation_items', {
