@@ -91,6 +91,7 @@ const RULES: Rule[] = [
   post('/courses/:id/items/:iid/code/submissions/:uid/regrade', 'code.regrade', '提出を AI で採点し直した', 'change', 'user'),
 
   post('/courses/:id/items/:iid/quiz/submit', 'quiz.submit', '小テストを受けた', 'change', 'item'),
+  post('/courses/:id/items/:iid/quiz/results/:uid/grade', 'quiz.grade', '小テストの記述を採点した', 'change', 'user'),
   post('/courses/:id/items/:iid/bundle/files', 'bundle.upload', '配布するファイルをアップロード', 'change', 'item'),
   post('/courses/:id/items/:iid/bundle/files/delete', 'bundle.delete', '配布するファイルを削除', 'change', 'item'),
   post('/courses/:id/items/:iid/bundle/launch', 'bundle.launch', 'VS Code で開いた', 'change', 'item'),

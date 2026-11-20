@@ -3,15 +3,21 @@ import { Block, Card, Stat, Stats, Table } from '../../components/card'
 import { AppShell } from '../../components/layout'
 import { QuizReview, QuizScoreChip } from '../../components/quiz'
 import { Styles } from '../../components/style'
-import { Avatar, Breadcrumbs, EmptyState, PageHeader, Person, formatDateTime, userMeta } from '../../components/ui'
+import { Avatar, Breadcrumbs, Chip, EmptyState, PageHeader, Person, formatDateTime, userMeta } from '../../components/ui'
 import type { CourseAccess } from '../../lib/courses'
 import { QUIZ_KIND_LABELS, quizPercent, type QuizKind, type QuizReviewItem, type QuizScore } from '../../lib/quiz'
 import type { QuizAttemptSummary, QuizStudent } from '../../lib/quiz-store'
 
 type QuizTarget = { id: number; title: string }
 
-/** 受験結果の一覧の 1 行。count は受験の回数、latest はいちばん新しい受験、best はいちばん点数の高い受験 */
-export type ResultRow = { student: QuizStudent; count: number; latest: QuizAttemptSummary | null; best: QuizAttemptSummary | null }
+/** 受験結果の一覧の 1 行。count は受験の回数、latest はいちばん新しい受験、best はいちばん点数の高い受験、pending はすべての受験の採点待ちの数 */
+export type ResultRow = {
+  student: QuizStudent
+  count: number
+  latest: QuizAttemptSummary | null
+  best: QuizAttemptSummary | null
+  pending: number
+}
 
 /** 問題 1 つの正答率。学生ごとのいちばん新しい受験で数える */
 export type QuestionStat = { kind: QuizKind; prompt: string; answered: number; correct: number }
@@ -48,6 +54,7 @@ export const ResultsPage = ({
   const taken = rows.filter((r) => r.best)
   const passed = taken.filter((r) => r.best!.passed)
   const average = taken.length ? Math.round(taken.reduce((sum, r) => sum + quizPercent(r.best!), 0) / taken.length) : null
+  const pending = rows.reduce((sum, r) => sum + r.pending, 0)
   return (
     <AppShell tone={access.course.color}>
       <PageStyles />
@@ -65,6 +72,7 @@ export const ResultsPage = ({
         <Stat label="受験" value={`${taken.length}/${rows.length}`} />
         <Stat label="合格" value={`${passed.length}/${rows.length}`} />
         <Stat label="最高点の平均" value={average === null ? '—' : `${average}%`} />
+        {pending > 0 && <Stat label="採点待ち" value={`${pending} 問`} />}
       </Stats>
       {rows.length === 0 ? (
         <EmptyState icon="users" title="学生がいません" text="コースに学生が参加すると、ここに並びます。" />
@@ -77,7 +85,7 @@ export const ResultsPage = ({
             { label: '操作', class: 'hide-sm', srOnly: true },
           ]}
         >
-          {rows.map(({ student, count, latest, best }) => (
+          {rows.map(({ student, count, latest, best, pending }) => (
             <tr>
               <td>
                 <Person
@@ -95,7 +103,14 @@ export const ResultsPage = ({
                   </>
                 )}
               </td>
-              <td class="col-score">{best ? <QuizScoreChip score={best} passed={!!best.passed} /> : <span class="muted">未受験</span>}</td>
+              <td class="col-score">
+                {best ? <QuizScoreChip score={best} passed={!!best.passed} /> : <span class="muted">未受験</span>}
+                {pending > 0 && (
+                  <Chip tone="accent" icon="clock" class="quiz-pending-chip">
+                    採点待ち {pending}
+                  </Chip>
+                )}
+              </td>
               <td class="hide-sm col-open">
                 {latest && (
                   <Button href={resultsUrl(access.course.id, item.id, student.id)} size="sm" iconEnd="chevronRight">
@@ -179,12 +194,16 @@ export const ResultPage = ({
     />
     <div class="submission">
       <div class="submission-main">
-        <QuizReview items={review} who="学生" />
+        <QuizReview
+          items={review}
+          who="学生"
+          grade={{ action: `${resultsUrl(access.course.id, item.id, student.id)}/grade`, attemptId: attempt.id }}
+        />
       </div>
       <aside class="submission-side stack">
         <Card heading="点数">
           <p class="submission-score">
-            <QuizScoreChip score={attempt} passed={!!attempt.passed} />
+            <QuizScoreChip score={attempt} passed={!!attempt.passed} pending={attempt.pending} />
             <span class="muted small">{percentText(attempt)}</span>
           </p>
         </Card>
@@ -201,7 +220,7 @@ export const ResultPage = ({
                     <span>
                       {history.length - i} 回目<span class="muted small"> {formatDateTime(h.createdAt)}</span>
                     </span>
-                    <QuizScoreChip score={h} passed={!!h.passed} />
+                    <QuizScoreChip score={h} passed={!!h.passed} pending={h.pending} />
                   </a>
                 </li>
               ))}

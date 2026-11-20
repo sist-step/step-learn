@@ -59,8 +59,8 @@ import {
   quizFormRows,
   quizSettingsOf,
   readQuizForm,
+  upgradeQuestions,
   type QuizFormRow,
-  type QuizQuestion,
 } from '../lib/quiz'
 import { quizViewOf, type QuizView } from '../lib/quiz-store'
 import { availableCodeLanguages } from '../lib/sandbox'
@@ -560,7 +560,7 @@ const agent: ExtraKind = {
 
 /** 入力欄に入れる問題。保存済みの中身では問題の一覧、送られてきたままの値では編集画面が組み立てた JSON */
 const quizRowsOf = (values: Record<string, unknown>): QuizFormRow[] =>
-  Array.isArray(values.questions) ? quizFormRows(values.questions as QuizQuestion[]) : readQuizForm(str(values.questions)).rows
+  Array.isArray(values.questions) ? quizFormRows(upgradeQuestions(values.questions)) : readQuizForm(str(values.questions)).rows
 
 const QuizKindFields: ExtraKind['Fields'] = ({ values, errors, idPrefix }) => {
   // 保存済みの中身は toData が必ず questions を入れるので、どちらもないのは追加のモーダル。問題と採点は追加したあとの編集画面で設定する
@@ -602,7 +602,7 @@ function useQuizView(item: MItem, access: CourseAccess): QuizView | null {
   })
 }
 
-// Moodle の小テストの活動を使わないのは、コードを読んで答える形式（並べ替え・実行の順番・字下げなど）が Moodle の小テストにないため
+// Moodle の小テストの活動を使わないのは、コードを読んで答える形式（並べ替えと字下げ・行を選ぶ・コードの穴埋めなど）が Moodle の小テストにないため
 const quiz: ExtraKind = {
   label: '小テスト',
   description: 'コードを読んで答える問題で理解を確かめる',

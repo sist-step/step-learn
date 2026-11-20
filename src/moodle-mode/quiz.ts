@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { intParam } from '../lib/http'
 import { QUIZ_KIND, isQuizPassed, quizSettingsOf } from '../lib/quiz'
@@ -15,8 +15,15 @@ const SUMMARY = {
   correct: quizAttempts.correct,
   total: quizAttempts.total,
   passed: quizAttempts.passed,
+  // 列を足さずに答えの JSON から数えるのは、採点待ちは記述の問題にしか出ず、点数と同じく教師の採点で変わるため
+  pending:
+    sql<number>`(SELECT count(*) FROM json_each(${quizAttempts.answers}) WHERE json_extract(json_each.value, '$.correct') IS NULL)`.mapWith(
+      Number,
+    ),
   createdAt: quizAttempts.createdAt,
 }
+
+const ATTEMPT = { ...SUMMARY, answers: quizAttempts.answers }
 
 const STUDENT = { id: users.id, name: users.name, username: users.username, email: users.email }
 
@@ -28,11 +35,11 @@ export function quizStore(key: string): QuizStore {
     listOf: (userId) => db.select(SUMMARY).from(quizAttempts).where(ofUser(userId)).orderBy(desc(quizAttempts.id)).limit(200).all(),
     get: (userId, id) =>
       db
-        .select()
+        .select(ATTEMPT)
         .from(quizAttempts)
         .where(and(ofUser(userId), eq(quizAttempts.id, id)))
         .get(),
-    latest: (userId) => db.select().from(quizAttempts).where(ofUser(userId)).orderBy(desc(quizAttempts.id)).limit(1).get(),
+    latest: (userId) => db.select(ATTEMPT).from(quizAttempts).where(ofUser(userId)).orderBy(desc(quizAttempts.id)).limit(1).get(),
     listAll: () => db.select(SUMMARY).from(quizAttempts).where(ofItem).orderBy(desc(quizAttempts.id)).limit(5000).all(),
     answersOf: (ids) =>
       ids.length
@@ -49,6 +56,13 @@ export function quizStore(key: string): QuizStore {
         .values({ key, userId, answers: graded.records, correct: graded.correct, total: graded.total, passed: passed ? 1 : 0 })
         .run()
       return passed
+    },
+    regrade(userId, id, graded, passPercent) {
+      const passed = isQuizPassed(graded, passPercent)
+      db.update(quizAttempts)
+        .set({ answers: graded.records, correct: graded.correct, total: graded.total, passed: passed ? 1 : 0 })
+        .where(and(ofUser(userId), eq(quizAttempts.id, id)))
+        .run()
     },
     // コースの学生を並べないのは、参加者が Moodle にあり、STEP Learn は自分にログインした人しか知らないため。受けた人だけを並べる
     listStudents: () =>

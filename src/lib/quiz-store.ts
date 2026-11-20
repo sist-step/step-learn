@@ -11,12 +11,15 @@ import {
   type QuizTakeQuestion,
 } from './quiz'
 
-/** 受験の一覧に出す項目。答えは含めない */
-export type QuizAttemptSummary = QuizScore & { id: number; userId: number; passed: number; createdAt: number }
+/** 受験の一覧に出す項目。答えは含めない。pending は採点待ちの問題の数 */
+export type QuizAttemptSummary = QuizScore & { id: number; userId: number; passed: number; pending: number; createdAt: number }
 
 export type QuizAttempt = QuizAttemptSummary & { answers: QuizAnswerRecord[] }
 
 export type QuizStudent = { id: number; name: string; username: string | null; email: string }
+
+/** 受験を残すときの点数と記録（lib/quiz.ts の gradeQuiz の結果） */
+export type QuizGraded = QuizScore & { pending: number; records: QuizAnswerRecord[] }
 
 /**
  * 小テストのアイテム 1 つの、受験の記録の置き場所。通常モードは step-learn.db（lib/quiz-items.ts）、
@@ -31,13 +34,15 @@ export interface QuizStore {
   listAll(): QuizAttemptSummary[]
   answersOf(ids: number[]): { answers: QuizAnswerRecord[] }[]
   /** 受験を残し、合格したかを返す */
-  record(userId: number, graded: QuizScore & { records: QuizAnswerRecord[] }, passPercent: number): boolean
+  record(userId: number, graded: QuizGraded, passPercent: number): boolean
+  /** 教師が採点したあとの記録で、受験の点数と合否を書き換える */
+  regrade(userId: number, id: number, graded: QuizGraded, passPercent: number): void
   /** 受験結果の一覧に並べる学生 */
   listStudents(): QuizStudent[]
   findUser(userId: number): QuizStudent | undefined
 }
 
-export type QuizAttemptView = { score: QuizScore; passed: boolean; createdAt: number; review: QuizReviewItem[] }
+export type QuizAttemptView = { score: QuizScore; passed: boolean; pending: number; createdAt: number; review: QuizReviewItem[] }
 
 /** アイテムの画面に出す小テスト（components/quiz.tsx の QuizPanel） */
 export type QuizView = {
@@ -78,6 +83,7 @@ export function quizViewOf(
         ? {
             score: { correct: latest.correct, total: latest.total },
             passed: !!latest.passed,
+            pending: latest.pending,
             createdAt: latest.createdAt,
             review: reviewQuiz(questions, latest.answers, showAnswers ? 'all' : 'correct'),
           }

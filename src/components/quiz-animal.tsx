@@ -31,7 +31,7 @@ const Mirror = ({ children }: { children: Child }) => (
 export const QUIZ_ANIMALS: Record<QuizKind, Animal> = {
   choice: {
     name: 'フクロウ',
-    hint: '正しいものをひとつ選ぼう。まよったら、ちがうものから消していくといいよ。',
+    hint: '正しいものを選ぼう。まよったら、ちがうものから消していくといいよ。',
     body: (
       <>
         <Mirror>
@@ -48,9 +48,9 @@ export const QUIZ_ANIMALS: Record<QuizKind, Animal> = {
     eyes: [34, 66, 49],
     eyeSize: 6,
   },
-  output: {
+  short: {
     name: 'ネコ',
-    hint: '頭の中でコードを動かしてみよう。画面に出る文字を、そのまま書いてね。',
+    hint: '頭の中でコードを動かしてみよう。答えを、そのまま書いてね。',
     body: (
       <>
         <Mirror>
@@ -89,9 +89,9 @@ export const QUIZ_ANIMALS: Record<QuizKind, Animal> = {
     eyes: [37, 63, 50],
     eyeSize: 5,
   },
-  bug: {
+  lines: {
     name: 'カエル',
-    hint: 'バグ（まちがい）は、どの行にかくれているかな？ 1 行だけ選んでね。',
+    hint: 'コードをよく見て、当てはまる行を選ぼう。',
     body: (
       <>
         <Mirror>
@@ -110,9 +110,9 @@ export const QUIZ_ANIMALS: Record<QuizKind, Animal> = {
     eyeSize: 5,
     mouth: [50, 64, 15],
   },
-  flow: {
+  match: {
     name: 'ウサギ',
-    hint: 'コードが実行される順に、行をぴょんぴょん押していこう。同じ行を何回押してもいいよ。',
+    hint: 'ぴょんと結ぼう！ 左のものに合うものを、右から選んでね。',
     body: (
       <>
         <Mirror>
@@ -130,9 +130,9 @@ export const QUIZ_ANIMALS: Record<QuizKind, Animal> = {
     eyeSize: 5,
     mouth: [50, 73, 5],
   },
-  indent: {
+  essay: {
     name: 'カニ',
-    hint: 'よこ歩きはまかせて！ 左右のボタンで行を動かして、字下げをつけ直そう。',
+    hint: 'じっくり考えて、自分のことばで書いてみよう。先生があとで読んでくれるよ。',
     body: (
       <>
         <Mirror>
@@ -151,9 +151,9 @@ export const QUIZ_ANIMALS: Record<QuizKind, Animal> = {
     eyeSize: 4.5,
     mouth: [50, 70, 8],
   },
-  table: {
+  blank: {
     name: 'リス',
-    hint: '変数の値をメモしていこう。くり返しの 1 回ごとに、いくつになるかな？',
+    hint: 'あいているところに入るものを、メモするように書きこもう。',
     body: (
       <>
         <circle class="qa-shade" cx="77" cy="42" r="23" />
