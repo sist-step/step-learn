@@ -15,6 +15,8 @@ import {
   fileChange,
   fileId,
   id,
+  reorderProposal,
+  sameMembers,
   sameSnapshot,
   success,
   toConstraints,
@@ -44,7 +46,7 @@ import { fetchFile } from './client'
 import { codeSettingsOf, codeStageOf } from './code-store'
 import { loadCourse, moodle, myCourses, otherCourses, type LoadedCourse } from './data'
 import { insertExtra, newExtraKey, updateExtraData } from './extra'
-import { CODE_KIND } from './extra-kinds'
+import { CODE_KIND, extraKindOf } from './extra-kinds'
 import { EXTRA_PATH, type MItem, type MSection } from './mapping'
 
 const moodleContext = (c: AiToolContext) => c as Context<MoodleEnv>
@@ -124,7 +126,7 @@ export const kindLabel = (it: MItem) =>
   codeKind(it)
     ? 'コーディング問題'
     : it.kind === 'extra'
-      ? (it.extra?.type ?? KIND_LABELS.extra)
+      ? (extraKindOf(it.extra?.type ?? '')?.label ?? KIND_LABELS.extra)
       : it.kind === 'moodle'
         ? `Moodle の活動（${it.modname}）`
         : KIND_LABELS[it.kind]
@@ -209,16 +211,29 @@ export const readMoodleItemFile: AiFileReader = async (c, itemId, courseId) => {
   return { title: item.title, name: item.fileName, size: item.fileSize, read }
 }
 
-// ---------------------------------------------------------------- 追加・並べ替え（すぐ実行する）
+// ---------------------------------------------------------------- 追加・並べ替え（利用者が確認してから実行する）
+// 追加と並べ替えもすぐ実行しないのは、AI が読んだ教材（ほかの教師が書いたもの）に指示を仕込まれると、利用者の知らないうちに、
+// ほかのコースの非公開の内容を書き写したアイテムを作らせたり、ほかのコースの並びを変えさせたりできるため
 
-const createSection = defineTool(
+const createSection = defineConfirmTool(
   'create_section',
-  'コースの末尾にセクションを追加する。学生には非表示の状態で作られる。',
+  'コースの末尾にセクションを追加する。学生には非表示の状態で作られる。利用者が確認カードで承認してから実行される。',
   z.object({
     course_id: id('コースの ID'),
     title: describedString('セクション名', 120, 1),
     summary: z.optional(describedString('セクションの説明', 2000)),
   }),
+  async (c, { course_id, title, summary }) => {
+    const loaded = await manageable(c, course_id)
+    if (!loaded) return failure(NOT_FOUND, 'セクションを追加できませんでした')
+    const name = title.trim()
+    if (!name) return failure('セクション名が空です。', 'セクションを追加できませんでした')
+    return {
+      title: `「${loaded.course.fullname}」にセクションを追加する（学生には非表示）`,
+      changes: [{ label: 'セクション名', before: '', after: name }, ...changed('説明', '', summary?.trim(), true)],
+      snapshot: null,
+    }
+  },
   async (c, { course_id, title, summary }) => {
     const loaded = await manageable(c, course_id)
     if (!loaded) return failure(NOT_FOUND, 'セクションを追加できませんでした')
@@ -238,49 +253,84 @@ const extraUrl = (c: AiToolContext, key: string) => `${config.appOrigin ?? new U
 
 const CREATABLE_TYPES = ['link', 'file', 'code'] as const
 
-const createItem = defineTool(
+const CREATABLE_LABELS: Record<(typeof CREATABLE_TYPES)[number], string> = { link: 'リンク', file: 'ファイル', code: 'コーディング問題' }
+
+const createItemArgs = z.object({
+  course_id: id('コースの ID'),
+  section_id: id('追加先のセクションの ID'),
+  type: z.enum(CREATABLE_TYPES).check(z.describe('link: リンク / file: ファイル / code: コーディング問題')),
+  title: describedString('タイトル', 200, 1),
+  file_id: z.optional(fileId('ファイルのアイテムに置くファイル。ファイルでは必須')),
+  url: z.optional(describedString('リンクの URL（http:// か https:// で始まる）。リンクでは必須', 2000)),
+  link_target: z.optional(
+    z.enum(LINK_TARGETS).check(z.describe('リンクの開き方。new: 新しいタブ / same: 同じタブ / embed: ページに埋め込む')),
+  ),
+  body: z.optional(describedString('コーディング問題の問題文（Markdown）', 100_000)),
+  language: z.optional(
+    z
+      .enum(CODE_LANGUAGES)
+      .check(
+        z.describe(`コードの言語。web: HTML / CSS / JavaScript、python: Python。今作れるのは ${availableCodeLanguages.join('・')} だけ`),
+      ),
+  ),
+  constraints: z.optional(
+    constraintsSchema('コーディング問題の制約。AI が提出を制約ごとに判定し、すべてできていればクリアになる。コーディング問題では必須'),
+  ),
+  criteria: z.optional(
+    describedString('コーディング問題の補足。制約にしにくい観点（読みやすさなど）。AI の判定に使い、学生には見せない', 5000),
+  ),
+})
+
+/** 追加するアイテムの引数を確かめる。提案と実行のどちらでも、そのときの権限とファイルで確かめ直す */
+async function checkNewItem(c: AiToolContext, args: z.output<typeof createItemArgs>) {
+  const loaded = await manageable(c, args.course_id)
+  const section = loaded && loaded.sections.find((s) => s.id === args.section_id)
+  if (!loaded || !section) return failure(NOT_FOUND, 'アイテムを追加できませんでした')
+  const fail = (message: string) => failure(message, 'アイテムを追加できませんでした')
+  const title = args.title.trim()
+  if (!title) return fail('タイトルが空です。')
+  const url = args.url?.trim() ?? ''
+  if (args.type === 'link' && !isHttpUrl(url)) return fail('リンクには http:// か https:// で始まる URL が必要です。')
+  const language = args.language ?? 'web'
+  if (args.type === 'code' && !args.constraints?.length) return fail('コーディング問題には制約（constraints）を 1 つ以上渡してください。')
+  if (args.type === 'code' && !availableCodeLanguages.includes(language))
+    return fail(
+      `${CODE_LANGUAGE_LABELS[language]} のコードは作れません。今は ${availableCodeLanguages.map((l) => CODE_LANGUAGE_LABELS[l]).join('・')} だけ作れます。`,
+    )
+  const upload = args.type === 'file' && args.file_id ? findUpload(c.var.user!.id, args.file_id) : undefined
+  if (args.type === 'file' && !upload) return fail(args.file_id ? UPLOAD_NOT_FOUND : 'ファイルには file_id を渡してください。')
+  return { loaded, section, title, url, language, upload }
+}
+
+const createItem = defineConfirmTool(
   'create_item',
-  'セクションの末尾にアイテムを追加する。作れるのはリンク（Moodle の URL の活動）・ファイル（Moodle のファイルの活動。request_file で受け取ったもの）・コーディング問題（学生がブラウザでコードを書いて提出し、AI が制約ごとに判定する課題）。学生には非表示の状態で作られる。',
-  z.object({
-    course_id: id('コースの ID'),
-    section_id: id('追加先のセクションの ID'),
-    type: z.enum(CREATABLE_TYPES).check(z.describe('link: リンク / file: ファイル / code: コーディング問題')),
-    title: describedString('タイトル', 200, 1),
-    file_id: z.optional(fileId('ファイルのアイテムに置くファイル。ファイルでは必須')),
-    url: z.optional(describedString('リンクの URL（http:// か https:// で始まる）。リンクでは必須', 2000)),
-    link_target: z.optional(
-      z.enum(LINK_TARGETS).check(z.describe('リンクの開き方。new: 新しいタブ / same: 同じタブ / embed: ページに埋め込む')),
-    ),
-    body: z.optional(describedString('コーディング問題の問題文（Markdown）', 100_000)),
-    language: z.optional(
-      z
-        .enum(CODE_LANGUAGES)
-        .check(
-          z.describe(`コードの言語。web: HTML / CSS / JavaScript、python: Python。今作れるのは ${availableCodeLanguages.join('・')} だけ`),
-        ),
-    ),
-    constraints: z.optional(
-      constraintsSchema('コーディング問題の制約。AI が提出を制約ごとに判定し、すべてできていればクリアになる。コーディング問題では必須'),
-    ),
-    criteria: z.optional(
-      describedString('コーディング問題の補足。制約にしにくい観点（読みやすさなど）。AI の判定に使い、学生には見せない', 5000),
-    ),
-  }),
+  'セクションの末尾にアイテムを追加する。作れるのはリンク（Moodle の URL の活動）・ファイル（Moodle のファイルの活動。request_file で受け取ったもの）・コーディング問題（学生がブラウザでコードを書いて提出し、AI が制約ごとに判定する課題）。学生には非表示の状態で作られる。利用者が確認カードで承認してから実行される。',
+  createItemArgs,
   async (c, args) => {
-    const loaded = await manageable(c, args.course_id)
-    const fail = (message: string) => failure(message, 'アイテムを追加できませんでした')
-    if (!loaded || !loaded.sections.some((s) => s.id === args.section_id)) return failure(NOT_FOUND, 'アイテムを追加できませんでした')
-    const title = args.title.trim()
-    if (!title) return fail('タイトルが空です。')
-    const url = args.url?.trim() ?? ''
-    if (args.type === 'link' && !isHttpUrl(url)) return fail('リンクには http:// か https:// で始まる URL が必要です。')
-    if (args.type === 'code' && !args.constraints?.length) return fail('コーディング問題には制約（constraints）を 1 つ以上渡してください。')
-    if (args.type === 'code' && !availableCodeLanguages.includes(args.language ?? 'web'))
-      return fail(
-        `${CODE_LANGUAGE_LABELS[args.language ?? 'web']} のコードは作れません。今は ${availableCodeLanguages.map((l) => CODE_LANGUAGE_LABELS[l]).join('・')} だけ作れます。`,
-      )
-    const upload = args.type === 'file' && args.file_id ? findUpload(c.var.user!.id, args.file_id) : undefined
-    if (args.type === 'file' && !upload) return fail(args.file_id ? UPLOAD_NOT_FOUND : 'ファイルには file_id を渡してください。')
+    const checked = await checkNewItem(c, args)
+    if ('content' in checked) return checked
+    const { loaded, section, title, url, language, upload } = checked
+    const link = args.type === 'link'
+    const code = args.type === 'code'
+    return {
+      title: `「${loaded.course.fullname}」の「${section.title}」に${CREATABLE_LABELS[args.type]}を追加する（学生には非表示）`,
+      changes: [
+        { label: 'タイトル', before: '', after: title },
+        ...(link ? [{ label: 'URL', before: '', after: url }] : []),
+        ...(link ? [{ label: '開き方', before: '', after: LINK_TARGET_LABELS[args.link_target ?? 'new'] }] : []),
+        ...(upload ? [fileChange({ name: '', size: 0 }, upload)] : []),
+        ...(code ? changed('問題文', '', args.body, true) : []),
+        ...(code ? [{ label: '言語', before: '', after: CODE_LANGUAGE_LABELS[language] }] : []),
+        ...(code ? changed('制約', '', constraintLines(toConstraints(args.constraints ?? [])), true) : []),
+        ...(code ? changed('補足', '', args.criteria, true) : []),
+      ],
+      snapshot: null,
+    }
+  },
+  async (c, args) => {
+    const checked = await checkNewItem(c, args)
+    if ('content' in checked) return checked
+    const { title, url, language, upload } = checked
     const api = moodle(moodleContext(c))
     const activity = { courseid: args.course_id, cmid: 0, sectionid: args.section_id, name: title, completion: 'none', visible: false }
     let cmid: number
@@ -290,7 +340,6 @@ const createItem = defineTool(
       cmid = await api.saveResource({ ...activity, draftitemid: upload.draftItemId })
       consumeUpload(upload.id)
     } else {
-      const language = args.language ?? 'web'
       const key = newExtraKey()
       // 新しいタブで開くのは、Moodle の画面から開いたときも、STEP Learn の一覧と同じくエディターを別のタブに出すため
       cmid = await api.saveUrl({ ...activity, externalurl: extraUrl(c, key), display: 'new' })
@@ -319,32 +368,38 @@ const createItem = defineTool(
   },
 )
 
-const sameMembers = (ids: number[], current: number[]) =>
-  ids.length === current.length && new Set(ids).size === ids.length && ids.every((i) => current.includes(i))
+const SECTIONS_MISMATCH =
+  'section_ids がコースのセクション（一般を除く）と一致しません。get_course で確かめてから、すべての ID を 1 回ずつ並べてください。'
+const ITEMS_MISMATCH = 'item_ids がセクションのアイテムと一致しません。get_course で確かめてから、すべての ID を 1 回ずつ並べてください。'
 
-const reorderSections = defineTool(
+/** 並べ替えるセクション。一般はいつも先頭にあり、動かせない */
+const movableSections = (loaded: LoadedCourse) => topSections(loaded).filter((s) => s.number !== 0)
+
+const itemsIn = (loaded: LoadedCourse, sectionId: number) => loaded.items.filter((it) => it.sectionId === sectionId)
+
+const reorderSections = defineConfirmTool(
   'reorder_sections',
-  'コースのセクションを並べ替える。section_ids には、一般（general）を除くすべてのセクションの ID を新しい順に並べる。一般はいつも先頭にある。',
+  'コースのセクションを並べ替える。section_ids には、一般（general）を除くすべてのセクションの ID を新しい順に並べる。一般はいつも先頭にある。利用者が確認カードで承認してから実行される。',
   z.object({
     course_id: id('コースの ID'),
     section_ids: z.array(id('セクションの ID')).check(z.describe('一般を除くすべてのセクションの ID を新しい順に')),
   }),
   async (c, { course_id, section_ids }) => {
+    const label = 'セクションを並べ替えられませんでした'
     const loaded = await manageable(c, course_id, true)
-    if (!loaded) return failure(NOT_FOUND, 'セクションを並べ替えられませんでした')
+    if (!loaded) return failure(NOT_FOUND, label)
+    const title = `「${loaded.course.fullname}」のセクションを並べ替える`
+    return reorderProposal(title, movableSections(loaded), section_ids, SECTIONS_MISMATCH, label)
+  },
+  async (c, { course_id, section_ids }, snapshot) => {
+    const label = 'セクションを並べ替えられませんでした'
+    const loaded = await manageable(c, course_id, true)
+    if (!loaded) return failure(NOT_FOUND, label)
     const sections = topSections(loaded)
     const general = sections.find((s) => s.number === 0)
-    if (
-      !general ||
-      !sameMembers(
-        section_ids,
-        sections.filter((s) => s.number !== 0).map((s) => s.id),
-      )
-    )
-      return failure(
-        'section_ids がコースのセクション（一般を除く）と一致しません。get_course で確かめてから、すべての ID を 1 回ずつ並べてください。',
-        'セクションを並べ替えられませんでした',
-      )
+    const current = movableSections(loaded).map((s) => s.id)
+    if (!sameSnapshot(current, snapshot)) return failure(STALE, label)
+    if (!general || !sameMembers(section_ids, current)) return failure(SECTIONS_MISMATCH, label)
     const api = moodle(moodleContext(c))
     // Moodle は「このセクションの後ろへ」しか指定できないので、一般の後ろから順に 1 つずつ後ろへつなげる
     let after: MSection = general
@@ -357,29 +412,33 @@ const reorderSections = defineTool(
   },
 )
 
-const reorderItems = defineTool(
+const reorderItems = defineConfirmTool(
   'reorder_items',
-  'セクションの中のアイテムを並べ替える。item_ids には、そのセクションのすべてのアイテムの ID を新しい順に並べる。別のセクションへ移すときは update_item を使う。',
+  'セクションの中のアイテムを並べ替える。item_ids には、そのセクションのすべてのアイテムの ID を新しい順に並べる。別のセクションへ移すときは update_item を使う。利用者が確認カードで承認してから実行される。',
   z.object({
     course_id: id('コースの ID'),
     section_id: id('セクションの ID'),
     item_ids: z.array(id('アイテムの ID')).check(z.describe('セクションのすべてのアイテムの ID を新しい順に')),
   }),
   async (c, { course_id, section_id, item_ids }) => {
-    const loaded = await manageable(c, course_id, true)
-    const section = loaded && topSections(loaded).find((s) => s.id === section_id)
-    if (!loaded || !section) return failure(NOT_FOUND, 'アイテムを並べ替えられませんでした')
-    const current = loaded.items.filter((it) => it.sectionId === section_id).map((it) => it.id)
-    if (!sameMembers(item_ids, current))
-      return failure(
-        'item_ids がセクションのアイテムと一致しません。get_course で確かめてから、すべての ID を 1 回ずつ並べてください。',
-        'アイテムを並べ替えられませんでした',
-      )
+    const label = 'アイテムを並べ替えられませんでした'
+    const found = await sectionOf(c, course_id, section_id, true)
+    if (!found) return failure(NOT_FOUND, label)
+    const title = `「${found.section.title}」のアイテムを並べ替える`
+    return reorderProposal(title, itemsIn(found.loaded, section_id), item_ids, ITEMS_MISMATCH, label)
+  },
+  async (c, { course_id, section_id, item_ids }, snapshot) => {
+    const label = 'アイテムを並べ替えられませんでした'
+    const found = await sectionOf(c, course_id, section_id, true)
+    if (!found) return failure(NOT_FOUND, label)
+    const current = itemsIn(found.loaded, section_id).map((it) => it.id)
+    if (!sameSnapshot(current, snapshot)) return failure(STALE, label)
+    if (!sameMembers(item_ids, current)) return failure(ITEMS_MISMATCH, label)
     const api = moodle(moodleContext(c))
     // Moodle は「この活動の前へ」かセクションの末尾へしか動かせないので、新しい順に 1 つずつ末尾へ送る
     for (const cmid of item_ids) await api.updateCourse(course_id, 'cm_move', [cmid], { sectionid: section_id })
     forgetCourse(course_id)
-    return success({ ok: true }, `「${section.title}」のアイテムを並べ替えました`, inCourse(course_id, section_id))
+    return success({ ok: true }, `「${found.section.title}」のアイテムを並べ替えました`, inCourse(course_id, section_id))
   },
 )
 

@@ -180,12 +180,27 @@ export const sheetByName = (doc: Y.Doc, name: string) =>
 
 // ---------------------------------------------------------------- 計算
 
+// 参照をたどる再帰をこれより深くしないのは、上から下へ累計するシートで、末尾のセルから先頭までの数千段をたどると、スタックが足りずに落ちるため
+const MAX_DEPTH = 200
+
+/** 深すぎて、いまのスタックでは計算しない参照先 */
+class TooDeep {
+  constructor(
+    readonly sheet: SheetMap,
+    readonly r: number,
+    readonly c: number,
+  ) {}
+}
+
 /** シートのセルの値を求める。作り直すまで結果を覚えておくので、文書が変わったら作り直す */
 export function createEvaluator(doc: Y.Doc) {
   const memo = new Map<string, Scalar>()
   const busy = new Set<string>()
-  function value(sheet: SheetMap, r: number, c: number): Scalar {
-    const key = `${idOf(sheet)}:${r},${c}`
+  let depth = 0
+  const keyOf = (sheet: SheetMap, r: number, c: number) => `${idOf(sheet)}:${r},${c}`
+
+  function compute(sheet: SheetMap, r: number, c: number): Scalar {
+    const key = keyOf(sheet, r, c)
     if (memo.has(key)) return memo.get(key)!
     const raw = cellsOf(sheet).get(cellKey(r, c))
     if (raw === undefined) return null
@@ -195,21 +210,46 @@ export function createEvaluator(doc: Y.Doc) {
       return v
     }
     if (busy.has(key)) return CYCLE
+    if (depth >= MAX_DEPTH) throw new TooDeep(sheet, r, c)
     busy.add(key)
-    const v = evaluateFormula(raw.slice(1), {
-      cell: (name, rr, cc) => {
-        const target = name === null ? sheet : sheetByName(doc, name)
-        return target ? value(target, rr, cc) : undefined
-      },
-      size: (name) => {
-        const target = name === null ? sheet : sheetByName(doc, name)
-        return target && { rows: rowsOf(target), cols: colsOf(target) }
-      },
-      here: { r, c },
-    })
-    busy.delete(key)
-    memo.set(key, v)
-    return v
+    depth++
+    try {
+      const v = evaluateFormula(raw.slice(1), {
+        cell: (name, rr, cc) => {
+          const target = name === null ? sheet : sheetByName(doc, name)
+          return target ? compute(target, rr, cc) : undefined
+        },
+        size: (name) => {
+          const target = name === null ? sheet : sheetByName(doc, name)
+          return target && { rows: rowsOf(target), cols: colsOf(target) }
+        },
+        here: { r, c },
+      })
+      memo.set(key, v)
+      return v
+    } finally {
+      busy.delete(key)
+      depth--
+    }
+  }
+
+  /** 深すぎる参照先は、先にそちらだけを新しいスタックで求めて覚え、もとのセルを求め直す */
+  function value(sheet: SheetMap, r: number, c: number): Scalar {
+    const pending: TooDeep[] = [new TooDeep(sheet, r, c)]
+    for (;;) {
+      const next = pending.at(-1)!
+      try {
+        const v = compute(next.sheet, next.r, next.c)
+        pending.pop()
+        if (pending.length === 0) return v
+      } catch (e) {
+        if (!(e instanceof TooDeep)) throw e
+        const key = keyOf(e.sheet, e.r, e.c)
+        // 求めている途中のセルにまた行き着いたら、深さの上限より長い循環なので、そのセルを循環にして先へ進める
+        if (pending.some((p) => keyOf(p.sheet, p.r, p.c) === key)) memo.set(key, CYCLE)
+        else pending.push(e)
+      }
+    }
   }
   return { value }
 }
