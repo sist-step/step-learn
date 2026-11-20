@@ -464,6 +464,18 @@ export async function updateItem(c: Context<AppEnv>) {
   }
   const { hidden, ...input } = result.values
   const stored = file && (await putCourseFile(courseId, file))
+  // 最初に読んだ値のまま書き込まないのは、フォームとファイルを読む（await）あいだに、別のタブでアイテムが消されたり、問題が確定されたりするため
+  const latestCode = getCodeItem(iid)
+  const changedMeanwhile = !getItem(courseId, iid) || (!!latestCode && isFinalized(latestCode.stage) !== finalized)
+  if (changedMeanwhile) {
+    if (stored) inBackground(deleteKeys([stored.key]))
+    return redirectWith(
+      c,
+      `/courses/${courseId}/items/${iid}/edit`,
+      '保存している間に、別の画面でアイテムが変わりました。開き直してから、もう一度保存してください。',
+      'error',
+    )
+  }
 
   db.update(items)
     .set({
@@ -476,7 +488,7 @@ export async function updateItem(c: Context<AppEnv>) {
       ...fileColumns(stored),
       ...(sectionId !== item.sectionId && { sectionId, position: nextPosition(items, eq(items.sectionId, sectionId)) }),
     })
-    .where(eq(items.id, iid))
+    .where(and(eq(items.id, iid), eq(items.courseId, courseId)))
     .run()
   if (code) {
     updateCodeItem(iid, code.language, {
