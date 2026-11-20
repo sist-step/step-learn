@@ -13,7 +13,7 @@ import { AppsPage, AuthorizeErrorPage, ConsentPage, type AuthorizeFields, type C
 type C = Context<AppEnv>
 
 /** トークンの持ち主として要求を扱えるか。expired は、Moodle のトークンが切れていて、ログインし直してもらう必要がある */
-export type McpSignIn = 'ok' | 'expired' | 'forbidden'
+type McpSignIn = 'ok' | 'expired' | 'forbidden'
 
 /** MCP の OAuth と /mcp を、モードごとの DB と権限の確認で動かす（通常モードは backend.ts、Moodle モードは moodle-mode/mcp.ts） */
 export type McpBackend = {

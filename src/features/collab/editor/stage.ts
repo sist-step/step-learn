@@ -6,7 +6,7 @@ import { hasText, newElement, newId, penPath, readElement, shapePath, simplify, 
 
 export type Tool = 'select' | 'hand' | 'note' | 'text' | 'line' | 'arrow' | 'pen' | `shape:${ShapeKind}`
 
-export type StageOptions = {
+type StageOptions = {
   ctx: EditorContext
   host: HTMLElement
   /** board は自由に動かせる無限の面、slides は決まった大きさの面を枠に合わせて出す */

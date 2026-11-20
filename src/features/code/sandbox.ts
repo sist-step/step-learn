@@ -2,20 +2,20 @@ import http from 'node:http'
 import { CODE_LANGUAGES, type CodeLanguage } from './code'
 import { config } from '../../lib/config'
 
-export const SANDBOX_LANGUAGES = ['python'] as const
+const SANDBOX_LANGUAGES = ['python'] as const
 
-export type SandboxLanguage = (typeof SANDBOX_LANGUAGES)[number]
+type SandboxLanguage = (typeof SANDBOX_LANGUAGES)[number]
 
 /** sandbox（sandbox/server.py）が受け付ける上限。UTF-8 でのバイト数 */
-export const MAX_CODE_BYTES = 64 * 1024
-export const MAX_STDIN_BYTES = 32 * 1024
+const MAX_CODE_BYTES = 64 * 1024
+const MAX_STDIN_BYTES = 32 * 1024
 
-export type RunRequest = { language: SandboxLanguage; code: string; stdin?: string }
+type RunRequest = { language: SandboxLanguage; code: string; stdin?: string }
 
 /** exited 以外は途中で止まった: 時間切れ / 出力が多すぎる / メモリ不足などで強制終了された */
-export const RUN_STATUSES = ['exited', 'timeout', 'output_limit', 'killed'] as const
+const RUN_STATUSES = ['exited', 'timeout', 'output_limit', 'killed'] as const
 
-export type RunStatus = (typeof RUN_STATUSES)[number]
+type RunStatus = (typeof RUN_STATUSES)[number]
 
 export type RunResult = {
   status: RunStatus

@@ -22,7 +22,7 @@ export type AiToolResult = { content: string; label: string; isError?: boolean; 
 export type AiChange = { label: string; before: string; after: string; long?: boolean }
 
 /** snapshot は提案したときの値。実行するときに今の値と比べ、そのあいだに変わっていたら実行しない */
-export type AiProposal = { title: string; changes: AiChange[]; snapshot: unknown }
+type AiProposal = { title: string; changes: AiChange[]; snapshot: unknown }
 
 export type AiAgentTool =
   | { kind: 'run'; tool: AiTool; run: (c: AiToolContext, args: unknown) => Promise<AiToolResult> }
@@ -37,7 +37,7 @@ export type AiAgentTool =
 export type AiFileStore = { receive: (c: AiToolContext, file: File) => Promise<number> }
 
 /** read_file で読むファイルのアイテム。title はアイテムの名前、read はファイルの中身で、取り出せなければ null */
-export type AiReadableFile = { title: string; name: string; size: number; read: () => Promise<Uint8Array | null> }
+type AiReadableFile = { title: string; name: string; size: number; read: () => Promise<Uint8Array | null> }
 
 /**
  * read_file で、利用者が管理しているファイルのアイテムを探す（通常モードは features/ai/ai-tools.ts、Moodle モードは moodle-mode/ai-tools.ts）。

@@ -8,7 +8,7 @@ import { Stage, applyTextDiff, drawElement, styleCommand, syncStyleTools, syncTe
 export const SLIDE_W = 720
 export const SLIDE_H = 405
 
-export type SlideMap = Y.Map<unknown>
+type SlideMap = Y.Map<unknown>
 
 export const slidesOf = (doc: Y.Doc) => doc.getArray<SlideMap>('slides')
 export const elementsOf = (slide: SlideMap) => slide.get('elements') as Y.Map<ElMap>
@@ -24,7 +24,7 @@ export const backgroundOf = (slide: SlideMap) => {
 
 export type SlideData = { id: string; bg?: string; notes?: string; elements: ElData[] }
 
-export function newSlide(data: SlideData): SlideMap {
+function newSlide(data: SlideData): SlideMap {
   const slide = new Y.Map<unknown>()
   slide.set('id', data.id)
   if (data.bg) slide.set('bg', data.bg)
@@ -35,10 +35,10 @@ export function newSlide(data: SlideData): SlideMap {
   return slide
 }
 
-export type Layout = 'title' | 'content' | 'blank'
+type Layout = 'title' | 'content' | 'blank'
 
 /** レイアウトごとの最初の中身。id を引数で決めるのは、最初のスライドを全員が同じ変更として作るため（ensureSlide） */
-export function layoutElements(layout: Layout, id: (name: string) => string): ElData[] {
+function layoutElements(layout: Layout, id: (name: string) => string): ElData[] {
   if (layout === 'title')
     return [
       {
@@ -101,7 +101,7 @@ export function layoutElements(layout: Layout, id: (name: string) => string): El
 }
 
 /** スライドが 1 枚もなければ、タイトルのスライドを入れる。決まった clientID で作るのは、sheet-model.ts の ensureSheet と同じ理由 */
-export function ensureSlide(doc: Y.Doc) {
+function ensureSlide(doc: Y.Doc) {
   if (slidesOf(doc).length) return
   const seed = new Y.Doc()
   seed.clientID = 0

@@ -1,6 +1,6 @@
 // 表計算の計算式（= で始まるセル）の読み取りと計算。Excel の書き方と関数の一部に合わせる
 
-export type CellError = { error: string }
+type CellError = { error: string }
 export type Scalar = number | string | boolean | CellError | null
 type Range = { range: Scalar[][] }
 type Value = Scalar | Range
@@ -24,7 +24,7 @@ export function colName(c: number) {
   return s
 }
 
-export function colIndex(name: string) {
+function colIndex(name: string) {
   let n = 0
   for (const ch of name.toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64)
   return n - 1
@@ -294,7 +294,7 @@ export function formatGeneral(n: number) {
 
 // ---------------------------------------------------------------- 計算
 
-export type Lookup = {
+type Lookup = {
   /** そのシートのセルの値。シートがなければ undefined */
   cell: (sheet: string | null, r: number, c: number) => Scalar | undefined
   /** そのシートが使っている大きさ（範囲の参照を切り詰める） */
@@ -1027,7 +1027,7 @@ export function sheetPrefix(name: string) {
   return new RegExp(`^${BARE_SHEET}$`).test(name) ? `${name}!` : `'${name.replace(/'/g, "''")}'!`
 }
 
-export type FormulaRef = { sheet: string | null; r1: number; c1: number; r2: number; c2: number }
+type FormulaRef = { sheet: string | null; r1: number; c1: number; r2: number; c2: number }
 
 export function formulaRefs(formula: string): FormulaRef[] {
   const refs: FormulaRef[] = []

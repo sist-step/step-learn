@@ -93,7 +93,7 @@ export const AuthorizeErrorPage = ({ heading, text, loggedIn }: { heading: strin
   </AuthShell>
 )
 
-export type GrantRow = { id: number; client: ClientView; createdAt: number; lastUsedAt: number }
+type GrantRow = { id: number; client: ClientView; createdAt: number; lastUsedAt: number }
 
 const SETUP_STEPS = [
   { app: 'Claude', text: '設定 → コネクタ → 「カスタムコネクタを追加」に URL を入力します。' },

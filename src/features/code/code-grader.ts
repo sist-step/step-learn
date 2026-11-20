@@ -139,10 +139,10 @@ function parseJson(text: string): Record<string, unknown> | null {
 }
 
 /** 採点に使うもの。設定は採点するときのアイテムのもの、files は提出されたコード */
-export type GradingInput = CodeSettings & { files: CodeFiles }
+type GradingInput = CodeSettings & { files: CodeFiles }
 
 /** 採点の前に提出を動かした結果。Python は sandbox で実行した出力、Web は browser のコンテナで開いた記録。動かせなかったものは null */
-export type Observation = { run: RunResult | null; web: WebRecord | null }
+type Observation = { run: RunResult | null; web: WebRecord | null }
 
 const NOTHING_OBSERVED: Observation = { run: null, web: null }
 
@@ -170,7 +170,7 @@ const constraintLine = (c: CodeConstraint, guide: string | undefined) =>
 
 // ---------------------------------------------------------------- 制約のないアイテム（制約を必須にする前に作ったもの）: 講評だけを書く
 
-export function buildFeedbackMessages(input: GradingInput, observed: Observation): AiMessage[] {
+function buildFeedbackMessages(input: GradingInput, observed: Observation): AiMessage[] {
   const { title, body, criteria } = input
   const boundary = newBoundary()
   const system = [
@@ -191,7 +191,7 @@ export function buildFeedbackMessages(input: GradingInput, observed: Observation
   ]
 }
 
-export function parseFeedback(text: string) {
+function parseFeedback(text: string) {
   const feedback = parseJson(text)?.feedback
   return typeof feedback === 'string' && feedback.trim() ? feedback.trim().slice(0, MAX_FEEDBACK_LENGTH) : null
 }
@@ -210,13 +210,13 @@ type JudgedVerdict = {
 }
 
 /** 制約ごとの判定（制約と同じ順）と、全体の講評 */
-export type Judgement = { verdicts: JudgedVerdict[]; feedback: string }
+type Judgement = { verdicts: JudgedVerdict[]; feedback: string }
 
 /**
  * 制約ごとの判定を頼む。retryNote は、前の回答で確かめられなかった根拠を写し直させる指示で、頼み直すときだけ渡す。
  * fixed は、判定がもう決まっている制約（DECIDER が自信を持って判定したもの）の判定。その制約は理由と根拠だけを書かせる
  */
-export function buildJudgeMessages(
+function buildJudgeMessages(
   input: GradingInput,
   observed: Observation,
   retryNote = '',
@@ -278,7 +278,7 @@ export function buildJudgeMessages(
   ]
 }
 
-export function parseJudgement(text: string, count: number): Judgement | null {
+function parseJudgement(text: string, count: number): Judgement | null {
   const data = parseJson(text)
   if (!data || !Array.isArray(data.verdicts) || typeof data.feedback !== 'string') return null
   const byNo = new Map<number, JudgedVerdict>()
@@ -315,7 +315,7 @@ function squeeze(source: string) {
  * AI が根拠として写した quote を、提出したコードの中から探す。空白の違いと「...」での省略は見逃し、ほかの違いがあれば見つからない扱いにする。
  * file（AI が答えたファイルの名前）から先に探す
  */
-export function locateQuote(language: CodeLanguage, files: CodeFiles, quote: string, file = ''): Evidence | null {
+function locateQuote(language: CodeLanguage, files: CodeFiles, quote: string, file = ''): Evidence | null {
   const segments = quote
     .split(/\.{3,}|…/)
     .map((s) => s.replace(/\s+/g, ''))
@@ -346,7 +346,7 @@ const UNVERIFIED_REASON =
  * 判定の根拠が、提出したコードの中にあるかを確かめる。missing は、ない根拠で "pass" にしていた制約の番号で、その判定は "partial" に下げておく。
  * 根拠のない "pass" をそのまま通さないのは、AI が書かれていないコードを書かれていると思い込んで、できていない制約を通してしまうため
  */
-export function checkEvidence(
+function checkEvidence(
   { language, files }: Pick<GradingInput, 'language' | 'files'>,
   judgement: Judgement,
   fixed: readonly (Verdict | null)[] = [],
@@ -604,10 +604,10 @@ async function gradeOne(
 // ---------------------------------------------------------------- 問題文から下書きを作る
 
 /** 下書きを作るのに使うもの。タイトルと問題文は、編集画面に入っている保存前の値 */
-export type SetupInput = { title: string; body: string; language: CodeLanguage }
+type SetupInput = { title: string; body: string; language: CodeLanguage }
 
 /** AI が作った、最初のコードと制約の下書き */
-export type SetupDraft = { starter: CodeFiles; solution: CodeFiles; stdin: string; constraints: CodeConstraint[] }
+type SetupDraft = { starter: CodeFiles; solution: CodeFiles; stdin: string; constraints: CodeConstraint[] }
 
 const LANGUAGE_RULES: Record<CodeLanguage, string> = {
   web: '- ファイルは index.html・style.css・script.js の 3 つです。index.html は <link rel="stylesheet" href="style.css" /> と <script src="script.js"></script> で、ほかの 2 つを読み込みます。問題文が求めていない限り、外部のライブラリは使いません。',
@@ -620,7 +620,7 @@ const CONSTRAINT_RULES = [
   '- 制約ごとに label と text を作ります。label は学生にも見せる、何ができればよいかの短い名前（15 字程度。例:「名前を見出しにする」）です。text は学生には見せず、AI が判定に使う詳しい内容で、コードを読めば満たしているか判定できる文（40 字程度。例:「h1 要素に自分の名前が書かれている」）にします。',
 ]
 
-export function buildSetupMessages({ title, body, language }: SetupInput): AiMessage[] {
+function buildSetupMessages({ title, body, language }: SetupInput): AiMessage[] {
   const files = CODE_FILES[language].map((f) => f.key)
   const keys = [...files, ...(language === 'python' ? ['stdin'] : [])]
   const system = [
@@ -652,7 +652,7 @@ const constraintsOf = (value: unknown): CodeConstraint[] =>
     .filter((c): c is CodeConstraint => !!c)
     .slice(0, MAX_CONSTRAINTS)
 
-export function parseSetup(text: string, language: CodeLanguage): SetupDraft | null {
+function parseSetup(text: string, language: CodeLanguage): SetupDraft | null {
   const data = parseJson(text)
   if (!data) return null
   const str = (key: string, max: number) => {
@@ -679,9 +679,9 @@ export function parseSetup(text: string, language: CodeLanguage): SetupDraft | n
 }
 
 /** 制約だけを作るのに使うもの。最初のコードも編集画面に入っている保存前の値で、はじめから書いてある部分を制約にしないために渡す */
-export type ConstraintsInput = SetupInput & { starter: CodeFiles }
+type ConstraintsInput = SetupInput & { starter: CodeFiles }
 
-export function buildConstraintsMessages({ title, body, language, starter }: ConstraintsInput): AiMessage[] {
+function buildConstraintsMessages({ title, body, language, starter }: ConstraintsInput): AiMessage[] {
   const system = [
     'あなたは、プログラミングの授業の教師が課題を準備するのを手伝うアシスタントです。教師が書いた課題のタイトル・問題文・最初のコードから、AI が提出を判定するときに使う「制約」を作ります。',
     ...CONSTRAINT_RULES,
@@ -694,7 +694,7 @@ export function buildConstraintsMessages({ title, body, language, starter }: Con
   ]
 }
 
-export function parseConstraints(text: string): CodeConstraint[] | null {
+function parseConstraints(text: string): CodeConstraint[] | null {
   const constraints = constraintsOf(parseJson(text)?.constraints)
   return constraints.length > 0 ? constraints : null
 }
@@ -707,16 +707,7 @@ const PREPARE_MODEL: ClaudeModel = 'claude-opus-5-5'
 const PREPARE_MAX_TOKENS = 32_000
 const MAX_GUIDE_LENGTH = 600
 
-export function buildPrepareMessages({
-  title,
-  body,
-  criteria,
-  constraints,
-  language,
-  starter,
-  solution,
-  stdin,
-}: CodeSettings): AiMessage[] {
+function buildPrepareMessages({ title, body, criteria, constraints, language, starter, solution, stdin }: CodeSettings): AiMessage[] {
   const boundary = newBoundary()
   const shown = hasCode(solution)
   const observed =
@@ -757,14 +748,14 @@ export function buildPrepareMessages({
 }
 
 /** 判定の基準を読む。制約の数と合わなければ null */
-export function parseGuides(text: string, count: number): string[] | null {
+function parseGuides(text: string, count: number): string[] | null {
   const guides = parseJson(text)?.guides
   if (!Array.isArray(guides) || guides.length !== count || !guides.every((g) => typeof g === 'string' && g.trim())) return null
   return guides.map((g: string) => g.trim().slice(0, MAX_GUIDE_LENGTH))
 }
 
 /** 準備が終わった（ready）か、失敗した（failed）か。guides は ready のときの判定の基準 */
-export type Preparation = { stage: 'ready'; guides: string[] } | { stage: 'failed' }
+type Preparation = { stage: 'ready'; guides: string[] } | { stage: 'failed' }
 
 /**
  * 確定した問題の準備（判定の基準を書く）を、裏で進める。load は準備中の問題の設定（準備中でなければ null）、save は結果を書く。
@@ -956,7 +947,7 @@ export function createGrader({
 // ---------------------------------------------------------------- 学生の提出
 
 /** 同じアイテムに続けて提出できるまでの秒数。AI が採点するときは、提出のたびに AI の利用料がかかるので長くする */
-export const SUBMIT_INTERVAL = gradingEnabled ? 60 : 10
+const SUBMIT_INTERVAL = gradingEnabled ? 60 : 10
 
 /** いちばん新しい提出の時刻から、次に提出できるまでの残りの秒数 */
 export const submitWait = (lastSubmittedAt: number | undefined, now = Math.floor(Date.now() / 1000)) =>

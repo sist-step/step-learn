@@ -160,7 +160,7 @@ export const needsReview = (s: Pick<SubmissionSummary, 'status' | 'verdicts'>) =
 export type ConstraintStat = { label: string; optional: boolean; passed: number; judged: number }
 
 /** 学生の数。絞り込む前の全員から数える */
-export type SubmissionCounts = {
+type SubmissionCounts = {
   students: number
   submitted: number
   cleared: number

@@ -51,7 +51,7 @@ async function readCookie<T extends z.ZodType>(c: Context, name: string, schema:
 
 const FLOW = z.object({ state: z.string(), nonce: z.string(), verifier: z.string(), next: z.string(), linkUserId: z.number().nullable() })
 
-export type MicrosoftFlow = z.output<typeof FLOW>
+type MicrosoftFlow = z.output<typeof FLOW>
 
 /** Microsoft のサインイン画面の URL を返し、戻ってきたときに照らし合わせる値を Cookie に残す。linkUserId は、ログイン中のユーザーに結び付けるとき */
 export async function startMicrosoftAuth(c: Context, { next, linkUserId = null }: { next: string; linkUserId?: number | null }) {
@@ -148,7 +148,7 @@ export async function exchangeMicrosoftCode(c: Context, flow: MicrosoftFlow, cod
 
 const SIGNUP = z.object({ subject: z.string(), email: z.string(), name: z.string(), next: z.string() })
 
-export type MicrosoftSignup = z.output<typeof SIGNUP>
+type MicrosoftSignup = z.output<typeof SIGNUP>
 
 /** 登録を終えるまで、確かめた Microsoft アカウントを Cookie に持っておく。DB に置かないのは、登録をやめた人の分が残り続けるため */
 export const holdMicrosoftSignup = (c: Context, signup: MicrosoftSignup) => writeCookie(c, SIGNUP_COOKIE, signup, SIGNUP_TTL)

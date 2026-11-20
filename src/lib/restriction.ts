@@ -24,19 +24,19 @@ export const RESTRICTION_KIND_LABELS: Record<RestrictionKind | 'set', string> = 
 }
 
 export const DATE_DIRECTIONS = ['>=', '<'] as const
-export type DateDirection = (typeof DATE_DIRECTIONS)[number]
+type DateDirection = (typeof DATE_DIRECTIONS)[number]
 export const DATE_DIRECTION_LABELS: Record<DateDirection, string> = { '>=': '以降', '<': 'より前' }
 
 /** 値は Moodle の COMPLETION_INCOMPLETE（0）・COMPLETE（1）・COMPLETE_PASS（2）・COMPLETE_FAIL（3） */
 export const COMPLETION_EXPECTS = [1, 0, 2, 3] as const
-export type CompletionExpect = (typeof COMPLETION_EXPECTS)[number]
+type CompletionExpect = (typeof COMPLETION_EXPECTS)[number]
 export const COMPLETION_EXPECT_LABELS: Record<CompletionExpect, string> = {
   1: '完了している',
   0: '完了していない',
   2: '合格している',
   3: '不合格になっている',
 }
-export const isPassFail = (e: CompletionExpect) => e === 2 || e === 3
+const isPassFail = (e: CompletionExpect) => e === 2 || e === 3
 
 export const PROFILE_OPS = ['isequalto', 'contains', 'doesnotcontain', 'startswith', 'endswith', 'isempty', 'isnotempty'] as const
 export type ProfileOp = (typeof PROFILE_OPS)[number]
@@ -53,27 +53,27 @@ export const profileOpTakesValue = (op: ProfileOp) => op !== 'isempty' && op !==
 
 /** 完了の条件にできる「直前のアイテム」 */
 export const PREVIOUS_ITEM = -1
-export const MAX_RESTRICTION_CONDITIONS = 50
+const MAX_RESTRICTION_CONDITIONS = 50
 // 深さに上限を設けるのは、際限なく入れ子にした JSON で判定と描画の再帰を深くさせないため
-export const MAX_RESTRICTION_DEPTH = 5
-export const MAX_PROFILE_VALUE_LENGTH = 255
+const MAX_RESTRICTION_DEPTH = 5
+const MAX_PROFILE_VALUE_LENGTH = 255
 export const MAX_RESTRICTION_JSON_LENGTH = 100_000
 
 /** k は編集画面の行の目印（入力のエラーを出す場所）。Moodle に渡す JSON には含めない */
-export type DateCondition = { type: 'date'; d: DateDirection; t: number; k?: string }
-export type CompletionCondition = { type: 'completion'; cm: number; e: CompletionExpect; k?: string }
+type DateCondition = { type: 'date'; d: DateDirection; t: number; k?: string }
+type CompletionCondition = { type: 'completion'; cm: number; e: CompletionExpect; k?: string }
 /** min・max は評点の割合（%）。min 以上・max 未満 */
-export type GradeCondition = { type: 'grade'; id: number; min?: number; max?: number; k?: string }
+type GradeCondition = { type: 'grade'; id: number; min?: number; max?: number; k?: string }
 /** field は標準の項目なら `sf:<名前>`、Moodle の独自の項目なら `cf:<短縮名>` */
-export type ProfileCondition = { type: 'profile'; field: string; op: ProfileOp; v: string; k?: string }
+type ProfileCondition = { type: 'profile'; field: string; op: ProfileOp; v: string; k?: string }
 /** STEP Learn では編集しない Moodle の条件（グループなど）。raw は Moodle の JSON のまま */
-export type OtherCondition = { type: 'other'; raw: Record<string, unknown>; k?: string }
-export type RestrictionCondition = DateCondition | CompletionCondition | GradeCondition | ProfileCondition | OtherCondition
+type OtherCondition = { type: 'other'; raw: Record<string, unknown>; k?: string }
+type RestrictionCondition = DateCondition | CompletionCondition | GradeCondition | ProfileCondition | OtherCondition
 /** 制限セット。show・showc は一番上のセットだけが持つ（Moodle と同じく、& と !| は条件ごとの showc、| と !& は全体の show） */
 export type RestrictionSet = { op: RestrictionOp; c: RestrictionNode[]; show?: boolean; showc?: boolean[]; k?: string }
-export type RestrictionNode = RestrictionCondition | RestrictionSet
+type RestrictionNode = RestrictionCondition | RestrictionSet
 
-export const isSet = (n: RestrictionNode): n is RestrictionSet => !('type' in n)
+const isSet = (n: RestrictionNode): n is RestrictionSet => !('type' in n)
 
 /** 一番上のセットで、条件ごとに表示を選ぶ（目のアイコンが条件ごとに付く） */
 export const showsEach = (op: RestrictionOp) => op === '&' || op === '!|'
@@ -169,7 +169,7 @@ function writeNode(node: RestrictionNode, root: boolean): Record<string, unknown
 /** Moodle の形の JSON にする。条件がなければ null（制限なし） */
 export const restrictionJson = (set: RestrictionSet | null) => (set && set.c.length > 0 ? JSON.stringify(writeNode(set, true)) : null)
 
-export function conditionsOf(node: RestrictionNode): RestrictionCondition[] {
+function conditionsOf(node: RestrictionNode): RestrictionCondition[] {
   return isSet(node) ? node.c.flatMap(conditionsOf) : [node]
 }
 
@@ -184,7 +184,7 @@ export type RestrictionFormNode =
   | { k: string; type: 'other'; raw: Record<string, unknown> }
   | { k: string; op: string; c: RestrictionFormNode[]; show?: boolean; showc?: boolean[] }
 
-export type RestrictionIssue = { key: string; message: string }
+type RestrictionIssue = { key: string; message: string }
 
 const parsePercent = (s: string) => {
   const t = s.trim()
@@ -284,7 +284,7 @@ export function readRestrictionForm(json: string): { set: RestrictionSet | null;
 
 // ---------------------------------------------------------------- 選べるもの
 
-export type RestrictionChoice = { id: number; label: string; meta?: string }
+type RestrictionChoice = { id: number; label: string; meta?: string }
 
 /** 編集画面で選べるものと、ほかの画面で条件を文にするときの名前 */
 export type RestrictionChoices = {
@@ -332,7 +332,7 @@ export function checkRestrictionChoices(set: RestrictionSet, choices: Restrictio
 
 export type CompletionState = 'incomplete' | 'complete' | 'pass' | 'fail'
 
-export type RestrictionEnv = {
+type RestrictionEnv = {
   now: number
   /** アイテムの完了の状態。アイテムがなければ null */
   completion: (itemId: number) => CompletionState | null
@@ -437,7 +437,7 @@ export type Availability = {
   text: string
 }
 
-export const AVAILABLE: Availability = { open: true, hidden: false, text: '' }
+const AVAILABLE: Availability = { open: true, hidden: false, text: '' }
 
 export function checkRestriction(set: RestrictionSet | null, env: RestrictionEnv, choices: RestrictionChoices): Availability {
   if (!set) return AVAILABLE

@@ -1,13 +1,13 @@
 // スライドとキャンバスに置くもの（図形・テキスト・画像・付箋・線）の形と描き方
 import * as Y from 'yjs'
 
-export const SHAPE_KINDS = ['rect', 'roundRect', 'ellipse', 'triangle', 'diamond', 'star', 'arrowRight', 'speech'] as const
+const SHAPE_KINDS = ['rect', 'roundRect', 'ellipse', 'triangle', 'diamond', 'star', 'arrowRight', 'speech'] as const
 
 export type ShapeKind = (typeof SHAPE_KINDS)[number]
 
 export const isShapeKind = (v: unknown): v is ShapeKind => typeof v === 'string' && (SHAPE_KINDS as readonly string[]).includes(v)
 
-export type ElType = 'text' | 'shape' | 'image' | 'note' | 'line' | 'pen'
+type ElType = 'text' | 'shape' | 'image' | 'note' | 'line' | 'pen'
 
 export type Align = 'left' | 'center' | 'right'
 

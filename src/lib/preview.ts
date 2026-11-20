@@ -1,4 +1,4 @@
-export type PreviewKind = 'pdf' | 'image' | 'video' | 'audio' | 'text'
+type PreviewKind = 'pdf' | 'image' | 'video' | 'audio' | 'text'
 
 // 種類が空や別物（.ts が video/mp2t など）で届くことがあるので、テキストは拡張子でも判定する
 const TEXT_FILE_NAME =

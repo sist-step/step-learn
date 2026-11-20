@@ -173,7 +173,7 @@ export function ensureSheet(doc: Y.Doc) {
   seed.destroy()
 }
 
-export const sheetByName = (doc: Y.Doc, name: string) =>
+const sheetByName = (doc: Y.Doc, name: string) =>
   sheetsOf(doc)
     .toArray()
     .find((s) => nameOf(s).toLowerCase() === name.toLowerCase())
@@ -261,7 +261,7 @@ const NUMBER = nf(0, 0)
 const FIXED2 = nf(2, 2)
 const PERCENT = nf(0, 2)
 
-export function formatDateSerial(n: number) {
+function formatDateSerial(n: number) {
   const d = serialDate(n)
   return `${d.y}/${d.m}/${d.d}`
 }

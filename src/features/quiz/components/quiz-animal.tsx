@@ -2,7 +2,7 @@ import type { Child } from 'hono/jsx'
 import type { QuizKind } from '../quiz'
 import { useStyle } from '../../../components/style'
 
-export type AnimalMood = 'normal' | 'happy' | 'sad'
+type AnimalMood = 'normal' | 'happy' | 'sad'
 
 type Animal = {
   /** 代替テキストに使う呼び名 */

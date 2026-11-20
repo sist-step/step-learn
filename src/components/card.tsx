@@ -14,19 +14,14 @@ type CardOwnProps = {
   children?: Child
 }
 
-export type CardProps = CardOwnProps &
+type CardProps = CardOwnProps &
   (
     | ({ as?: 'section' } & JSX.IntrinsicElements['section'])
     | ({ as: 'form' } & JSX.IntrinsicElements['form'])
     | ({ as: 'div' } & JSX.IntrinsicElements['div'])
   )
 
-export const CardHead = ({
-  heading,
-  description,
-  leading,
-  actions,
-}: Pick<CardOwnProps, 'heading' | 'description' | 'leading' | 'actions'>) => {
+const CardHead = ({ heading, description, leading, actions }: Pick<CardOwnProps, 'heading' | 'description' | 'leading' | 'actions'>) => {
   useStyle('/src/components/card.css')
   return (
     <div class="card-head">
@@ -100,7 +95,7 @@ export const Block = ({
   )
 }
 
-export type TableColumn = { label: Child; class?: string; srOnly?: boolean }
+type TableColumn = { label: Child; class?: string; srOnly?: boolean }
 
 export const Table = ({ columns, children }: { columns: readonly (TableColumn | false | null | undefined)[]; children: Child }) => {
   useStyle('/src/components/card.css')

@@ -42,7 +42,7 @@ export type PresentationContext = {
   store: PresentationStore
 }
 
-export type PresentationTarget = {
+type PresentationTarget = {
   courseId: number
   course: string
   title: string

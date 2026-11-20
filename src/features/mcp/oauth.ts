@@ -26,7 +26,7 @@ export type OAuthFailure = {
   description: string
 }
 
-export type OAuthTokens = { access_token: string; token_type: 'Bearer'; expires_in: number; refresh_token: string }
+type OAuthTokens = { access_token: string; token_type: 'Bearer'; expires_in: number; refresh_token: string }
 
 export const isFailure = (v: object): v is OAuthFailure => 'error' in v
 
@@ -49,7 +49,7 @@ const isLoopback = (url: URL) => url.protocol === 'http:' && LOOPBACK_HOSTS.has(
  * つなげてよい戻り先か。誰でも登録できるようにしないのは、攻撃者が「Claude」を名乗るクライアントを自分のサーバーへの戻り先で登録し、
  * 同意の画面へのリンクを教師に踏ませると、本人のトークンを取られるため
  */
-export function isAllowedRedirectUri(uri: string) {
+function isAllowedRedirectUri(uri: string) {
   const url = URL.parse(uri)
   if (!url || url.username || url.password || url.hash) return false
   if (isLoopback(url)) return true
@@ -131,7 +131,7 @@ export const registrationSchema = z.object({
   response_types: z.optional(z.array(z.string())),
 })
 
-export type Registration = z.output<typeof registrationSchema>
+type Registration = z.output<typeof registrationSchema>
 
 /** PKCE の code_verifier（RFC 7636 の 4.1） */
 const VERIFIER = /^[A-Za-z0-9\-._~]{43,128}$/

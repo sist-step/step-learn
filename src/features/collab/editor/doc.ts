@@ -15,7 +15,7 @@ import { DOC_FONTS, presenceColor } from '../collab'
 import type { CollabEditor, EditorContext } from './app'
 
 /** 文書の中身を入れる Yjs の欄の名前 */
-export const DOC_FIELD = 'doc'
+const DOC_FIELD = 'doc'
 
 const MAX_INDENT = 8
 const INDENT_TYPES = ['paragraph', 'heading']

@@ -17,7 +17,7 @@ export const AGENT_KIND = 'agent'
 /** 教師が選べる Claude のモデル。安い順 */
 export const AGENT_CLAUDE_MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-opus-5-5'] as const satisfies readonly ClaudeModel[]
 
-export type AgentClaudeModel = (typeof AGENT_CLAUDE_MODELS)[number]
+type AgentClaudeModel = (typeof AGENT_CLAUDE_MODELS)[number]
 
 export const isAgentClaudeModel = (s: unknown): s is AgentClaudeModel =>
   typeof s === 'string' && (AGENT_CLAUDE_MODELS as readonly string[]).includes(s)
@@ -35,10 +35,10 @@ export type AgentModel = { provider: 'anthropic'; id: AgentClaudeModel } | ({ pr
 export const DEFAULT_AGENT_MODEL: AgentModel = { provider: 'anthropic', id: 'claude-haiku-5-5' }
 
 /** 1 回の応答の出力トークンの上限。ファイルを丸ごと書き出すツールの引数も、この中に収める */
-export const AGENT_MAX_TOKENS = 32_000
+const AGENT_MAX_TOKENS = 32_000
 
 /** 選べる OpenRouter のモデルのコンテキストの長さの下限。システムプロンプトとツールの定義に 5K トークンほど使い、残りで作業させる */
-export const MIN_AGENT_CONTEXT = 64_000
+const MIN_AGENT_CONTEXT = 64_000
 
 // 100K にしないのは、Haiku 5.5 は 1 回の入力が 100K トークンを超えると料金が 5 倍になり、超える前に会話を短くするため
 const HAIKU_CONTEXT_LIMIT = 80_000
@@ -99,7 +99,7 @@ const STORED_OPENROUTER_MODEL = z.object({
 })
 
 /** 保存した OpenRouter のモデルの情報（JSON から読んだもの）。正しくなければ null */
-export function parseOpenRouterModel(v: unknown): OpenRouterModelInfo | null {
+function parseOpenRouterModel(v: unknown): OpenRouterModelInfo | null {
   const result = STORED_OPENROUTER_MODEL.safeParse(v)
   // tools を保存した値から読まないのは、ツールを使えるモデルしか選べず、保存した時点で必ず使えるため
   return result.success ? { ...result.data, tools: true } : null
@@ -150,7 +150,7 @@ export const AGENT_BODY_LIMIT = 16 * 1024 * 1024
 export type AgentState = 'closed' | 'off' | 'unset' | 'before' | 'after' | 'total' | 'limit' | 'ok'
 
 /** 提供元ごとの API キー。hint は入れたキーの末尾（キーがなければ空） */
-export type AgentKeyState = { configured: boolean; hint: string }
+type AgentKeyState = { configured: boolean; hint: string }
 
 export type AgentSettings = {
   /** 選んでいるモデルの提供元の API キーが入っていて、読み出せる */
@@ -168,7 +168,7 @@ export type AgentSettings = {
 /** 教師や管理者がまだ決めていないときの上限（USD） */
 export const AGENT_DEFAULT_LIMITS = { userLimit: 0.5, totalLimit: 10 }
 
-export type AgentUserUsage = { id: number | null; name: string; username: string | null; cost: number; calls: number; lastAt: number }
+type AgentUserUsage = { id: number | null; name: string; username: string | null; cost: number; calls: number; lastAt: number }
 
 /** アイテム 1 つの設定・使用量・トークン。通常モードは features/agent/agent-items.ts、Moodle モードは moodle-mode/agent-store.ts */
 export type AgentStore = {
@@ -255,7 +255,7 @@ const pathProperty = (description: string) => ({ type: 'string', description })
 
 // 拡張機能に定義を持たせないのは、アイテムの API キーで呼べるツールをサーバーが決め、古い拡張機能が勝手なツールを足せないようにするため
 /** 拡張機能が学生の PC で実行するツール。パスは VS Code で開いているフォルダーからの相対パス（/ 区切り） */
-export const AGENT_TOOLS: AiTool[] = [
+const AGENT_TOOLS: AiTool[] = [
   {
     name: 'list_files',
     description: 'フォルダーの中のファイルとフォルダーの一覧を返す。.git・node_modules などは除く。',
@@ -361,9 +361,9 @@ export function agentToolsFor(names: readonly string[] | undefined): AiTool[] {
   return AGENT_TOOLS.filter((t) => supported.has(t.name))
 }
 
-export const AGENT_PLATFORMS = ['win32', 'darwin', 'linux'] as const
+const AGENT_PLATFORMS = ['win32', 'darwin', 'linux'] as const
 
-export type AgentPlatform = (typeof AGENT_PLATFORMS)[number]
+type AgentPlatform = (typeof AGENT_PLATFORMS)[number]
 
 const PLATFORM_LABELS: Record<AgentPlatform, string> = {
   win32: 'Windows（コマンドは PowerShell で実行される）',
@@ -464,7 +464,7 @@ export function agentSummaryMessages(messages: AiMessage[]): AiMessage[] {
 // 会話の中身を厳しく決めすぎないのは、Anthropic の応答の形が増えても、拡張機能から送り返されたものを弾かないようにするため
 const NATIVE_BLOCK_TYPES = ['text', 'thinking', 'redacted_thinking', 'tool_use'] as const
 
-export const MAX_AGENT_MESSAGES = 2000
+const MAX_AGENT_MESSAGES = 2000
 const MAX_TEXT = 200_000
 
 const text = (max = MAX_TEXT) => z.string().check(z.maxLength(max))

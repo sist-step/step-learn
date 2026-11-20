@@ -57,7 +57,7 @@ const TreeNodes = ({ nodes, deleteAction }: { nodes: BundleTreeNode[]; deleteAct
   </ul>
 )
 
-export const BundleTree = ({ files, deleteAction }: { files: Listed[]; deleteAction?: string }) => {
+const BundleTree = ({ files, deleteAction }: { files: Listed[]; deleteAction?: string }) => {
   useStyle('/src/features/bundle/components/bundle.css', '/src/components/course.css')
   return (
     <div class="bundle-tree kind-bundle">

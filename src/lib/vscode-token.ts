@@ -40,7 +40,7 @@ type ClaimsByKind = {
   presentation: Base
 }
 
-export type TokenKind = keyof ClaimsByKind
+type TokenKind = keyof ClaimsByKind
 type LaunchKind = 'launch' | 'code-launch' | 'presentation-launch'
 type Claims<K extends TokenKind> = ClaimsByKind[K] & { kind: K }
 type Fields<K extends TokenKind> = Omit<ClaimsByKind[K], 'exp' | 'nonce'>
@@ -75,7 +75,7 @@ export function signToken<K extends TokenKind>(kind: K, fields: Fields<K>): stri
 }
 
 /** 種類が kind の、期限内で改ざんされていない鍵の中身。そうでなければ null */
-export function verifyToken<K extends TokenKind>(kind: K, token: string): Claims<K> | null {
+function verifyToken<K extends TokenKind>(kind: K, token: string): Claims<K> | null {
   const [body, signature, extra] = token.split('.')
   if (!body || !signature || extra !== undefined) return null
   const expected = Buffer.from(mac(body))

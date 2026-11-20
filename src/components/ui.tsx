@@ -1,5 +1,4 @@
 import type { Child, JSX } from 'hono/jsx'
-import { courseImageUrl } from '../lib/course-images'
 import { cx } from './cx'
 import { Icon, type IconName } from './icons'
 import { useStyle } from './style'
@@ -138,7 +137,7 @@ export const Breadcrumbs = ({ items }: { items: readonly Crumb[] }) => {
   )
 }
 
-export type AlertTone = 'error' | 'info' | 'success' | 'warning'
+type AlertTone = 'error' | 'info' | 'success' | 'warning'
 
 const ALERT_ICONS: Record<AlertTone, IconName> = { error: 'alert', info: 'info', success: 'check', warning: 'alert' }
 
@@ -152,7 +151,7 @@ export const Alert = ({ tone = 'error', children }: { tone?: AlertTone; children
   )
 }
 
-export type ChipTone = 'default' | 'accent' | 'success' | 'live'
+type ChipTone = 'default' | 'accent' | 'success' | 'live'
 
 export const Chip = ({
   tone = 'default',
@@ -217,76 +216,6 @@ export const ProgressRing = ({ done, total }: { done: number; total: number }) =
         <span data-progress-pct>{pct}</span>%
       </strong>
     </div>
-  )
-}
-
-export type CourseCardData = {
-  id: number
-  code: string
-  title: string
-  summary: string
-  color: string
-  heroImage?: string | null
-  iconImage?: string | null
-  role?: string | null
-  total?: number
-  done?: number
-  members?: number
-  inProgress: boolean
-}
-
-export const CourseIcon = ({
-  course,
-  text,
-  class: cls,
-}: {
-  course: { id: number; iconImage?: string | null }
-  text: string
-  class: string
-}) => {
-  useStyle('/src/components/ui.css')
-  const src = courseImageUrl(course.id, 'icon', course.iconImage)
-  return (
-    <span class={cx(cls, 'course-icon', src && 'has-image')} aria-hidden="true">
-      {src ? <img src={src} alt="" loading="lazy" /> : text}
-    </span>
-  )
-}
-
-export const courseInitials = (course: { code: string; title: string }) => [...(course.code || course.title)].slice(0, 2).join('')
-
-/** client.ts が localStorage の設定で表示を切り替えるまでの既定（進行中・参加しているコースだけ）で見えるか */
-export const shownByDefault = (course: CourseCardData) => course.inProgress && !!course.role
-
-export const CourseCard = ({ course, showProgress }: { course: CourseCardData; showProgress?: boolean }) => {
-  useStyle('/src/components/ui.css')
-  const hero = courseImageUrl(course.id, 'hero', course.heroImage)
-  return (
-    <a
-      href={`/courses/${course.id}`}
-      class={`course-card tone-${course.color}`}
-      data-course-ended={!course.inProgress || undefined}
-      data-course-unenrolled={!course.role || undefined}
-    >
-      <div class="course-cover">
-        {hero && <img class="course-cover-img" src={hero} alt="" loading="lazy" />}
-        <CourseIcon course={course} text={courseInitials(course)} class="course-mono" />
-      </div>
-      <div class="course-body">
-        <h3 class="course-title">{course.title}</h3>
-        {course.code && <div class="course-code">{course.code}</div>}
-        {course.summary && <p class="course-summary">{course.summary}</p>}
-      </div>
-      <div class="course-foot">
-        {showProgress && course.role === 'student' ? (
-          <Progress done={course.done ?? 0} total={course.total ?? 0} />
-        ) : (
-          <span class="meta course-members">
-            <Icon name="users" size={14} /> {course.members ?? 0}人
-          </span>
-        )}
-      </div>
-    </a>
   )
 }
 

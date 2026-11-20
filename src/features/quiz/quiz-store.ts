@@ -14,12 +14,12 @@ import {
 /** 受験の一覧に出す項目。答えは含めない。pending は採点待ちの問題の数 */
 export type QuizAttemptSummary = QuizScore & { id: number; userId: number; passed: number; pending: number; createdAt: number }
 
-export type QuizAttempt = QuizAttemptSummary & { answers: QuizAnswerRecord[] }
+type QuizAttempt = QuizAttemptSummary & { answers: QuizAnswerRecord[] }
 
 export type QuizStudent = { id: number; name: string; username: string | null; email: string }
 
 /** 受験を残すときの点数と記録（features/quiz/quiz.ts の gradeQuiz の結果） */
-export type QuizGraded = QuizScore & { pending: number; records: QuizAnswerRecord[] }
+type QuizGraded = QuizScore & { pending: number; records: QuizAnswerRecord[] }
 
 /**
  * 小テストのアイテム 1 つの、受験の記録の置き場所。通常モードは step-learn.db（features/quiz/quiz-items.ts）、

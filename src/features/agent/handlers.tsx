@@ -36,7 +36,7 @@ type C = Context<AppEnv>
 /** 利用者が今開けるアイテム。description は学生にも見せているアイテムの説明で、AI にも渡す */
 export type AgentTarget = { course: string; title: string; description: string; store: AgentStore }
 
-export type AgentContext = AgentTarget & {
+type AgentContext = AgentTarget & {
   courseId: number
   /** URL の :iid。通常モードはアイテムの ID、Moodle モードは活動の cmid */
   itemId: number

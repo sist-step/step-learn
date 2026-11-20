@@ -6,7 +6,7 @@ import { isAllowedOrigin } from '../screen/screen-share'
 // このファイルで DB を読まないのは、Moodle モードでも読み込むので、step-learn.db を開くと Moodle モードでも作られてしまうため
 
 /** 通常モード（features/presentation/presentation-access.ts）と Moodle モード（moodle-mode/presentation.ts）で違う部分 */
-export type PresentationSocketBackend = {
+type PresentationSocketBackend = {
   /** その時点でそのアイテムを開いてよいなら、アイテムの識別子（PresentationContext の ref）を返す */
   authorize: (cookie: string | undefined, target: PresentationTargetIds) => Promise<string | null>
 }

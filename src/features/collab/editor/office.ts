@@ -15,7 +15,7 @@ export function hexColor(color: string | undefined | null): string | null {
   return /^#[0-9a-f]{6}$/i.test(normalized) ? normalized.slice(1).toUpperCase() : null
 }
 
-export type ImageData = { data: ArrayBuffer; type: 'png' | 'jpg' | 'gif'; width: number; height: number }
+type ImageData = { data: ArrayBuffer; type: 'png' | 'jpg' | 'gif'; width: number; height: number }
 
 const IMAGE_TYPES: Record<string, ImageData['type']> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif' }
 

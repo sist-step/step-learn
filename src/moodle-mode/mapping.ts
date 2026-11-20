@@ -1,4 +1,4 @@
-import type { CourseCardData } from '../components/ui'
+import type { CourseCardData } from '../components/course'
 import { BUNDLE_MODULE } from '../features/bundle/bundle'
 import type { CourseAccess } from '../lib/courses'
 import { isHttpUrl } from '../lib/forms'
@@ -9,12 +9,12 @@ import { toMarkdown, toPlainText } from '../moodle/html'
 import type { MoodleCourse, MoodleFormat, MoodleModule, MoodleRestriction, MoodleRestrictionOptions, MoodleSection } from './client'
 
 // Moodle のコースには色がないので、ID から決めて毎回同じ色にする
-export const courseColor = (id: number) => COURSE_COLORS[id % COURSE_COLORS.length]
+const courseColor = (id: number) => COURSE_COLORS[id % COURSE_COLORS.length]
 
 /** コース画像の URL のうち、画像の配信 URL（/courses/:id/hero/:name）に使う部分 */
 const imageKey = (url: string) => (url ? (URL.parse(url)?.pathname ?? null) : null)
 
-export function toCourse(m: MoodleCourse): Course {
+function toCourse(m: MoodleCourse): Course {
   return {
     id: m.id,
     code: m.shortname,
@@ -143,7 +143,7 @@ export type MSection = {
 }
 
 /** 教師に見せるアクセス制限。text は Moodle が作った説明、set は編集画面に渡す条件（読めなければ null） */
-export type Restriction = { text: string; set: RestrictionSet | null }
+type Restriction = { text: string; set: RestrictionSet | null }
 
 // リンクを外すのは、Moodle が活動の名前を Moodle の画面へのリンクにしており、文字にすると URL が並んで条件が読みにくいため
 const restrictionText = (html: string) => toPlainText(html.replace(/<\/?a\b[^>]*>/gi, ''), 1)
@@ -324,10 +324,10 @@ export type TopcollLayout = {
   persistent: boolean
 }
 
-export type TileProgress = 'none' | 'fraction' | 'percent'
+type TileProgress = 'none' | 'fraction' | 'percent'
 
 /** photo は Moodle での写真のファイル名（変わると配信 URL も変わる） */
-export type Tile = { photo: string; photoUrl: string }
+type Tile = { photo: string; photoUrl: string }
 
 export type TilesLayout = {
   kind: 'tiles'

@@ -25,7 +25,7 @@ import {
   type CollabView,
 } from '../collab'
 
-export const COLLAB_KIND_ICONS: Record<CollabKind, IconName> = { doc: 'page', sheet: 'table', slides: 'presentation', board: 'squares2x2' }
+const COLLAB_KIND_ICONS: Record<CollabKind, IconName> = { doc: 'page', sheet: 'table', slides: 'presentation', board: 'squares2x2' }
 
 const PickOption = ({
   name,
@@ -742,7 +742,7 @@ const BoardNoteColors = () => (
   </div>
 )
 
-export type CollabWorkspaceProps = {
+type CollabWorkspaceProps = {
   kind: CollabKind
   courseId: number
   itemId: number

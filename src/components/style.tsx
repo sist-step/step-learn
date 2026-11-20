@@ -5,7 +5,7 @@ import { Link } from 'vite-ssr-components/hono'
 import type { AppEnv } from '../lib/types'
 
 // 並びはカスケードの順。同じ詳細度のルールがぶつかると後ろのファイルが勝つので、ページごとに読み込む組み合わせが変わってもこの順で出す
-export const STYLESHEETS = [
+const STYLESHEETS = [
   '/src/styles/base.css',
   '/src/components/button.css',
   '/src/components/form.css',
@@ -41,7 +41,7 @@ export const STYLESHEETS = [
   '/src/moodle-mode/moodle-mode.css',
 ] as const
 
-export type StyleSheet = (typeof STYLESHEETS)[number]
+type StyleSheet = (typeof STYLESHEETS)[number]
 
 const BASE: StyleSheet = '/src/styles/base.css'
 const PLACEHOLDER = '<!--stylesheets-->'

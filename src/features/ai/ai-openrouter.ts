@@ -18,7 +18,7 @@ import { parseJson } from '../../lib/json'
 const API = 'https://openrouter.ai/api/v1'
 
 /** 1 トークンあたりの料金（USD） */
-export type OpenRouterPrice = { prompt: number; completion: number }
+type OpenRouterPrice = { prompt: number; completion: number }
 
 // usage.cost だけに頼らないのは、cost のない応答を 0 として数えると、上限の計算から漏れるため。
 // 提供元ごとに料金が違うので、OpenRouter のモデル一覧に載っている額で見積もる

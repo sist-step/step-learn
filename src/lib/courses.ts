@@ -50,7 +50,7 @@ export const isVisibleItem = (itemId: number) =>
     .get()
 
 /** items を FROM に含むクエリで使う、進捗に数えるアイテム（学生に見えて、完了の条件があり、コースが完了ステータスを使う）の条件 */
-export const trackedItem = () =>
+const trackedItem = () =>
   and(
     visibleItem(),
     ne(items.completion, 'none'),

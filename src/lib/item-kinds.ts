@@ -12,7 +12,7 @@ import type { Completion, ItemType, LinkTarget } from './types'
 type Tx = Parameters<Parameters<DB['transaction']>[0]>[0]
 
 /** 新しく作るアイテム。種類ごとの欄（code・collab）は、その種類のときだけ読む */
-export type NewItem = {
+type NewItem = {
   courseId: number
   sectionId: number
   /** この ID のアイテムの前に入れる。なければ末尾 */

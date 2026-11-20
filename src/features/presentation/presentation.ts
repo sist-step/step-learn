@@ -5,12 +5,12 @@ export const PRESENTATION_KIND = 'presentation'
 
 export const presentationBase = (courseId: number, itemId: number) => `/courses/${courseId}/items/${itemId}/presentation`
 
-export const MAX_PRESENTATION_PAGES = 2000
+const MAX_PRESENTATION_PAGES = 2000
 
 /** 拡張機能が、スライドが変わらなくても送り続ける間隔（秒）。拡張機能に claim の応答で伝える */
 export const SYNC_HEARTBEAT = 10
 /** この秒数のあいだ拡張機能から届かなければ、同期が止まったとみなす */
-export const SYNC_ALIVE = 30
+const SYNC_ALIVE = 30
 /** socket.io につながっていないときに、画面が公開の状態を読む間隔（ミリ秒） */
 export const STATE_INTERVAL = 3000
 /** socket.io につながっているときの間隔（ミリ秒）。同期が途切れたことは知らせが来ないので、読むのを完全にはやめない */
@@ -90,7 +90,7 @@ const releaseTo = (s: PresentationState, page: number): Patch => ({
   releasedSlideIds: union(s.releasedSlideIds, s.slideIds.slice(0, page)),
 })
 
-export type UploadedPdf = Pick<PresentationState, 'fileKey' | 'fileSize' | 'slideIds' | 'animatedPages' | 'triggerPages' | 'sourceName'>
+type UploadedPdf = Pick<PresentationState, 'fileKey' | 'fileSize' | 'slideIds' | 'animatedPages' | 'triggerPages' | 'sourceName'>
 
 /**
  * PDF を上げ直したとき。公開の範囲は、公開済みのスライドのうち、新しい PDF でいちばん後ろにあるページまで。
@@ -117,7 +117,7 @@ export function uploaded(s: PresentationState, pdf: UploadedPdf, now: number): P
 }
 
 /** 拡張機能が送る、映しているスライド。slideId が null は、スライドショーをしていない */
-export type Position = { slideId: number | null; complete: boolean }
+type Position = { slideId: number | null; complete: boolean }
 
 /**
  * 映しているスライドが届いたとき。アニメーションが終わっていればそのページまで、まだなら 1 つ前のページまで公開する。

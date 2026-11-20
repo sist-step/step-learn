@@ -33,7 +33,7 @@ export type AiChatEntry =
  * AI がファイルを選んでもらうために出したカード（features/ai/ai-agent.ts の REQUEST_FILE）。accept はファイルの選択に渡す拡張子（なければ種類を問わない）、
  * kinds は受け取れる種類の名前、received は受け取ったファイル（size は表示用）
  */
-export type AiFileEntry = {
+type AiFileEntry = {
   kind: 'file'
   callId: string
   title: string
@@ -48,7 +48,7 @@ export type AiFileEntry = {
  * hardLabel は「難しい依頼」を選んだときに答えるモデル（なければ選べない）、hardOff はそれを今使えない短い理由、
  * problem は今そのモデルを使えない理由、usage はそのモデルで使う今週の枠の使い具合、images は発言に画像を添えられること
  */
-export type AiModelOption = {
+type AiModelOption = {
   value: string
   label: string
   hardLabel: string | null
@@ -82,7 +82,7 @@ export type AiPanelProps = {
   } | null
 }
 
-export const AI_PANEL_ID = 'ai-panel'
+const AI_PANEL_ID = 'ai-panel'
 
 const SUGGESTION_SLOTS = 3
 

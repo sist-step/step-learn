@@ -84,7 +84,7 @@ export type ExtraData = Record<string, unknown>
  */
 /** 編集画面で開いているアイテム。itemId は活動の cmid */
 /** 編集しているアイテム。key は moodle-mode.db の extra_items の key */
-export type ExtraTarget = { courseId: number; itemId: number; title: string; key: string }
+type ExtraTarget = { courseId: number; itemId: number; title: string; key: string }
 
 export type ExtraKind = {
   label: string
@@ -740,7 +740,7 @@ const presentation: ExtraKind = {
   },
 }
 
-export const EXTRA_KINDS: Record<string, ExtraKind> = {
+const EXTRA_KINDS: Record<string, ExtraKind> = {
   screen,
   [PRESENTATION_KIND]: presentation,
   [CODE_KIND]: code,

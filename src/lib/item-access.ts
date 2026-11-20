@@ -7,7 +7,7 @@ import { intParam } from './http'
 import { items, users } from './schema'
 import type { AppEnv, Completion, ItemType, User } from './types'
 
-export type TypedItem = { id: number; courseId: number; title: string; body: string; completion: Completion }
+type TypedItem = { id: number; courseId: number; title: string; body: string; completion: Completion }
 
 /** 種類が type のアイテム。ほかの種類なら undefined */
 export const getItemOfType = (type: ItemType, itemId: number): TypedItem | undefined =>

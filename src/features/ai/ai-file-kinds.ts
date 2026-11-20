@@ -6,7 +6,7 @@ export const AI_FILE_KINDS = ['pdf', 'image', 'video', 'audio', 'word', 'excel',
 
 export type AiFileKind = (typeof AI_FILE_KINDS)[number]
 
-export const AI_FILE_KIND_LABELS: Record<AiFileKind, string> = {
+const AI_FILE_KIND_LABELS: Record<AiFileKind, string> = {
   pdf: 'PDF',
   image: '画像',
   video: '動画',

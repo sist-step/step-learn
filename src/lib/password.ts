@@ -1,4 +1,4 @@
-export const PASSWORD_MIN_LENGTH = 8
+const PASSWORD_MIN_LENGTH = 8
 export const PASSWORD_HINT = `${PASSWORD_MIN_LENGTH}文字以上。推測されやすいものは使えません`
 
 // 流出したパスワードの上位や、サービス・地域から連想しやすい語。

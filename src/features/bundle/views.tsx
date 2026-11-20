@@ -31,7 +31,7 @@ export type SyncFileRow = { path: string; versions: number; deleted: boolean; la
 
 type HistoryQuery = { v?: number; full?: boolean }
 
-export function historyUrl(courseId: number, itemId: number, userId?: number, { v, full }: HistoryQuery = {}) {
+function historyUrl(courseId: number, itemId: number, userId?: number, { v, full }: HistoryQuery = {}) {
   const query = new URLSearchParams({ ...(v && { v: String(v) }), ...(full && { view: 'full' }) }).toString()
   return `${bundleBase(courseId, itemId)}/history${userId ? `/${userId}` : ''}${query ? `?${query}` : ''}`
 }

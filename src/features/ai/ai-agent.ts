@@ -104,12 +104,12 @@ const toolActivity = (name: string, tool?: AiAgentTool): AiActivity =>
 /** 1 回の発言で、AI がツールを呼んで考え直せる回数 */
 const MAX_ROUNDS = 10
 /** 1 つのチャットで送れる発言の数 */
-export const MAX_AI_TURNS = 50
+const MAX_AI_TURNS = 50
 
 // モデルの文脈の上限（1M トークン）まで待たないのは、Claude Haiku 5.5 は入力が 100K トークンを超えると料金が上がり、
 // 長い会話を毎回送り直すほど遅く、高くなるため。100K より下にするのは、1 回の発言でツールの結果が足されても超えないようにするため
 /** 会話の大きさがこのトークン数に達したら、次の発言の前に古いやり取りを要約する */
-export const AI_CONTEXT_COMPACT_AT = 80_000
+const AI_CONTEXT_COMPACT_AT = 80_000
 
 /** 会話の大きさ。AI_CONTEXT_COMPACT_AT に対する %（0〜100） */
 export const contextPercent = ({ contextTokens = 0 }: AiChatContent) =>
@@ -244,7 +244,7 @@ const REQUEST_TOOL = toolOf(
 )
 
 /** アイテムのファイル（PDF・画像）の中身を AI に見せるツール。読み込み方を渡し、ファイルを読めるモデル（readsFiles）のときだけ AI に渡す */
-export const READ_FILE = 'read_file'
+const READ_FILE = 'read_file'
 
 const readArgs = z.object({
   item_id: id('ファイルのアイテムの ID'),

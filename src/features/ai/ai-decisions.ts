@@ -18,12 +18,12 @@ const FALLBACK_INPUT_PRICE: Record<DecisionModel, number> = {
 export type ChoiceQuestion = { type: 'choice'; instructions: string; criteria: Record<string, string> }
 
 /** instructions に書いたことが当てはまるかを、はい・いいえで答えさせる問い */
-export type NoulQuestion = { type: 'noul'; instructions: string }
+type NoulQuestion = { type: 'noul'; instructions: string }
 
-export type DecisionQuestion = ChoiceQuestion | NoulQuestion
+type DecisionQuestion = ChoiceQuestion | NoulQuestion
 
 /** probabilities は選択肢ごとの確からしさ、noul ははいの確からしさ。答えを断られた問いは refusal になる */
-export type DecisionAnswer =
+type DecisionAnswer =
   { type: 'choice'; choice: string; probabilities: Record<string, number> } | { type: 'noul'; noul: number } | { type: 'refusal' }
 
 type WireAnswer = { type?: string; choice?: unknown; probabilities?: unknown; noul?: unknown }

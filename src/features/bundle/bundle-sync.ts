@@ -9,10 +9,10 @@ import { diffLines, diffStats, splitLines } from '../../lib/diff'
 /** 記録するファイル 1 つの大きさの上限。残すのはソースコードの変更履歴なので、大きなファイルは記録しない */
 export const MAX_SYNC_FILE_SIZE = 256 * 1024
 /** 1 人がアイテム 1 つに残せる記録の合計（縮める前の大きさ） */
-export const MAX_SYNC_TOTAL_SIZE = 30 * 1024 * 1024
+const MAX_SYNC_TOTAL_SIZE = 30 * 1024 * 1024
 /** 拡張機能が 1 回に送れる本文の大きさと、変更の数 */
 export const SYNC_BODY_LIMIT = 2 * 1024 * 1024
-export const MAX_SYNC_CHANGES = 200
+const MAX_SYNC_CHANGES = 200
 /** 変更履歴の画面に出す、1 人の記録の数（新しいものから） */
 export const MAX_LISTED_VERSIONS = 5000
 
@@ -29,9 +29,9 @@ export type SyncVersion = {
   createdAt: number
 }
 
-export type SyncVersionContent = SyncVersion & { content: Buffer | null }
+type SyncVersionContent = SyncVersion & { content: Buffer | null }
 
-export type NewSyncVersion = Omit<SyncVersionContent, 'id' | 'createdAt'>
+type NewSyncVersion = Omit<SyncVersionContent, 'id' | 'createdAt'>
 
 /** 変更履歴の一覧の 1 行。versions は記録の数、lastAt はいちばん新しい記録の日時（記録がなければ null） */
 export type SyncStudentRow = { student: Student; versions: number; lastAt: number | null }
@@ -66,7 +66,7 @@ export function syncStateOf(sync: BundleSyncStore, base: string, viewer: { id: n
   return { enabled, historyHref: sync.usage(viewer.id) > 0 ? `${base}/history/${viewer.id}` : undefined }
 }
 
-export function decodeText(bytes: Uint8Array) {
+function decodeText(bytes: Uint8Array) {
   try {
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
   } catch {
@@ -89,7 +89,7 @@ export async function distributedText(files: BundleFile[], path: string, read: (
 }
 
 /** 拡張機能から送られた変更 1 つ。content が null なら、ファイルを消した */
-export type SyncChange = { path: string; content: Uint8Array | null }
+type SyncChange = { path: string; content: Uint8Array | null }
 
 const SYNC_CHANGE = z.union([z.object({ path: z.string(), deleted: z.literal(true) }), z.object({ path: z.string(), content: z.string() })])
 

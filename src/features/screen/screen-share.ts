@@ -13,11 +13,11 @@ import {
   type StreamConfig,
 } from './screen-share-protocol'
 
-export type Sharer = { id: number; name: string }
+type Sharer = { id: number; name: string }
 
 // このファイルで DB を読まないのは、Moodle モードでも読み込むので、step-learn.db を開くと Moodle モードでも作られてしまうため
 /** 通常モード（src/features/screen/screen-share-access.ts）と Moodle モード（src/moodle-mode/screen-share.ts）で違う部分 */
-export type ShareBackend = {
+type ShareBackend = {
   /** その時点で接続してよいなら利用者を、だめなら null を返す */
   authorize: (cookie: string | undefined, courseId: number, itemId: number, mode: ShareMode) => Promise<Sharer | null>
   /** 共有が始まった・終わったとき。開いているコースの画面に「配信中」を出し入れする */

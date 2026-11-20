@@ -46,7 +46,7 @@ export type Backup = {
   warnings: string[]
 }
 
-export const MODULE_LABELS: Record<string, string> = {
+const MODULE_LABELS: Record<string, string> = {
   page: 'ページ',
   url: 'URL',
   resource: 'ファイル',

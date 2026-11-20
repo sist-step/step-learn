@@ -31,7 +31,7 @@ export type CodeConstraint = { label: string; text: string; optional?: boolean }
 
 export const CONSTRAINT_KINDS = ['required', 'optional'] as const
 
-export type ConstraintKind = (typeof CONSTRAINT_KINDS)[number]
+type ConstraintKind = (typeof CONSTRAINT_KINDS)[number]
 
 export const CONSTRAINT_KIND_LABELS: Record<ConstraintKind, string> = { required: '必須', optional: '発展' }
 
@@ -177,7 +177,7 @@ export type CodeFileKey = (typeof CODE_FILE_KEYS)[number]
 
 export type CodeFiles = Partial<Record<CodeFileKey, string>>
 
-export type CodeFileSpec = { key: CodeFileKey; name: string; label: string }
+type CodeFileSpec = { key: CodeFileKey; name: string; label: string }
 
 export const CODE_FILES: Record<CodeLanguage, readonly CodeFileSpec[]> = {
   web: [
@@ -226,14 +226,14 @@ export const sameFiles = (language: CodeLanguage, a: CodeFiles, b: CodeFiles) =>
 export const hasCode = (files: CodeFiles) => Object.values(files).some((code) => !!code?.trim())
 
 /** 学生が判定の確認を教師に頼んだ状態。open は教師がまだ見ていない、closed は教師が確認した */
-export type AppealState = 'none' | 'open' | 'closed'
+type AppealState = 'none' | 'open' | 'closed'
 
 export const appealStateOf = (s: { appealedAt: number | null; appealClosedAt: number | null }): AppealState =>
   s.appealedAt == null ? 'none' : s.appealClosedAt == null ? 'open' : 'closed'
 
-export const PREVIEW_SOURCE = 'step-learn-preview'
+const PREVIEW_SOURCE = 'step-learn-preview'
 
-export type PreviewLevel = 'log' | 'warn' | 'error'
+type PreviewLevel = 'log' | 'warn' | 'error'
 
 export type PreviewMessage = { source: typeof PREVIEW_SOURCE; level: PreviewLevel; text: string }
 

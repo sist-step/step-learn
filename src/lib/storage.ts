@@ -11,7 +11,7 @@ export const MAX_FILE_SIZE = 30 * 1024 * 1024 // 30MB
 
 export const FILE_TOO_LARGE = `ファイルサイズは ${formatBytes(MAX_FILE_SIZE)} までです。`
 
-export const EXECUTABLE_NOT_ALLOWED = '実行ファイル（.exe など）はアップロードできません。'
+const EXECUTABLE_NOT_ALLOWED = '実行ファイル（.exe など）はアップロードできません。'
 
 // .js・.sh・.py などのスクリプトを含めないのは、プログラミングの授業で教材として配るため
 const EXECUTABLE_NAME =

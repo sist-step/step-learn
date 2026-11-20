@@ -12,7 +12,7 @@ import { LIMITS, RESTRICTION_NOTE, cut, moduleLabel, type Backup, type BackupFil
 import { linkTargetOf } from './display'
 import { toMarkdown, toPlainText } from './html'
 
-export type MoodleSite = { url: string; token: string }
+type MoodleSite = { url: string; token: string }
 
 type Content = NonNullable<MoodleModule['contents']>[number]
 

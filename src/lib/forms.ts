@@ -500,7 +500,7 @@ const aiSettings = z.object({
   'claude-sonnet-5-5_share': percent('Claude Sonnet 5.5 の週の枠'),
 })
 
-export const MAX_AI_MESSAGE_LENGTH = 4000
+const MAX_AI_MESSAGE_LENGTH = 4000
 
 const aiMessage = z.object({
   message: text('メッセージ', MAX_AI_MESSAGE_LENGTH, { required: true }),
@@ -634,7 +634,7 @@ const aiSuggestions = z.object({ page: hidden(500) })
 // 形式と大きさをここで確かめないのは、受け取れる形式が文字起こしの提供元の都合で決まり、features/ai/ai-voice.ts にまとめておくため
 const aiVoice = z.object({ audio: file('音声がありません。') })
 
-export const FORMS = {
+const FORMS = {
   login,
   register,
   completeRegister,
@@ -699,7 +699,7 @@ export type FormInput = Record<string, unknown>
 
 export type FormValues<N extends FormName> = z.output<(typeof FORMS)[N]>
 
-export type Validated<N extends FormName> = { ok: true; values: FormValues<N> } | { ok: false; errors: FieldErrors }
+type Validated<N extends FormName> = { ok: true; values: FormValues<N> } | { ok: false; errors: FieldErrors }
 
 export const firstError = (errors: FieldErrors) => Object.values(errors).find((m) => !!m) ?? ''
 

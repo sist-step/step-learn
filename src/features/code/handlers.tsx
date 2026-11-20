@@ -47,7 +47,7 @@ import {
 
 type C = Context<AppEnv>
 
-export type CodeContext = {
+type CodeContext = {
   access: CourseAccess
   /** URL の :iid。通常モードはアイテムの ID、Moodle モードは活動の cmid */
   itemId: number

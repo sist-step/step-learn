@@ -359,7 +359,7 @@ const ExtraOptionBody = ({ kind }: { kind: ExtraKind }) => (
 
 const CHOICES = ['none', 'manual', 'view'] as const
 
-export const MoodleCompletionField = ({ id, value = 'none', error }: { id?: string; value?: string; error?: string }) => (
+const MoodleCompletionField = ({ id, value = 'none', error }: { id?: string; value?: string; error?: string }) => (
   <SelectField
     label="完了の条件"
     name="completion"
@@ -1264,7 +1264,7 @@ export const ItemPage = ({
 
 // ---------------------------------------------------------------- 編集
 
-export type ItemEditValues = { title: string; url: string; linkTarget: string; hidden: number; sectionId: number; completion: string }
+type ItemEditValues = { title: string; url: string; linkTarget: string; hidden: number; sectionId: number; completion: string }
 
 export const ItemEditPage = ({
   access,

@@ -1,7 +1,7 @@
 import { and, desc, eq, isNotNull, or } from 'drizzle-orm'
 import type { Context } from 'hono'
 import type { CourseFormValues } from '../../components/course'
-import type { CourseCardData } from '../../components/ui'
+import type { CourseCardData } from '../../components/course'
 import { canCreateCourse } from '../../lib/auth'
 import { courseAvailability } from '../../lib/availability'
 import {

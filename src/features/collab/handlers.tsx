@@ -10,7 +10,7 @@ import { CollabPage } from './views'
 
 type C = Context<AppEnv>
 
-export type CollabContext = {
+type CollabContext = {
   access: CourseAccess
   /** URL の :iid。通常モードはアイテムの ID、Moodle モードは活動の cmid */
   item: { id: number; title: string }

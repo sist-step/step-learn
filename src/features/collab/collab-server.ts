@@ -14,10 +14,10 @@ import { config } from '../../lib/config'
 
 // このファイルで DB を読まないのは、Moodle モードでも読み込むので、step-learn.db を開くと Moodle モードでも作られてしまうため
 
-export type CollabUser = { id: number; name: string }
+type CollabUser = { id: number; name: string }
 
 /** 通常モード（src/features/collab/collab-access.ts）と Moodle モード（src/moodle-mode/collab.ts）で違う部分 */
-export type CollabSocketBackend = {
+type CollabSocketBackend = {
   /** その時点でそのファイルを開いてよいなら利用者とファイルを、だめなら null を返す */
   authorize: (cookie: string | undefined, auth: CollabAuth) => Promise<{ user: CollabUser; doc: CollabDocStore } | null>
 }

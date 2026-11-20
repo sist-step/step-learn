@@ -21,7 +21,7 @@ import { ResultPage, ResultsPage, resultsUrl, type QuestionStat, type ResultRow 
 
 type C = Context<AppEnv>
 
-export type QuizContext = {
+type QuizContext = {
   access: CourseAccess
   /** URL の :iid。通常モードはアイテムの ID、Moodle モードは活動の cmid */
   item: { id: number; title: string }

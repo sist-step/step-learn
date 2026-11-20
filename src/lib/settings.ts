@@ -2,7 +2,7 @@
 import { z } from 'zod'
 import { parseJson } from './json'
 
-export const SETTINGS_KEY = 'settings'
+const SETTINGS_KEY = 'settings'
 
 /** AI のパネルを本文の横に並べる幅。これより狭いと本文に重ねて出す */
 export const AI_PANEL_DOCKED = '(min-width: 1100px)'
@@ -21,8 +21,8 @@ const SETTINGS = z.object({
   outlineHidden: z.array(z.string()).catch([]),
 })
 
-export type Settings = z.infer<typeof SETTINGS>
-export type SettingKey = keyof Settings
+type Settings = z.infer<typeof SETTINGS>
+type SettingKey = keyof Settings
 export type Theme = Settings['theme']
 
 const toSettings = (value: unknown): Settings => SETTINGS.safeParse(value).data ?? SETTINGS.parse({})
@@ -30,7 +30,7 @@ const toSettings = (value: unknown): Settings => SETTINGS.safeParse(value).data 
 // 保存できない環境（プライベートブラウズなど）でも、開いているあいだは切り替えた設定のまま使えるよう、読み書きした値を持っておく
 let memory: Settings | null = null
 
-export function readSettings(): Readonly<Settings> {
+function readSettings(): Readonly<Settings> {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
     memory = raw === null ? migrateLegacy() : toSettings(parseJson(raw))

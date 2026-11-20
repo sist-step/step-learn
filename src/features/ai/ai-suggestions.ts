@@ -10,7 +10,7 @@ const COUNT = 3
 const MAX_LENGTH = 40
 
 /** 作れなかったときに出す候補。どの画面でも送れるものにする */
-export const DEFAULT_SUGGESTIONS = [
+const DEFAULT_SUGGESTIONS = [
   'このコースの構成を要約して',
   '開いているページの誤字や分かりにくい表現を直して',
   '新しいセクションを作って、授業の流れを説明するページを追加して',
@@ -43,7 +43,7 @@ function parse(text: string) {
  * パスが指す画面。course の itemId はアイテムの下の画面のときだけ入り、view はコースのページかアイテムの画面そのもの（学生も開ける画面）のとき true。
  * ID が大きすぎて読めないものは、どのコースにも当たらない 0 にする
  */
-export type PageTarget = { kind: 'admin' } | { kind: 'course'; courseId: number; itemId: number | null; view: boolean } | { kind: 'other' }
+type PageTarget = { kind: 'admin' } | { kind: 'course'; courseId: number; itemId: number | null; view: boolean } | { kind: 'other' }
 
 const toId = (s: string) => (Number.isSafeInteger(Number(s)) ? Number(s) : 0)
 

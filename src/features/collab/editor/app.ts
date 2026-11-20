@@ -16,7 +16,7 @@ export type ConfirmNear = (
 
 export type Presence = { id: number; name: string; color: string }
 
-export type ImageSize = { width: number; height: number }
+type ImageSize = { width: number; height: number }
 
 export type EditorContext = {
   root: HTMLElement

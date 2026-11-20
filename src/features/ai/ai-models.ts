@@ -1,9 +1,9 @@
 // features/ai/ai.ts に置かないのは、提供元ごとの実装（ai-openrouter.ts・ai-anthropic.ts）と features/ai/ai.ts が互いを読み込む循環になるため
 
-export const OPENROUTER_MODELS = ['deepseek/deepseek-v4.1-flash-1017'] as const
-export const ANTHROPIC_MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5'] as const
+const OPENROUTER_MODELS = ['deepseek/deepseek-v4.1-flash-1017'] as const
+const ANTHROPIC_MODELS = ['claude-haiku-5-5', 'claude-sonnet-5-5'] as const
 
-export const AI_MODELS = [...OPENROUTER_MODELS, ...ANTHROPIC_MODELS] as const
+const AI_MODELS = [...OPENROUTER_MODELS, ...ANTHROPIC_MODELS] as const
 
 // AI_MODELS に入れないのは、文章を作らず、決めた選択肢から答えを選ぶだけで、会話（AI エージェントやアシスタント）には使えないため
 /** 判定だけを返すモデル（OpenRouter の Decisions API）。使用量は OpenRouter の月の上限に数える */
@@ -29,12 +29,12 @@ export const OPENROUTER_TRANSCRIPTION_MODELS = ['openai/whisper-large-v3-turbo']
 export type TranscriptionModel = (typeof OPENROUTER_TRANSCRIPTION_MODELS)[number]
 
 export type OpenRouterModel = (typeof OPENROUTER_MODELS)[number]
-export type AnthropicModel = (typeof ANTHROPIC_MODELS)[number]
+type AnthropicModel = (typeof ANTHROPIC_MODELS)[number]
 export type AiModel = (typeof AI_MODELS)[number]
 
 // ANTHROPIC_MODELS に入れないのは、Opus はコーディングエージェントで教師が選んだときだけ使い、AI アシスタントの選択肢や管理画面の一覧に出さないため
 /** features/ai/ai-anthropic.ts で呼べる Claude のモデル */
-export const CLAUDE_MODELS = [...ANTHROPIC_MODELS, 'claude-opus-5-5'] as const
+const CLAUDE_MODELS = [...ANTHROPIC_MODELS, 'claude-opus-5-5'] as const
 
 export type ClaudeModel = (typeof CLAUDE_MODELS)[number]
 
@@ -91,7 +91,7 @@ export const AI_HARD_TASK_MODELS: Partial<Record<AiModel, AiModel>> = { 'claude-
  * ツールを呼ぶ前に書いた 1〜2 文より長い文章を、本文ではなく中身が空の考えた内容のブロックで返すモデル。
  * 回答のあとにツールを呼ばせると、回答が表示されずに消える
  */
-export const AI_HIDDEN_PRELUDE_MODELS: readonly ClaudeModel[] = ['claude-sonnet-5-5', 'claude-opus-5-5']
+const AI_HIDDEN_PRELUDE_MODELS: readonly ClaudeModel[] = ['claude-sonnet-5-5', 'claude-opus-5-5']
 
 export const hidesPrelude = (model: AiModel) => (AI_HIDDEN_PRELUDE_MODELS as readonly string[]).includes(model)
 
@@ -135,7 +135,7 @@ export const aiProvider = (model: AiModel | TranscriptionModel): AiProvider => (
 
 // 一覧から消さないのは、再開するときにここから外すだけで戻せて、止める前にそのモデルで使った今月の額も月の上限に数え続けるため
 /** 一時的に止めているモデル。会話の選択肢に出さず、呼び出しても断る */
-export const AI_PAUSED_MODELS: readonly (AiModel | DecisionModel)[] = ['typesafe/jev-1.14']
+const AI_PAUSED_MODELS: readonly (AiModel | DecisionModel)[] = ['typesafe/jev-1.14']
 
 export const isModelPaused = (model: AiModel | DecisionModel) => AI_PAUSED_MODELS.includes(model)
 
@@ -150,7 +150,7 @@ export const isReserveModel = (model: AiModel | DecisionModel) => (AI_RESERVE_MO
 /** arguments はモデルが書いた JSON の文字列。壊れていることがあるので、使う側で検証する */
 export type AiToolCall = { id: string; name: string; arguments: string }
 
-export const AI_FILE_MEDIA_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const
+const AI_FILE_MEDIA_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const
 
 export type AiFileMediaType = (typeof AI_FILE_MEDIA_TYPES)[number]
 

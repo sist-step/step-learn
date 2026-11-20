@@ -59,7 +59,7 @@ export type CollabOwner = 'course' | 'template' | `user:${number}`
 
 export const userOwner = (userId: number): CollabOwner => `user:${userId}`
 
-export function parseOwner(v: unknown): CollabOwner | null {
+function parseOwner(v: unknown): CollabOwner | null {
   if (v === 'course' || v === 'template') return v
   const m = typeof v === 'string' ? /^user:([1-9]\d{0,15})$/.exec(v) : null
   return m && Number.isSafeInteger(Number(m[1])) ? userOwner(Number(m[1])) : null

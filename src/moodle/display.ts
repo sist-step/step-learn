@@ -1,7 +1,7 @@
 import type { LinkTarget } from '../lib/types'
 
 /** Moodle の URL・ファイルの活動の表示方法（resourcelib の RESOURCELIB_DISPLAY_*） */
-export const MOODLE_DISPLAYS = { auto: 0, embed: 1, frame: 2, new: 3, download: 4, open: 5, popup: 6 } as const
+const MOODLE_DISPLAYS = { auto: 0, embed: 1, frame: 2, new: 3, download: 4, open: 5, popup: 6 } as const
 
 export type MoodleDisplay = keyof typeof MOODLE_DISPLAYS
 

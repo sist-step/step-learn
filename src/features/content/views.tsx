@@ -92,14 +92,14 @@ export type ItemInput = {
 }
 
 /** コードのアイテムの言語と、見ている学生のいちばん新しい提出。goals は学生に見せるクリアの条件（制約のラベル） */
-export type CodeView = { language: CodeLanguage; goals: Goal[]; grade: GradeView | null; solution: CodeFiles | null; stage: CodeStage }
+type CodeView = { language: CodeLanguage; goals: Goal[]; grade: GradeView | null; solution: CodeFiles | null; stage: CodeStage }
 
 export type OutlineItem = Pick<
   Item,
   'id' | 'sectionId' | 'type' | 'title' | 'url' | 'linkTarget' | 'fileName' | 'fileType' | 'hidden' | 'completion'
 >
 
-export type OutlineSection = Pick<Section, 'id' | 'title' | 'hidden'>
+type OutlineSection = Pick<Section, 'id' | 'title' | 'hidden'>
 
 /** 学生がアクセス制限でまだ開けないアイテムと、目次にも出さないアイテム・セクション */
 export type RestrictedOutline = { locked: Set<number>; hidden: Set<number>; hiddenSections: Set<number> }

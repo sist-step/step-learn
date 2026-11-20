@@ -26,7 +26,7 @@ import { readFields, readForm, sameOriginReferer, wantsJson } from '../../lib/ht
 import { uploadProblem } from '../../lib/storage'
 import type { AppEnv, User } from '../../lib/types'
 
-export type AiBackend = {
+type AiBackend = {
   agent: AiAgent
   /** ログインしている人が AI を使えるか */
   canUse: (c: Context<AppEnv>) => boolean | Promise<boolean>
@@ -318,7 +318,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
   return { renderPanel, show, state, suggestions, image, send, decide, approveAll, stop, voice, close }
 }
 
-export type AiHandlers = ReturnType<typeof createAiHandlers>
+type AiHandlers = ReturnType<typeof createAiHandlers>
 
 export function aiRoutes(h: AiHandlers) {
   const app = new Hono<AppEnv>()

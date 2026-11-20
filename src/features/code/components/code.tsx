@@ -113,7 +113,7 @@ const CODE_SHORTCUTS: { label: string; keys: string[][]; only?: CodeLanguage }[]
  * コードのエディターの道具（Web のコードの整形と、キーボードショートカットの一覧）。
  * 整形は、同じ data-code-workspace / data-code-starter の中で表示中のファイルに対して src/features/code/editor.ts が行う
  */
-export const CodeEditorTools = ({ language }: { language: CodeLanguage }) => (
+const CodeEditorTools = ({ language }: { language: CodeLanguage }) => (
   <>
     {language === 'web' && <IconButton icon="format" label="コードを整形（Shift + Alt + F）" data-code-format />}
     <Popover
@@ -146,7 +146,7 @@ export const CodeEditorTools = ({ language }: { language: CodeLanguage }) => (
   </>
 )
 
-export const CodeField = ({
+const CodeField = ({
   label,
   name,
   id = `f-${name}`,
@@ -867,7 +867,7 @@ export const CodeStageFields = (props: Parameters<typeof StageBody>[0]) => (
 )
 
 /** 確定した問題の、判定に関わる設定。変えられないので入力欄ではなく、中身をそのまま見せる */
-export type FinalizedCode = {
+type FinalizedCode = {
   language: CodeLanguage
   starter: CodeFiles
   stdin: string
@@ -959,7 +959,7 @@ export const CodeFinalizedFields = ({ code }: { code: FinalizedCode }) => (
   </fieldset>
 )
 
-export const CODE_FORM = 'code-form'
+const CODE_FORM = 'code-form'
 const RESET_FORM = 'code-reset'
 
 /** 右の枠の表示。output はプレビュー（Web）か実行結果（Python） */
@@ -1325,7 +1325,7 @@ const GoalList = ({ goals, grade }: { goals: readonly Goal[]; grade?: GradeView 
 }
 
 /** 提出の履歴の 1 件 */
-export type SubmissionRow = { status: GradingStatus; verdicts: ConstraintResult[] | null; createdAt: number }
+type SubmissionRow = { status: GradingStatus; verdicts: ConstraintResult[] | null; createdAt: number }
 
 /**
  * 学生の提出のタブに出すもの（features/code/code-grader.ts の submissionsOf で作る）。秒数はどれも描いた時点のもので、

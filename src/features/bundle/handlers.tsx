@@ -40,7 +40,7 @@ import { SyncHistoryPage, SyncStudentsPage, type SyncFileRow } from './views'
 
 type C = Context<AppEnv>
 
-export type BundleContext = {
+type BundleContext = {
   access: CourseAccess
   /** URL の :iid。通常モードはアイテムの ID、Moodle モードは活動の cmid */
   itemId: number

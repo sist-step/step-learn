@@ -3,7 +3,7 @@ import zlib from 'node:zlib'
 import yauzl, { type Entry } from 'yauzl'
 
 /** zip に入れるファイル 1 つ。中身は入れる順番が来たときに read で読む */
-export type ZipSource = { path: string; read: () => Promise<Uint8Array> }
+type ZipSource = { path: string; read: () => Promise<Uint8Array> }
 
 const UTF8_NAMES = 0x0800
 const STORED = 0

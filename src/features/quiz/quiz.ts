@@ -28,7 +28,7 @@ export const QUIZ_KIND_DESCRIPTIONS: Record<QuizKind, string> = {
 }
 
 /** 問題を足したときに、問題文の欄に最初から入れておく文 */
-export const QUIZ_DEFAULT_PROMPTS: Record<QuizKind, string> = {
+const QUIZ_DEFAULT_PROMPTS: Record<QuizKind, string> = {
   choice: '',
   short: 'このコードを実行すると、何が出力されますか？',
   blank: '空欄に入るものを答えてください。',
@@ -40,7 +40,7 @@ export const QUIZ_DEFAULT_PROMPTS: Record<QuizKind, string> = {
 
 /** 行を選ぶ問題の選び方。one は 1 行だけ、many は当てはまる行をすべて、sequence は実行される順に（同じ行を何度選んでもよい） */
 export const LINES_MODES = ['one', 'many', 'sequence'] as const
-export type LinesMode = (typeof LINES_MODES)[number]
+type LinesMode = (typeof LINES_MODES)[number]
 export const LINES_MODE_LABELS: Record<LinesMode, string> = { one: '1 行だけ', many: '当てはまる行すべて', sequence: '実行される順に' }
 
 /** 並べ替えの問題で答えさせるもの */
@@ -49,12 +49,12 @@ export type OrderAsk = (typeof ORDER_ASKS)[number]
 export const ORDER_ASK_LABELS: Record<OrderAsk, string> = { order: '並び', indent: '字下げ', both: '並びと字下げ' }
 
 /** 穴埋めの本文の形。table は | で区切った表として出す */
-export const BLANK_LAYOUTS = ['code', 'table'] as const
-export type BlankLayout = (typeof BLANK_LAYOUTS)[number]
+const BLANK_LAYOUTS = ['code', 'table'] as const
+type BlankLayout = (typeof BLANK_LAYOUTS)[number]
 
 /** 穴埋めの答え方。type は打ちこむ、pick は選択肢から選ぶ */
-export const BLANK_FILLS = ['type', 'pick'] as const
-export type BlankFill = (typeof BLANK_FILLS)[number]
+const BLANK_FILLS = ['type', 'pick'] as const
+type BlankFill = (typeof BLANK_FILLS)[number]
 
 /** 学生に出す画面の見た目。game は中学生向けで、3D のダンジョンの扉を 1 問ずつ正解して開けながら進み、点数は問題ごとの最初の答えで数える */
 export const QUIZ_LOOKS = ['plain', 'game'] as const
@@ -65,38 +65,38 @@ export const QUIZ_LOOK_LABELS: Record<QuizLook, string> = { plain: '標準', gam
 
 export const isQuizLook = (v: unknown): v is QuizLook => QUIZ_LOOKS.some((look) => look === v)
 
-export const MAX_QUIZ_QUESTIONS = 50
-export const MAX_QUIZ_PROMPT_LENGTH = 2000
-export const MAX_QUIZ_CODE_LENGTH = 5000
-export const MIN_QUIZ_CHOICES = 2
-export const MAX_QUIZ_CHOICES = 8
-export const MAX_QUIZ_CHOICE_LENGTH = 300
-export const MIN_QUIZ_LINES = 2
-export const MAX_QUIZ_LINES = 20
-export const MAX_QUIZ_LINE_LENGTH = 300
+const MAX_QUIZ_QUESTIONS = 50
+const MAX_QUIZ_PROMPT_LENGTH = 2000
+const MAX_QUIZ_CODE_LENGTH = 5000
+const MIN_QUIZ_CHOICES = 2
+const MAX_QUIZ_CHOICES = 8
+const MAX_QUIZ_CHOICE_LENGTH = 300
+const MIN_QUIZ_LINES = 2
+const MAX_QUIZ_LINES = 20
+const MAX_QUIZ_LINE_LENGTH = 300
 /** 並べ替えに混ぜる、使わない行の数 */
-export const MAX_QUIZ_DISTRACTORS = 10
+const MAX_QUIZ_DISTRACTORS = 10
 /** 短答の正しい答えとして登録できる数 */
-export const MAX_QUIZ_ANSWERS = 10
+const MAX_QUIZ_ANSWERS = 10
 export const MAX_QUIZ_OUTPUT_LENGTH = 2000
-export const MAX_QUIZ_EXPLANATION_LENGTH = 2000
+const MAX_QUIZ_EXPLANATION_LENGTH = 2000
 /** 行を選ぶ問題の「実行される順に」で選べる行の数 */
 export const MAX_QUIZ_STEPS = 40
 /** 字下げの深さ */
 export const MAX_QUIZ_INDENT = 8
-export const MAX_QUIZ_BLANKS = 30
-export const MAX_QUIZ_BLANK_LENGTH = 100
-export const MAX_QUIZ_TABLE_COLUMNS = 8
+const MAX_QUIZ_BLANKS = 30
+const MAX_QUIZ_BLANK_LENGTH = 100
+const MAX_QUIZ_TABLE_COLUMNS = 8
 /** 穴埋めの表の行の数（見出しの行を含む） */
-export const MAX_QUIZ_TABLE_ROWS = 13
+const MAX_QUIZ_TABLE_ROWS = 13
 /** 穴埋めと組み合わせの選択肢に混ぜる、正解ではないものの数 */
-export const MAX_QUIZ_EXTRAS = 10
-export const MIN_QUIZ_PAIRS = 2
-export const MAX_QUIZ_PAIRS = 12
-export const MAX_QUIZ_KEYWORDS = 10
-export const MAX_QUIZ_KEYWORD_LENGTH = 50
+const MAX_QUIZ_EXTRAS = 10
+const MIN_QUIZ_PAIRS = 2
+const MAX_QUIZ_PAIRS = 12
+const MAX_QUIZ_KEYWORDS = 10
+const MAX_QUIZ_KEYWORD_LENGTH = 50
 export const MAX_QUIZ_ESSAY_LENGTH = 4000
-export const MAX_QUIZ_SAMPLE_LENGTH = 2000
+const MAX_QUIZ_SAMPLE_LENGTH = 2000
 export const MAX_QUIZ_JSON_LENGTH = 600_000
 /** 1 人がアイテム 1 つを受けられる回数。受け直しは自由だが、記録が際限なく増えないように止める */
 export const MAX_QUIZ_ATTEMPTS = 100
@@ -119,14 +119,14 @@ export type ChoiceQuestion = QuestionBase & {
   /** 正解の選択肢の位置（0 始まり）。multiple でなければ 1 つ */
   answers: number[]
 }
-export type ShortQuestion = QuestionBase & {
+type ShortQuestion = QuestionBase & {
   kind: 'short'
   /** 正しい答え。どれか 1 つと合えば正解 */
   answers: string[]
   ignoreSpace: boolean
   ignoreCase: boolean
 }
-export type BlankQuestion = QuestionBase & {
+type BlankQuestion = QuestionBase & {
   kind: 'blank'
   /** 空欄を {{正解|別解}} で書いた本文 */
   text: string
@@ -135,7 +135,7 @@ export type BlankQuestion = QuestionBase & {
   /** 選んで答えるときに、正解に混ぜる選択肢 */
   extras: string[]
 }
-export type OrderQuestion = QuestionBase & {
+type OrderQuestion = QuestionBase & {
   kind: 'order'
   /** 正しい順に並べた行。字下げを答えさせるときは、正しい字下げを付けたまま */
   lines: string[]
@@ -143,18 +143,18 @@ export type OrderQuestion = QuestionBase & {
   distractors: string[]
   ask: OrderAsk
 }
-export type LinesQuestion = QuestionBase & {
+type LinesQuestion = QuestionBase & {
   kind: 'lines'
   mode: LinesMode
   /** 正解の行の番号（1 始まり）。sequence では実行される順 */
   answer: number[]
 }
-export type MatchQuestion = QuestionBase & {
+type MatchQuestion = QuestionBase & {
   kind: 'match'
   pairs: { left: string; right: string }[]
   extras: string[]
 }
-export type EssayQuestion = QuestionBase & {
+type EssayQuestion = QuestionBase & {
   kind: 'essay'
   /** すべて含む答えを、自動で正解にする言葉。なければ、教師が採点するまで採点待ち */
   keywords: string[]
@@ -202,12 +202,12 @@ export type QuizTakeQuestion =
  * 選択の 1 つ・行を 1 行だけは選んだ位置・行、選択の複数・行を選ぶは位置・行の番号の並び、短答・記述は入力した文字、
  * 穴埋め・組み合わせは欄ごとの値、並べ替えは使う行（字下げを答えるときは、深さ 1 つを空白 4 つにして頭に付ける）。答えていなければ null
  */
-export type QuizAnswer = number | string | string[] | number[] | null
+type QuizAnswer = number | string | string[] | number[] | null
 
 /** correct が null なのは、記述の問題で教師の採点を待っているもの */
 export type QuizAnswerRecord = { id: string; answer: QuizAnswer; correct: boolean | null }
 
-export const isQuizKind = (v: unknown): v is QuizKind => QUIZ_KINDS.includes(v as QuizKind)
+const isQuizKind = (v: unknown): v is QuizKind => QUIZ_KINDS.includes(v as QuizKind)
 
 const isOneOf = <T extends string>(list: readonly T[], v: unknown): v is T => list.includes(v as T)
 
@@ -257,7 +257,7 @@ const indentWidth = (line: string) => [...(/^[ \t]*/.exec(line)?.[0] ?? '')].red
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))
 
 /** 字下げした行を、字下げを除いた行と、行ごとの深さに分ける。深さの単位は、字下げの幅の最大公約数 */
-export function indentOf(lines: readonly string[]): { lines: string[]; levels: number[] } {
+function indentOf(lines: readonly string[]): { lines: string[]; levels: number[] } {
   const widths = lines.map(indentWidth)
   const unit = widths.reduce(gcd, 0) || 1
   return { lines: lines.map((line) => line.trim()), levels: widths.map((w) => w / unit) }
@@ -289,7 +289,7 @@ const wordList = (text: string) =>
 // ---------------------------------------------------------------- 穴埋めの本文
 
 /** 本文を行 → マス → 文字と空欄に分け、空欄ごとの正解（別解を含む）を取り出す。error は本文の書き方の誤り */
-export function parseBlanks(text: string, layout: BlankLayout): { rows: BlankPart[][][]; blanks: string[][]; error: string | null } {
+function parseBlanks(text: string, layout: BlankLayout): { rows: BlankPart[][][]; blanks: string[][]; error: string | null } {
   const rows: BlankPart[][][] = []
   const blanks: string[][] = []
   let error: string | null = null
@@ -354,7 +354,7 @@ const strsOf = (v: unknown) => (Array.isArray(v) ? v.filter((s) => typeof s === 
 const numsOf = (v: unknown) => (Array.isArray(v) ? v.filter((n) => typeof n === 'number') : [])
 
 /** 前の形式（出力の予測・バグ探し・実行の順番・字下げ・変数の追跡など）で保存した問題を、今の形にする。読めなければ null */
-export function upgradeQuestion(raw: unknown): QuizQuestion | null {
+function upgradeQuestion(raw: unknown): QuizQuestion | null {
   if (!isRecord(raw) || typeof raw.id !== 'string') return null
   const base = { id: raw.id, prompt: strOf(raw.prompt), code: strOf(raw.code), explanation: strOf(raw.explanation) }
   switch (raw.kind) {
@@ -475,7 +475,7 @@ export type QuizFormRow = {
   sample: string
 }
 
-export type QuizIssue = { key: string; message: string }
+type QuizIssue = { key: string; message: string }
 
 /** 追加する問題のひな形（template）で、問題の目印を入れる場所。client.ts が足すときに置き換える */
 export const QUIZ_KEY_SLOT = '__K__'
@@ -806,7 +806,7 @@ function shuffled<T>(list: readonly T[], seed: string): T[] {
 }
 
 /** 並べ替えの行を混ぜる。seed が同じなら同じ並びになる。混ぜた結果が正しい順のままなら、先頭を末尾へ回す */
-export function shuffledLines(lines: readonly string[], seed: string) {
+function shuffledLines(lines: readonly string[], seed: string) {
   const result = shuffled(lines, seed)
   return result.length > 1 && sameList(result, lines) ? [...result.slice(1), result[0]] : result
 }
@@ -1046,7 +1046,7 @@ export const bestScore = <T extends QuizScore>(attempts: readonly T[]): T | null
 // ---------------------------------------------------------------- 結果
 
 /** 正解。選択と行を選ぶは位置・行の番号、短答は正しい答え、穴埋めは空欄ごとの正解（別解を含む）、組み合わせは右の項目、並べ替えは正しい行、記述は解答例 */
-export type QuizSolution = { answer: number[] | string[] | string[][] | string; explanation: string }
+type QuizSolution = { answer: number[] | string[] | string[][] | string; explanation: string }
 
 /** 問題 1 つの結果。none は、その受験のあとに足された問題（採点していない） */
 export type QuizReviewStatus = 'right' | 'wrong' | 'pending' | 'none'

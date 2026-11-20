@@ -10,7 +10,7 @@ import { AiPage, aiLimitField, aiShareField, type AiSettingValues } from './view
 
 type C = Context<AppEnv>
 
-export type AiAdminBackend = {
+type AiAdminBackend = {
   ledger: AiLedger
   usageByUser: () => AiUserUsage[]
   /** Moodle モードのときの、Moodle のサイト管理の URL。ユーザーとコースの管理は Moodle で行う */
