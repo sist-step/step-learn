@@ -28,6 +28,7 @@ const Mirror = ({ children }: { children: Child }) => (
 )
 
 /** 出題の形式ごとの案内役。形式と動物の動きや習性を結び付けて、どの形式かを絵で覚えられるようにしている */
+// 色をここに持たせないのは、quiz-game.css が同じ色を問題と結果の要素（data-quiz-q / data-quiz-kind）にも付けるため
 export const QUIZ_ANIMALS: Record<QuizKind, Animal> = {
   choice: {
     name: 'フクロウ',

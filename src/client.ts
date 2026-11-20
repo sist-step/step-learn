@@ -16,7 +16,7 @@ import { formatClock } from './lib/clock'
 import { formatDateTimeInput } from './lib/course-period'
 import { isFormName, validate, type FieldErrors, type FormInput } from './lib/forms'
 import { renderMarkdown } from './lib/markdown'
-import { MAX_QUIZ_INDENT, MAX_QUIZ_STEPS, QUIZ_KEY_SLOT, lineAt, parseSteps, withIndent } from './lib/quiz'
+import { MAX_QUIZ_INDENT, MAX_QUIZ_STEPS, QUIZ_KEY_SLOT, lineAt, parseSteps, withIndent, type QuizKind } from './lib/quiz'
 import { showsEach, type RestrictionOp } from './lib/restriction'
 import { AI_PANEL_DOCKED, getSetting, setSetting, updateSetting, type Theme } from './lib/settings'
 
@@ -589,12 +589,12 @@ document.addEventListener('click', (e) => {
   }
 })
 
-const quizAnswered = (question: HTMLElement) => {
+const quizAnswered = (question: HTMLElement): boolean => {
   const filled = (selector: string) => {
     const fields = $$<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(selector, question)
     return fields.length > 0 && fields.every((field) => !!field.value.trim())
   }
-  switch (question.dataset.quizQ) {
+  switch (question.dataset.quizQ as QuizKind) {
     case 'order':
       return $$<HTMLInputElement>('[data-quiz-line-value]', question).some((input) => !input.disabled)
     case 'short':
@@ -604,7 +604,8 @@ const quizAnswered = (question: HTMLElement) => {
       return filled('[data-quiz-blank]')
     case 'match':
       return filled('[data-quiz-match]')
-    default: {
+    case 'choice':
+    case 'lines': {
       const flow = question.querySelector<HTMLInputElement>('[data-quiz-flow-value]')
       return flow ? !!flow.value : !!question.querySelector('input:is([type="radio"], [type="checkbox"]):checked')
     }

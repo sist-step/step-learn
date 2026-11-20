@@ -229,6 +229,7 @@ export const WalkingMascot = () => {
 }
 
 /** マスコットの遊び場。伝える情報のない空きに置く。ガラスの足場（床・棚・箱）の上を `WalkingMascot` が歩き、跳び移る */
+// 足場を同じクラスにまとめないのは、client.ts の WALKER_GROUNDS がセレクターごとに最初の 1 つだけを足場にするため
 export const MascotYard = () => {
   useStyle('/src/components/mascot.css')
   return (

@@ -2316,18 +2316,16 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
 
     const from = handles.length
     signboard(frame, edge, i)
-    const puzzle =
-      kind === 'choice'
-        ? choicePuzzle(frame, edge, i)
-        : kind === 'short' || kind === 'essay'
-          ? slatePuzzle(frame, i)
-          : kind === 'order'
-            ? orderPuzzle(frame, edge, i)
-            : kind === 'lines'
-              ? stages[i].querySelector('[data-quiz-flow]')
-                ? flowPuzzle(frame, i)
-                : pickPuzzle(frame, i)
-              : gridPuzzle(frame, i)
+    const puzzles: Record<QuizKind, () => Puzzle> = {
+      choice: () => choicePuzzle(frame, edge, i),
+      short: () => slatePuzzle(frame, i),
+      essay: () => slatePuzzle(frame, i),
+      order: () => orderPuzzle(frame, edge, i),
+      lines: () => (stages[i].querySelector('[data-quiz-flow]') ? flowPuzzle(frame, i) : pickPuzzle(frame, i)),
+      blank: () => gridPuzzle(frame, i),
+      match: () => gridPuzzle(frame, i),
+    }
+    const puzzle = puzzles[kind]()
     // レバー: 右の柱の前。引くと、答えを決めて扉を開ける
     const lever = new Group()
     lever.position.set(1.22, 1.08, 0.53)
