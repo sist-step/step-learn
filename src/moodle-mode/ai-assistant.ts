@@ -14,9 +14,12 @@ import { db } from './db'
 import { aiChats } from './schema'
 
 /** サイト管理者か、いずれかのコースを管理できる人。通常モードの canUseAi（lib/ai-usage.ts）と同じ条件を、Moodle のロールで確かめる */
-export async function canUseMoodleAi(c: Context<MoodleEnv>) {
+export const canUseMoodleAi = async (c: Context<MoodleEnv>) => AI_PROVIDERS.some(isProviderEnabled) && (await isMoodleAiTeacher(c))
+
+/** AI_EMAIL_DOMAIN のメールで、サイト管理者かいずれかのコースを管理できる人。MCP はこれだけで決める（lib/ai-usage.ts の isAiTeacher と同じ） */
+export async function isMoodleAiTeacher(c: Context<MoodleEnv>) {
   const user = c.var.user
-  if (!user || !AI_PROVIDERS.some(isProviderEnabled) || !hasAiEmail(user.email)) return false
+  if (!user || !hasAiEmail(user.email)) return false
   if (user.role === 'admin') return true
   return (await myCourses(c)).some((m) => m.canmanage)
 }
