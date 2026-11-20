@@ -3,40 +3,58 @@
 /** 小テストのアイテムの種類の名前（Moodle モードでは extra_items.type） */
 export const QUIZ_KIND = 'quiz'
 
-export const QUIZ_KINDS = ['choice', 'output', 'order', 'bug', 'flow', 'indent', 'table'] as const
+export const QUIZ_KINDS = ['choice', 'short', 'blank', 'order', 'lines', 'match', 'essay'] as const
 
 export type QuizKind = (typeof QUIZ_KINDS)[number]
 
 export const QUIZ_KIND_LABELS: Record<QuizKind, string> = {
   choice: '選択',
-  output: '出力の予測',
+  short: '短答',
+  blank: '穴埋め',
   order: '並べ替え',
-  bug: 'バグ探し',
-  flow: '実行の順番',
-  indent: '字下げ',
-  table: '変数の追跡',
+  lines: '行を選ぶ',
+  match: '組み合わせ',
+  essay: '記述',
 }
 
 export const QUIZ_KIND_DESCRIPTIONS: Record<QuizKind, string> = {
-  choice: '選択肢から 1 つ選ぶ',
-  output: 'コードの実行結果を答える',
-  order: 'ばらばらの行を正しい順に並べる',
-  bug: '間違っている行を選ぶ',
-  flow: '行が実行される順にたどる',
-  indent: '消えた字下げを付け直す',
-  table: '変数の値の移り変わりを表に書く',
+  choice: '選択肢から 1 つ、または複数を選ぶ',
+  short: '値や出力を短く書く',
+  blank: 'コードや表の空欄を埋める',
+  order: '行を正しい順に並べ、字下げを付ける',
+  lines: 'バグのある行や、実行される順の行を選ぶ',
+  match: '左の項目に合うものを右から選ぶ',
+  essay: '文章で答える。教師が採点する',
 }
 
 /** 問題を足したときに、問題文の欄に最初から入れておく文 */
 export const QUIZ_DEFAULT_PROMPTS: Record<QuizKind, string> = {
   choice: '',
-  output: 'このコードを実行すると、何が出力されますか？',
+  short: 'このコードを実行すると、何が出力されますか？',
+  blank: '空欄に入るものを答えてください。',
   order: '正しく動くように、行を並べ替えてください。',
-  bug: 'このコードには間違いがあります。間違っている行を選んでください。',
-  flow: 'このコードを実行したとき、行が実行される順に選んでください。',
-  indent: 'このコードは字下げが消えています。正しく動くように、字下げを付け直してください。',
-  table: 'このコードを実行したとき、繰り返しの各回が終わった時点での変数の値を書いてください。',
+  lines: 'このコードには間違いがあります。間違っている行を選んでください。',
+  match: '左の項目に合うものを、右から選んでください。',
+  essay: 'このコードが何をしているか、説明してください。',
 }
+
+/** 行を選ぶ問題の選び方。one は 1 行だけ、many は当てはまる行をすべて、sequence は実行される順に（同じ行を何度選んでもよい） */
+export const LINES_MODES = ['one', 'many', 'sequence'] as const
+export type LinesMode = (typeof LINES_MODES)[number]
+export const LINES_MODE_LABELS: Record<LinesMode, string> = { one: '1 行だけ', many: '当てはまる行すべて', sequence: '実行される順に' }
+
+/** 並べ替えの問題で答えさせるもの */
+export const ORDER_ASKS = ['order', 'indent', 'both'] as const
+export type OrderAsk = (typeof ORDER_ASKS)[number]
+export const ORDER_ASK_LABELS: Record<OrderAsk, string> = { order: '並び', indent: '字下げ', both: '並びと字下げ' }
+
+/** 穴埋めの本文の形。table は | で区切った表として出す */
+export const BLANK_LAYOUTS = ['code', 'table'] as const
+export type BlankLayout = (typeof BLANK_LAYOUTS)[number]
+
+/** 穴埋めの答え方。type は打ちこむ、pick は選択肢から選ぶ */
+export const BLANK_FILLS = ['type', 'pick'] as const
+export type BlankFill = (typeof BLANK_FILLS)[number]
 
 /** 学生に出す画面の見た目。game は中学生向けで、3D のダンジョンの扉を 1 問ずつ正解して開けながら進み、点数は問題ごとの最初の答えで数える */
 export const QUIZ_LOOKS = ['plain', 'game'] as const
@@ -56,15 +74,29 @@ export const MAX_QUIZ_CHOICE_LENGTH = 300
 export const MIN_QUIZ_LINES = 2
 export const MAX_QUIZ_LINES = 20
 export const MAX_QUIZ_LINE_LENGTH = 300
+/** 並べ替えに混ぜる、使わない行の数 */
+export const MAX_QUIZ_DISTRACTORS = 10
+/** 短答の正しい答えとして登録できる数 */
+export const MAX_QUIZ_ANSWERS = 10
 export const MAX_QUIZ_OUTPUT_LENGTH = 2000
 export const MAX_QUIZ_EXPLANATION_LENGTH = 2000
-/** 実行の順番で選べる行の数 */
+/** 行を選ぶ問題の「実行される順に」で選べる行の数 */
 export const MAX_QUIZ_STEPS = 40
 /** 字下げの深さ */
 export const MAX_QUIZ_INDENT = 8
-export const MAX_QUIZ_COLUMNS = 6
-export const MAX_QUIZ_ROWS = 12
-export const MAX_QUIZ_CELL_LENGTH = 40
+export const MAX_QUIZ_BLANKS = 30
+export const MAX_QUIZ_BLANK_LENGTH = 100
+export const MAX_QUIZ_TABLE_COLUMNS = 8
+/** 穴埋めの表の行の数（見出しの行を含む） */
+export const MAX_QUIZ_TABLE_ROWS = 13
+/** 穴埋めと組み合わせの選択肢に混ぜる、正解ではないものの数 */
+export const MAX_QUIZ_EXTRAS = 10
+export const MIN_QUIZ_PAIRS = 2
+export const MAX_QUIZ_PAIRS = 12
+export const MAX_QUIZ_KEYWORDS = 10
+export const MAX_QUIZ_KEYWORD_LENGTH = 50
+export const MAX_QUIZ_ESSAY_LENGTH = 4000
+export const MAX_QUIZ_SAMPLE_LENGTH = 2000
 export const MAX_QUIZ_JSON_LENGTH = 600_000
 /** 1 人がアイテム 1 つを受けられる回数。受け直しは自由だが、記録が際限なく増えないように止める */
 export const MAX_QUIZ_ATTEMPTS = 100
@@ -74,52 +106,110 @@ type QuestionBase = {
   /** 受験の記録と結び付ける目印。問題を書き換えても変えない */
   id: string
   prompt: string
+  /** 問題に添えるコード。行を選ぶ問題では、選ぶ行そのもの */
+  code: string
   /** 採点のあとに見せる解説 */
   explanation: string
 }
 
 export type ChoiceQuestion = QuestionBase & {
   kind: 'choice'
-  code: string
   choices: string[]
-  /** 正解の選択肢の位置（0 始まり） */
-  answer: number
+  multiple: boolean
+  /** 正解の選択肢の位置（0 始まり）。multiple でなければ 1 つ */
+  answers: number[]
 }
-export type OutputQuestion = QuestionBase & { kind: 'output'; code: string; /** 正しい出力 */ answer: string }
-export type OrderQuestion = QuestionBase & { kind: 'order'; /** 正しい順に並べた行 */ lines: string[] }
-export type BugQuestion = QuestionBase & { kind: 'bug'; code: string; /** 間違っている行の番号（1 始まり） */ answer: number }
-export type FlowQuestion = QuestionBase & { kind: 'flow'; code: string; /** 実行される順に並べた行の番号（1 始まり） */ answer: number[] }
-export type IndentQuestion = QuestionBase & { kind: 'indent'; /** 正しく字下げしたコード */ code: string }
-export type TableQuestion = QuestionBase & {
-  kind: 'table'
-  code: string
-  /** 変数の名前 */
-  columns: string[]
-  /** 各回の変数の値。1 行が 1 回分で、並びは columns と同じ */
-  rows: string[][]
+export type ShortQuestion = QuestionBase & {
+  kind: 'short'
+  /** 正しい答え。どれか 1 つと合えば正解 */
+  answers: string[]
+  ignoreSpace: boolean
+  ignoreCase: boolean
+}
+export type BlankQuestion = QuestionBase & {
+  kind: 'blank'
+  /** 空欄を {{正解|別解}} で書いた本文 */
+  text: string
+  layout: BlankLayout
+  fill: BlankFill
+  /** 選んで答えるときに、正解に混ぜる選択肢 */
+  extras: string[]
+}
+export type OrderQuestion = QuestionBase & {
+  kind: 'order'
+  /** 正しい順に並べた行。字下げを答えさせるときは、正しい字下げを付けたまま */
+  lines: string[]
+  /** 混ぜておく、使わない行 */
+  distractors: string[]
+  ask: OrderAsk
+}
+export type LinesQuestion = QuestionBase & {
+  kind: 'lines'
+  mode: LinesMode
+  /** 正解の行の番号（1 始まり）。sequence では実行される順 */
+  answer: number[]
+}
+export type MatchQuestion = QuestionBase & {
+  kind: 'match'
+  pairs: { left: string; right: string }[]
+  extras: string[]
+}
+export type EssayQuestion = QuestionBase & {
+  kind: 'essay'
+  /** すべて含む答えを、自動で正解にする言葉。なければ、教師が採点するまで採点待ち */
+  keywords: string[]
+  /** 採点のあとに見せる解答例 */
+  sample: string
 }
 
-export type QuizQuestion = ChoiceQuestion | OutputQuestion | OrderQuestion | BugQuestion | FlowQuestion | IndentQuestion | TableQuestion
+export type QuizQuestion = ChoiceQuestion | ShortQuestion | BlankQuestion | OrderQuestion | LinesQuestion | MatchQuestion | EssayQuestion
+
+/** 穴埋めの本文の一部。文字か、空欄の番号（0 始まり） */
+export type BlankPart = string | number
 
 /** 学生に出す問題。正解と解説を含めない */
 export type QuizTakeQuestion =
-  | { id: string; kind: 'choice'; prompt: string; code: string; choices: string[] }
-  | { id: string; kind: 'output'; prompt: string; code: string }
-  | { id: string; kind: 'order'; prompt: string; /** 混ぜた行 */ lines: string[] }
-  | { id: string; kind: 'bug'; prompt: string; code: string }
-  | { id: string; kind: 'flow'; prompt: string; code: string }
-  | { id: string; kind: 'indent'; prompt: string; /** 字下げを除いた行 */ lines: string[] }
-  | { id: string; kind: 'table'; prompt: string; code: string; columns: string[]; rowCount: number }
+  | { id: string; kind: 'choice'; prompt: string; code: string; choices: string[]; multiple: boolean }
+  | { id: string; kind: 'short'; prompt: string; code: string; multiline: boolean }
+  | {
+      id: string
+      kind: 'blank'
+      prompt: string
+      code: string
+      layout: BlankLayout
+      /** 行 → マス → 文字と空欄。layout が code なら、1 行のマスは 1 つ */
+      rows: BlankPart[][][]
+      blanks: number
+      /** 選んで答えるときの選択肢。打ちこむときは空 */
+      options: string[]
+    }
+  | {
+      id: string
+      kind: 'order'
+      prompt: string
+      code: string
+      /** 混ぜた行。字下げを答えさせるときは、字下げを除いてある */
+      lines: string[]
+      ask: OrderAsk
+      /** 使わない行が混ざっているか */
+      unused: boolean
+    }
+  | { id: string; kind: 'lines'; prompt: string; code: string; mode: LinesMode }
+  | { id: string; kind: 'match'; prompt: string; code: string; lefts: string[]; options: string[] }
+  | { id: string; kind: 'essay'; prompt: string; code: string }
 
 /**
- * 選択とバグ探しは選んだ位置・行、出力の予測は入力した文字、並べ替えは並べた行、実行の順番は選んだ行の番号、
- * 字下げは行ごとの深さ、変数の追跡は左上から行ごとに並べたマスの値。答えていなければ null
+ * 選択の 1 つ・行を 1 行だけは選んだ位置・行、選択の複数・行を選ぶは位置・行の番号の並び、短答・記述は入力した文字、
+ * 穴埋め・組み合わせは欄ごとの値、並べ替えは使う行（字下げを答えるときは、深さ 1 つを空白 4 つにして頭に付ける）。答えていなければ null
  */
 export type QuizAnswer = number | string | string[] | number[] | null
 
-export type QuizAnswerRecord = { id: string; answer: QuizAnswer; correct: boolean }
+/** correct が null なのは、記述の問題で教師の採点を待っているもの */
+export type QuizAnswerRecord = { id: string; answer: QuizAnswer; correct: boolean | null }
 
 export const isQuizKind = (v: unknown): v is QuizKind => QUIZ_KINDS.includes(v as QuizKind)
+
+const isOneOf = <T extends string>(list: readonly T[], v: unknown): v is T => list.includes(v as T)
 
 export const codeLines = (code: string) => code.split('\n')
 
@@ -133,13 +223,23 @@ const trimCode = (s: string) =>
     .join('\n')
     .replace(/^\n+|\n+$/g, '')
 
-// NFKC にそろえるのは、日本語入力のまま打った全角の数字や記号を、同じ出力として受け付けるため
-const normalizeOutput = (s: string) => trimCode(s.normalize('NFKC'))
+// NFKC にそろえるのは、日本語入力のまま打った全角の数字や記号を、同じ答えとして受け付けるため
+const normalizeShort = (s: string, q: Pick<ShortQuestion, 'ignoreSpace' | 'ignoreCase'>) => {
+  const text = trimCode(s.normalize('NFKC'))
+  const spaced = q.ignoreSpace ? text.replace(/\s+/g, '') : text
+  return q.ignoreCase ? spaced.toLowerCase() : spaced
+}
 
 // 空白と引用符の種類を区別しないのは、[1, 2] と [1,2]、'a' と "a" のような書き方の違いを誤りにしないため
 const normalizeCell = (s: string) => s.normalize('NFKC').replace(/\s+/g, '').replace(/'/g, '"')
 
+const normalizeWords = (s: string) => s.normalize('NFKC').toLowerCase().replace(/\s+/g, '')
+
 const sameList = (a: readonly unknown[], b: readonly unknown[]) => a.length === b.length && a.every((v, i) => v === b[i])
+
+const byNumber = (a: number, b: number) => a - b
+
+const sameSet = (a: readonly number[], b: readonly number[]) => sameList([...new Set(a)].sort(byNumber), [...new Set(b)].sort(byNumber))
 
 /** 「4, 5, 1」のように書いた行の番号の並びを読む。数でないものが混ざっていれば null */
 export function parseSteps(text: string): number[] | null {
@@ -156,41 +256,223 @@ const indentWidth = (line: string) => [...(/^[ \t]*/.exec(line)?.[0] ?? '')].red
 
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))
 
-/** 字下げしたコードを、字下げを除いた行と、行ごとの深さに分ける。空の行は除く。深さの単位は、字下げの幅の最大公約数 */
-export function indentOf(code: string): { lines: string[]; levels: number[] } {
-  const rows = codeLines(trimCode(code)).filter((line) => line.trim())
-  const widths = rows.map(indentWidth)
+/** 字下げした行を、字下げを除いた行と、行ごとの深さに分ける。深さの単位は、字下げの幅の最大公約数 */
+export function indentOf(lines: readonly string[]): { lines: string[]; levels: number[] } {
+  const widths = lines.map(indentWidth)
   const unit = widths.reduce(gcd, 0) || 1
-  return { lines: rows.map((line) => line.trim()), levels: widths.map((w) => w / unit) }
+  return { lines: lines.map((line) => line.trim()), levels: widths.map((w) => w / unit) }
 }
 
-/** 字下げの問題の結果に出すコード。深さ 1 つを空白 4 つにする */
-export const indentedCode = (lines: readonly string[], levels: readonly number[]) =>
-  lines.map((line, i) => '    '.repeat(levels[i] ?? 0) + line).join('\n')
+const INDENT = '    '
 
-const CELL_SEPARATOR = '|'
+/** 字下げの深さを、空白 4 つずつにして行の頭に付ける */
+export const withIndent = (line: string, level: number) => INDENT.repeat(level) + line
 
-/** 「i | total」のように書いた 1 行を、マスに分ける */
-const cellsOf = (line: string) =>
-  line
-    .normalize('NFKC')
-    .split(CELL_SEPARATOR)
-    .map((cell) => cell.trim())
+/** 並べ替えの答えの 1 行（字下げを答えるとき）を、深さと字下げを除いた行に分ける */
+export const levelOf = (line: string) => {
+  const spaces = /^ */.exec(line)?.[0].length ?? 0
+  return { level: Math.floor(spaces / INDENT.length), text: line.trim() }
+}
+
+const textList = (text: string) =>
+  normalizeNewlines(text)
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+
+const wordList = (text: string) =>
+  text
+    .split(/[\n,、]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+
+// ---------------------------------------------------------------- 穴埋めの本文
+
+/** 本文を行 → マス → 文字と空欄に分け、空欄ごとの正解（別解を含む）を取り出す。error は本文の書き方の誤り */
+export function parseBlanks(text: string, layout: BlankLayout): { rows: BlankPart[][][]; blanks: string[][]; error: string | null } {
+  const rows: BlankPart[][][] = []
+  const blanks: string[][] = []
+  let error: string | null = null
+  const lines =
+    layout === 'table'
+      ? trimCode(text)
+          .split('\n')
+          .filter((line) => line.trim())
+      : codeLines(trimCode(text))
+  for (const line of lines) {
+    const cells: BlankPart[][] = [[]]
+    let plain = ''
+    const flush = () => {
+      if (plain) cells[cells.length - 1].push(plain)
+      plain = ''
+    }
+    for (let at = 0; at < line.length; at++) {
+      if (line.startsWith('{{', at)) {
+        const end = line.indexOf('}}', at + 2)
+        if (end < 0) {
+          error ??= '{{ に対応する }} がありません。空欄は {{正解}} のように書いてください。'
+          plain += line.slice(at)
+          break
+        }
+        const answers = line
+          .slice(at + 2, end)
+          .split(/(?<!\\)\|/)
+          .map((s) => s.replace(/\\\|/g, '|').trim())
+          .filter(Boolean)
+        if (answers.length === 0) error ??= '空欄の正解が空です。{{正解}} のように、中に正解を書いてください。'
+        flush()
+        cells[cells.length - 1].push(blanks.length)
+        blanks.push(answers)
+        at = end + 1
+      } else if (layout === 'table' && line[at] === '|') {
+        flush()
+        cells.push([])
+      } else if (layout === 'table' && line.startsWith('\\|', at)) {
+        plain += '|'
+        at++
+      } else plain += line[at]
+    }
+    flush()
+    if (layout === 'table')
+      for (const cell of cells) {
+        const first = cell[0]
+        const last = cell[cell.length - 1]
+        if (typeof first === 'string') cell[0] = first.trimStart()
+        if (typeof last === 'string') cell[cell.length - 1] = (cell[cell.length - 1] as string).trimEnd()
+      }
+    rows.push(cells.map((cell) => cell.filter((part) => part !== '')))
+  }
+  return { rows, blanks, error }
+}
+
+// ---------------------------------------------------------------- 前の形式の問題
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+
+const strOf = (v: unknown) => (typeof v === 'string' ? v : '')
+const strsOf = (v: unknown) => (Array.isArray(v) ? v.filter((s) => typeof s === 'string') : [])
+const numsOf = (v: unknown) => (Array.isArray(v) ? v.filter((n) => typeof n === 'number') : [])
+
+/** 前の形式（出力の予測・バグ探し・実行の順番・字下げ・変数の追跡など）で保存した問題を、今の形にする。読めなければ null */
+export function upgradeQuestion(raw: unknown): QuizQuestion | null {
+  if (!isRecord(raw) || typeof raw.id !== 'string') return null
+  const base = { id: raw.id, prompt: strOf(raw.prompt), code: strOf(raw.code), explanation: strOf(raw.explanation) }
+  switch (raw.kind) {
+    case 'choice':
+      return {
+        ...base,
+        kind: 'choice',
+        choices: strsOf(raw.choices),
+        multiple: raw.multiple === true,
+        answers: Array.isArray(raw.answers) ? numsOf(raw.answers) : typeof raw.answer === 'number' ? [raw.answer] : [],
+      }
+    case 'short':
+      return {
+        ...base,
+        kind: 'short',
+        answers: strsOf(raw.answers),
+        ignoreSpace: raw.ignoreSpace === true,
+        ignoreCase: raw.ignoreCase === true,
+      }
+    case 'output':
+      return { ...base, kind: 'short', answers: [strOf(raw.answer)], ignoreSpace: false, ignoreCase: false }
+    case 'blank':
+      return {
+        ...base,
+        kind: 'blank',
+        text: strOf(raw.text),
+        layout: isOneOf(BLANK_LAYOUTS, raw.layout) ? raw.layout : 'code',
+        fill: isOneOf(BLANK_FILLS, raw.fill) ? raw.fill : 'type',
+        extras: strsOf(raw.extras),
+      }
+    case 'table': {
+      // 前の形式の答え（行ごとに並べたマスの値）がそのまま空欄の答えになるように、すべての値のマスを、左上から行ごとの空欄にする
+      const columns = strsOf(raw.columns)
+      const rows = Array.isArray(raw.rows) ? raw.rows.map(strsOf) : []
+      const escape = (s: string) => s.replace(/\|/g, '\\|')
+      const text = [
+        ['回', ...columns.map(escape)].join(' | '),
+        ...rows.map((cells, r) => [String(r + 1), ...cells.map((cell) => `{{${escape(cell)}}}`)].join(' | ')),
+      ].join('\n')
+      return { ...base, kind: 'blank', text, layout: 'table', fill: 'type', extras: [] }
+    }
+    case 'order':
+      return {
+        ...base,
+        kind: 'order',
+        lines: strsOf(raw.lines),
+        distractors: strsOf(raw.distractors),
+        ask: isOneOf(ORDER_ASKS, raw.ask) ? raw.ask : 'order',
+      }
+    case 'indent':
+      return {
+        ...base,
+        code: '',
+        kind: 'order',
+        lines: codeLines(trimCode(base.code)).filter((line) => line.trim()),
+        distractors: [],
+        ask: 'indent',
+      }
+    case 'lines':
+      return { ...base, kind: 'lines', mode: isOneOf(LINES_MODES, raw.mode) ? raw.mode : 'one', answer: numsOf(raw.answer) }
+    case 'bug':
+      return { ...base, kind: 'lines', mode: 'one', answer: typeof raw.answer === 'number' ? [raw.answer] : [] }
+    case 'flow':
+      return { ...base, kind: 'lines', mode: 'sequence', answer: numsOf(raw.answer) }
+    case 'match':
+      return {
+        ...base,
+        kind: 'match',
+        pairs: Array.isArray(raw.pairs) ? raw.pairs.filter(isRecord).map((p) => ({ left: strOf(p.left), right: strOf(p.right) })) : [],
+        extras: strsOf(raw.extras),
+      }
+    case 'essay':
+      return { ...base, kind: 'essay', keywords: strsOf(raw.keywords), sample: strOf(raw.sample) }
+    default:
+      return null
+  }
+}
+
+export const upgradeQuestions = (raw: unknown): QuizQuestion[] =>
+  Array.isArray(raw) ? raw.map(upgradeQuestion).filter((q) => q !== null) : []
 
 // ---------------------------------------------------------------- 編集画面から送られた値
 
-/** 編集画面（components/quiz.tsx の QuizQuestionsField）の問題 1 つの、入力中の値。どの種類でもすべての欄を持つ */
+/**
+ * 編集画面（components/quiz.tsx の QuizQuestionsField）の問題 1 つの、入力中の値。どの種類でもすべての欄を持つ。
+ * 選び方の欄（multiple など）は、ラジオボタンで選んだ値の文字
+ */
 export type QuizFormRow = {
   k: string
   kind: QuizKind
   prompt: string
   code: string
-  choices: string[]
-  /** 選択は正解の位置、出力の予測は正しい出力、バグ探しは行の番号、実行の順番は行の番号の並び、変数の追跡は表（1 行目が変数の名前） */
-  answer: string
-  /** 並べ替えの行（改行区切り） */
-  lines: string
   explanation: string
+  /** 選択の選択肢と、正解の印 */
+  choices: string[]
+  correct: boolean[]
+  multiple: string
+  /** 短答の正しい答え */
+  answers: string[]
+  space: string
+  case: string
+  /** 穴埋めの本文 */
+  text: string
+  layout: string
+  fill: string
+  /** 並べ替えの正しい順の行（改行区切り） */
+  lines: string
+  ask: string
+  /** 並べ替えの使わない行、穴埋めと組み合わせの選択肢に混ぜるもの（改行区切り） */
+  extras: string
+  /** 行を選ぶ問題の正解の行の番号 */
+  steps: string
+  mode: string
+  /** 組み合わせの左と右 */
+  pairs: [string, string][]
+  /** 記述の、自動で正解にする言葉（改行かカンマ区切り）と解答例 */
+  keywords: string
+  sample: string
 }
 
 export type QuizIssue = { key: string; message: string }
@@ -198,66 +480,115 @@ export type QuizIssue = { key: string; message: string }
 /** 追加する問題のひな形（template）で、問題の目印を入れる場所。client.ts が足すときに置き換える */
 export const QUIZ_KEY_SLOT = '__K__'
 
-/** バグ探しと実行の順番の編集で、入力した番号の行の中身。番号が行の範囲になければ null */
+/** 行を選ぶ問題の編集で、入力した番号の行の中身。番号が行の範囲になければ null */
 export function lineAt(code: string, lineNo: string | number) {
   const text = String(lineNo).trim()
   const n = /^\d+$/.test(text) ? Number(text) : 0
   return codeLines(trimCode(code))[n - 1] ?? null
 }
 
-const answerInputOf = (q: QuizQuestion) => {
+const BLANK_ROW: Omit<QuizFormRow, 'k' | 'kind' | 'prompt'> = {
+  code: '',
+  explanation: '',
+  choices: [],
+  correct: [],
+  multiple: '0',
+  answers: [],
+  space: '0',
+  case: '0',
+  text: '',
+  layout: 'code',
+  fill: 'type',
+  lines: '',
+  ask: 'order',
+  extras: '',
+  steps: '',
+  mode: 'one',
+  pairs: [],
+  keywords: '',
+  sample: '',
+}
+
+/** 問題を足したときの、入力欄の最初の値 */
+export const blankFormRow = (k: string, kind: QuizKind): QuizFormRow => ({
+  ...BLANK_ROW,
+  k,
+  kind,
+  prompt: QUIZ_DEFAULT_PROMPTS[kind],
+  ...(kind === 'choice' && { choices: ['', '', '', ''], correct: [false, false, false, false] }),
+  ...(kind === 'short' && { answers: [''] }),
+  ...(kind === 'match' && {
+    pairs: [
+      ['', ''],
+      ['', ''],
+      ['', ''],
+    ],
+  }),
+})
+
+const flag = (on: boolean) => (on ? '1' : '0')
+
+function formRowOf(q: QuizQuestion): QuizFormRow {
+  const row = { ...BLANK_ROW, k: q.id, kind: q.kind, prompt: q.prompt, code: q.code, explanation: q.explanation }
   switch (q.kind) {
     case 'choice':
-    case 'bug':
-      return String(q.answer)
-    case 'output':
-      return q.answer
-    case 'flow':
-      return q.answer.join(', ')
-    case 'table':
-      return [q.columns, ...q.rows].map((cells) => cells.join(` ${CELL_SEPARATOR} `)).join('\n')
+      return { ...row, choices: q.choices, correct: q.choices.map((_, i) => q.answers.includes(i)), multiple: flag(q.multiple) }
+    case 'short':
+      return { ...row, answers: q.answers, space: flag(q.ignoreSpace), case: flag(q.ignoreCase) }
+    case 'blank':
+      return { ...row, text: q.text, layout: q.layout, fill: q.fill, extras: q.extras.join('\n') }
     case 'order':
-    case 'indent':
-      return ''
+      return { ...row, lines: q.lines.join('\n'), extras: q.distractors.join('\n'), ask: q.ask }
+    case 'lines':
+      return { ...row, steps: q.answer.join(', '), mode: q.mode }
+    case 'match':
+      return { ...row, pairs: q.pairs.map((p) => [p.left, p.right]), extras: q.extras.join('\n') }
+    case 'essay':
+      return { ...row, keywords: q.keywords.join('\n'), sample: q.sample }
   }
 }
 
-export const quizFormRows = (questions: readonly QuizQuestion[]): QuizFormRow[] =>
-  questions.map((q) => ({
-    k: q.id,
-    kind: q.kind,
-    prompt: q.prompt,
-    code: q.kind === 'order' ? '' : q.code,
-    choices: q.kind === 'choice' ? q.choices : [],
-    answer: answerInputOf(q),
-    lines: q.kind === 'order' ? q.lines.join('\n') : '',
-    explanation: q.explanation,
-  }))
+export const quizFormRows = (questions: readonly QuizQuestion[]): QuizFormRow[] => questions.map(formRowOf)
 
 const FORM_BROKEN = '問題を読み取れませんでした。ページを開き直してから、もう一度お試しください。'
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
 const KEY_PATTERN = /^[A-Za-z0-9]{1,32}$/
 
 function readRow(raw: unknown): QuizFormRow | null {
   if (!isRecord(raw) || typeof raw.k !== 'string' || !KEY_PATTERN.test(raw.k) || !isQuizKind(raw.kind)) return null
-  const str = (key: string) => (typeof raw[key] === 'string' ? normalizeNewlines(raw[key]) : '')
+  const str = (key: keyof QuizFormRow) => normalizeNewlines(strOf(raw[key]))
+  const list = (key: keyof QuizFormRow) => (Array.isArray(raw[key]) ? raw[key].map((s) => normalizeNewlines(strOf(s))) : [])
   return {
     k: raw.k,
     kind: raw.kind,
     prompt: str('prompt'),
     code: str('code'),
-    choices: Array.isArray(raw.choices) ? raw.choices.map((c) => (typeof c === 'string' ? c : '')) : [],
-    answer: str('answer'),
-    lines: str('lines'),
     explanation: str('explanation'),
+    choices: list('choices'),
+    correct: Array.isArray(raw.correct) ? raw.correct.map((v) => v === true) : [],
+    multiple: str('multiple'),
+    answers: list('answers'),
+    space: str('space'),
+    case: str('case'),
+    text: str('text'),
+    layout: str('layout'),
+    fill: str('fill'),
+    lines: str('lines'),
+    ask: str('ask'),
+    extras: str('extras'),
+    steps: str('steps'),
+    mode: str('mode'),
+    pairs: Array.isArray(raw.pairs)
+      ? raw.pairs.map((p): [string, string] => (Array.isArray(p) ? [strOf(p[0]).trim(), strOf(p[1]).trim()] : ['', '']))
+      : [],
+    keywords: str('keywords'),
+    sample: str('sample'),
   }
 }
 
 const tooLong = (label: string, max: number) => `${label}は${max}文字以内で入力してください。`
 
-/** 並べ替えと字下げの行の数と長さの誤り。なければ null */
+/** 並べ替えの行の数と長さの誤り。なければ null */
 function linesError(lines: readonly string[], label: string) {
   if (lines.length < MIN_QUIZ_LINES) return `${label}を ${MIN_QUIZ_LINES} 行以上入力してください。`
   if (lines.length > MAX_QUIZ_LINES) return `${label}は ${MAX_QUIZ_LINES} 行までにしてください。`
@@ -265,23 +596,32 @@ function linesError(lines: readonly string[], label: string) {
   return null
 }
 
-/** 変数の追跡の表（1 行目が変数の名前）を読む。誤りがあれば error に入れる */
-function readTable(text: string): { columns: string[]; rows: string[][]; error: string | null } {
-  const [columns = [], ...rows] = trimCode(text)
-    .split('\n')
-    .filter((line) => line.trim())
-    .map(cellsOf)
-  const fail = (error: string) => ({ columns, rows, error })
-  if (rows.length === 0) return fail('1 行目に変数の名前、2 行目からは各回の値を、| で区切って入力してください。')
-  if (columns.length > MAX_QUIZ_COLUMNS) return fail(`変数は ${MAX_QUIZ_COLUMNS} 個までにしてください。`)
-  if (rows.length > MAX_QUIZ_ROWS) return fail(`値の行は ${MAX_QUIZ_ROWS} 行までにしてください。`)
-  const uneven = rows.findIndex((cells) => cells.length !== columns.length)
-  if (uneven >= 0) return fail(`${uneven + 2} 行目の値の数が、変数の数（${columns.length} 個）と合いません。`)
-  if ([columns, ...rows].some((cells) => cells.some((cell) => !cell)))
-    return fail('空のマスがあります。すべてのマスに値を入力してください。')
-  if ([columns, ...rows].some((cells) => cells.some((cell) => cell.length > MAX_QUIZ_CELL_LENGTH)))
-    return fail(tooLong('1 つの値', MAX_QUIZ_CELL_LENGTH))
-  return { columns, rows, error: null }
+/** 改行区切りの選択肢に混ぜるものの誤り。なければ null */
+function extrasError(extras: readonly string[], max: number, length: number) {
+  if (extras.length > max) return `混ぜるものは ${max} 個までにしてください。`
+  if (extras.some((s) => s.length > length)) return tooLong('混ぜるもの 1 つ', length)
+  return null
+}
+
+/** 穴埋めの本文の誤り。なければ null */
+function blankError(text: string, layout: BlankLayout) {
+  if (!text.trim()) return '空欄のある本文を入力してください。'
+  if (text.length > MAX_QUIZ_CODE_LENGTH) return tooLong('本文', MAX_QUIZ_CODE_LENGTH)
+  const sheet = parseBlanks(text, layout)
+  if (sheet.error) return sheet.error
+  if (sheet.blanks.length === 0) return '空欄がありません。答えさせたいところを {{正解}} のように書いてください。'
+  if (sheet.blanks.length > MAX_QUIZ_BLANKS) return `空欄は ${MAX_QUIZ_BLANKS} 個までにしてください。`
+  if (sheet.blanks.some((answers) => answers.some((a) => a.length > MAX_QUIZ_BLANK_LENGTH)))
+    return tooLong('空欄の正解', MAX_QUIZ_BLANK_LENGTH)
+  if (layout === 'table') {
+    const [head, ...body] = sheet.rows
+    if (body.length === 0) return '表は、1 行目に見出し、2 行目から中身を | で区切って書いてください。'
+    if (sheet.rows.length > MAX_QUIZ_TABLE_ROWS) return `表の行は、見出しを含めて ${MAX_QUIZ_TABLE_ROWS} 行までにしてください。`
+    if (head.length > MAX_QUIZ_TABLE_COLUMNS) return `表の列は ${MAX_QUIZ_TABLE_COLUMNS} 列までにしてください。`
+    const uneven = body.findIndex((cells) => cells.length !== head.length)
+    if (uneven >= 0) return `${uneven + 2} 行目のマスの数が、見出し（${head.length} 個）と合いません。`
+  }
+  return null
 }
 
 function readQuestion(row: QuizFormRow, issues: QuizIssue[]): QuizQuestion {
@@ -294,66 +634,96 @@ function readQuestion(row: QuizFormRow, issues: QuizIssue[]): QuizQuestion {
   if (!prompt) fail('prompt', '問題文を入力してください。')
   else if (prompt.length > MAX_QUIZ_PROMPT_LENGTH) fail('prompt', tooLong('問題文', MAX_QUIZ_PROMPT_LENGTH))
   if (explanation.length > MAX_QUIZ_EXPLANATION_LENGTH) fail('explanation', tooLong('解説', MAX_QUIZ_EXPLANATION_LENGTH))
-  if (kind !== 'order') {
-    if (!code && kind !== 'choice') fail('code', 'コードを入力してください。')
-    else if (code.length > MAX_QUIZ_CODE_LENGTH) fail('code', tooLong('コード', MAX_QUIZ_CODE_LENGTH))
-  }
-  const base = { id: k, prompt, explanation }
+  if (!code && kind === 'lines') fail('code', 'コードを入力してください。')
+  else if (code.length > MAX_QUIZ_CODE_LENGTH) fail('code', tooLong('コード', MAX_QUIZ_CODE_LENGTH))
+  const base = { id: k, prompt, code, explanation }
   switch (kind) {
     case 'choice': {
-      const filled = row.choices.map((text, i) => ({ text: text.trim(), i })).filter((c) => c.text)
+      const multiple = row.multiple === '1'
+      const filled = row.choices.map((text, i) => ({ text: text.trim(), right: !!row.correct[i] })).filter((c) => c.text)
       const choices = filled.map((c) => c.text)
-      const answer = filled.findIndex((c) => String(c.i) === row.answer.trim())
+      const answers = filled.flatMap((c, i) => (c.right ? [i] : []))
       if (choices.length < MIN_QUIZ_CHOICES) fail('choices', `選択肢を ${MIN_QUIZ_CHOICES} つ以上入力してください。`)
       else if (choices.length > MAX_QUIZ_CHOICES) fail('choices', `選択肢は ${MAX_QUIZ_CHOICES} 個までにしてください。`)
       else if (choices.some((c) => c.length > MAX_QUIZ_CHOICE_LENGTH)) fail('choices', tooLong('選択肢', MAX_QUIZ_CHOICE_LENGTH))
       else if (new Set(choices).size < choices.length) fail('choices', '同じ選択肢が 2 つあります。')
-      else if (answer < 0) fail('choices', '正解の選択肢を選んでください。')
-      return { ...base, kind, code, choices, answer }
+      else if (answers.length === 0) fail('choices', '正解の選択肢に印を付けてください。')
+      else if (!multiple && answers.length > 1)
+        fail('choices', '正解は 1 つだけにしてください。複数を正解にするときは、選び方を「複数選ぶ」にします。')
+      return { ...base, kind, choices, multiple, answers }
     }
-    case 'output': {
-      const answer = trimCode(row.answer)
-      if (!answer) fail('answer', '正しい出力を入力してください。')
-      else if (answer.length > MAX_QUIZ_OUTPUT_LENGTH) fail('answer', tooLong('正しい出力', MAX_QUIZ_OUTPUT_LENGTH))
-      return { ...base, kind, code, answer }
+    case 'short': {
+      const answers = row.answers.map(trimCode).filter(Boolean)
+      if (answers.length === 0) fail('answers', '正しい答えを入力してください。')
+      else if (answers.length > MAX_QUIZ_ANSWERS) fail('answers', `正しい答えは ${MAX_QUIZ_ANSWERS} 個までにしてください。`)
+      else if (answers.some((a) => a.length > MAX_QUIZ_OUTPUT_LENGTH)) fail('answers', tooLong('正しい答え', MAX_QUIZ_OUTPUT_LENGTH))
+      return { ...base, kind, answers, ignoreSpace: row.space === '1', ignoreCase: row.case === '1' }
+    }
+    case 'blank': {
+      const layout = isOneOf(BLANK_LAYOUTS, row.layout) ? row.layout : 'code'
+      const fill = isOneOf(BLANK_FILLS, row.fill) ? row.fill : 'type'
+      const text = trimCode(row.text)
+      const extras = fill === 'pick' ? textList(row.extras) : []
+      const error = blankError(text, layout)
+      if (error) fail('text', error)
+      const extraError = extrasError(extras, MAX_QUIZ_EXTRAS, MAX_QUIZ_BLANK_LENGTH)
+      if (extraError) fail('extras', extraError)
+      return { ...base, kind, text, layout, fill, extras }
     }
     case 'order': {
+      const ask = isOneOf(ORDER_ASKS, row.ask) ? row.ask : 'order'
       const ordered = trimCode(row.lines)
         .split('\n')
         .filter((line) => line.trim())
-      const error = linesError(ordered, '並べ替える行')
+      const distractors = trimCode(row.extras)
+        .split('\n')
+        .filter((line) => line.trim())
+      const error = linesError(ordered, '正しい順の行')
+      const levels = indentOf(ordered).levels
       if (error) fail('lines', error)
-      else if (new Set(ordered).size < 2) fail('lines', '同じ行だけでは並べ替えになりません。')
-      return { ...base, kind, lines: ordered }
+      else if (ask !== 'indent' && new Set(ordered).size < 2) fail('lines', '同じ行だけでは並べ替えになりません。')
+      else if (ask !== 'order' && levels.every((level) => level === 0)) fail('lines', '字下げのある行を 1 つ以上入れてください。')
+      else if (levels.some((level) => level > MAX_QUIZ_INDENT)) fail('lines', `字下げは ${MAX_QUIZ_INDENT} 段までにしてください。`)
+      const extraError = extrasError(distractors, MAX_QUIZ_DISTRACTORS, MAX_QUIZ_LINE_LENGTH)
+      if (extraError) fail('extras', extraError)
+      return { ...base, kind, lines: ordered, distractors, ask }
     }
-    case 'bug': {
-      const answer = /^\d+$/.test(row.answer.trim()) ? Number(row.answer.trim()) : 0
-      if (code && (answer < 1 || answer > lines.length))
-        fail('answer', `間違っている行の番号を、1〜${lines.length} の整数で入力してください。`)
-      else if (code && !lines[answer - 1].trim()) fail('answer', '空の行は選べません。')
-      return { ...base, kind, code, answer }
+    case 'lines': {
+      const mode = isOneOf(LINES_MODES, row.mode) ? row.mode : 'one'
+      const answer = parseSteps(row.steps) ?? []
+      if (!code) return { ...base, kind, mode, answer }
+      const range = `行の番号は、1〜${lines.length} の整数で入力してください。`
+      if (answer.some((n) => n < 1 || n > lines.length)) fail('steps', range)
+      else if (answer.some((n) => !lines[n - 1].trim())) fail('steps', '空の行は選べません。')
+      else if (mode === 'one' && answer.length !== 1) fail('steps', '正解の行の番号を 1 つ入力してください。')
+      else if (mode === 'many' && answer.length === 0) fail('steps', '正解の行の番号を、カンマで区切って入力してください。')
+      else if (mode === 'many' && new Set(answer).size < answer.length) fail('steps', '同じ行の番号が 2 回あります。')
+      else if (mode === 'sequence' && answer.length < 2)
+        fail('steps', '実行される順に、行の番号を 2 つ以上、カンマで区切って入力してください。')
+      else if (answer.length > MAX_QUIZ_STEPS) fail('steps', `行の番号は ${MAX_QUIZ_STEPS} 個までにしてください。`)
+      return { ...base, kind, mode, answer: mode === 'many' ? [...answer].sort((a, b) => a - b) : answer }
     }
-    case 'flow': {
-      const answer = parseSteps(row.answer) ?? []
-      if (!code) return { ...base, kind, code, answer }
-      if (answer.length < 2) fail('answer', '実行される順に、行の番号を 2 つ以上、カンマで区切って入力してください。')
-      else if (answer.length > MAX_QUIZ_STEPS) fail('answer', `行の番号は ${MAX_QUIZ_STEPS} 個までにしてください。`)
-      else if (answer.some((n) => n < 1 || n > lines.length)) fail('answer', `行の番号は、1〜${lines.length} の整数で入力してください。`)
-      else if (answer.some((n) => !lines[n - 1].trim())) fail('answer', '空の行は選べません。')
-      return { ...base, kind, code, answer }
+    case 'match': {
+      const pairs = row.pairs.filter(([left, right]) => left || right).map(([left, right]) => ({ left, right }))
+      const extras = textList(row.extras)
+      if (pairs.length < MIN_QUIZ_PAIRS) fail('pairs', `組み合わせを ${MIN_QUIZ_PAIRS} つ以上入力してください。`)
+      else if (pairs.length > MAX_QUIZ_PAIRS) fail('pairs', `組み合わせは ${MAX_QUIZ_PAIRS} 個までにしてください。`)
+      else if (pairs.some((p) => !p.left || !p.right)) fail('pairs', '左と右の両方を入力してください。')
+      else if (pairs.some((p) => p.left.length > MAX_QUIZ_CHOICE_LENGTH || p.right.length > MAX_QUIZ_CHOICE_LENGTH))
+        fail('pairs', tooLong('1 つの項目', MAX_QUIZ_CHOICE_LENGTH))
+      else if (new Set(pairs.map((p) => p.left)).size < pairs.length) fail('pairs', '左に同じ項目が 2 つあります。')
+      const extraError = extrasError(extras, MAX_QUIZ_EXTRAS, MAX_QUIZ_CHOICE_LENGTH)
+      if (extraError) fail('extras', extraError)
+      return { ...base, kind, pairs, extras }
     }
-    case 'indent': {
-      const indented = indentOf(code)
-      const error = code ? linesError(indented.lines, 'コード') : null
-      if (error) fail('code', error)
-      else if (code && indented.levels.every((level) => level === 0)) fail('code', '字下げのある行を 1 つ以上入れてください。')
-      else if (indented.levels.some((level) => level > MAX_QUIZ_INDENT)) fail('code', `字下げは ${MAX_QUIZ_INDENT} 段までにしてください。`)
-      return { ...base, kind, code }
-    }
-    case 'table': {
-      const table = readTable(row.answer)
-      if (table.error) fail('answer', table.error)
-      return { ...base, kind, code, columns: table.columns, rows: table.rows }
+    case 'essay': {
+      const keywords = wordList(row.keywords)
+      const sample = row.sample.trim()
+      if (keywords.length > MAX_QUIZ_KEYWORDS) fail('keywords', `キーワードは ${MAX_QUIZ_KEYWORDS} 個までにしてください。`)
+      else if (keywords.some((w) => w.length > MAX_QUIZ_KEYWORD_LENGTH))
+        fail('keywords', tooLong('キーワード 1 つ', MAX_QUIZ_KEYWORD_LENGTH))
+      if (sample.length > MAX_QUIZ_SAMPLE_LENGTH) fail('sample', tooLong('解答例', MAX_QUIZ_SAMPLE_LENGTH))
+      return { ...base, kind, keywords, sample }
     }
   }
 }
@@ -400,7 +770,7 @@ export const DEFAULT_QUIZ_SETTINGS: QuizSettings = { questions: [], passPercent:
 
 /** Moodle モードの extra_items の data（extra-kinds.tsx の quiz の toData が作る）を、小テストの設定として読む */
 export const quizSettingsOf = (data: Record<string, unknown>): QuizSettings => ({
-  questions: Array.isArray(data.questions) ? (data.questions as QuizQuestion[]) : [],
+  questions: upgradeQuestions(data.questions),
   passPercent: typeof data.passPercent === 'number' ? data.passPercent : DEFAULT_PASS_PERCENT,
   showAnswers: data.showAnswers === 0 ? 0 : 1,
   look: isQuizLook(data.look) ? data.look : 'plain',
@@ -414,15 +784,19 @@ const hash = (s: string) => {
   return h >>> 0
 }
 
-// Math.random を使わないのは、開き直すたびに並びが変わると、途中まで並べた学生がやり直しになるため
-function shuffled<T>(list: readonly T[], seed: string): T[] {
+const seeded = (seed: string) => {
   let state = hash(seed)
-  const random = () => {
+  return () => {
     state = (state + 0x6d2b79f5) | 0
     let t = Math.imul(state ^ (state >>> 15), 1 | state)
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
+}
+
+// Math.random を使わないのは、開き直すたびに並びが変わると、途中まで並べた学生がやり直しになるため
+function shuffled<T>(list: readonly T[], seed: string): T[] {
+  const random = seeded(seed)
   const result = [...list]
   for (let i = result.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1))
@@ -434,34 +808,81 @@ function shuffled<T>(list: readonly T[], seed: string): T[] {
 /** 並べ替えの行を混ぜる。seed が同じなら同じ並びになる。混ぜた結果が正しい順のままなら、先頭を末尾へ回す */
 export function shuffledLines(lines: readonly string[], seed: string) {
   const result = shuffled(lines, seed)
-  return sameList(result, lines) ? [...result.slice(1), result[0]] : result
+  return result.length > 1 && sameList(result, lines) ? [...result.slice(1), result[0]] : result
 }
 
-/** 学生に出す形にする。seed は並べ替えの行の混ぜ方を決める（学生ごとに変える） */
-export const takeQuestions = (questions: readonly QuizQuestion[], seed: string): QuizTakeQuestion[] =>
-  questions.map((q) => {
-    const { id, prompt } = q
-    switch (q.kind) {
-      case 'choice':
-        return { id, kind: q.kind, prompt, code: q.code, choices: q.choices }
-      case 'output':
-      case 'bug':
-      case 'flow':
-        return { id, kind: q.kind, prompt, code: q.code }
-      case 'order':
-        return { id, kind: q.kind, prompt, lines: shuffledLines(q.lines, `${seed}:${id}`) }
-      case 'indent':
-        return { id, kind: q.kind, prompt, lines: indentOf(q.code).lines }
-      case 'table':
-        return { id, kind: q.kind, prompt, code: q.code, columns: q.columns, rowCount: q.rows.length }
+/** 並べ替えで並びを答えさせないときの行。正しい順のまま、使わない行を seed で決めた位置に差しこむ */
+function insertedLines(lines: readonly string[], distractors: readonly string[], seed: string) {
+  const random = seeded(seed)
+  const result = [...lines]
+  for (const extra of distractors) result.splice(Math.floor(random() * (result.length + 1)), 0, extra)
+  return result
+}
+
+const unique = (list: readonly string[]) => [...new Set(list)]
+
+/** 穴埋め（選んで答える）の選択肢。空欄ごとの最初の正解と、混ぜるもの */
+const blankOptionsOf = (q: BlankQuestion) =>
+  unique([...parseBlanks(q.text, q.layout).blanks.map((answers) => answers[0] ?? ''), ...q.extras])
+
+const matchOptionsOf = (q: MatchQuestion) => unique([...q.pairs.map((p) => p.right), ...q.extras])
+
+/** 並べ替えで配る行（混ぜる前）。字下げを答えさせるときは、字下げを除く */
+function orderPoolOf(q: OrderQuestion) {
+  const pool = [...q.lines, ...q.distractors]
+  return q.ask === 'order' ? pool : pool.map((line) => line.trim())
+}
+
+function takeQuestion(q: QuizQuestion, seed: string): QuizTakeQuestion {
+  const { id, prompt, code } = q
+  const base = { id, prompt, code }
+  switch (q.kind) {
+    case 'choice':
+      return { ...base, kind: q.kind, choices: q.choices, multiple: q.multiple }
+    case 'short':
+      return { ...base, kind: q.kind, multiline: q.answers.some((a) => a.includes('\n')) }
+    case 'blank': {
+      const sheet = parseBlanks(q.text, q.layout)
+      const options = q.fill === 'pick' ? shuffled(blankOptionsOf(q), `${seed}:${id}`) : []
+      return { ...base, kind: q.kind, layout: q.layout, rows: sheet.rows, blanks: sheet.blanks.length, options }
     }
-  })
+    case 'order': {
+      const lines = orderPoolOf(q)
+      const placed =
+        q.ask === 'indent'
+          ? insertedLines(lines.slice(0, q.lines.length), lines.slice(q.lines.length), `${seed}:${id}`)
+          : shuffledLines(lines, `${seed}:${id}`)
+      return { ...base, kind: q.kind, lines: placed, ask: q.ask, unused: q.distractors.length > 0 }
+    }
+    case 'lines':
+      return { ...base, kind: q.kind, mode: q.mode }
+    case 'match':
+      return { ...base, kind: q.kind, lefts: q.pairs.map((p) => p.left), options: shuffled(matchOptionsOf(q), `${seed}:${id}`) }
+    case 'essay':
+      return { ...base, kind: q.kind }
+  }
+}
 
-const LIST_KINDS: readonly QuizKind[] = ['order', 'indent', 'table']
+/** 学生に出す形にする。seed は並べ替えの行と選択肢の混ぜ方を決める（学生ごとに変える） */
+export const takeQuestions = (questions: readonly QuizQuestion[], seed: string): QuizTakeQuestion[] =>
+  questions.map((q) => takeQuestion(q, seed))
 
-// 欄をいくつも送る種類の名前に [] を付けるのは、同じ名前の欄をすべて受け取るため（付けないと、最後の 1 つだけになる）
+type AnswerShape =
+  | Pick<ChoiceQuestion, 'id' | 'kind' | 'multiple'>
+  | Pick<LinesQuestion, 'id' | 'kind' | 'mode'>
+  | { id: string; kind: Exclude<QuizKind, 'choice' | 'lines'> }
+
+/** 欄をいくつも送る問題か */
+const isListAnswer = (q: AnswerShape) =>
+  q.kind === 'blank' ||
+  q.kind === 'order' ||
+  q.kind === 'match' ||
+  (q.kind === 'choice' && q.multiple) ||
+  (q.kind === 'lines' && q.mode === 'many')
+
+// 欄をいくつも送る問題の名前に [] を付けるのは、同じ名前の欄をすべて受け取るため（付けないと、最後の 1 つだけになる）
 /** 解答のフォームの欄の名前 */
-export const answerField = (q: Pick<QuizQuestion, 'id' | 'kind'>) => `a.${q.id}${LIST_KINDS.includes(q.kind) ? '[]' : ''}`
+export const answerField = (q: AnswerShape) => `a.${q.id}${isListAnswer(q) ? '[]' : ''}`
 
 // ---------------------------------------------------------------- 採点
 
@@ -472,80 +893,143 @@ const intAnswer = (raw: unknown, min: number, max: number) => {
 
 const stringList = (raw: unknown) => (Array.isArray(raw) ? raw.filter((v) => typeof v === 'string') : typeof raw === 'string' ? [raw] : [])
 
+const textAnswer = (raw: unknown, max: number) => {
+  const text = typeof raw === 'string' ? trimCode(raw).slice(0, max) : ''
+  return text || null
+}
+
+/** sent の値が、pool の中からそれぞれ 1 回ずつ取り出したものか */
+function drawnFrom(sent: readonly string[], pool: readonly string[]) {
+  const left = [...pool]
+  return sent.every((v) => {
+    const at = left.indexOf(v)
+    if (at < 0) return false
+    left.splice(at, 1)
+    return true
+  })
+}
+
+/** 選んだ位置・行の番号の並び。重ならない番号を小さい順にする */
+const indexList = (raw: unknown, min: number, max: number) => {
+  const sent = stringList(raw).map((v) => intAnswer(v, min, max))
+  return sent.length > 0 && sent.every((n) => n !== null) ? [...new Set(sent)].sort((a, b) => a - b) : null
+}
+
 /** 送られた値を、問題の種類に合う答えにする。答えていない・形が合わないものは null */
 export function readQuizAnswer(q: QuizQuestion, raw: unknown): QuizAnswer {
   switch (q.kind) {
     case 'choice':
-      return intAnswer(raw, 0, q.choices.length - 1)
-    case 'bug':
-      return intAnswer(raw, 1, codeLines(q.code).length)
-    case 'output': {
-      const text = typeof raw === 'string' ? trimCode(raw).slice(0, MAX_QUIZ_OUTPUT_LENGTH) : ''
-      return text || null
+      return q.multiple ? indexList(raw, 0, q.choices.length - 1) : intAnswer(raw, 0, q.choices.length - 1)
+    case 'short':
+      return textAnswer(raw, MAX_QUIZ_OUTPUT_LENGTH)
+    case 'essay':
+      return textAnswer(raw, MAX_QUIZ_ESSAY_LENGTH)
+    case 'blank': {
+      const count = parseBlanks(q.text, q.layout).blanks.length
+      const cells = stringList(raw).map((v) => v.trim().slice(0, MAX_QUIZ_BLANK_LENGTH))
+      return cells.length === count && cells.some(Boolean) ? cells : null
+    }
+    case 'match': {
+      const sent = stringList(raw)
+      const options = matchOptionsOf(q)
+      return sent.length === q.pairs.length && sent.some(Boolean) && sent.every((v) => !v || options.includes(v)) ? sent : null
     }
     case 'order': {
-      const lines = stringList(raw)
-      // 配った行を並べ替えたものだけを受け付けるのは、書き換えた行を記録に残さないため
-      return sameList([...lines].sort(), [...q.lines].sort()) ? lines : null
-    }
-    case 'flow': {
-      const steps = typeof raw === 'string' ? parseSteps(raw) : null
-      const count = codeLines(q.code).length
-      return steps && steps.length > 0 && steps.length <= MAX_QUIZ_STEPS * 2 && steps.every((n) => n >= 1 && n <= count) ? steps : null
-    }
-    case 'indent': {
       const sent = stringList(raw)
-      const levels = sent.map((v) => intAnswer(v, 0, MAX_QUIZ_INDENT)).filter((v) => v !== null)
-      return levels.length === sent.length && levels.length === indentOf(q.code).lines.length ? levels : null
+      if (sent.length === 0) return null
+      const pool = orderPoolOf(q)
+      if (q.ask === 'order') return drawnFrom(sent, pool) ? sent : null
+      // 配った行に字下げを付けたものだけを受け付けるのは、書き換えた行を記録に残さないため
+      const read = sent.map(levelOf)
+      return read.every((r) => r.level <= MAX_QUIZ_INDENT) &&
+        drawnFrom(
+          read.map((r) => r.text),
+          pool,
+        )
+        ? read.map((r) => withIndent(r.text, r.level))
+        : null
     }
-    case 'table': {
-      const cells = stringList(raw).map((v) => v.trim().slice(0, MAX_QUIZ_CELL_LENGTH))
-      return cells.length === q.rows.length * q.columns.length && cells.some(Boolean) ? cells : null
+    case 'lines': {
+      const count = codeLines(q.code).length
+      if (q.mode === 'one') return intAnswer(raw, 1, count)
+      if (q.mode === 'many') return indexList(raw, 1, count)
+      const steps = typeof raw === 'string' ? parseSteps(raw) : null
+      return steps && steps.length > 0 && steps.length <= MAX_QUIZ_STEPS * 2 && steps.every((n) => n >= 1 && n <= count) ? steps : null
     }
   }
 }
 
-export function isCorrectAnswer(q: QuizQuestion, answer: QuizAnswer) {
+/** 答えが合っているか。記述でキーワードだけでは決められないものは null（教師の採点を待つ） */
+export function isCorrectAnswer(q: QuizQuestion, answer: QuizAnswer): boolean | null {
   if (answer === null) return false
   switch (q.kind) {
     case 'choice':
-    case 'bug':
-      return answer === q.answer
-    case 'output':
-      return typeof answer === 'string' && normalizeOutput(answer) === normalizeOutput(q.answer)
-    case 'order':
-      return Array.isArray(answer) && sameList(answer, q.lines)
-    case 'flow':
-      return Array.isArray(answer) && sameList(answer, q.answer)
-    case 'indent':
-      return Array.isArray(answer) && sameList(answer, indentOf(q.code).levels)
-    case 'table':
+      return q.multiple ? Array.isArray(answer) && sameSet(answer as number[], q.answers) : answer === q.answers[0]
+    case 'short':
+      return typeof answer === 'string' && q.answers.some((a) => normalizeShort(a, q) === normalizeShort(answer, q))
+    case 'blank': {
+      const { blanks } = parseBlanks(q.text, q.layout)
       return (
-        Array.isArray(answer) &&
+        Array.isArray(answer) && answer.length === blanks.length && blanks.every((answers, i) => isSameCell(String(answer[i]), answers))
+      )
+    }
+    case 'match':
+      return Array.isArray(answer) && q.pairs.every((p, i) => answer[i] === p.right)
+    case 'order': {
+      if (!Array.isArray(answer)) return false
+      if (q.ask === 'order') return sameList(answer, q.lines)
+      const right = indentOf(q.lines)
+      const read = (answer as string[]).map(levelOf)
+      return (
         sameList(
-          answer.map((v) => normalizeCell(String(v))),
-          q.rows.flat().map(normalizeCell),
+          read.map((r) => r.text),
+          right.lines,
+        ) &&
+        sameList(
+          read.map((r) => r.level),
+          right.levels,
         )
       )
+    }
+    case 'lines':
+      if (q.mode === 'one') return answer === q.answer[0]
+      return Array.isArray(answer) && (q.mode === 'many' ? sameSet(answer as number[], q.answer) : sameList(answer, q.answer))
+    case 'essay': {
+      if (typeof answer !== 'string' || q.keywords.length === 0) return null
+      const written = normalizeWords(answer)
+      return q.keywords.every((word) => written.includes(normalizeWords(word))) ? true : null
+    }
   }
 }
 
-/** 変数の追跡で、答えたマスが正しい値と合っているか */
-export const isSameCell = (answer: string, correct: string) => normalizeCell(answer) === normalizeCell(correct)
+/** 穴埋めの欄の値が、空欄の正解（別解を含む）のどれかと合っているか */
+export const isSameCell = (answer: string, answers: readonly string[]) => answers.some((a) => normalizeCell(answer) === normalizeCell(a))
 
 export type QuizScore = { correct: number; total: number }
 
-/** input は、欄の名前（answerField）から送られた値を返す */
+/** input は、欄の名前（answerField）から送られた値を返す。pending は採点待ちの問題の数 */
 export function gradeQuiz(
   questions: readonly QuizQuestion[],
   input: (field: string, q: QuizQuestion) => unknown,
-): QuizScore & { records: QuizAnswerRecord[] } {
+): QuizScore & { pending: number; records: QuizAnswerRecord[] } {
   const records = questions.map((q) => {
     const answer = readQuizAnswer(q, input(answerField(q), q))
     return { id: q.id, answer, correct: isCorrectAnswer(q, answer) }
   })
-  return { records, correct: records.filter((r) => r.correct).length, total: records.length }
+  return {
+    records,
+    correct: records.filter((r) => r.correct === true).length,
+    total: records.length,
+    pending: records.filter((r) => r.correct === null).length,
+  }
 }
+
+/** 記録の点数を数え直す（教師が記述を採点したあと） */
+export const scoreOf = (records: readonly QuizAnswerRecord[]) => ({
+  correct: records.filter((r) => r.correct === true).length,
+  total: records.length,
+  pending: records.filter((r) => r.correct === null).length,
+})
 
 /** ゲームの見た目で、1 問ずつ確かめたときの最初の答え（client.ts の qgCheck が送る first[]）の欄の名前 */
 export const FIRST_ANSWER_FIELD = 'first[]'
@@ -593,30 +1077,48 @@ export const bestScore = <T extends QuizScore>(attempts: readonly T[]): T | null
 
 // ---------------------------------------------------------------- 結果
 
-export type QuizSolution = { answer: number | string | string[] | number[]; explanation: string }
+/** 正解。選択と行を選ぶは位置・行の番号、短答は正しい答え、穴埋めは空欄ごとの正解（別解を含む）、組み合わせは右の項目、並べ替えは正しい行、記述は解答例 */
+export type QuizSolution = { answer: number[] | string[] | string[][] | string; explanation: string }
+
+/** 問題 1 つの結果。none は、その受験のあとに足された問題（採点していない） */
+export type QuizReviewStatus = 'right' | 'wrong' | 'pending' | 'none'
 
 /** 採点のあとに見せる、問題 1 つの結果 */
 export type QuizReviewItem = {
   question: QuizTakeQuestion
   answer: QuizAnswer
-  /** その受験のあとに足された問題は null（採点していない） */
-  correct: boolean | null
+  status: QuizReviewStatus
   /** 正解と解説。見せてよいときだけ入れる */
   solution?: QuizSolution
 }
 
 const solutionAnswerOf = (q: QuizQuestion): QuizSolution['answer'] => {
   switch (q.kind) {
+    case 'choice':
+    case 'short':
+      return q.answers
+    case 'blank':
+      return parseBlanks(q.text, q.layout).blanks
     case 'order':
-      return q.lines
-    case 'indent':
-      return indentOf(q.code).levels
-    case 'table':
-      return q.rows.flat()
-    default:
+      return q.ask === 'order' ? q.lines : (({ lines, levels }) => lines.map((line, i) => withIndent(line, levels[i])))(indentOf(q.lines))
+    case 'lines':
       return q.answer
+    case 'match':
+      return q.pairs.map((p) => p.right)
+    case 'essay':
+      return q.sample
   }
 }
+
+/** 前の形式で残した答えを、今の問題の形に合わせる（字下げの問題の、行ごとの深さの答え） */
+function upgradeAnswer(q: QuizQuestion, take: QuizTakeQuestion, answer: QuizAnswer): QuizAnswer {
+  if (q.kind === 'order' && take.kind === 'order' && Array.isArray(answer) && answer.every((v) => typeof v === 'number'))
+    return take.lines.map((line, i) => withIndent(line, (answer as number[])[i] ?? 0))
+  return answer
+}
+
+const statusOf = (record: QuizAnswerRecord | undefined): QuizReviewStatus =>
+  !record ? 'none' : record.correct === null ? 'pending' : record.correct ? 'right' : 'wrong'
 
 /**
  * 受験の記録を、今の問題に重ねる。reveal が all ならすべての正解と解説を、correct なら正解した問題の解説だけを含める
@@ -631,11 +1133,12 @@ export function reviewQuiz(
   const take = takeQuestions(questions, '')
   return questions.map((q, i) => {
     const record = byId.get(q.id)
-    const shown = reveal === 'all' || !!record?.correct
+    const status = statusOf(record)
+    const shown = reveal === 'all' || status === 'right'
     return {
       question: take[i],
-      answer: record?.answer ?? null,
-      correct: record ? record.correct : null,
+      answer: upgradeAnswer(q, take[i], record?.answer ?? null),
+      status,
       ...(shown && { solution: { answer: solutionAnswerOf(q), explanation: q.explanation } }),
     }
   })

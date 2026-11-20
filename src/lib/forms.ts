@@ -584,6 +584,9 @@ const codeTrial = z.object({
 
 const regrade = z.object({ submission: id() })
 
+/** 教師が小テストの記述を採点するフォーム。q は問題の目印、verdict は正解（right）か不正解（wrong） */
+const quizGrade = z.object({ attempt: id(), q: hidden(32), verdict: z.enum(['right', 'wrong']) })
+
 /** 教師が判定を変えるフォーム。制約ごとの判定は verdict_0・verdict_1… の名前で送られ、数が提出ごとに違うので、ハンドラで読む */
 const codeVerdicts = z.looseObject({ submission: id() })
 
@@ -674,6 +677,7 @@ export const FORMS = {
   codeConstraintsSuggest,
   codeTrial,
   regrade,
+  quizGrade,
   bundleUpload,
   bundleRemove,
   bundleSync,

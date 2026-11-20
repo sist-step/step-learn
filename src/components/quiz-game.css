@@ -19,12 +19,12 @@
   --qa-cheek: #ff9aa5;
 }
 :is(.qa-choice, .quiz-game [data-quiz-q='choice'], .quiz-game [data-quiz-kind='choice']) { --qa-main: var(--qg-purple); --qa-sub: #e4dcfa; --qa-accent: #f7a531; }
-:is(.qa-output, .quiz-game [data-quiz-q='output'], .quiz-game [data-quiz-kind='output']) { --qa-main: var(--qg-orange); --qa-sub: #fdebd3; --qa-accent: #f58fa0; --qa-shade: #dc8436; }
+:is(.qa-short, .quiz-game [data-quiz-q='short'], .quiz-game [data-quiz-kind='short']) { --qa-main: var(--qg-orange); --qa-sub: #fdebd3; --qa-accent: #f58fa0; --qa-shade: #dc8436; }
 :is(.qa-order, .quiz-game [data-quiz-q='order'], .quiz-game [data-quiz-kind='order']) { --qa-main: var(--qg-navy); --qa-accent: #f7a531; }
-:is(.qa-bug, .quiz-game [data-quiz-q='bug'], .quiz-game [data-quiz-kind='bug']) { --qa-main: var(--qg-green); --qa-sub: #cdf0b6; }
-:is(.qa-flow, .quiz-game [data-quiz-q='flow'], .quiz-game [data-quiz-kind='flow']) { --qa-main: var(--qg-pink); --qa-accent: #ef8fa6; }
-:is(.qa-indent, .quiz-game [data-quiz-q='indent'], .quiz-game [data-quiz-kind='indent']) { --qa-main: var(--qg-red); }
-:is(.qa-table, .quiz-game [data-quiz-q='table'], .quiz-game [data-quiz-kind='table']) { --qa-main: var(--qg-brown); --qa-sub: #f3dcc0; --qa-accent: #f3b58f; --qa-shade: #99603a; }
+:is(.qa-lines, .quiz-game [data-quiz-q='lines'], .quiz-game [data-quiz-kind='lines']) { --qa-main: var(--qg-green); --qa-sub: #cdf0b6; }
+:is(.qa-match, .quiz-game [data-quiz-q='match'], .quiz-game [data-quiz-kind='match']) { --qa-main: var(--qg-pink); --qa-accent: #ef8fa6; }
+:is(.qa-essay, .quiz-game [data-quiz-q='essay'], .quiz-game [data-quiz-kind='essay']) { --qa-main: var(--qg-red); }
+:is(.qa-blank, .quiz-game [data-quiz-q='blank'], .quiz-game [data-quiz-kind='blank']) { --qa-main: var(--qg-brown); --qa-sub: #f3dcc0; --qa-accent: #f3b58f; --qa-shade: #99603a; }
 
 .qa { flex: none; overflow: visible; }
 .qa-main { fill: var(--qa-main); }

@@ -15,7 +15,7 @@ import { formatClock } from './lib/clock'
 import { formatDateTimeInput } from './lib/course-period'
 import { isFormName, validate, type FieldErrors, type FormInput } from './lib/forms'
 import { renderMarkdown } from './lib/markdown'
-import { MAX_QUIZ_INDENT, MAX_QUIZ_STEPS, QUIZ_KEY_SLOT, lineAt, parseSteps } from './lib/quiz'
+import { MAX_QUIZ_INDENT, MAX_QUIZ_STEPS, QUIZ_KEY_SLOT, lineAt, parseSteps, withIndent } from './lib/quiz'
 import { showsEach, type RestrictionOp } from './lib/restriction'
 import { AI_PANEL_DOCKED, getSetting, setSetting, updateSetting, type Theme } from './lib/settings'
 
@@ -322,25 +322,53 @@ document.addEventListener('submit', (e) => $$<HTMLElement>('[data-rs]', e.target
 // 入力の検証より前に置くのは、検証が読む questions を、送信と入力のたびに先に組み立て直すため
 let qzCount = 0
 
-const qzControl = (row: HTMLElement, field: string) =>
-  row.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[name="${CSS.escape(`${row.dataset.qzKey}.${field}`)}"]`)
+const qzNamed = (row: HTMLElement, field: string) =>
+  $$<HTMLInputElement | HTMLTextAreaElement>(`[name="${CSS.escape(`${row.dataset.qzKey}.${field}`)}"]`, row)
+
+/** 問題の欄の値。ラジオボタンの組（選び方）は、選ばれているものの値 */
+function qzValue(row: HTMLElement, field: string) {
+  const controls = qzNamed(row, field)
+  const radios = controls.filter((el): el is HTMLInputElement => el instanceof HTMLInputElement && el.type === 'radio')
+  if (radios.length) return radios.find((el) => el.checked)?.value ?? ''
+  return controls[0]?.value ?? ''
+}
+
+const qzItems = (row: HTMLElement, field: string) => $$<HTMLElement>(`[data-qz-items="${field}"] [data-qz-item]`, row)
+
+const qzCells = (item: HTMLElement) => $$<HTMLInputElement | HTMLTextAreaElement>('[data-qz-cell]', item).map((cell) => cell.value)
+
+const QZ_TEXT_FIELDS = [
+  'prompt',
+  'code',
+  'explanation',
+  'multiple',
+  'space',
+  'case',
+  'text',
+  'layout',
+  'fill',
+  'lines',
+  'ask',
+  'extras',
+  'steps',
+  'mode',
+  'keywords',
+  'sample',
+]
 
 function qzReadQuestion(row: HTMLElement) {
-  const kind = row.dataset.qzQuestion
-  const value = (field: string) => qzControl(row, field)?.value ?? ''
-  const choices = $$<HTMLElement>('[data-qz-choice]', row)
+  const choices = qzItems(row, 'choices')
   return {
     k: row.dataset.qzKey,
-    kind,
-    prompt: value('prompt'),
-    code: value('code'),
-    choices: choices.map((c) => c.querySelector<HTMLInputElement>('[data-qz-choice-text]')?.value ?? ''),
-    answer:
-      kind === 'choice'
-        ? String(choices.findIndex((c) => c.querySelector<HTMLInputElement>('input[type="radio"]')?.checked))
-        : value('answer'),
-    lines: value('lines'),
-    explanation: value('explanation'),
+    kind: row.dataset.qzQuestion,
+    ...Object.fromEntries(QZ_TEXT_FIELDS.map((field) => [field, qzValue(row, field)])),
+    choices: choices.map((item) => qzCells(item)[0] ?? ''),
+    correct: choices.map((item) => !!item.querySelector<HTMLInputElement>('[data-qz-item-check]')?.checked),
+    answers: qzItems(row, 'answers').map((item) => qzCells(item)[0] ?? ''),
+    pairs: qzItems(row, 'pairs').map((item) => {
+      const [left = '', right = ''] = qzCells(item)
+      return [left, right]
+    }),
   }
 }
 
@@ -349,16 +377,24 @@ function qzSync(editor: HTMLElement) {
   if (value) value.value = JSON.stringify($$<HTMLElement>('[data-qz-question]', editor).map(qzReadQuestion))
 }
 
+/** 選び方に合わせて、その選び方のときだけ出す欄と説明を出し分ける */
+function qzWhen(row: HTMLElement) {
+  for (const el of $$<HTMLElement>('[data-qz-when]', row)) {
+    const [field, value] = (el.dataset.qzWhen ?? '').split('=')
+    el.hidden = qzValue(row, field) !== value
+  }
+  const text = row.querySelector<HTMLTextAreaElement>('[data-qz-blank-text]')
+  const placeholder = text?.getAttribute(`data-placeholder-${qzValue(row, 'layout')}`)
+  if (text && placeholder) text.placeholder = placeholder
+}
+
 const qzLineNote = (line: string | null) => (line === null ? '' : line.trim() || '（空の行）')
 
-/** バグ探しと実行の順番で、入力した行の番号の横に、その行の中身を出す */
+/** 行を選ぶ問題で、入力した行の番号の下に、その行の中身を出す */
 function qzShowLines(row: HTMLElement) {
-  const code = qzControl(row, 'code')?.value ?? ''
-  const answer = qzControl(row, 'answer')?.value ?? ''
-  const note = row.querySelector<HTMLElement>('[data-qz-bug-line]')
-  if (note) note.textContent = qzLineNote(lineAt(code, answer))
+  const code = qzValue(row, 'code')
   row.querySelector<HTMLElement>('[data-qz-flow-steps]')?.replaceChildren(
-    ...(parseSteps(answer) ?? []).map((n) => {
+    ...(parseSteps(qzValue(row, 'steps')) ?? []).map((n) => {
       const item = document.createElement('li')
       const no = Object.assign(document.createElement('span'), { className: 'qz-flow-no', textContent: String(n) })
       const line = Object.assign(document.createElement('code'), {
@@ -378,7 +414,8 @@ document.addEventListener('click', (e) => {
   const row = target.closest<HTMLElement>('[data-qz-question]')
   const add = target.closest<HTMLElement>('[data-qz-add]')
   const move = target.closest<HTMLElement>('[data-qz-move]')
-  const choiceRemove = target.closest<HTMLElement>('[data-qz-choice-remove]')
+  const items = target.closest<HTMLElement>('[data-qz-items]')
+  const itemRemove = target.closest<HTMLElement>('[data-qz-item-remove]')
   if (add) {
     const template = editor.querySelector<HTMLTemplateElement>(`template[data-qz-template="${add.dataset.qzAdd}"]`)
     const list = editor.querySelector<HTMLElement>('[data-qz-list]')
@@ -402,17 +439,17 @@ document.addEventListener('click', (e) => {
     const again = row.querySelector<HTMLElement>(`[data-qz-move="${move.dataset.qzMove}"]`)
     const back = row.querySelector<HTMLElement>(`[data-qz-move="${up ? 'down' : 'up'}"]`)
     ;((up ? row.previousElementSibling : row.nextElementSibling) ? again : back)?.focus()
-  } else if (row && target.closest('[data-qz-choice-add]')) {
-    const template = row.querySelector<HTMLTemplateElement>('[data-qz-choice-template]')
-    const list = row.querySelector<HTMLElement>('[data-qz-choice-list]')
+  } else if (items && target.closest('[data-qz-item-add]')) {
+    const template = items.querySelector<HTMLTemplateElement>('[data-qz-item-template]')
+    const list = items.querySelector<HTMLElement>('[data-qz-item-list]')
     if (!template || !list) return
     list.insertAdjacentHTML('beforeend', template.innerHTML)
-    list.lastElementChild?.querySelector<HTMLElement>('[data-qz-choice-text]')?.focus()
-  } else if (row && choiceRemove) {
-    const choice = choiceRemove.closest<HTMLElement>('[data-qz-choice]')
-    const next = (choice?.nextElementSibling ?? choice?.previousElementSibling) as HTMLElement | null
-    choice?.remove()
-    ;(next?.querySelector<HTMLElement>('[data-qz-choice-text]') ?? row.querySelector<HTMLElement>('[data-qz-choice-add]'))?.focus()
+    list.lastElementChild?.querySelector<HTMLElement>('[data-qz-cell]')?.focus()
+  } else if (items && itemRemove) {
+    const item = itemRemove.closest<HTMLElement>('[data-qz-item]')
+    const next = (item?.nextElementSibling ?? item?.previousElementSibling) as HTMLElement | null
+    item?.remove()
+    ;(next?.querySelector<HTMLElement>('[data-qz-cell]') ?? items.querySelector<HTMLElement>('[data-qz-item-add]'))?.focus()
   } else return
   qzSync(editor)
 })
@@ -422,7 +459,12 @@ const qzOnEdit = (e: Event) => {
   const editor = target.closest<HTMLElement>('[data-qz]')
   if (!editor) return
   const row = target.closest<HTMLElement>('[data-qz-question]')
-  if (row && target.matches('[data-qz-code], [data-qz-bug-no], [data-qz-flow-answer]')) qzShowLines(row)
+  if (row && target.matches('[data-qz-code], [data-qz-steps]')) qzShowLines(row)
+  if (row && target.matches('input[type="radio"]')) qzWhen(row)
+  // 1 つ選ぶ選択の問題では、正解の印を 1 つだけにする（ラジオボタンにしないのは、複数選ぶに切り替えたときに印を残すため）
+  if (row && target.matches('[data-qz-item-check]:checked') && qzValue(row, 'multiple') === '0')
+    for (const other of $$<HTMLInputElement>('[data-qz-items="choices"] [data-qz-item-check]', row))
+      if (other !== target) other.checked = false
   qzSync(editor)
 }
 document.addEventListener('input', qzOnEdit, true)
@@ -454,7 +496,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('pointerdown', (e) => {
   const target = e.target as Element
   const line = target.closest<HTMLElement>('[data-quiz-line]')
-  if (!line || e.button !== 0 || target.closest('button')) return
+  if (!line || e.button !== 0 || target.closest('button') || line.closest('.quiz-order.is-fixed')) return
   // タッチでは、つまみ以外をなぞったときにページをスクロールできるように残す
   if (e.pointerType !== 'mouse' && !target.closest('[data-quiz-grip]')) return
   const list = line.parentElement!
@@ -519,35 +561,52 @@ document.addEventListener('click', (e) => {
   if (!line && quizFlowSteps(flow).length === 0) flow.querySelector<HTMLElement>('[data-quiz-flow-line]')?.focus()
 })
 
-// --- 小テストの「字下げ」: 行ごとのボタンで、字下げを深く・浅くする
+// --- 小テストの並べ替えの字下げと「使わない」: 行ごとのボタンで、字下げを深く・浅くし、使う・使わないを切り替える
 document.addEventListener('click', (e) => {
-  const button = (e.target as Element).closest<HTMLButtonElement>('[data-quiz-indent-move]')
-  const line = button?.closest<HTMLElement>('[data-quiz-indent-line]')
-  const value = line?.querySelector<HTMLInputElement>('input[type="hidden"]')
-  if (!button || !line || !value) return
-  const level = Math.min(MAX_QUIZ_INDENT, Math.max(0, Number(value.value) + Number(button.dataset.quizIndentMove)))
-  value.value = String(level)
-  line.style.setProperty('--level', String(level))
-  const [shallower, deeper] = [-1, 1].map((d) => line.querySelector<HTMLButtonElement>(`[data-quiz-indent-move="${d}"]`)!)
-  shallower.disabled = level === 0
-  deeper.disabled = level === MAX_QUIZ_INDENT
-  // 端まで動かすとボタンが押せなくなってフォーカスを失うので、反対向きのボタンへ移す
-  if (button.disabled) (button === shallower ? deeper : shallower).focus()
+  const target = e.target as Element
+  const line = target.closest<HTMLElement>('[data-quiz-line]')
+  const value = line?.querySelector<HTMLInputElement>('[data-quiz-line-value]')
+  if (!line || !value) return
+  const indent = target.closest<HTMLButtonElement>('[data-quiz-indent-move]')
+  const use = target.closest<HTMLButtonElement>('[data-quiz-line-use]')
+  if (indent) {
+    const level = Math.min(MAX_QUIZ_INDENT, Math.max(0, Number(line.dataset.level ?? 0) + Number(indent.dataset.quizIndentMove)))
+    line.dataset.level = String(level)
+    line.style.setProperty('--level', String(level))
+    value.value = withIndent(line.dataset.line ?? '', level)
+    const [shallower, deeper] = [-1, 1].map((d) => line.querySelector<HTMLButtonElement>(`[data-quiz-indent-move="${d}"]`)!)
+    shallower.disabled = level === 0
+    deeper.disabled = level === MAX_QUIZ_INDENT
+    // 端まで動かすとボタンが押せなくなってフォーカスを失うので、反対向きのボタンへ移す
+    if (indent.disabled) (indent === shallower ? deeper : shallower).focus()
+  } else if (use) {
+    const unused = !line.hasAttribute('data-unused')
+    line.toggleAttribute('data-unused', unused)
+    value.disabled = unused
+    use.setAttribute('aria-pressed', String(unused))
+    use.textContent = unused ? '使う' : '使わない'
+  }
 })
 
 const quizAnswered = (question: HTMLElement) => {
+  const filled = (selector: string) => {
+    const fields = $$<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(selector, question)
+    return fields.length > 0 && fields.every((field) => !!field.value.trim())
+  }
   switch (question.dataset.quizQ) {
     case 'order':
-    case 'indent':
-      return true
-    case 'output':
-      return !!question.querySelector<HTMLTextAreaElement>('textarea')?.value.trim()
-    case 'flow':
-      return !!question.querySelector<HTMLInputElement>('[data-quiz-flow-value]')?.value
-    case 'table':
-      return $$<HTMLInputElement>('input.quiz-cell', question).every((cell) => !!cell.value.trim())
-    default:
-      return !!question.querySelector('input[type="radio"]:checked')
+      return $$<HTMLInputElement>('[data-quiz-line-value]', question).some((input) => !input.disabled)
+    case 'short':
+    case 'essay':
+      return filled('[data-quiz-text]')
+    case 'blank':
+      return filled('[data-quiz-blank]')
+    case 'match':
+      return filled('[data-quiz-match]')
+    default: {
+      const flow = question.querySelector<HTMLInputElement>('[data-quiz-flow-value]')
+      return flow ? !!flow.value : !!question.querySelector('input:is([type="radio"], [type="checkbox"]):checked')
+    }
   }
 }
 
@@ -625,7 +684,7 @@ document.addEventListener('click', (e) => {
 
 /** ステージの答えの欄の、送る値（フォームの外のプレビューでも集められるように、FormData を使わずに読む） */
 const qgEntries = (stage: HTMLElement) =>
-  $$<HTMLInputElement | HTMLTextAreaElement>('input[name], textarea[name]', stage)
+  $$<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input[name], textarea[name], select[name]', stage)
     .filter((el) => !el.disabled && el.name.startsWith('a.') && !(/^(radio|checkbox)$/.test(el.type) && !(el as HTMLInputElement).checked))
     .map((el): [string, string] => [el.name, el.value])
 
@@ -717,9 +776,9 @@ document.addEventListener('keydown', (e) => {
 // Enter で送信させないのは、途中のステージの表を埋めている最中に、採点へ進んでしまうため
 document.addEventListener('keydown', (e) => {
   const cell = e.target as Element
-  if (e.key !== 'Enter' || e.isComposing || !cell.matches('[data-quiz-game] input.quiz-cell')) return
+  if (e.key !== 'Enter' || e.isComposing || !cell.matches('[data-quiz-game] input:is([data-quiz-blank], [data-quiz-text])')) return
   e.preventDefault()
-  const cells = $$<HTMLInputElement>('input.quiz-cell', cell.closest<HTMLElement>('[data-qg-stage]')!)
+  const cells = $$<HTMLInputElement>('input[data-quiz-blank]', cell.closest<HTMLElement>('[data-qg-stage]')!)
   cells[cells.indexOf(cell as HTMLInputElement) + 1]?.focus()
 })
 

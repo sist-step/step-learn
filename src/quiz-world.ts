@@ -50,7 +50,7 @@ import {
   type Texture,
 } from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
-import { MAX_QUIZ_CELL_LENGTH, MAX_QUIZ_INDENT, MAX_QUIZ_OUTPUT_LENGTH, type QuizKind } from './lib/quiz'
+import { MAX_QUIZ_ESSAY_LENGTH, MAX_QUIZ_INDENT, MAX_QUIZ_OUTPUT_LENGTH, type QuizKind } from './lib/quiz'
 
 type Triple = [number, number, number]
 type Tones = { main: Color; sub: Color; accent: Color; shade: Color }
@@ -231,7 +231,7 @@ const ANIMALS: Record<QuizKind, (g: Group, kit: Kit, c: Tones) => Mesh | null> =
     put(g, kit, CONE, c.accent, [0, 0.9, 0.47], [0.07, 0.16, 0.07], [Math.PI / 2 + 0.5, 0, 0])
     return face(g, kit, [0.2, 1.02, 0.455, 0.075])
   },
-  output(g, kit, c) {
+  short(g, kit, c) {
     put(g, kit, SPHERE, c.main, [0, 0.4, 0], [0.4, 0.38, 0.38])
     put(g, kit, SPHERE, c.sub, [0, 0.36, 0.2], [0.26, 0.26, 0.22])
     put(g, kit, SPHERE, c.main, [0, 0.96, 0], [0.5, 0.44, 0.45])
@@ -261,7 +261,7 @@ const ANIMALS: Record<QuizKind, (g: Group, kit: Kit, c: Tones) => Mesh | null> =
     })
     return face(g, kit, [0.15, 1.04, 0.44, 0.06], [0.26, 0.92, 0.39])
   },
-  bug(g, kit, c) {
+  lines(g, kit, c) {
     put(g, kit, SPHERE, c.main, [0, 0.36, 0], [0.44, 0.34, 0.4])
     put(g, kit, SPHERE, c.sub, [0, 0.33, 0.18], [0.32, 0.26, 0.26])
     put(g, kit, SPHERE, c.main, [0, 0.86, 0], [0.56, 0.4, 0.46])
@@ -272,7 +272,7 @@ const ANIMALS: Record<QuizKind, (g: Group, kit: Kit, c: Tones) => Mesh | null> =
     })
     return face(g, kit, [0.27, 1.23, 0.275, 0.06], [0.4, 0.8, 0.3], [0.8, 0.455, 0.15])
   },
-  flow(g, kit, c) {
+  match(g, kit, c) {
     put(g, kit, SPHERE, c.main, [0, 0.38, 0], [0.38, 0.36, 0.36])
     put(g, kit, SPHERE, kit.white, [0, 0.34, 0.18], [0.25, 0.25, 0.22])
     put(g, kit, SPHERE, c.main, [0, 0.92, 0], [0.46, 0.42, 0.43])
@@ -285,7 +285,7 @@ const ANIMALS: Record<QuizKind, (g: Group, kit: Kit, c: Tones) => Mesh | null> =
     feet(g, kit, c.main)
     return face(g, kit, [0.18, 0.97, 0.4, 0.06], [0.3, 0.85, 0.33], [0.84, 0.425, 0.05])
   },
-  indent(g, kit, c) {
+  essay(g, kit, c) {
     put(g, kit, SPHERE, c.main, [0, 0.5, 0], [0.62, 0.36, 0.44])
     both((s) => {
       put(g, kit, CYLINDER, c.main, [s * 0.18, 0.93, 0.1], [0.035, 0.3, 0.035])
@@ -298,7 +298,7 @@ const ANIMALS: Record<QuizKind, (g: Group, kit: Kit, c: Tones) => Mesh | null> =
     })
     return face(g, kit, [0.18, 1.12, 0.225, 0.055], [0.36, 0.52, 0.37], [0.5, 0.44, 0.08])
   },
-  table(g, kit, c) {
+  blank(g, kit, c) {
     put(g, kit, SPHERE, c.shade, [0.05, 0.5, -0.45], 0.26)
     put(g, kit, SPHERE, c.shade, [0.05, 0.95, -0.55], 0.3)
     put(g, kit, SPHERE, c.shade, [0.05, 1.35, -0.42], 0.22)
@@ -799,43 +799,100 @@ type Puzzle = {
 }
 
 const LETTERS = 'ABCDEFGH'
-/** 形式ごとの、石板に書く答え方・画面の上の案内・答えずにレバーを引いたときのひとこと */
-const GUIDES: Record<QuizKind, { how: string; quest: string; missing: string }> = {
+type Guide = { how: string; quest: string; missing: string }
+/** 答え方ごとの、石板に書く答え方・画面の上の案内・答えずにレバーを引いたときのひとこと。形式の中で答え方が分かれるもの（複数選ぶ選択など）は別に持つ */
+const GUIDES = {
   choice: {
     how: '答えだと思う玉を持ちあげて、扉の横の「こたえの台座」に置こう。',
     quest: '玉を「こたえの台座」に置いて、レバーを引こう',
     missing: 'まだ台座に玉がないよ。答えの玉を置いてから引こう',
   },
-  output: {
-    how: '左の黒板をクリックして、表示される文字を書きこもう。',
-    quest: '黒板に出力を書いて、レバーを引こう',
+  choiceMany: {
+    how: '正しいと思う玉を、ぜんぶ「こたえの台座」に置こう。台座をクリックすると、さいごに置いた玉がもどるよ。',
+    quest: '正しい玉をぜんぶ台座に置いて、レバーを引こう',
+    missing: 'まだ台座に玉がないよ。答えの玉を置いてから引こう',
+  },
+  short: {
+    how: '左の黒板をクリックして、答えを書きこもう。',
+    quest: '黒板に答えを書いて、レバーを引こう',
     missing: 'まだ黒板に何も書いていないよ',
+  },
+  essay: {
+    how: '左の黒板をクリックして、自分のことばで答えを書こう。先生があとで採点してくれるよ。',
+    quest: '黒板に答えを書いて、レバーを引こう',
+    missing: 'まだ黒板に何も書いていないよ',
+  },
+  blank: {
+    how: '左の表のますをクリックして、空欄に入るものを書きこもう。Enter でつぎのますへ。',
+    quest: '空欄をうめて、レバーを引こう',
+    missing: 'まだ空いているますがあるよ',
+  },
+  blankPick: {
+    how: '左の表のますをクリックするたびに、入るものが入れかわるよ。正しいものにしよう。',
+    quest: '空欄に入るものを選んで、レバーを引こう',
+    missing: 'まだ選んでいないますがあるよ',
   },
   order: {
     how: '左のブロックを持ちあげて、入れたい場所のブロックをクリック。上から正しい順に並べよう。',
     quest: 'ブロックを正しい順に並べて、レバーを引こう',
     missing: 'ブロックを並べてから引こう',
   },
-  bug: {
-    how: '左のブロックのうち、まちがいのある行を押そう。',
-    quest: 'まちがいのある行のブロックを押して、レバーを引こう',
-    missing: 'まだ、まちがいの行を選んでいないよ',
-  },
-  flow: {
-    how: '実行される順に、左のブロックを押していこう。同じ行を何度押してもいいよ。',
-    quest: '実行される順にブロックを押して、レバーを引こう',
-    missing: 'まだブロックを押していないよ',
-  },
-  indent: {
+  orderIndent: {
     how: '左のブロックの右はしを押すと字下げが深く、左はしを押すと浅くなるよ。',
     quest: 'ブロックを左右に動かして字下げを直し、レバーを引こう',
     missing: 'ブロックを動かしてから引こう',
   },
-  table: {
-    how: '左の表のますをクリックして、そのときの変数の値を書きこもう。Enter でつぎのますへ。',
-    quest: '表のますに値を書いて、レバーを引こう',
-    missing: 'まだ空いているますがあるよ',
+  orderBoth: {
+    how: 'ブロックのまん中を持ちあげて、入れたい場所のブロックをクリック。はしを押すと字下げが変わるよ。',
+    quest: 'ブロックを並べて字下げも直し、レバーを引こう',
+    missing: 'ブロックを並べてから引こう',
   },
+  lines: {
+    how: '左のブロックのうち、当てはまる行を押そう。',
+    quest: '当てはまる行のブロックを押して、レバーを引こう',
+    missing: 'まだ行を選んでいないよ',
+  },
+  linesMany: {
+    how: '当てはまる行を、ぜんぶ押そう。もう一度押すと、えらぶのをやめるよ。',
+    quest: '当てはまる行をぜんぶ押して、レバーを引こう',
+    missing: 'まだ行を選んでいないよ',
+  },
+  linesSequence: {
+    how: '実行される順に、左のブロックを押していこう。同じ行を何度押してもいいよ。',
+    quest: '実行される順にブロックを押して、レバーを引こう',
+    missing: 'まだブロックを押していないよ',
+  },
+  match: {
+    how: '左の表の「こたえ」のますをクリックするたびに、こたえが入れかわるよ。合うものにしよう。',
+    quest: '合うものを選んで、レバーを引こう',
+    missing: 'まだ選んでいないところがあるよ',
+  },
+} satisfies Record<string, Guide>
+
+/** ステージの DOM の形から、答え方の案内を決める */
+function guideOf(kind: QuizKind, stage: HTMLElement | undefined): Guide {
+  const has = (selector: string) => !!stage?.querySelector(selector)
+  const order = stage?.querySelector('.quiz-order')
+  const key: keyof typeof GUIDES =
+    kind === 'choice' && has('input[type="checkbox"]')
+      ? 'choiceMany'
+      : kind === 'lines'
+        ? has('[data-quiz-flow]')
+          ? 'linesSequence'
+          : has('input[type="checkbox"]')
+            ? 'linesMany'
+            : 'lines'
+        : kind === 'blank' && has('select[data-quiz-blank]')
+          ? 'blankPick'
+          : kind === 'order' && order?.classList.contains('is-fixed')
+            ? 'orderIndent'
+            : kind === 'order' && order?.classList.contains('is-indent')
+              ? 'orderBoth'
+              : kind
+  const guide = GUIDES[key]
+  if (kind !== 'order' || !has('[data-quiz-line-use]')) return guide
+  const extra = key === 'orderIndent' ? 'まん中を押すと、使う・使わないが切りかわるよ。' : '使わない行は、右の箱に入れよう。'
+  return { ...guide, how: `${guide.how}${extra}` }
 }
 
 /**
@@ -848,6 +905,7 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
   if (!root) return null
   const panel = root.querySelector<HTMLElement>('.qg-panel')
   const stages = [...root.querySelectorAll<HTMLElement>('[data-qg-stage]')]
+  const guides = kinds.map((kind, i) => guideOf(kind, stages[i]))
   const count = kinds.length
   const { main, sides } = layout(count)
   const rooms = [...main, ...sides]
@@ -1389,7 +1447,14 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
   const signboard = (frame: Group, edge: Edge, i: number) => {
     const stage = stages[i]
     const prompt = stage.querySelector('.quiz-prompt')?.textContent ?? ''
-    const listing = (stage.querySelector('pre.quiz-code')?.textContent ?? '').replace(/\n+$/, '')
+    const listing = [...stage.querySelectorAll('pre.quiz-code')]
+      .map((pre) => {
+        const copy = pre.cloneNode(true) as Element
+        for (const blank of copy.querySelectorAll('.quiz-blank'))
+          blank.replaceWith(`［${blank.querySelector('.quiz-blank-no')?.textContent ?? ''}］`)
+        return (copy.textContent ?? '').replace(/\n+$/, '')
+      })
+      .join('\n\n')
     const lines = listing ? listing.split('\n') : []
     const w = 2.9
     const h = lines.length ? 2.3 : 1.7
@@ -1414,7 +1479,7 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
       paper.font = text(30 * scale, 800)
       paper.fillText(`ステージ ${i + 1}　${kindNames[i]}`, pad, pad)
       paper.font = text(small)
-      const how = wrapText(paper, `${GUIDES[kinds[i]].how}${more ? '（つづきは N キーのノートで読めるよ）' : ''}`, W - pad * 2)
+      const how = wrapText(paper, `${guides[i].how}${more ? '（つづきは N キーのノートで読めるよ）' : ''}`, W - pad * 2)
       const foot = how.length * small * 1.4 + 12
       how.forEach((line, k) => paper.fillText(line, pad, H - pad - foot + 12 + k * small * 1.4))
       const listed = lines.length * mark * 1.36 + (lines.length ? 30 : 0)
@@ -1469,14 +1534,23 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
     )
   }
 
-  /** 選択: 玉を持ちあげて、こたえの台座に置く */
+  /** 選択: 玉を持ちあげて、こたえの台座に置く。複数選ぶ問題では、正しいと思う玉をすべて置く */
   const choicePuzzle = (frame: Group, edge: Edge, i: number): Puzzle => {
     const labels = [...stages[i].querySelectorAll<HTMLElement>('label.quiz-choice')]
     const inputs = labels.map((label) => label.querySelector<HTMLInputElement>('input'))
+    const multiple = inputs[0]?.type === 'checkbox'
     const perRow = Math.ceil(labels.length / (labels.length > 4 ? 2 : 1))
-    /** 台座に置いてある玉の番号。置いていなければ -1（最初は、まだ DOM を読んでいない印の -2） */
-    let placed = -2
+    /** 台座に置いてある玉の番号（最初は、まだ DOM を読んでいない印の null） */
+    let placed: number[] | null = null
     const altar: Triple = [1.95, 1.24, 1.75]
+    /** 台座の上の、k 番の玉を置く位置。複数あるときは輪に並べる */
+    const spot = (k: number): Triple => {
+      const at = placed?.indexOf(k) ?? -1
+      const count = placed?.length ?? 0
+      if (count <= 1 || at < 0) return altar
+      const a = (at / count) * Math.PI * 2
+      return [altar[0] + Math.cos(a) * 0.2, altar[1], altar[2] + Math.sin(a) * 0.2]
+    }
     pedestal(frame, altar[0], altar[2], 0.95, 1.45)
     part(frame, CRADLE, brass, [altar[0], 0.95, altar[2]], 1.5)
     for (let k = 0; k < 4; k++) {
@@ -1495,7 +1569,13 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
       paper.fillStyle = hex(kit.ink)
       paper.textBaseline = 'middle'
       paper.textAlign = 'left'
-      const words = placed < 0 ? 'こたえの台座' : `こたえ　${LETTERS[placed]}　${labels[placed].textContent?.trim() ?? ''}`
+      const now = placed ?? []
+      const words =
+        now.length === 0
+          ? 'こたえの台座'
+          : now.length === 1
+            ? `こたえ　${LETTERS[now[0]]}　${labels[now[0]].textContent?.trim() ?? ''}`
+            : `こたえ　${now.map((k) => LETTERS[k]).join('・')}`
       fitText(paper, words, 18, h / 2, w - 36, 30, (px) => text(px, 800))
       note.flush()
     }
@@ -1542,16 +1622,17 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
       const twin = orbModel(color)
       twin.scale.setScalar(0.43)
       const name = `${LETTERS[k]} の玉`
+      const onAltar = () => !!placed?.includes(k)
       handle(
         frame,
         `orb-${i}-${k}`,
         `選択肢 ${LETTERS[k]}「${label.textContent?.trim() ?? ''}」の玉`,
         [x, 1.08, z],
         [0.56, 0.7, 0.56],
-        () => (held?.item === twin ? 'もどす' : placed === k ? '' : held ? 'この玉に持ちかえる' : 'もちあげる'),
+        () => (held?.item === twin ? 'もどす' : onAltar() ? '' : held ? 'この玉に持ちかえる' : 'もちあげる'),
         () => {
           if (held?.item === twin) return release()
-          if (placed === k) return
+          if (onAltar()) return
           release()
           orb.visible = false
           hold({ name, tip: '扉の横の「こたえの台座」に置こう', item: twin, back: () => (orb.visible = true) })
@@ -1565,93 +1646,201 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
       'こたえの台座',
       [altar[0], 0.7, altar[2]],
       [0.84, 1.4, 0.84],
-      () => (orbs.some(({ twin }) => twin === held?.item) ? 'こたえの台座に置く' : ''),
+      () =>
+        orbs.some(({ twin }) => twin === held?.item) ? 'こたえの台座に置く' : multiple && placed?.length ? 'さいごに置いた玉をもどす' : '',
       () => {
         const k = orbs.findIndex(({ twin }) => twin === held?.item)
-        if (k < 0) return
+        if (k < 0) {
+          // 複数選ぶ問題では、置いた玉を台座から 1 つずつもどせるようにする（元の場所の玉は、台座に動いていて押せないため）
+          const last = multiple ? placed?.[placed.length - 1] : undefined
+          if (last === undefined) return
+          inputs[last]?.click()
+          dirty = true
+          return
+        }
         take()
         orbs[k].orb.visible = true
         orbs[k].orb.position.set(altar[0], altar[1] + 0.7, altar[2])
-        inputs[k]?.click()
+        if (!inputs[k]?.checked) inputs[k]?.click()
         dirty = true
       },
     )
     return {
       handles: [],
       sync() {
-        const now = inputs.findIndex((input) => input?.checked)
-        if (now === placed) return
-        placed = now
+        const now = inputs.flatMap((input, k) => (input?.checked ? [k] : []))
+        if (placed && now.length === placed.length && now.every((k) => placed!.includes(k))) return
+        // 置いた順を残すのは、「さいごに置いた玉をもどす」で、最後に置いたものから外すため
+        placed = [...(placed ?? []).filter((k) => now.includes(k)), ...now.filter((k) => !placed?.includes(k))]
         drawNote()
       },
       update(dt, time) {
         orbs.forEach(({ orb, twin, home }, k) => {
           orb.rotation.y = time * 0.6 + k
           twin.rotation.y = time * 0.9
-          const to = placed === k ? altar : home
+          const on = !!placed?.includes(k)
+          const to = on ? spot(k) : home
+          orb.scale.setScalar(on && (placed?.length ?? 0) > 1 ? 0.7 : 1)
           orb.position.x += (to[0] - orb.position.x) * ease(dt, 6)
           orb.position.y += (to[1] + Math.sin(time * 2 + k) * 0.03 - orb.position.y) * ease(dt, 6)
           orb.position.z += (to[2] - orb.position.z) * ease(dt, 6)
         })
         ring.rotation.z = time * 0.8
       },
-      answered: () => placed >= 0,
+      answered: () => (placed?.length ?? 0) > 0,
     }
   }
 
-  /** 並べ替え: ブロックを持ちあげて、入れたい場所のブロックを押す */
-  const orderPuzzle = (frame: Group, i: number): Puzzle => {
+  /** 並べ替え: ブロックを持ちあげて、入れたい場所のブロックを押す。字下げを答える問題では、ブロックの左右のはしを押して字下げを変え、使わない行は箱に入れる */
+  const orderPuzzle = (frame: Group, edge: Edge, i: number): Puzzle => {
     const list = stages[i].querySelector<HTMLElement>('[data-quiz-order]')
     const lines = [...stages[i].querySelectorAll<HTMLElement>('[data-quiz-line]')]
+    const reorder = !list?.classList.contains('is-fixed')
+    const indent = !!list?.classList.contains('is-indent')
+    const optional = !!stages[i].querySelector('[data-quiz-line-use]')
     const shelf = rack(frame, lines.length)
+    const width = indent ? RACK_W - MAX_QUIZ_INDENT * NOTCH : RACK_W
+    const left = indent ? RACK_X - RACK_W / 2 + width / 2 : RACK_X
+    if (indent)
+      for (let level = 1; level <= MAX_QUIZ_INDENT; level++)
+        part(
+          frame,
+          BOX,
+          iron,
+          [RACK_X - RACK_W / 2 + level * NOTCH, shelf.y((lines.length - 1) / 2), WALL + 0.052],
+          [0.012, lines.length * shelf.rowH, 0.004],
+        )
+    const unusedTone = kit.stone.clone().lerp(sheetTone, 0.35)
     const blocks = lines.map((line, k) => {
-      const made = lineBlock(frame, RACK_W, shelf.rowH, line.querySelector('code')?.textContent ?? '', 0)
-      made.group.position.set(RACK_X, shelf.y(k), WALL + 0.05)
-      made.draw()
+      const words = line.dataset.line ?? line.querySelector('code')?.textContent ?? ''
+      const made = lineBlock(frame, width, shelf.rowH, words, 0)
+      made.group.position.set(left, shelf.y(k), WALL + 0.055)
+      made.draw({ arrows: indent })
       const twin = new Group()
-      const tall = (0.32 * made.h) / RACK_W
+      const tall = (0.32 * made.h) / width
       part(twin, rounded(0.34, tall + 0.02, 0.03, 0.006), woodMat, [0, 0, -0.016])
       twin.add(new Mesh(new PlaneGeometry(0.32, tall), made.face.mesh.material))
-      const item = { ...made, line, twin, slot: k }
+      const item = { ...made, line, twin, slot: k, level: 0, unused: false }
+      const useButton = () => line.querySelector<HTMLElement>('[data-quiz-line-use]')
       handle(
         made.group,
         `line-${i}-${k}`,
-        `ブロック「${line.querySelector('code')?.textContent ?? ''}」`,
+        `ブロック「${words}」`,
         [0, 0, 0.05],
-        [RACK_W, shelf.rowH, 0.12],
-        () => (held?.item === twin ? 'もどす' : blocks.some((other) => other.twin === held?.item) ? 'ここに入れる' : 'もちあげる'),
+        [indent ? width / 2 : width, shelf.rowH, 0.12],
         () => {
+          if (held?.item === twin) return 'もどす'
+          if (blocks.some((other) => other.twin === held?.item)) return 'ここに入れる'
+          if (reorder) return 'もちあげる'
+          return optional ? (item.unused ? 'この行を使う' : 'この行を使わない') : ''
+        },
+        () => {
+          if (held?.item === twin) return release()
           const from = blocks.find((other) => other.twin === held?.item)
-          if (!from) {
+          if (from) {
+            take()
+            from.group.visible = true
+            // 並べ替えは、2D のステージの「上へ／下へ」のボタンを、動かす段の数だけ押したことにする（client.ts）
+            const button = from.line.querySelector<HTMLElement>(`[data-quiz-line-move="${item.slot < from.slot ? 'up' : 'down'}"]`)
+            for (let step = Math.abs(item.slot - from.slot); step > 0; step--) button?.click()
+          } else if (reorder) {
             release()
             made.group.visible = false
-            hold({ name: 'ブロック', tip: '入れたい場所のブロックを押そう', item: twin, back: () => (made.group.visible = true) })
+            hold({
+              name: 'ブロック',
+              tip: optional ? '入れたい場所のブロックを押そう。使わない行は、右の箱に入れよう' : '入れたい場所のブロックを押そう',
+              item: twin,
+              back: () => (made.group.visible = true),
+            })
             return
-          }
-          take()
-          from.group.visible = true
-          // 並べ替えは、2D のステージの「上へ／下へ」のボタンを、動かす段の数だけ押したことにする（client.ts）
-          const button = from.line.querySelector<HTMLElement>(`[data-quiz-line-move="${item.slot < from.slot ? 'up' : 'down'}"]`)
-          for (let step = Math.abs(item.slot - from.slot); step > 0; step--) button?.click()
+          } else useButton()?.click()
           dirty = true
         },
       )
+      if (indent) {
+        const ends: [side: number, label: string, name: string][] = [
+          [-1, '左へ（字下げを浅く）', '浅くする'],
+          [1, '右へ（字下げを深く）', '深くする'],
+        ]
+        for (const [side, label, name] of ends)
+          handle(
+            made.group,
+            `${side < 0 ? 'out' : 'in'}-${i}-${k}`,
+            `ブロック「${words}」の字下げを${name}`,
+            [(side * width * 3) / 8, 0, 0.05],
+            [width / 4, shelf.rowH, 0.12],
+            () => (held ? '' : (side < 0 ? item.level > 0 : item.level < MAX_QUIZ_INDENT) ? label : ''),
+            () => {
+              line.querySelector<HTMLElement>(`[data-quiz-indent-move="${side}"]`)?.click()
+              dirty = true
+            },
+          )
+      }
       return item
     })
+    // 使わない行の箱: 棚の右の床に置く。持っているブロックを入れると「使わない」に、もう一度入れると「使う」に戻る
+    if (reorder && optional) {
+      const x = RACK_X + RACK_W / 2 + 0.85
+      const z = WALL + 0.45
+      part(frame, rounded(0.8, 0.5, 0.6, 0.04), woodMat, [x, 0.25, z])
+      part(frame, rounded(0.84, 0.06, 0.64, 0.02), iron, [x, 0.48, z])
+      const sign = plate(0.8, 0.22)
+      sign.paper.fillStyle = hex(sheetTone)
+      sign.paper.fillRect(0, 0, sign.w, sign.h)
+      sign.paper.fillStyle = hex(kit.ink)
+      sign.paper.textBaseline = 'middle'
+      sign.paper.textAlign = 'center'
+      sign.paper.font = text(26, 800)
+      sign.paper.fillText('使わない行の箱', sign.w / 2, sign.h / 2 + 1)
+      sign.flush()
+      sign.mesh.position.set(x, 0.75, WALL + 0.03)
+      frame.add(sign.mesh)
+      solids.push({ ...outOf(edge, x, z), r: 0.5 })
+      handle(
+        frame,
+        `crate-${i}`,
+        '使わない行の箱',
+        [x, 0.3, z],
+        [0.9, 0.7, 0.7],
+        () => {
+          const from = blocks.find((other) => other.twin === held?.item)
+          return from ? (from.unused ? '箱から出して、この行を使う' : '箱に入れて、この行を使わない') : ''
+        },
+        () => {
+          const from = blocks.find((other) => other.twin === held?.item)
+          if (!from) return
+          take()
+          from.group.visible = true
+          from.line.querySelector<HTMLElement>('[data-quiz-line-use]')?.click()
+          dirty = true
+        },
+      )
+    }
     return {
       handles: [],
       sync() {
         const order = list ? [...list.children] : []
-        for (const item of blocks) item.slot = Math.max(0, order.indexOf(item.line))
+        for (const item of blocks) {
+          item.slot = Math.max(0, order.indexOf(item.line))
+          item.level = Number(item.line.dataset.level) || 0
+          const unused = item.line.hasAttribute('data-unused')
+          if (unused === item.unused) continue
+          item.unused = unused
+          item.draw({ arrows: indent, fill: unused ? unusedTone : sheetTone })
+        }
       },
       update(dt) {
-        for (const item of blocks) item.group.position.y += (shelf.y(item.slot) - item.group.position.y) * ease(dt, 9)
+        for (const item of blocks) {
+          item.group.position.y += (shelf.y(item.slot) - item.group.position.y) * ease(dt, 9)
+          item.group.position.x += (left + item.level * NOTCH - item.group.position.x) * ease(dt, 10)
+          item.group.position.z += (WALL + (item.unused ? 0.02 : 0.055) - item.group.position.z) * ease(dt, 9)
+        }
       },
-      answered: () => true,
+      answered: () => blocks.some((item) => !item.unused),
     }
   }
 
-  /** コードの行を、番号付きのブロックにして棚に並べる（バグ探し・実行の順番）。空の行は押せない */
+  /** コードの行を、番号付きのブロックにして棚に並べる（行を選ぶ問題）。空の行は押せない */
   const codeRows = (frame: Group, rows: HTMLElement[]) => {
     const shelf = rack(frame, rows.length)
     return rows.map((row, k) => {
@@ -1662,11 +1851,8 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
     })
   }
 
-  /** バグ探し: まちがいのある行のブロックを押す。選んだブロックは手前にせり出して、虫がとまる */
-  const bugPuzzle = (frame: Group, i: number): Puzzle => {
-    const blocks = codeRows(frame, [...stages[i].querySelectorAll<HTMLElement>('.quiz-lines > .quiz-line')])
-    const inputs = blocks.map(({ row }) => row.querySelector<HTMLInputElement>('input'))
-    let picked = -2
+  /** 虫の模型。行を選ぶ問題で、選んだ行のブロックにとまらせる */
+  const bugModel = () => {
     const bug = new Group()
     put(bug, kit, SPHERE, kit.red, [0, 0, 0], [0.075, 0.05, 0.095])
     put(bug, kit, SPHERE, kit.ink, [0, 0.01, 0.085], 0.04)
@@ -1679,7 +1865,21 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
       put(bug, kit, SPHERE, kit.ink, [x, 0.04, z], 0.014)
     bug.rotation.x = Math.PI / 2
     bug.visible = false
-    frame.add(bug)
+    return bug
+  }
+
+  /** 行を選ぶ（1 行・当てはまる行すべて）: 当てはまる行のブロックを押す。選んだブロックは手前にせり出して、虫がとまる */
+  const pickPuzzle = (frame: Group, i: number): Puzzle => {
+    const blocks = codeRows(frame, [...stages[i].querySelectorAll<HTMLElement>('.quiz-lines > .quiz-line')])
+    const inputs = blocks.map(({ row }) => row.querySelector<HTMLInputElement>('input'))
+    const multiple = inputs.some((input) => input?.type === 'checkbox')
+    let picked = new Set<number>()
+    let read = false
+    const bugs = blocks.map(() => {
+      const bug = bugModel()
+      frame.add(bug)
+      return bug
+    })
     blocks.forEach((item, k) => {
       const input = inputs[k]
       if (!input) return
@@ -1689,7 +1889,7 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
         `${k + 1} 行目のブロック「${item.row.querySelector('code')?.textContent ?? ''}」`,
         [0, 0, 0.05],
         [RACK_W, item.rowH, 0.12],
-        () => (picked === k ? '' : 'この行をえらぶ'),
+        () => (picked.has(k) ? (multiple ? 'えらぶのをやめる' : '') : 'この行をえらぶ'),
         () => {
           input.click()
           dirty = true
@@ -1699,23 +1899,26 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
     return {
       handles: [],
       sync() {
-        const now = inputs.findIndex((input) => input?.checked)
-        if (now === picked) return
+        const now = new Set(inputs.flatMap((input, k) => (input?.checked ? [k] : [])))
+        if (read && now.size === picked.size && [...now].every((k) => picked.has(k))) return
         const before = picked
         picked = now
-        for (const k of [before, now])
-          if (blocks[k]) blocks[k].draw({ fill: k === now ? kit.red.clone().lerp(sheetTone, 0.62) : sheetTone })
+        read = true
+        blocks.forEach((block, k) => {
+          if (before.has(k) !== now.has(k)) block.draw({ fill: now.has(k) ? kit.red.clone().lerp(sheetTone, 0.62) : sheetTone })
+        })
       },
       update(dt, time) {
-        blocks.forEach(
-          (item, k) => (item.group.position.z += (WALL + 0.05 + (picked === k ? 0.07 : 0) - item.group.position.z) * ease(dt, 9)),
-        )
-        bug.visible = picked >= 0
-        if (picked < 0) return
-        bug.position.set(RACK_X + RACK_W / 2 - 0.22 + Math.sin(time * 1.3) * 0.05, blocks[picked].y, blocks[picked].group.position.z + 0.09)
-        bug.rotation.z = Math.sin(time * 1.3) * 0.5
+        blocks.forEach((item, k) => {
+          item.group.position.z += (WALL + 0.05 + (picked.has(k) ? 0.07 : 0) - item.group.position.z) * ease(dt, 9)
+          const bug = bugs[k]
+          bug.visible = picked.has(k)
+          if (!bug.visible) return
+          bug.position.set(RACK_X + RACK_W / 2 - 0.22 + Math.sin(time * 1.3 + k) * 0.05, item.y, item.group.position.z + 0.09)
+          bug.rotation.z = Math.sin(time * 1.3 + k) * 0.5
+        })
       },
-      answered: () => picked >= 0,
+      answered: () => picked.size > 0,
     }
   }
 
@@ -1740,7 +1943,7 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
     ],
     0.5,
   )
-  /** 実行の順番: 実行される順にブロックを押す。押した順番がブロックに付き、光の玉が最後に押した行へ移る */
+  /** 行を選ぶ（実行される順に）: 実行される順にブロックを押す。押した順番がブロックに付き、光の玉が最後に押した行へ移る */
   const flowPuzzle = (frame: Group, i: number): Puzzle => {
     const flow = stages[i].querySelector<HTMLElement>('[data-quiz-flow]')
     const value = flow?.querySelector<HTMLInputElement>('[data-quiz-flow-value]')
@@ -1833,66 +2036,16 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
     }
   }
 
-  /** 字下げ: ブロックの右はしを押すと右へ、左はしを押すと左へ動く。ブロックのずれが、そのまま字下げになる */
-  const indentPuzzle = (frame: Group, i: number): Puzzle => {
-    const rows = [...stages[i].querySelectorAll<HTMLElement>('[data-quiz-indent-line]')]
-    const shelf = rack(frame, rows.length)
-    const width = RACK_W - MAX_QUIZ_INDENT * NOTCH
-    const left = RACK_X - RACK_W / 2 + width / 2
-    for (let level = 1; level <= MAX_QUIZ_INDENT; level++)
-      part(
-        frame,
-        BOX,
-        iron,
-        [RACK_X - RACK_W / 2 + level * NOTCH, shelf.y((rows.length - 1) / 2), WALL + 0.052],
-        [0.012, rows.length * shelf.rowH, 0.004],
-      )
-    const blocks = rows.map((row, k) => {
-      const made = lineBlock(frame, width, shelf.rowH, row.querySelector('code')?.textContent ?? '', 0)
-      made.group.position.set(left, shelf.y(k), WALL + 0.055)
-      made.draw({ arrows: true })
-      const item = { ...made, level: 0 }
-      const line = row.querySelector('code')?.textContent ?? ''
-      const ends: [side: number, label: string, name: string][] = [
-        [-1, '左へ（字下げを浅く）', '浅くする'],
-        [1, '右へ（字下げを深く）', '深くする'],
-      ]
-      for (const [side, label, name] of ends)
-        handle(
-          made.group,
-          `${side < 0 ? 'out' : 'in'}-${i}-${k}`,
-          `ブロック「${line}」の字下げを${name}`,
-          [(side * width) / 4, 0, 0.05],
-          [width / 2, shelf.rowH, 0.12],
-          () => ((side < 0 ? item.level > 0 : item.level < MAX_QUIZ_INDENT) ? label : ''),
-          () => {
-            row.querySelector<HTMLElement>(`[data-quiz-indent-move="${side}"]`)?.click()
-            dirty = true
-          },
-        )
-      return item
-    })
-    return {
-      handles: [],
-      sync() {
-        blocks.forEach((item, k) => (item.level = Number(rows[k].querySelector<HTMLInputElement>('input')?.value) || 0))
-      },
-      update(dt) {
-        for (const item of blocks) item.group.position.x += (left + item.level * NOTCH - item.group.position.x) * ease(dt, 10)
-      },
-      answered: () => true,
-    }
-  }
-
   /** 左の壁に掛けた、黒板や表の額縁と裏板。中の絵（plate）は WALL + 0.08 に置く */
   const framed = (frame: Group, w: number, h: number, y: number, material: Material) => {
     part(frame, rounded(w + 0.1, h + 0.1, 0.05, 0.015), beamMat, [RACK_X, y, WALL + 0.045])
     part(frame, frameGeometry(w, h, 0.09, 0.08, 1.2), material, [RACK_X, y, WALL + 0.09])
     both((s) => part(frame, rounded(0.06, 0.24, 0.04, 0.01), iron, [RACK_X + s * (w / 2 - 0.3), y + h / 2 + 0.16, WALL + 0.05]))
   }
-  /** 出力の予測: 黒板をクリックして、出力を書きこむ */
-  const outputPuzzle = (frame: Group, i: number): Puzzle => {
-    const field = stages[i].querySelector<HTMLTextAreaElement>('textarea.quiz-output')
+  /** 短答と記述: 黒板をクリックして、答えを書きこむ */
+  const slatePuzzle = (frame: Group, i: number): Puzzle => {
+    const field = stages[i].querySelector<HTMLInputElement | HTMLTextAreaElement>('[data-quiz-text]')
+    const multiline = field instanceof HTMLTextAreaElement
     const w = 2.7
     const h = 1.3
     const y = 1.5
@@ -1918,11 +2071,11 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
       handle(
         frame,
         `slate-${i}`,
-        '出力を書く黒板',
+        '答えを書く黒板',
         [RACK_X, y, WALL + 0.08],
         [w, h, 0.06],
         () => (typing?.field === field ? '' : '書きこむ'),
-        () => type(field, true),
+        () => type(field, multiline),
       )
     return {
       handles: [],
@@ -1938,13 +2091,13 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
         paper.textAlign = 'left'
         paper.fillStyle = hex(kit.white.clone().lerp(slateTone, 0.45))
         paper.font = text(24, 800)
-        paper.fillText('出力', 28, 22)
+        paper.fillText('こたえ', 28, 22)
         paper.fillStyle = hex(kit.white)
         if (field?.value || caret >= 0) chalk(paper, field?.value ?? '', caret, 28, 66, W - 56, H - 86, 34)
         else {
           paper.fillStyle = hex(kit.white.clone().lerp(slateTone, 0.5))
           paper.font = text(28)
-          paper.fillText('ここをクリックして、出力を書こう', 28, 70)
+          paper.fillText('ここをクリックして、答えを書こう', 28, 70)
         }
         slate.flush()
       },
@@ -1953,18 +2106,61 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
     }
   }
 
-  /** 変数の追跡: 表のますをクリックして、値を書きこむ */
-  const tablePuzzle = (frame: Group, i: number): Puzzle => {
-    const cells = [...stages[i].querySelectorAll<HTMLInputElement>('input.quiz-cell')]
-    const heads = [...stages[i].querySelectorAll('.quiz-table thead th')].map((th) => th.textContent ?? '')
-    const columns = Math.max(1, heads.length - 1)
-    const rows = Math.ceil(cells.length / columns)
+  type GridField = HTMLInputElement | HTMLSelectElement
+  /** 表のマス 1 つ。field は答えを入れる欄（なければ、書いてあるだけのマス）。read は、マスに書く文字 */
+  type GridCell = { field: GridField | null; read: (active: GridField | null, caret: number) => string }
+  const fieldText = (field: GridField, caret: number) => {
+    if (field instanceof HTMLSelectElement) return field.value ? (field.selectedOptions[0]?.textContent ?? '') : '？'
+    return caret < 0 ? field.value : `${field.value.slice(0, caret)}▏${field.value.slice(caret)}`
+  }
+  /** DOM のマスの文字。空欄の番号は書かず、空欄の欄は入っている値にする */
+  const cellText = (node: Node, active: GridField | null, caret: number): string => {
+    if (node instanceof HTMLInputElement || node instanceof HTMLSelectElement) return fieldText(node, node === active ? caret : -1)
+    if (node instanceof Element && node.matches('.quiz-blank-no')) return ''
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
+    return [...node.childNodes].map((child) => cellText(child, active, caret)).join('')
+  }
+  const domCell = (el: Element): GridCell => ({
+    field: el.querySelector<GridField>('[data-quiz-blank], [data-quiz-match]'),
+    read: (active, caret) => cellText(el, active, caret).trim(),
+  })
+  const textCell = (words: string): GridCell => ({ field: null, read: () => words })
+  const fieldCell = (field: GridField): GridCell => ({ field, read: (active, caret) => fieldText(field, field === active ? caret : -1) })
+  /** ステージの表（穴埋め・組み合わせ）を、見出しとマスにする */
+  function gridOf(stage: HTMLElement): { heads: string[]; rows: GridCell[][]; widths?: number[] } {
+    const table = stage.querySelector('.quiz-table')
+    if (table)
+      return {
+        heads: [...table.querySelectorAll('thead th')].map((th) => cellText(th, null, -1).trim()),
+        rows: [...table.querySelectorAll('tbody tr')].map((tr) => [...tr.children].map(domCell)),
+      }
+    const pairs = [...stage.querySelectorAll('.quiz-match-row')]
+    if (pairs.length)
+      return {
+        heads: ['', 'こたえ'],
+        rows: pairs.map((row) => {
+          const field = row.querySelector<GridField>('[data-quiz-match]')
+          return [textCell(row.querySelector('.quiz-match-left')?.textContent ?? ''), field ? fieldCell(field) : textCell('')]
+        }),
+        widths: [0.5, 0.5],
+      }
+    return {
+      heads: ['空欄', 'こたえ'],
+      rows: [...stage.querySelectorAll<GridField>('[data-quiz-blank]')].map((field, n) => [textCell(`［${n + 1}］`), fieldCell(field)]),
+      widths: [0.25, 0.75],
+    }
+  }
+  /** 穴埋めと組み合わせ: 表のますをクリックして、値を書きこむ。選んで答えるますは、クリックするたびに次の選択肢になる */
+  const gridPuzzle = (frame: Group, i: number): Puzzle => {
+    const { heads, rows, widths } = gridOf(stages[i])
+    const columns = Math.max(1, heads.length, ...rows.map((cells) => cells.length))
+    const share = widths ?? Array.from({ length: columns }, () => 1 / columns)
+    const lefts = share.map((_, col) => share.slice(0, col).reduce((sum, v) => sum + v, 0))
+    const fields = rows.flatMap((cells) => cells.flatMap((cell) => (cell.field ? [cell.field] : [])))
     const w = 2.7
-    const rowH = Math.min(0.3, 2.6 / (rows + 1))
-    const h = rowH * (rows + 1)
+    const rowH = Math.min(0.3, 2.6 / (rows.length + 1))
+    const h = rowH * (rows.length + 1)
     const y = Math.min(2.85 - h / 2, 1.55)
-    const first = 0.4
-    const wide = (w - first) / columns
     const chart = plate(w, h, 0.45)
     const board = new Group()
     board.position.set(RACK_X, y, WALL + 0.08)
@@ -1977,75 +2173,82 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
     ])
       part(frame, SPHERE, kit.mat(kit.red), [RACK_X + sx * (w / 2 + 0.045), y + sy * (h / 2 + 0.045), WALL + 0.14], 0.025)
     let shown = '\u0000'
-    cells.forEach((cell, k) => {
-      const col = k % columns
-      const row = Math.floor(k / columns)
-      handle(
-        board,
-        `cell-${i}-${k}`,
-        cell.getAttribute('aria-label') ?? 'ます',
-        [-w / 2 + first + (col + 0.5) * wide, h / 2 - (row + 1.5) * rowH, 0.02],
-        [wide, rowH, 0.06],
-        () => (typing?.field === cell ? '' : '書きこむ'),
-        // Enter で次のますへ進めるのは、1 ますごとに照準を合わせ直さずに、続けて打てるようにするため
-        () => type(cell, false, cells[k + 1] ? () => handles.find((other) => other.id === `cell-${i}-${k + 1}`)?.use() : undefined),
-      )
-    })
+    const cycle = (field: HTMLSelectElement) => {
+      field.selectedIndex = (field.selectedIndex + 1) % field.options.length
+      field.dispatchEvent(new Event('input', { bubbles: true }))
+      field.dispatchEvent(new Event('change', { bubbles: true }))
+      dirty = true
+    }
+    rows.forEach((cells, row) =>
+      cells.forEach((cell, col) => {
+        const field = cell.field
+        if (!field) return
+        const k = fields.indexOf(field)
+        handle(
+          board,
+          `cell-${i}-${k}`,
+          field.getAttribute('aria-label') ?? 'ます',
+          [-w / 2 + (lefts[col] + share[col] / 2) * w, h / 2 - (row + 1.5) * rowH, 0.02],
+          [share[col] * w, rowH, 0.06],
+          () => (field instanceof HTMLSelectElement ? 'つぎの選択肢にする' : typing?.field === field ? '' : '書きこむ'),
+          () => {
+            if (field instanceof HTMLSelectElement) return cycle(field)
+            // Enter で次のますへ進めるのは、1 ますごとに照準を合わせ直さずに、続けて打てるようにするため
+            const next = fields[k + 1]
+            type(
+              field,
+              false,
+              next instanceof HTMLInputElement ? () => handles.find((other) => other.id === `cell-${i}-${k + 1}`)?.use() : undefined,
+            )
+          },
+        )
+      }),
+    )
     return {
       handles: [],
       sync() {
-        const active = cells.findIndex((cell) => typing?.field === cell)
-        const now = `${active}:${active >= 0 ? caretOf(cells[active]) : -1}:${cells.map((cell) => cell.value).join('\u0001')}`
+        const active = fields.find((field) => typing?.field === field) ?? null
+        const caret = active ? caretOf(active) : -1
+        const now = `${fields.indexOf(active!)}:${caret}:${fields.map((field) => field.value).join('\u0001')}`
         if (now === shown) return
         shown = now
         const { paper, w: W, h: H } = chart
-        const line = H / (rows + 1)
-        const lead = (first / w) * W
-        const span = (W - lead) / columns
+        const line = H / (rows.length + 1)
         const px = Math.min(30, line * 0.5)
+        const xOf = (col: number) => lefts[col] * W
+        const spanOf = (col: number) => share[col] * W
         paper.fillStyle = hex(sheetTone)
         paper.fillRect(0, 0, W, H)
         paper.fillStyle = hex(tone(i).clone().lerp(sheetTone, 0.6))
         paper.fillRect(0, 0, W, line)
-        paper.fillRect(0, 0, lead, H)
         paper.textBaseline = 'middle'
         paper.textAlign = 'center'
         paper.fillStyle = hex(kit.ink)
-        fitText(paper, heads[0] ?? '', lead / 2, line / 2, lead - 10, px, (size) => text(size, 800))
-        for (let col = 0; col < columns; col++)
-          fitText(paper, heads[col + 1] ?? '', lead + (col + 0.5) * span, line / 2, span - 14, px, code)
-        for (let row = 0; row < rows; row++) {
-          paper.fillStyle = hex(kit.ink)
-          paper.font = text(px, 800)
-          paper.fillText(String(row + 1), lead / 2, (row + 1.5) * line)
-        }
-        cells.forEach((cell, k) => {
-          const x = lead + (k % columns) * span
-          const top = (Math.floor(k / columns) + 1) * line
-          if (k === active) {
-            paper.fillStyle = hex(kit.gold.clone().lerp(sheetTone, 0.5))
-            paper.fillRect(x, top, span, line)
-          }
-          paper.fillStyle = hex(kit.ink)
-          const caret = k === active ? caretOf(cell) : -1
-          fitText(
-            paper,
-            caret < 0 ? cell.value : `${cell.value.slice(0, caret)}▏${cell.value.slice(caret)}`,
-            x + span / 2,
-            top + line / 2,
-            span - 14,
-            px,
-            code,
-          )
-        })
+        heads.forEach((head, col) =>
+          fitText(paper, head, xOf(col) + spanOf(col) / 2, line / 2, spanOf(col) - 14, px, (size) => text(size, 800)),
+        )
+        rows.forEach((cells, row) =>
+          cells.forEach((cell, col) => {
+            const top = (row + 1) * line
+            if (cell.field && cell.field === active) {
+              paper.fillStyle = hex(kit.gold.clone().lerp(sheetTone, 0.5))
+              paper.fillRect(xOf(col), top, spanOf(col), line)
+            } else if (cell.field && !cell.field.value) {
+              paper.fillStyle = hex(tone(i).clone().lerp(sheetTone, 0.85))
+              paper.fillRect(xOf(col), top, spanOf(col), line)
+            }
+            paper.fillStyle = hex(kit.ink)
+            fitText(paper, cell.read(active, caret), xOf(col) + spanOf(col) / 2, top + line / 2, spanOf(col) - 14, px, code)
+          }),
+        )
         paper.strokeStyle = hex(kit.ink.clone().lerp(sheetTone, 0.45))
         paper.lineWidth = 3
-        for (let row = 1; row <= rows; row++) paper.strokeRect(0, row * line, W, 0)
-        for (let col = 0; col < columns; col++) paper.strokeRect(lead + col * span, 0, 0, H)
+        for (let row = 1; row <= rows.length; row++) paper.strokeRect(0, row * line, W, 0)
+        for (let col = 1; col < columns; col++) paper.strokeRect(xOf(col), 0, 0, H)
         chart.flush()
       },
       update() {},
-      answered: () => cells.every((cell) => !!cell.value.trim()),
+      answered: () => fields.length > 0 && fields.every((field) => !!field.value.trim()),
     }
   }
 
@@ -2116,17 +2319,15 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
     const puzzle =
       kind === 'choice'
         ? choicePuzzle(frame, edge, i)
-        : kind === 'output'
-          ? outputPuzzle(frame, i)
+        : kind === 'short' || kind === 'essay'
+          ? slatePuzzle(frame, i)
           : kind === 'order'
-            ? orderPuzzle(frame, i)
-            : kind === 'bug'
-              ? bugPuzzle(frame, i)
-              : kind === 'flow'
+            ? orderPuzzle(frame, edge, i)
+            : kind === 'lines'
+              ? stages[i].querySelector('[data-quiz-flow]')
                 ? flowPuzzle(frame, i)
-                : kind === 'indent'
-                  ? indentPuzzle(frame, i)
-                  : tablePuzzle(frame, i)
+                : pickPuzzle(frame, i)
+              : gridPuzzle(frame, i)
     // レバー: 右の柱の前。引くと、答えを決めて扉を開ける
     const lever = new Group()
     lever.position.set(1.22, 1.08, 0.53)
@@ -2158,7 +2359,7 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
         if (checking()) return
         if (!puzzle.answered()) {
           gate.shake = 0.5
-          announce(GUIDES[kind].missing)
+          announce(guides[i].missing)
           return
         }
         // 2D のステージの「こたえる！」を押したことにする。client.ts がサーバーで確かめ、正解ならステージに data-qg-passed を付け、まちがいなら qg:wrong を送る
@@ -2181,7 +2382,7 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
       [-1.8, 0.7, 1.15],
       [0.9, 1.4, 0.9],
       () => 'はなしかける',
-      () => announce(GUIDES[kind].how),
+      () => announce(guides[i].how),
     )
     puzzle.handles = handles.slice(from)
     return gate
@@ -2720,7 +2921,7 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
   root.addEventListener('qg:wrong', onWrong)
   const onType = (e: Event) => {
     if (!typing || !typer) return
-    const limit = typing.multiline ? MAX_QUIZ_OUTPUT_LENGTH : MAX_QUIZ_CELL_LENGTH
+    const limit = typing.multiline ? MAX_QUIZ_ESSAY_LENGTH : MAX_QUIZ_OUTPUT_LENGTH
     const value = (typing.multiline ? typer.value : typer.value.replace(/\n/g, '')).slice(0, limit)
     // 変換の途中で欄を書き換えないのは、日本語の入力が途中で確定されてしまうため
     if (!(e as InputEvent).isComposing && typer.value !== value) typer.value = value
@@ -3010,7 +3211,7 @@ function buildGame(host: HTMLElement, kinds: QuizKind[], kit: Kit): View | null 
               ? `${held.name}を持っているよ。${held.tip}`
               : next < 0
                 ? goalText
-                : `${here === next ? GUIDES[kinds[next]].quest : 'つぎの扉をさがそう'}（${next + 1} / ${count}）`
+                : `${here === next ? guides[next].quest : 'つぎの扉をさがそう'}（${next + 1} / ${count}）`
       if (quest && quest.textContent !== message) quest.textContent = message
 
       gates.forEach((gate, i) => {
