@@ -1,9 +1,16 @@
 // 毎回 Moodle に問い合わせないのは、GET のたびにナビのコース一覧なども取り直すと、Moodle の速さがそのまま画面の速さになるため
 // TTL を長くしないのは、通知（handlers.tsx の backchannel）が届かない変更も、待たせずに STEP Learn に出すため。通知の鍵を設定していない Moodle や、プラグインの監視していない操作で変えたときがそう
 const TTL = 30_000
-const MAX_ENTRIES = 5_000
+// 件数を多くしないのは、キーが利用者ごとで、コースの内容（core_course_get_contents）は 1 件が数百 KB になることがあり、小さな VPS のメモリを使い切るため
+const MAX_ENTRIES = 1_000
 
 const entries = new Map<string, { at: number; value: Promise<unknown> }>()
+
+// 読まれたときだけ捨てる形にしないのは、二度と開かれないキー（授業が終わった学生のコースなど）が、件数の上限まで残り続けるため
+setInterval(() => {
+  const now = Date.now()
+  for (const [key, hit] of entries) if (now - hit.at >= TTL) entries.delete(key)
+}, TTL).unref()
 
 export function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
   const hit = entries.get(key)
