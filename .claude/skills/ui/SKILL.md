@@ -5,7 +5,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 
 # UI の作り方
 
-方針は「SSR ＋ 小さなクライアント JS」。CSS フレームワークや UI ライブラリは入れない。JS は `src/client.ts` の 1 ファイルで、重いライブラリを使うものだけ別のファイルにして、使う画面でだけ `client.ts` が動的に読み込む（一覧は AGENTS.md）。
+方針は「SSR ＋ 小さなクライアント JS」。CSS フレームワークや UI ライブラリは入れない。クライアント JS の置き場所は AGENTS.md の「守ること」。
 
 このスキルには、コードを読んでも気づきにくい規則だけを書く。部品の props や挙動は、その部品の `.tsx` を読む。
 
@@ -50,11 +50,9 @@ Moodle モードの種類ごとの入力欄（`moodle-mode/extra-kinds.tsx`）�
 - 残りの属性は `...rest` で要素に渡し、型は `JSX.IntrinsicElements['button']` などと交差させる
 - 部品が出すクラスや `data-*` は `client.ts` も参照している。名前を変えるときは `client.ts` も検索する
 - 新しい部品は、描画時に `useStyle('/src/components/<部品>.css')` で自分の CSS を登録する
-- 2 か所に足さないと動かないものがある
-  - マスコットの足場: `mascot.css` の `.mascot-yard-block.is-<名前>` と、`client.ts` の `WALKER_GROUNDS`
-  - 小テストの出題形式: `lib/quiz.ts` の `QUIZ_KINDS` と種類ごとの分岐（前の形式は `upgradeQuestion` で読み替える）、`components/quiz.tsx` の編集欄・解答・結果、`client.ts` の `quizAnswered`、`quiz-world.ts` の部屋の部品と `GUIDES`
-  - 小テストの動物: `quiz-animal.tsx` の `QUIZ_ANIMALS` と `quiz-game.css` の色
-  - AI のツールが変えた内容をその場で反映する画面: 画面の要素に `data-ai-watch`（`item:<id>`。コースは `CourseLiveSync` が `course:<id>` を持つ）と、ツールの `success` の 3 つ目に `lib/ai-tool-kit.ts` の `inCourse` / `inItem`
+- 種類ごとに分かれる処理（小テストの形式など）は、`Record<種類, …>` か全部の `case` を書いた `switch` にして、種類を足したら型エラーで足し忘れがわかるようにする。`default` や三項演算子の最後に「残り全部」を受けさせない
+- 型で縛れないつながり（CSS のクラスと `client.ts` のセレクターなど）は、片方の定義の場所に「なぜまとめないか」のコメントを書き、スキルには書き足さない
+- AI のツールが変えた内容をその場で反映する画面には、要素に `data-ai-watch`（`item:<id>`。コースは `CourseLiveSync` が `course:<id>` を持つ）を付ける。ツールは `success` の 3 つ目に `lib/ai-tool-kit.ts` の `inCourse` / `inItem` を渡す
 
 ### アイコン
 

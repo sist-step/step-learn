@@ -58,6 +58,7 @@ export const notes = sqliteTable(
 - インデックス名は `<テーブル>_<カラム>`。WHERE や ORDER BY に使う列に張る
 - 一意にしたい列は `uniqueIndex('<テーブル>_<カラム>')`。NULL 可の列でも、NULL どうしは重複扱いにならない
 - `updated_at` には `.$onUpdate(() => now)` を付け、`db.update()` のたびに自動で更新させる
+- JSON を入れた列の形を変えるときは、マイグレーションで書き換えず、読むときに前の形を今の形へ読み替える関数を通す（`lib/quiz.ts` の `upgradeQuestion`）
 
 ## クエリの書き方
 

@@ -48,15 +48,9 @@ npm run dev -- --port <番号> --strictPort
 
 `git diff master...HEAD` と未コミットの差分を読み、以下を確かめる。
 
-- [ ] `coding-style` の書式（セミコロンなし・シングルクォート・2 スペース）に合っている
-- [ ] 何をしているかを説明するだけのコメントを書いていない。コメントは Why not だけ
-- [ ] 全ハンドラの先頭で `intParam` と権限チェックをしており、権限がなければ `c.notFound()`
-- [ ] フォームの検証は `lib/forms.ts` のスキーマと `validate` で行い、フォームに `validateWith` を付けている。HTML の `required` / `maxlength` などを書いていない
-- [ ] クエリを Drizzle で書いている。`sql` テンプレートを使う箇所でも値を文字列連結していない
-- [ ] 色を直接書かず CSS トークンを使っている
-- [ ] 既存の `migrations/` を変更していない
+- [ ] AGENTS.md の「守ること」「書き方」と、使ったスキルの規則に反していない。特にコメントが Why not だけか、全ハンドラの先頭で権限を確かめて `c.notFound()` を返しているか
+- [ ] 環境変数を足したなら `.env.example` と `docs/production.md` を更新した
 - [ ] 不要な依存を足していない
-- [ ] 環境変数を足したなら `.env.example` と README を更新した
 - [ ] 使わなくなったコード・CSS・import を残していない
 
 ## 4. 報告
