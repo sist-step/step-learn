@@ -165,7 +165,7 @@ npm start            # = node dist/server/index.js
 - 発表ファイルは `/presentation-io/` の socket.io で、スライドが変わったことを学生の画面に知らせます。リバースプロキシでは画面共有と同じように WebSocket の Upgrade を通してください。つながらない場合は、3 秒おきの確認で反映されます
 - 配信中の状態と、コードの採点の順番待ちはプロセスのメモリに持つため、複数のプロセスやサーバーに分散させないでください。採点の途中で再起動すると、その提出は「採点できませんでした」になり、教師が採点し直せます
 - 実行時に必要なのは `dist/`・`migrations/`・`migrations-moodle/`（Moodle モードのとき）・`.env` と、`better-sqlite3` を入れた `node_modules` です（`npm ci --omit=dev` で入ります）。起動したディレクトリを基準に読み込みます
-- SQLite・セッション署名鍵・（ローカル保存時の）教材ファイルは、起動したディレクトリの `data/` に保存されます（変更はできません）。**このディレクトリをバックアップ対象にしてください**
+- SQLite・セッション署名鍵・（ローカル保存時の）教材ファイルは、起動したディレクトリの `data/` に保存されます（変更はできません）。**このディレクトリをバックアップ対象にしてください**（DB の複製のしかたは下の「バックアップ」）
 
 ### Microsoft アカウントでのログイン
 
@@ -323,9 +323,49 @@ docker compose up -d --build   # http://127.0.0.1:3000
 - リバースプロキシが別のホストにある場合は、`HOST_BIND` で公開するアドレスを変えます（例 `HOST_BIND=192.168.0.10` や `0.0.0.0`）
   - Docker の公開ポートは ufw / firewalld の INPUT ルールを通りません。送信元をリバースプロキシに絞るには、iptables の `DOCKER-USER` チェーンかホストの外のファイアウォールで制限してください
   - 例：`iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 3000 ! -s <リバースプロキシの IP> -j DROP`
-- SQLite とローカル保存の教材ファイルは Docker ボリューム `step-learn_data` に保存されます。**このボリュームをバックアップ対象にしてください**
+- SQLite とローカル保存の教材ファイルは Docker ボリューム `step-learn_data` に保存されます。**このボリュームをバックアップ対象にしてください**（下の「バックアップ」）
+- ヘルスチェックは `/healthz` で、DB を読めることと `data/` に書き込めることを確かめます
+- ログは json-file で、コンテナごとに 10MB × 3 ファイルまで残します
 - 一緒に起動する `sandbox` サービスは、学生が書いたコードを実行するコンテナです（下の「コードを実行する sandbox」）。ボリューム `step-learn_sandbox-socket` はアプリとの通信用のソケットを置くだけなので、バックアップは要りません
 - 一緒に起動する `browser` サービスは、Web の提出を採点の前に開くコンテナです（下の「Web の提出を開く browser」）。ボリューム `step-learn_browser-socket` も、ソケットを置くだけなのでバックアップは要りません
+
+### 小さな VPS で動かす
+
+`compose.yaml` のメモリの上限は、環境変数で変えられます。
+
+| 変数 | 既定 | 意味 |
+| --- | --- | --- |
+| `APP_MEM_LIMIT` | `512m` | app のコンテナの上限 |
+| `APP_HEAP_MB` | `320` | Node のヒープの上限（MB）。`APP_MEM_LIMIT` より十分小さくする |
+| `SANDBOX_MEM_LIMIT` | `512m` | sandbox のコンテナの上限 |
+| `BROWSER_MEM_LIMIT` | `1g` | browser のコンテナの上限 |
+| `BROWSER_SLOTS` | `2` | browser で同時に開く提出の数 |
+
+上限はそれぞれの最大で、ふだん使う量ではありません（待機中は 3 つ合わせて 200MB ほど）。メモリ 1GB の VPS では、次を目安にしてください。
+
+- スワップを 1〜2GB 作る（足りなくなったときに、app が落とされるのを防ぐ）
+- `SANDBOX_MEM_LIMIT=384m`・`BROWSER_MEM_LIMIT=512m`・`BROWSER_SLOTS=1` に下げる
+- イメージはサーバーでビルドせず、ほかの場所でビルドしたものを pull する（上の「自動デプロイ」はそうしている）
+
+### バックアップ
+
+SQLite は WAL で書き込むので、動いている最中に `data/` のファイルをそのままコピーすると、壊れた複製になることがあります。DB は次のコマンドで複製してください（サーバーは止めなくてよい）。
+
+```sh
+npm run db:backup                                   # data/backups/step-learn-<日時>.db に書き出し、7 世代を残す
+npm run db:backup -- --out /backup --keep 14        # 書き出す先と残す世代を変える
+docker compose exec app node dist/server/backup.js  # Docker のとき（ボリュームの data/backups に書き出す）
+```
+
+Moodle モードの `moodle-mode.db` があれば、それも一緒に複製します。教材ファイル（`data/files`）は書き換えないので、そのままコピーしてかまいません。たとえば Docker では、毎日 cron で次を実行し、できたファイルをサーバーの外へ送ります（自動デプロイの beta ではボリュームが `step-learn-beta_data` で、`docker compose` には `-p step-learn-beta` を付けます）。
+
+```sh
+docker compose exec -T app node dist/server/backup.js
+docker run --rm -v step-learn_data:/data:ro -v /srv/backup:/backup busybox \
+  tar czf /backup/step-learn-$(date +%F).tgz -C /data --exclude='./step-learn.db*' --exclude='./moodle-mode.db*' .
+```
+
+戻すときは、サーバーを止めてから、複製した `.db` を `step-learn.db`（Moodle モードは `moodle-mode.db`）の名前で `data/` に置き、同じ名前の `-wal` と `-shm` のファイルを消してください。
 
 ### コードを実行する sandbox
 
@@ -409,7 +449,12 @@ Marketplace への公開（無料）:
 
 ### 自動デプロイ（GitHub Actions のセルフホストランナー）
 
-`master` への push で CI（`.github/workflows/ci.yml`）が成功すると、`.github/workflows/deploy.yml` が beta のサーバーのセルフホストランナー上で `docker compose build` → `docker compose up -d` を実行して入れ替えます。
+`master` への push で CI（`.github/workflows/ci.yml`）が成功すると、`.github/workflows/deploy.yml` が動きます。
+
+1. GitHub のランナー（`ubuntu-latest`）で app・sandbox・browser の 3 つのイメージをビルドし、GitHub Container Registry（`ghcr.io/<リポジトリ>/step-learn` など、タグはコミットの SHA）に push する
+2. beta のサーバーのセルフホストランナーが、そのイメージを `docker compose pull` して `docker compose up -d --no-build` で入れ替える
+
+サーバーではビルドしません（小さな VPS で、動いている本番の横で `npm ci` と `vite build` を走らせるとメモリが足りなくなるため）。3 日より古い使っていないイメージと、ビルドキャッシュはデプロイのたびに消します。
 CI はチェックだけを行い、デプロイはしません。Actions の画面から手動で再デプロイすることもできます（`master` のみ）。
 
 | デプロイ | ランナーのラベル | Environment | Compose のプロジェクト（ボリューム） |
@@ -425,6 +470,7 @@ CI はチェックだけを行い、デプロイはしません。Actions の画
    - 使わない項目は登録しなくてかまいません。値に `'` と改行は使えません
    - Moodle モードで動かす場合は `MOODLE_URL` などを登録します
 3. ホスト側のポートを変える場合は変数 `DEPLOY_HOST_PORT` を、公開するアドレスを変える場合は変数 `DEPLOY_HOST_BIND` を、Environment かリポジトリに設定する
+   - コンテナのメモリの上限は変数 `DEPLOY_APP_MEM_LIMIT` / `DEPLOY_APP_HEAP_MB` / `DEPLOY_SANDBOX_MEM_LIMIT` / `DEPLOY_BROWSER_MEM_LIMIT` / `DEPLOY_BROWSER_SLOTS` で変えられます（下の「小さな VPS で動かす」）。設定しなければ `compose.yaml` の既定を使います
    - AI エージェントが検索する STEP Docs の索引を置くディレクトリ（既定 `/srv/step-learn/ai-docs`）を変える場合は変数 `DEPLOY_AI_DOCS_DIR` を設定する（上の「STEP Docs を AI エージェントに取り込む」）
 4. 必要に応じて、Environment に承認者などの保護ルールを設定する
 
