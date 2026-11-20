@@ -17,6 +17,7 @@
     "db:studio": "drizzle-kit studio",
     "db:check": "node scripts/check-migrations.ts",
     "db:check:moodle": "node scripts/check-migrations.ts --moodle",
+    "db:backup": "node dist/server/backup.js",
     "worktree:setup": "node scripts/worktree.ts setup",
     "dev:users": "node scripts/dev-users.ts",
     "docs:index": "node scripts/docs-index.ts"
