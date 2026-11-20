@@ -26,12 +26,12 @@ import {
   type BundleSyncStore,
   type SyncVersion,
 } from '../../lib/bundle-sync'
-import { LAUNCH_CLAIM, claimLaunch, signGrant, signLaunch, signSync, verifyGrant, verifySync } from '../../lib/bundle-token'
+import { launchClaimer, linkExpired, signToken, tooManyRequests, verifyBearer } from '../../lib/vscode-token'
 import { config } from '../../lib/config'
 import type { CourseAccess } from '../../lib/courses'
 import { diffLines } from '../../lib/diff'
 import { firstError, validate } from '../../lib/forms'
-import { clientIp, intParam, readFields, readJson, redirectWith, wantsJson } from '../../lib/http'
+import { intParam, readFields, readForm, readJson, redirectWith, wantsJson } from '../../lib/http'
 import { rateLimiter } from '../../lib/rate-limit'
 import { deleteKeys, inBackground, isExecutable, storage } from '../../lib/storage'
 import type { AppEnv } from '../../lib/types'
@@ -81,12 +81,10 @@ const serverOrigin = (c: C) => config.appOrigin ?? new URL(c.req.url).origin
 
 const readStored = (file: BundleFile) => storage.read(file.fileKey, file.size)
 
-const bearer = (c: Context) => c.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
-
 const SYNC_PATH = '/api/vscode/sync'
 
 /** 拡張機能が変更を送る要求か。ログインのセッションがなくても、鍵で本人と確かめられるので、本文の上限を上げてよい */
-export const isSyncRequest = (c: Context) => c.req.method === 'POST' && c.req.path === SYNC_PATH && !!verifySync(bearer(c))
+export const isSyncRequest = (c: Context) => c.req.method === 'POST' && c.req.path === SYNC_PATH && !!verifyBearer(c, 'sync')
 
 export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: BundleBackend) {
   async function manage(c: C) {
@@ -127,7 +125,7 @@ export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: B
   // 1 つずつ確かめるのは、どのファイルで止めたかを教師に伝えるため
   async function readUploads(c: C): Promise<Read<{ uploads: Upload[]; skipped: number }>> {
     // readForm を使わないのは、同じ名前の欄が並ぶとき、最後の 1 つしか受け取れないため
-    const result = validate('bundleUpload', await c.req.parseBody({ all: true }))
+    const result = validate('bundleUpload', await readForm(c, { all: true }))
     if (!result.ok) return { ok: false, error: firstError(result.errors) }
     const { files, paths, archives } = result.values
     if (!files.length && !archives.length) return { ok: false, error: 'アップロードするファイルを選択してください。' }
@@ -229,7 +227,7 @@ export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: B
     if (!ctx) return c.notFound()
     const { access, itemId, title, ref } = ctx
     if (!wantsJson(c)) return c.redirect(itemUrl(access.course.id, itemId), 303)
-    const token = signLaunch({ ref, userId: c.var.user!.id, course: access.course.title, title })
+    const token = signToken('launch', { ref, userId: c.var.user!.id, course: access.course.title, title })
     const query = new URLSearchParams({ server: serverOrigin(c), token })
     return c.json({ url: `vscode://${VSCODE_EXTENSION_ID}/open?${query}` })
   }
@@ -330,14 +328,13 @@ const SYNC_EXPIRED = '同期の期限が切れました。STEP Learn の画面�
 
 /** STEP Learn for VSCode（vscode-extension/）が呼ぶ API。ログインのセッションの代わりに、リンクの鍵と、それと引き換えた鍵で確かめる */
 export function vscodeApi({ itemOf, stampOf }: Pick<BundleBackend, 'itemOf' | 'stampOf'>) {
-  // 上限を付けるのは、ログインしていなくても呼べ、鍵を総当たりで試されないようにするため
-  const claimLimit = rateLimiter({ limit: 30, windowSec: 60 })
+  const claim = launchClaimer('launch')
   // 拡張機能は保存から数秒待ってまとめて送るので、普通に使っていて届く回数ではない
   const syncLimit = rateLimiter({ limit: 120, windowSec: 60 })
   const app = new Hono<AppEnv>()
 
   async function syncTarget(c: C) {
-    const claims = verifySync(bearer(c))
+    const claims = verifyBearer(c, 'sync')
     if (!claims || claims.stamp !== stampOf?.(claims.userId)) return null
     const item = await itemOf(claims.ref, claims.userId)
     // 利用者も確かめるのは、鍵が半年使え、そのあいだに利用者が消されているかもしれないため
@@ -346,24 +343,24 @@ export function vscodeApi({ itemOf, stampOf }: Pick<BundleBackend, 'itemOf' | 's
   }
 
   app.post('/claim', async (c) => {
-    const ip = clientIp(c)
-    if (claimLimit.retryAfter(ip)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
-    claimLimit.hit(ip)
-    const claims = claimLaunch((await readJson(c, LAUNCH_CLAIM))?.token ?? '')
-    const item = claims && (await itemOf(claims.ref, claims.userId))
-    const user = claims && item?.sync.findUser(claims.userId)
-    if (!claims || !item || !user)
-      return c.json({ error: 'リンクの期限が切れているか、すでに使われています。STEP Learn の画面からもう一度開いてください。' }, 401)
+    const claims = await claim(c)
+    if (claims instanceof Response) return claims
+    const item = await itemOf(claims.ref, claims.userId)
+    const user = item?.sync.findUser(claims.userId)
+    if (!item || !user) return linkExpired(c)
     return c.json({
       ref: claims.ref,
       course: claims.course,
       title: claims.title,
       // 拡張機能に鍵の中身を読ませないのは、鍵の形を変えたときに拡張機能を出し直さずに済ませるため
       user: { id: user.id, name: user.name },
-      grant: signGrant({ ref: claims.ref, userId: claims.userId }),
+      grant: signToken('grant', { ref: claims.ref, userId: claims.userId }),
       files: item.store.list().map(({ path, size, sha256 }) => ({ path, size, sha256 })),
       // 同期が無効でも鍵を渡すのは、あとから教師が有効にしたときに、学生が画面から開き直さなくても送り始められるようにするため
-      sync: { token: signSync({ ref: claims.ref, userId: claims.userId, stamp: stampOf?.(claims.userId) }), enabled: item.sync.enabled() },
+      sync: {
+        token: signToken('sync', { ref: claims.ref, userId: claims.userId, stamp: stampOf?.(claims.userId) }),
+        enabled: item.sync.enabled(),
+      },
     })
   })
 
@@ -377,7 +374,7 @@ export function vscodeApi({ itemOf, stampOf }: Pick<BundleBackend, 'itemOf' | 's
     const target = await syncTarget(c)
     if (!target) return c.json({ error: SYNC_EXPIRED }, 401)
     if (!target.sync.enabled()) return c.json({ enabled: false, recorded: 0, full: false })
-    if (syncLimit.retryAfter(target.limitKey)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
+    if (syncLimit.retryAfter(target.limitKey)) return tooManyRequests(c)
     syncLimit.hit(target.limitKey)
     const changes = await readJson(c, SYNC_REQUEST)
     if (!changes) return c.json({ error: '送られた内容が正しくありません。' }, 400)
@@ -388,7 +385,7 @@ export function vscodeApi({ itemOf, stampOf }: Pick<BundleBackend, 'itemOf' | 's
   // パスではなく中身のハッシュで指すのは、URL が .md などで終わると開発サーバー（Vite）が自分のファイルとして横取りし、
   // 拡張機能はどのみち受け取った中身をハッシュで確かめるため
   app.get('/files/:sha256{[0-9a-f]{64}}', async (c) => {
-    const grant = verifyGrant(bearer(c))
+    const grant = verifyBearer(c, 'grant')
     const store = grant && (await itemOf(grant.ref, grant.userId))?.store
     if (!store) return c.json({ error: '期限が切れました。STEP Learn の画面からもう一度開いてください。' }, 401)
     const file = store.list().find((f) => f.sha256 === c.req.param('sha256'))

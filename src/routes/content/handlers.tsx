@@ -3,6 +3,7 @@ import type { Context } from 'hono'
 import {
   courseRevision,
   getCourseAccess,
+  manageAccess,
   isVisibleItem,
   moveRow,
   nextPosition,
@@ -46,7 +47,7 @@ import { codeStore, duplicateCodeItem, getCodeItem, setCodeStage, updateCodeItem
 import { dateTimeInputToUnix } from '../../lib/course-period'
 import { db } from '../../lib/db'
 import { completionError, firstError, isFile, readConstraints, solutionOf, validate, type FieldErrors } from '../../lib/forms'
-import { field, fileField, intParam, readFields, readForm, redirectWith, wantsJson, type Form } from '../../lib/http'
+import { field, fileField, intParam, readFields, readForm, redirectWith, sameOriginReferer, wantsJson, type Form } from '../../lib/http'
 import { presentationStore } from '../../lib/presentation-items'
 import { previewKind } from '../../lib/preview'
 import { DEFAULT_PASS_PERCENT, MAX_QUIZ_JSON_LENGTH, isQuizLook, readQuizForm } from '../../lib/quiz'
@@ -55,17 +56,7 @@ import { quizViewOf } from '../../lib/quiz-store'
 import { availableCodeLanguages } from '../../lib/sandbox'
 import { codeItems, collabItems, completions, items, sections } from '../../lib/schema'
 import { isSharing } from '../../lib/screen-share'
-import {
-  EXECUTABLE_NOT_ALLOWED,
-  FILE_TOO_LARGE,
-  MAX_FILE_SIZE,
-  deleteKeys,
-  inBackground,
-  isExecutable,
-  putCourseFile,
-  storage,
-  type StoredFile,
-} from '../../lib/storage'
+import { deleteKeys, inBackground, putCourseFile, storage, uploadProblem, type StoredFile } from '../../lib/storage'
 import {
   MAX_RESTRICTION_JSON_LENGTH,
   checkRestrictionChoices,
@@ -79,12 +70,6 @@ import {
 } from '../../lib/restriction'
 import type { AppEnv, CodeItem, Completion } from '../../lib/types'
 import { ItemEditPage, ItemPage, TEXT_PREVIEW_MAX, editUrl, type ItemInput, type OutlineItem, type RestrictedOutline } from './views'
-
-async function manageAccess(c: Context<AppEnv>) {
-  const id = intParam(c, 'id')
-  const access = id && (await getCourseAccess(c, id))
-  return access && access.canManage ? access : null
-}
 
 function bundleView(c: Context<AppEnv>, access: CourseAccess, itemId: number): BundleView {
   const courseId = access.course.id
@@ -292,13 +277,6 @@ const listField = (form: Form, key: string, max: number) => {
   return (Array.isArray(v) ? v : v === undefined ? [] : [v]).slice(0, max).map((s) => (typeof s === 'string' ? s.trim() : ''))
 }
 
-// lib/forms.ts で確かめないのは、上限の値がストレージの設定にあり、実行ファイルかどうかは中身を読まないと分からないため
-async function checkUpload(file: File | null) {
-  if (file && file.size > MAX_FILE_SIZE) return FILE_TOO_LARGE
-  if (file && (await isExecutable(file))) return EXECUTABLE_NOT_ALLOWED
-  return null
-}
-
 export async function createItem(c: Context<AppEnv>) {
   const access = await manageAccess(c)
   if (!access) return c.notFound()
@@ -313,7 +291,7 @@ export async function createItem(c: Context<AppEnv>) {
   if (type === 'code' && !availableCodeLanguages.includes(language))
     return redirectWith(c, editUrl(courseId, sectionId), `${CODE_LANGUAGE_LABELS[language]} は選べません。`, 'error')
   const file = type === 'file' && isFile(input.file) ? input.file : null
-  const uploadError = await checkUpload(file)
+  const uploadError = await uploadProblem(file)
   if (uploadError) return redirectWith(c, editUrl(courseId, sectionId), uploadError, 'error')
 
   const stored = file && (await putCourseFile(courseId, file))
@@ -421,7 +399,7 @@ export async function updateItem(c: Context<AppEnv>) {
   const file = result.ok && item.type === 'file' && isFile(result.values.file) ? result.values.file : null
   const completion = (result.ok && result.values.completion) || item.completion
   const savedFile = { type: file?.type ?? item.fileType ?? '', name: file?.name ?? item.fileName ?? '' }
-  const uploadError = result.ok ? await checkUpload(file) : null
+  const uploadError = result.ok ? await uploadProblem(file) : null
   const completionMessage = result.ok ? completionError(item.type, completion, item.type === 'file' ? savedFile : null) : null
   const agentModel =
     result.ok && item.type === 'agent' ? await resolveAgentModel(result.values.agent_model ?? '', savedAgentModel(iid)) : null
@@ -871,7 +849,7 @@ export async function toggleComplete(c: Context<AppEnv>) {
     const done = await trackedDoneCount(userId, id)
     return c.json({ completed, total, done })
   }
-  return c.redirect(c.req.header('referer') ?? `/courses/${id}`, 303)
+  return c.redirect(sameOriginReferer(c, `/courses/${id}`), 303)
 }
 
 export async function downloadFile(c: Context<AppEnv>) {

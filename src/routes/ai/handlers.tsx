@@ -39,7 +39,7 @@ import { formatBytes } from '../../lib/bytes'
 import { diffHunks, diffLines } from '../../lib/diff'
 import { firstError, validate } from '../../lib/forms'
 import { readFields, readForm, sameOriginReferer, wantsJson } from '../../lib/http'
-import { EXECUTABLE_NOT_ALLOWED, FILE_TOO_LARGE, MAX_FILE_SIZE, isExecutable } from '../../lib/storage'
+import { uploadProblem } from '../../lib/storage'
 import type { AppEnv, User } from '../../lib/types'
 
 export type AiBackend = {
@@ -241,13 +241,6 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     c.header('Content-Type', file.mediaType)
     c.header('X-Content-Type-Options', 'nosniff')
     return c.body(Buffer.from(file.data, 'base64'))
-  }
-
-  // lib/forms.ts で確かめないのは、上限の値がストレージの設定にあり、実行ファイルかどうかは中身を読まないと分からないため
-  async function uploadProblem(file: File) {
-    if (file.size > MAX_FILE_SIZE) return FILE_TOO_LARGE
-    if (await isExecutable(file)) return EXECUTABLE_NOT_ALLOWED
-    return null
   }
 
   /** 確認カードを決める。ファイルを選ぶカードでは、承認にファイルを添えて送る */

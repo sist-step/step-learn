@@ -14,7 +14,6 @@ import {
 import { agentTokenHash, apiKeyHintOf, newAgentToken, openApiKey, sealApiKey } from './agent-secret'
 import { db } from './db'
 import { agentItems, agentTokens, agentUsage, courses, items, users } from './schema'
-import type { User } from './types'
 
 // 提供元ごとに付加データを変えるのは、暗号化したキーを別の列へ書き写されても、別の提供元のキーとして開けないようにするため
 const aadOf = (itemId: number, provider: AgentProvider) =>
@@ -24,14 +23,6 @@ const KEY_COLUMNS = {
   anthropic: { key: 'apiKey', hint: 'apiKeyHint' },
   openrouter: { key: 'openrouterApiKey', hint: 'openrouterApiKeyHint' },
 } as const satisfies Record<AgentProvider, { key: keyof typeof agentItems.$inferSelect; hint: keyof typeof agentItems.$inferSelect }>
-
-/** コーディングエージェントのアイテムなら、そのコースの ID・タイトル・説明 */
-export const getAgentItem = (itemId: number) =>
-  db
-    .select({ courseId: items.courseId, title: items.title, body: items.body })
-    .from(items)
-    .where(and(eq(items.id, itemId), eq(items.type, AGENT_KIND)))
-    .get()
 
 const upsert = (itemId: number, set: Partial<typeof agentItems.$inferInsert>) =>
   void db
@@ -170,10 +161,6 @@ export function agentStore(itemId: number): AgentStore {
 }
 
 // ---------------------------------------------------------------- トークン
-
-const USER = { id: users.id, email: users.email, name: users.name, username: users.username, role: users.role }
-
-export const findAgentUser = (userId: number): User | undefined => db.select(USER).from(users).where(eq(users.id, userId)).get()
 
 /** トークンの ID・アイテム・持ち主。知らないトークンなら null */
 export function findAgentToken(token: string): { id: number; itemId: number; userId: number } | null {

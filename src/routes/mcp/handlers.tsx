@@ -3,7 +3,7 @@ import { cors } from 'hono/cors'
 import * as z from 'zod/mini'
 import { DOCS_ABILITIES } from '../../lib/ai-docs'
 import { config } from '../../lib/config'
-import { clientIp, intParam, redirectWith } from '../../lib/http'
+import { clientIp, intParam, readForm, redirectWith } from '../../lib/http'
 import { serveMcp, type McpTool } from '../../lib/mcp'
 import {
   clientKind,
@@ -221,7 +221,7 @@ export function createMcpHandlers(backend: McpBackend) {
   }
 
   async function submitAuthorize(c: C) {
-    const form = await c.req.parseBody()
+    const form = await readForm(c)
     const checked = await checkAuthorize(c, store, form)
     if (!checked.ok) {
       if ('redirect' in checked) return c.redirect(checked.redirect, 303)

@@ -15,6 +15,7 @@ import {
   type ClaudePrice,
 } from './ai-models'
 import { config } from './config'
+import { parseJson } from './json'
 
 /** Haiku 5.5 は、入力がこのトークン数を超えると LONG_PROMPT_PRICES の料金になる */
 const LONG_PROMPT_TOKENS = 100_000
@@ -43,14 +44,6 @@ function sharedClient() {
   if (!config.anthropic) throw new AiError('CLAUDE_API_KEY が設定されていないため、このモデルを利用できません')
   client ??= new Anthropic({ apiKey: config.anthropic.apiKey, maxRetries: 1 })
   return client
-}
-
-const parseJson = (raw: string): unknown => {
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
 }
 
 // そのまま送らないのは、OpenRouter のモデルが付けた ID（functions.read_file:0 など）を Anthropic が弾き、途中でモデルを変えた会話を続けられなくなるため

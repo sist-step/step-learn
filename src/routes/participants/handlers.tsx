@@ -1,18 +1,12 @@
 import { and, eq, isNotNull, or } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { RequestContext } from 'hono/jsx-renderer'
-import { getCourseAccess, trackedDoneCount, trackedItemCount } from '../../lib/courses'
+import { getCourseAccess, manageAccess, trackedDoneCount, trackedItemCount } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
 import { intParam, readFields, redirectWith } from '../../lib/http'
 import { completions, enrollments, users } from '../../lib/schema'
 import { COURSE_ROLE_LABELS, type AppEnv } from '../../lib/types'
 import { CANDIDATE_LIMIT, Candidates, ParticipantsPage, type Candidate, type Participant } from './views'
-
-async function manageAccess(c: Context<AppEnv>) {
-  const id = intParam(c, 'id')
-  const access = id && (await getCourseAccess(c, id))
-  return access && access.canManage ? access : null
-}
 
 /** 最後の教師を外す・学生に変える操作を防ぐ */
 async function isLastTeacher(courseId: number, userId: number) {

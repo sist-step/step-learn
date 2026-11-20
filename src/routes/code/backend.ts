@@ -1,37 +1,22 @@
 import { and, eq } from 'drizzle-orm'
 import { credentialStampOf } from '../../lib/auth'
-import { canOpenItem } from '../../lib/availability'
 import { grader } from '../../lib/code-grading'
 import { codeStore, getCodeItem } from '../../lib/code-items'
-import { getCourseAccess, getCourseAccessFor, isVisibleItem, type CourseAccess } from '../../lib/courses'
+import type { CourseAccess } from '../../lib/courses'
 import { db } from '../../lib/db'
-import { intParam } from '../../lib/http'
-import { completions, items, users } from '../../lib/schema'
-import type { Completion, User } from '../../lib/types'
+import { findUser, itemIdOfRef, openItem, openItemFor, type OpenedItem } from '../../lib/item-access'
+import { completions } from '../../lib/schema'
+import type { Completion } from '../../lib/types'
 import type { CodeBackend } from './handlers'
 
 const REF_PREFIX = 'code-'
 
-const findUser = (userId: number): User | undefined =>
-  db
-    .select({ id: users.id, email: users.email, name: users.name, username: users.username, role: users.role })
-    .from(users)
-    .where(eq(users.id, userId))
-    .get()
-
-/** user がアイテムを開けるなら、設定と置き場所。access を渡さなければ、ここでコースの権限を確かめる */
-async function openable(user: User, itemId: number, access?: CourseAccess | null) {
-  const item = db
-    .select({ courseId: items.courseId, title: items.title, body: items.body, completion: items.completion })
-    .from(items)
-    .where(and(eq(items.id, itemId), eq(items.type, 'code')))
-    .get()
-  const code = item && getCodeItem(itemId)
-  if (!item || !code) return null
-  const granted = access ?? (await getCourseAccessFor(user, item.courseId))
-  if (!granted || granted.course.id !== item.courseId || !canOpenItem(user, granted, itemId, isVisibleItem(itemId))) return null
+/** 開けたアイテムの、設定と置き場所。コードの設定がまだなければ null */
+function codeOf({ access, itemId, item }: OpenedItem) {
+  const code = getCodeItem(itemId)
+  if (!code) return null
   return {
-    access: granted,
+    access,
     completion: item.completion,
     settings: { title: item.title, body: item.body, ...code, solutionPublic: code.solutionPublic === 1 },
     stage: code.stage,
@@ -58,18 +43,18 @@ export const backend: CodeBackend = {
   pageUrl: (courseId, itemId) => `/courses/${courseId}/items/${itemId}/code`,
   itemUrl: (courseId, itemId) => `/courses/${courseId}/items/${itemId}`,
   async resolve(c) {
-    const courseId = intParam(c, 'id')
-    const itemId = intParam(c, 'iid')
-    const access = courseId && itemId && (await getCourseAccess(c, courseId))
-    const found = access && (await openable(c.var.user!, itemId, access))
+    const opened = await openItem(c, 'code')
+    const found = opened && codeOf(opened)
     if (!found) return null
     const { completion, ...rest } = found
+    const itemId = opened.itemId
     return { ...rest, itemId, ref: `${REF_PREFIX}${itemId}`, completion: completionOf(c.var.user!.id, itemId, found.access, completion) }
   },
   async targetOf(ref, userId) {
-    const itemId = Number(ref.slice(REF_PREFIX.length))
-    const user = ref.startsWith(REF_PREFIX) && Number.isSafeInteger(itemId) && findUser(userId)
-    const found = user && (await openable(user, itemId))
+    const itemId = itemIdOfRef(REF_PREFIX, ref)
+    const user = itemId && findUser(userId)
+    const opened = user && (await openItemFor(user, 'code', itemId))
+    const found = opened && codeOf(opened)
     if (!found) return null
     const { access, settings, stage, period, store } = found
     return {
@@ -80,7 +65,7 @@ export const backend: CodeBackend = {
       course: access.course.title,
       isStudent: access.role === 'student',
       courseId: access.course.id,
-      itemId,
+      itemId: opened.itemId,
     }
   },
 }

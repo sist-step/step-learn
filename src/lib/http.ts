@@ -93,8 +93,9 @@ export const limitBody = (maxSize: number, message = `送信できるデータ�
 
 export type Form = Record<string, string | File | (string | File)[]>
 
-export async function readForm(c: Context): Promise<Form> {
-  return (await c.req.parseBody()) as Form
+/** all を付けると、同じ名前の欄が 1 つでも配列で受け取る（複数のファイルを選ぶ欄など） */
+export async function readForm(c: Context, { all = false }: { all?: boolean } = {}): Promise<Form> {
+  return (await c.req.parseBody({ all })) as Form
 }
 
 /** 一覧の行のボタンのように、画面に出さない欄だけのフォームを読む。正しくなければ null（利用者には直せないので、呼ぶ側は c.notFound() にする） */
@@ -126,6 +127,9 @@ export function intParam(c: Context, key: string) {
 }
 
 export const wantsJson = (c: Context) => (c.req.header('accept') ?? '').includes('application/json')
+
+/** 拡張機能が Authorization ヘッダーで送る鍵。なければ空文字 */
+export const bearerToken = (c: Context) => c.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
 
 export function clientIp(c: Context) {
   if (config.trustProxy) {

@@ -4,7 +4,7 @@ import { deleteCookie, getCookie, getSignedCookie, setSignedCookie } from 'hono/
 import { createMiddleware } from 'hono/factory'
 import { parseSigned } from 'hono/utils/cookie'
 import type { AppEnv, Role, User } from './types'
-import { credentialStamp } from './bundle-token'
+import { credentialStamp } from './vscode-token'
 import { config } from './config'
 import { isInPeriod } from './course-period'
 import { db } from './db'

@@ -1,17 +1,9 @@
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { db } from './db'
-import { EMPTY_PRESENTATION, PRESENTATION_KIND, type PresentationState, type PresentationStore } from './presentation'
+import { EMPTY_PRESENTATION, type PresentationState, type PresentationStore } from './presentation'
 import { items, presentationItems } from './schema'
 
 export const PRESENTATION_REF_PREFIX = 'presentation-'
-
-/** 発表ファイルのアイテムなら、そのコースの ID とタイトル */
-export const getPresentationItem = (itemId: number) =>
-  db
-    .select({ courseId: items.courseId, title: items.title })
-    .from(items)
-    .where(and(eq(items.id, itemId), eq(items.type, PRESENTATION_KIND)))
-    .get()
 
 /** 通常モードの置き場所。PDF は items の file_key に、スライドの対応と公開の状態は presentation_items に置く */
 export function presentationStore(itemId: number): PresentationStore {

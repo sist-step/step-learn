@@ -17,7 +17,7 @@ import {
   type RestrictionFormNode,
   type RestrictionSet,
 } from '../lib/restriction'
-import { EXECUTABLE_NOT_ALLOWED, FILE_TOO_LARGE, MAX_FILE_SIZE, isExecutable } from '../lib/storage'
+import { uploadProblem } from '../lib/storage'
 import { AgentsPage } from '../routes/admin/views'
 import { CoursesPage } from '../routes/courses/views'
 import { DashboardPage } from '../routes/dashboard/views'
@@ -348,13 +348,6 @@ const findItem = (loaded: LoadedCourse, c: C) => {
   return loaded.items.find((it) => it.id === iid)
 }
 
-async function checkUpload(file: File | null) {
-  if (!file) return null
-  if (file.size > MAX_FILE_SIZE) return FILE_TOO_LARGE
-  if (await isExecutable(file)) return EXECUTABLE_NOT_ALLOWED
-  return null
-}
-
 const PLAY_NOT_SUPPORTED = '「最後まで再生したら完了」は使えません。'
 
 export async function createItem(c: C) {
@@ -381,7 +374,7 @@ export async function createItem(c: C) {
     cmid = await moodle(c).saveUrl({ ...target, externalurl: url, display: result.values.link_target })
   } else {
     const file = isFile(result.values.file) ? result.values.file : null
-    const uploadError = await checkUpload(file)
+    const uploadError = await uploadProblem(file)
     if (uploadError || !file) return redirectWith(c, editUrl(loaded, sectionId), uploadError ?? 'ファイルを選択してください。', 'error')
     cmid = await moodle(c).saveResource({ ...target, draftitemid: await uploadDraft(c.var.token!, file) })
   }
@@ -469,7 +462,7 @@ export async function updateItem(c: C) {
   // 送られてきた種類を使わないのは、画面の隠し欄は書き換えられ、保存済みのアイテムの種類と違うかもしれないため
   const result = validate('itemEdit', { ...form, type: item.kind })
   const file = result.ok && item.kind === 'file' && isFile(result.values.file) ? result.values.file : null
-  const fileError = await checkUpload(file)
+  const fileError = await uploadProblem(file)
   const playError = result.ok && result.values.completion === 'play' ? PLAY_NOT_SUPPORTED : null
   if (!result.ok || fileError || playError) {
     const errors = result.ok ? { ...(fileError && { file: fileError }), ...(playError && { completion: playError }) } : result.errors

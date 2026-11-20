@@ -3,10 +3,10 @@
 import crypto from 'node:crypto'
 import { Hono, type Context } from 'hono'
 import { VSCODE_EXTENSION_ID } from '../../lib/bundle'
-import { LAUNCH_CLAIM, claimPresentationLaunch, signPresentation, signPresentationLaunch, verifyPresentation } from '../../lib/bundle-token'
+import { launchClaimer, linkExpired, signToken, tooManyRequests, verifyBearer } from '../../lib/vscode-token'
 import { config } from '../../lib/config'
 import type { CourseAccess } from '../../lib/courses'
-import { clientIp, intParam, readFields, readJson, redirectWith, wantsJson } from '../../lib/http'
+import { intParam, readFields, readForm, readJson, redirectWith, wantsJson } from '../../lib/http'
 import { servePresentationPage, splitPresentationPdf } from '../../lib/presentation-pages'
 import { notifyPresentation } from '../../lib/presentation-socket'
 import {
@@ -25,6 +25,7 @@ import {
   type PresentationState,
   type PresentationStore,
 } from '../../lib/presentation'
+import { parseJson } from '../../lib/json'
 import { rateLimiter } from '../../lib/rate-limit'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE, deleteKeys, inBackground, storage } from '../../lib/storage'
 import type { AppEnv } from '../../lib/types'
@@ -62,8 +63,6 @@ export type PresentationBackend = {
 const nowSec = () => Math.floor(Date.now() / 1000)
 
 const serverOrigin = (c: C) => config.appOrigin ?? new URL(c.req.url).origin
-
-const bearer = (c: Context) => c.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
 
 const pagesOf = (s: PresentationState) => (s.fileKey ? s.slideIds.length : 0)
 
@@ -164,7 +163,7 @@ export function createPresentationHandlers({ resolve, itemUrl }: PresentationBac
     const ctx = await manage(c)
     if (!ctx) return c.notFound()
     if (!wantsJson(c)) return c.redirect(itemUrl(ctx.access.course.id, ctx.itemId), 303)
-    const token = signPresentationLaunch({ ref: ctx.ref, userId: c.var.user!.id })
+    const token = signToken('presentation-launch', { ref: ctx.ref, userId: c.var.user!.id })
     const query = new URLSearchParams({ server: serverOrigin(c), token })
     return c.json({ url: `vscode://${VSCODE_EXTENSION_ID}/presentation?${query}` })
   }
@@ -189,7 +188,7 @@ export function presentationRoutes(h: ReturnType<typeof createPresentationHandle
 const PDF_PATH = '/api/vscode/presentation/pdf'
 
 /** 拡張機能が PDF を上げる要求か。ログインのセッションがなくても、鍵で教師と確かめられるので、本文の上限を上げてよい */
-export const isPresentationUpload = (c: Context) => c.req.method === 'POST' && c.req.path === PDF_PATH && !!verifyPresentation(bearer(c))
+export const isPresentationUpload = (c: Context) => c.req.method === 'POST' && c.req.path === PDF_PATH && !!verifyBearer(c, 'presentation')
 
 const TOKEN_INVALID =
   '同期の期限が切れたか、このアイテムを編集できなくなりました。STEP Learn の画面から、もう一度「PowerPoint と同期」を押してください。'
@@ -207,15 +206,14 @@ const summaryOf = (s: PresentationState) => ({
 
 /** STEP Learn for VSCode（vscode-extension/）が呼ぶ API。ログインのセッションの代わりに、リンクの鍵と、それと引き換えた鍵で確かめる */
 export function presentationApi({ targetOf, keyPrefix }: PresentationBackend) {
-  // 上限を付けるのは、ログインしていなくても呼べ、鍵を総当たりで試されないようにするため
-  const claimLimit = rateLimiter({ limit: 30, windowSec: 60 })
+  const claim = launchClaimer('presentation-launch')
   // 拡張機能は 0.25 秒おきに読み、変わったときと SYNC_HEARTBEAT 秒おきにだけ送るので、スライドを送り続けても届かない回数にする
   const positionLimit = rateLimiter({ limit: 300, windowSec: 60 })
   const app = new Hono<AppEnv>()
 
   // 使うたびに確かめるのは、鍵が半日使え、そのあいだに教師から外されたり、アイテムが消されたりするため
   async function tokenTarget(c: C) {
-    const claims = verifyPresentation(bearer(c))
+    const claims = verifyBearer(c, 'presentation')
     const target = claims && (await targetOf(claims.ref, claims.userId))
     if (!claims || !target) return null
     c.set('logUserId', target.user.id)
@@ -224,19 +222,16 @@ export function presentationApi({ targetOf, keyPrefix }: PresentationBackend) {
   }
 
   app.post('/claim', async (c) => {
-    const ip = clientIp(c)
-    if (claimLimit.retryAfter(ip)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
-    claimLimit.hit(ip)
-    const claims = claimPresentationLaunch((await readJson(c, LAUNCH_CLAIM))?.token ?? '')
-    const target = claims && (await targetOf(claims.ref, claims.userId))
-    if (!claims || !target)
-      return c.json({ error: 'リンクの期限が切れているか、すでに使われています。STEP Learn の画面からもう一度開いてください。' }, 401)
+    const claims = await claim(c)
+    if (claims instanceof Response) return claims
+    const target = await targetOf(claims.ref, claims.userId)
+    if (!target) return linkExpired(c)
     return c.json({
       ref: claims.ref,
       course: target.course,
       title: target.title,
       user: target.user,
-      token: signPresentation({ ref: claims.ref, userId: claims.userId }),
+      token: signToken('presentation', { ref: claims.ref, userId: claims.userId }),
       heartbeat: SYNC_HEARTBEAT,
       maxSize: MAX_FILE_SIZE,
       ...summaryOf(target.store.get()),
@@ -246,17 +241,13 @@ export function presentationApi({ targetOf, keyPrefix }: PresentationBackend) {
   app.post('/pdf', async (c) => {
     const target = await tokenTarget(c)
     if (!target) return c.json({ error: TOKEN_INVALID }, 401)
-    const form = await c.req.parseBody()
+    const form = await readForm(c)
     const file = form.file
     if (!(file instanceof File) || file.size === 0) return c.json({ error: 'PDF がありません。' }, 400)
     if (file.size > MAX_FILE_SIZE) return c.json({ error: FILE_TOO_LARGE }, 413)
     const head = new TextDecoder('latin1').decode(await file.slice(0, PDF_MAGIC.length).arrayBuffer())
     if (head !== PDF_MAGIC) return c.json({ error: 'PDF ではないファイルです。' }, 400)
-    let raw: unknown = null
-    try {
-      raw = JSON.parse(typeof form.meta === 'string' ? form.meta : '')
-    } catch {}
-    const meta = PRESENTATION_META.safeParse(raw)
+    const meta = PRESENTATION_META.safeParse(parseJson(typeof form.meta === 'string' ? form.meta : null))
     if (!meta.success) return c.json({ error: '送られた内容が正しくありません。' }, 400)
 
     const fileKey = `${keyPrefix(target.courseId)}presentations/${crypto.randomUUID()}/slides.pdf`
@@ -292,7 +283,7 @@ export function presentationApi({ targetOf, keyPrefix }: PresentationBackend) {
   app.post('/position', async (c) => {
     const target = await tokenTarget(c)
     if (!target) return c.json({ error: TOKEN_INVALID }, 401)
-    if (positionLimit.retryAfter(target.limitKey)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
+    if (positionLimit.retryAfter(target.limitKey)) return tooManyRequests(c)
     positionLimit.hit(target.limitKey)
     const position = await readJson(c, PRESENTATION_POSITION)
     if (!position) return c.json({ error: '送られた内容が正しくありません。' }, 400)

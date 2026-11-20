@@ -24,10 +24,10 @@ import { AiError, type AiReply, type AiRequestFor } from '../../lib/ai-models'
 import { checkAnthropicKey, completeAnthropic } from '../../lib/ai-anthropic'
 import { checkOpenRouterKey, completeOpenRouterWith } from '../../lib/ai-openrouter'
 import { VSCODE_EXTENSION_ID } from '../../lib/bundle'
-import { LAUNCH_CLAIM, claimLaunch, signLaunch } from '../../lib/bundle-token'
+import { launchClaimer, linkExpired, signToken, tooManyRequests } from '../../lib/vscode-token'
 import { config } from '../../lib/config'
 import { firstError, validate } from '../../lib/forms'
-import { clientIp, readForm, readJson, redirectWith, wantsJson } from '../../lib/http'
+import { bearerToken, readForm, readJson, redirectWith, wantsJson } from '../../lib/http'
 import { rateLimiter } from '../../lib/rate-limit'
 import type { AppEnv } from '../../lib/types'
 
@@ -59,8 +59,6 @@ export type AgentBackend = {
 const editUrl = (courseId: number, itemId: number) => `/courses/${courseId}/items/${itemId}/edit`
 
 const nowSec = () => Math.floor(Date.now() / 1000)
-
-const bearer = (c: Context) => c.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
 
 /** アイテムで選んでいるモデルを、その提供元のキーで呼ぶ */
 const completeAgent = (model: AgentModel, apiKey: string, request: Omit<AiRequestFor<string>, 'model'>): Promise<AiReply> =>
@@ -97,7 +95,7 @@ export function createAgentHandlers({ resolve }: Pick<AgentBackend, 'resolve'>) 
     const back = `/courses/${item.courseId}/items/${item.itemId}`
     if (!wantsJson(c)) return c.redirect(back, 303)
     if (!item.store.settings().configured) return c.json({ error: AGENT_STATE_MESSAGES.off }, 409)
-    const token = signLaunch({ ref: item.ref, userId: c.var.user!.id, course: item.course, title: item.title })
+    const token = signToken('launch', { ref: item.ref, userId: c.var.user!.id, course: item.course, title: item.title })
     const query = new URLSearchParams({ server: config.appOrigin ?? new URL(c.req.url).origin, token })
     return c.json({ url: `vscode://${VSCODE_EXTENSION_ID}/agent?${query}` })
   }
@@ -169,14 +167,13 @@ const CONVERSATION_PATHS = ['/api/vscode/agent/messages', '/api/vscode/agent/sum
 export const agentRequestCheck =
   ({ findToken }: Pick<AgentBackend, 'findToken'>) =>
   (c: Context) =>
-    c.req.method === 'POST' && CONVERSATION_PATHS.includes(c.req.path) && !!findToken(bearer(c))
+    c.req.method === 'POST' && CONVERSATION_PATHS.includes(c.req.path) && !!findToken(bearerToken(c))
 
 const TOKEN_INVALID = 'トークンが使えなくなりました。STEP Learn のアイテムの画面から、もう一度 VS Code で開いてください。'
 
 /** STEP Learn for VSCode（vscode-extension/）が呼ぶ API。ログインのセッションの代わりに、アイテムごとのトークンで確かめる */
 export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToken }: AgentBackend) {
-  // 上限を付けるのは、ログインしていなくても呼べ、リンクの鍵やトークンを総当たりで試されないようにするため
-  const claimLimit = rateLimiter({ limit: 30, windowSec: 60 })
+  const claim = launchClaimer('launch')
   // 1 回の依頼でツールを何度も呼ぶので、拡張機能が普通に使っていて届く回数より多めにする
   const messageLimit = rateLimiter({ limit: 60, windowSec: 60 })
   /** 応答を作っている途中の利用者とアイテム。同じ人が並べて呼んで、上限を確かめる前に何回分も使うのを防ぐ */
@@ -186,21 +183,18 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
   // 開けるかを毎回確かめるのは、トークンが長く使え、そのあいだにコースから外されたり、アイテムが非表示になったりするため。
   // 開けないときもトークンを使えないことにしないのは、非表示を戻したときに、学生が STEP Learn の画面から開き直さずに済ませるため
   async function tokenTarget(c: C) {
-    const found = findToken(bearer(c))
+    const found = findToken(bearerToken(c))
     if (!found) return null
     touchToken(found.id)
     return { tokenId: found.id, ref: found.ref, userId: found.userId, item: await targetOf(found.ref, found.userId) }
   }
 
   app.post('/claim', async (c) => {
-    const ip = clientIp(c)
-    if (claimLimit.retryAfter(ip)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
-    claimLimit.hit(ip)
-    const claims = claimLaunch((await readJson(c, LAUNCH_CLAIM))?.token ?? '')
-    const user = claims && findUser(claims.userId)
-    const item = claims && user && (await targetOf(claims.ref, user.id))
-    if (!claims || !user || !item)
-      return c.json({ error: 'リンクの期限が切れているか、すでに使われています。STEP Learn の画面からもう一度開いてください。' }, 401)
+    const claims = await claim(c)
+    if (claims instanceof Response) return claims
+    const user = findUser(claims.userId)
+    const item = user && (await targetOf(claims.ref, user.id))
+    if (!user || !item) return linkExpired(c)
     return c.json({
       ref: claims.ref,
       course: item.course,
@@ -230,7 +224,7 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
   })
 
   app.post('/revoke', async (c) => {
-    const found = findToken(bearer(c))
+    const found = findToken(bearerToken(c))
     if (found) revokeToken(found.id)
     return c.body(null, 204)
   })
@@ -242,7 +236,7 @@ export function agentApi({ targetOf, findUser, findToken, touchToken, revokeToke
     const { userId, item } = target
     if (!item) return c.json({ error: AGENT_STATE_MESSAGES.closed, state: 'closed' }, 403)
     const limitKey = String(target.tokenId)
-    if (messageLimit.retryAfter(limitKey)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
+    if (messageLimit.retryAfter(limitKey)) return tooManyRequests(c)
     messageLimit.hit(limitKey)
     const request = await readJson(c, AGENT_REQUEST)
     if (!request) return c.json({ error: '送られた会話が正しくありません。新しいチャットを始めてください。' }, 400)

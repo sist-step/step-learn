@@ -1,5 +1,6 @@
 /// <reference lib="dom" />
 import { z } from 'zod'
+import { parseJson } from './json'
 
 export const SETTINGS_KEY = 'settings'
 
@@ -25,14 +26,6 @@ export type SettingKey = keyof Settings
 export type Theme = Settings['theme']
 
 const toSettings = (value: unknown): Settings => SETTINGS.safeParse(value).data ?? SETTINGS.parse({})
-
-const parseJson = (raw: string | null): unknown => {
-  try {
-    return JSON.parse(raw ?? 'null')
-  } catch {
-    return null
-  }
-}
 
 // 保存できない環境（プライベートブラウズなど）でも、開いているあいだは切り替えた設定のまま使えるよう、読み書きした値を持っておく
 let memory: Settings | null = null

@@ -13,6 +13,7 @@ import {
   type OpenRouterModelInfo,
 } from './ai-models'
 import { config } from './config'
+import { parseJson } from './json'
 
 const API = 'https://openrouter.ai/api/v1'
 
@@ -102,14 +103,6 @@ async function* sseData(body: ReadableStream<Uint8Array>) {
   }
 }
 
-const parseJson = <T>(raw: string) => {
-  try {
-    return JSON.parse(raw) as T
-  } catch {
-    return null
-  }
-}
-
 // OpenRouter のメッセージを AiError に入れないのは、画面に出す文言に外部の英語のエラーを混ぜないため
 function statusError(status: number) {
   if (status === 401 || status === 403) return new AiError('AI の API キーが使えません')
@@ -179,7 +172,7 @@ async function requestOpenRouter(
     try {
       for await (const data of sseData(res.body)) {
         if (data === '[DONE]') break
-        const chunk = parseJson<Chunk>(data)
+        const chunk = parseJson(data) as Chunk | null
         if (!chunk) continue
         if (chunk.error) fail(chunk.error)
         collect(chunk.choices?.[0])

@@ -3,6 +3,7 @@ import { alias } from 'drizzle-orm/sqlite-core'
 import type { Context } from 'hono'
 import type { AppEnv, Course, CourseRole, User } from './types'
 import { db } from './db'
+import { intParam } from './http'
 import { completions, courses, enrollments, items, sections, users } from './schema'
 
 export type CourseAccess = {
@@ -14,6 +15,13 @@ export type CourseAccess = {
 }
 
 export const getCourseAccess = (c: Context<AppEnv>, courseId: number) => getCourseAccessFor(c.var.user!, courseId)
+
+/** URL の :id のコースを、ログイン中の利用者が管理できる（教師・管理者）なら、その権限 */
+export async function manageAccess(c: Context<AppEnv>) {
+  const id = intParam(c, 'id')
+  const access = id && (await getCourseAccess(c, id))
+  return access && access.canManage ? access : null
+}
 
 export async function getCourseAccessFor(user: User, courseId: number): Promise<CourseAccess | null> {
   const row = db

@@ -6,7 +6,7 @@ import * as z from 'zod/mini'
 import { CodeTrialResult } from '../../components/code'
 import { AiError } from '../../lib/ai'
 import { VSCODE_EXTENSION_ID } from '../../lib/bundle'
-import { LAUNCH_CLAIM, claimCodeLaunch, signCode, signCodeLaunch, verifyCode } from '../../lib/bundle-token'
+import { launchClaimer, linkExpired, signToken, tooManyRequests, verifyBearer } from '../../lib/vscode-token'
 import {
   CODE_FILES,
   appealStateOf,
@@ -30,7 +30,7 @@ import type { CodeSettings, CodeStore, StudentRow, Submission, SubmissionSummary
 import { config } from '../../lib/config'
 import type { CourseAccess } from '../../lib/courses'
 import { firstError, readConstraints, solutionOf, validate, type FormValues } from '../../lib/forms'
-import { clientIp, field, intParam, readFields, readForm, readJson, redirectWith, wantsJson } from '../../lib/http'
+import { field, intParam, readFields, readForm, readJson, redirectWith, wantsJson } from '../../lib/http'
 import { rateLimiter } from '../../lib/rate-limit'
 import { SandboxError, runCode, sandboxEnabled } from '../../lib/sandbox'
 import type { AppEnv, Completion } from '../../lib/types'
@@ -315,7 +315,7 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl, prepareA
     if (!ctx) return c.notFound()
     const { ref, userId, courseId, itemId } = ctx
     if (!wantsJson(c)) return c.redirect(itemUrl(courseId, itemId), 303)
-    const query = new URLSearchParams({ server: serverOrigin(c), token: signCodeLaunch({ ref, userId }) })
+    const query = new URLSearchParams({ server: serverOrigin(c), token: signToken('code-launch', { ref, userId }) })
     return c.json({ url: `vscode://${VSCODE_EXTENSION_ID}/code?${query}` })
   }
 
@@ -690,10 +690,8 @@ export const CODE_BODY_LIMIT = 512 * 1024
 
 const CODE_API = '/api/vscode/code/'
 
-const bearer = (c: Context) => c.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
-
 /** 拡張機能がコードを送る要求か。ログインのセッションがなくても、鍵で本人と確かめられるので、本文の上限を上げてよい */
-export const isCodeRequest = (c: Context) => c.req.method === 'POST' && c.req.path.startsWith(CODE_API) && !!verifyCode(bearer(c))
+export const isCodeRequest = (c: Context) => c.req.method === 'POST' && c.req.path.startsWith(CODE_API) && !!verifyBearer(c, 'code')
 
 const EXPIRED = '期限が切れたか、このアイテムを開けなくなりました。STEP Learn の画面から、もう一度 VS Code で開いてください。'
 
@@ -715,15 +713,14 @@ function readUpload(
 
 /** 拡張機能が呼ぶ API。ログインのセッションの代わりに、リンクの鍵と、それと引き換えた鍵で確かめる */
 export function codeVscodeApi({ targetOf, stampOf, grader, pageUrl }: Pick<CodeBackend, 'targetOf' | 'stampOf' | 'grader' | 'pageUrl'>) {
-  // 上限を付けるのは、ログインしていなくても呼べ、鍵を総当たりで試されないようにするため
-  const claimLimit = rateLimiter({ limit: 30, windowSec: 60 })
+  const claim = launchClaimer('code-launch')
   // 拡張機能は保存から少し待ってまとめて送るので、普通に使っていて届く回数ではない
   const draftLimit = rateLimiter({ limit: 60, windowSec: 60 })
   const app = new Hono<AppEnv>()
 
   // 送るたびにアイテムを確かめるのは、鍵が半年使え、そのあいだにコースから外れたり、アイテムが非表示になったりするため
   async function targetFrom(c: C) {
-    const claims = verifyCode(bearer(c))
+    const claims = verifyBearer(c, 'code')
     if (!claims || claims.stamp !== stampOf?.(claims.userId)) return null
     const target = await targetOf(claims.ref, claims.userId)
     if (!target || !target.store.findUser(claims.userId) || (target.isStudent && !isSolvable(target.stage))) return null
@@ -740,21 +737,18 @@ export function codeVscodeApi({ targetOf, stampOf, grader, pageUrl }: Pick<CodeB
   })
 
   app.post('/claim', async (c) => {
-    const ip = clientIp(c)
-    if (claimLimit.retryAfter(ip)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
-    claimLimit.hit(ip)
-    const claims = claimCodeLaunch((await readJson(c, LAUNCH_CLAIM))?.token ?? '')
-    const found = claims && (await targetOf(claims.ref, claims.userId))
+    const claims = await claim(c)
+    if (claims instanceof Response) return claims
+    const found = await targetOf(claims.ref, claims.userId)
     const target = found && (!found.isStudent || isSolvable(found.stage)) ? found : null
-    const user = claims && target?.store.findUser(claims.userId)
-    if (!claims || !target || !user)
-      return c.json({ error: 'リンクの期限が切れているか、すでに使われています。STEP Learn の画面からもう一度開いてください。' }, 401)
+    const user = target?.store.findUser(claims.userId)
+    if (!target || !user) return linkExpired(c)
     return c.json({
       ...stateOf(c, target, claims.userId),
       ref: claims.ref,
       course: target.course,
       user: { id: user.id, name: user.name },
-      token: signCode({ ref: claims.ref, userId: claims.userId, stamp: stampOf?.(claims.userId) }),
+      token: signToken('code', { ref: claims.ref, userId: claims.userId, stamp: stampOf?.(claims.userId) }),
     })
   })
 
@@ -769,7 +763,7 @@ export function codeVscodeApi({ targetOf, stampOf, grader, pageUrl }: Pick<CodeB
   app.post('/draft', async (c) => {
     const target = await targetFrom(c)
     if (!target) return c.json({ error: EXPIRED }, 401)
-    if (draftLimit.retryAfter(target.limitKey)) return c.json({ error: 'しばらく待ってから、もう一度お試しください。' }, 429)
+    if (draftLimit.retryAfter(target.limitKey)) return tooManyRequests(c)
     draftLimit.hit(target.limitKey)
     const upload = await readJson(c, CODE_UPLOAD)
     const read = upload && readUpload(target.settings, upload)

@@ -4,7 +4,15 @@ import type { CourseFormValues } from '../../components/course'
 import type { CourseCardData } from '../../components/ui'
 import { canCreateCourse } from '../../lib/auth'
 import { courseAvailability } from '../../lib/availability'
-import { courseRevision, getCourseAccess, memberCount, trackedDoneCount, trackedItemCount, visibleItem } from '../../lib/courses'
+import {
+  courseRevision,
+  getCourseAccess,
+  manageAccess,
+  memberCount,
+  trackedDoneCount,
+  trackedItemCount,
+  visibleItem,
+} from '../../lib/courses'
 import { courseImagePrefix, type CourseImageKind } from '../../lib/course-images'
 import { dateInputToUnix, isInPeriod, isUpcoming, unixToDateInput } from '../../lib/course-period'
 import { contains, db } from '../../lib/db'
@@ -182,18 +190,17 @@ export async function leave(c: Context<AppEnv>) {
 }
 
 export async function settings(c: Context<AppEnv>) {
-  const id = intParam(c, 'id')
-  const access = id && (await getCourseAccess(c, id))
-  if (!access || !access.canManage) return c.notFound()
+  const access = await manageAccess(c)
+  if (!access) return c.notFound()
   return c.render(<SettingsPage access={access} values={courseValues(access.course)} />, {
     title: `設定 - ${access.course.title}`,
   })
 }
 
 export async function updateSettings(c: Context<AppEnv>) {
-  const id = intParam(c, 'id')
-  const access = id && (await getCourseAccess(c, id))
-  if (!access || !access.canManage) return c.notFound()
+  const access = await manageAccess(c)
+  if (!access) return c.notFound()
+  const id = access.course.id
   const form = await readForm(c)
   const result = validate('course', form)
   if (!result.ok) {
@@ -255,9 +262,9 @@ export async function removeCourseImage(c: Context<AppEnv>) {
 }
 
 export async function remove(c: Context<AppEnv>) {
-  const id = intParam(c, 'id')
-  const access = id && (await getCourseAccess(c, id))
-  if (!access || !access.canManage) return c.notFound()
+  const access = await manageAccess(c)
+  if (!access) return c.notFound()
+  const id = access.course.id
   db.delete(courses).where(eq(courses.id, id)).run()
   inBackground(deleteCourseFiles(id))
   return redirectWith(c, '/dashboard', `「${access.course.title}」を削除しました。`, 'info')

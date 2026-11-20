@@ -48,6 +48,7 @@ import {
 import { formatBytes } from './bytes'
 import { imageMediaType } from './images'
 import { ROLE_LABELS } from './types'
+import { parseJson } from './json'
 
 /**
  * パネルへ流す出来事。chat は新しく始めたチャットの ID、error の retract は送った発言を会話に残さなかったこと（入力欄に戻してよい）、
@@ -186,14 +187,6 @@ function usageMeter(of: AiModel, quota: AiQuota): AiUsageMeter {
     percent: state !== 'ok' ? 100 : limit > 0 ? Math.min(100, Math.floor((used / limit) * 100)) : 0,
     state,
     note: quotaProblem(quota) ?? `${RESET_AT.format(new Date(resetAt * 1000))}にリセット`,
-  }
-}
-
-const parseJson = (raw: string): unknown => {
-  try {
-    return JSON.parse(raw)
-  } catch {
-    return null
   }
 }
 

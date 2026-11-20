@@ -41,6 +41,15 @@ export async function isExecutable(file: File) {
   return universal && head.length >= 8 && new DataView(head.buffer).getUint32(4) < 45
 }
 
+// lib/forms.ts で確かめないのは、上限の値がストレージの設定にあり、実行ファイルかどうかは中身を読まないと分からないため
+/** アップロードされたファイルを置けないなら、画面に出す理由。ファイルがなければ null */
+export async function uploadProblem(file: File | null) {
+  if (!file) return null
+  if (file.size > MAX_FILE_SIZE) return FILE_TOO_LARGE
+  if (await isExecutable(file)) return EXECUTABLE_NOT_ALLOWED
+  return null
+}
+
 export type StoredFile = { key: string; name: string; size: number; type: string }
 export type ServeOptions = { filename: string; contentType: string; inline: boolean; range?: string }
 

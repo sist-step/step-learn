@@ -2,7 +2,7 @@ import { and, count, desc, eq, inArray, max, or, sql } from 'drizzle-orm'
 import type { BundleFile, BundleStore } from './bundle'
 import { MAX_LISTED_VERSIONS, type BundleSyncStore } from './bundle-sync'
 import { db } from './db'
-import { bundleFiles, bundleItems, bundleSyncVersions, enrollments, items, users } from './schema'
+import { bundleFiles, bundleItems, bundleSyncVersions, enrollments, users } from './schema'
 
 const COLUMNS = { path: bundleFiles.path, fileKey: bundleFiles.fileKey, size: bundleFiles.size, sha256: bundleFiles.sha256 }
 
@@ -153,11 +153,3 @@ export const bundleKeysOf = (itemIds: number[]) =>
         .all()
         .map((r) => r.fileKey)
     : []
-
-/** ファイル自動配布のアイテムなら、そのコースの ID とタイトル */
-export const getBundleItem = (itemId: number) =>
-  db
-    .select({ courseId: items.courseId, title: items.title })
-    .from(items)
-    .where(and(eq(items.id, itemId), eq(items.type, 'bundle')))
-    .get()

@@ -827,8 +827,6 @@ export function createPreparer<K>({
   }
 }
 
-export type Preparer<K> = ReturnType<typeof createPreparer<K>>
-
 // ---------------------------------------------------------------- 順番待ち
 
 /** 試しに判定した結果。solution は解答例の判定（解答例がなければ null）、starter は最初のコードの判定 */
