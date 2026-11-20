@@ -45,7 +45,7 @@ export type BundleContext = {
   /** URL の :iid。通常モードはアイテムの ID、Moodle モードは活動の cmid */
   itemId: number
   title: string
-  /** 拡張機能に渡すアイテムの識別子。storeOf に渡すと同じ置き場所が返る */
+  /** 拡張機能に渡すアイテムの識別子。itemOf に渡すと同じ置き場所が返る */
   ref: string
   store: BundleStore
   sync: BundleSyncStore
@@ -54,8 +54,13 @@ export type BundleContext = {
 export type BundleBackend = {
   /** URL のコースとアイテムを、ログインしている人が開けるなら返す。開けなければ null */
   resolve: (c: C) => Promise<BundleContext | null>
-  /** 拡張機能からの要求（ログインのセッションがない）で、userId の人が使う ref のアイテムの置き場所を返す。アイテムがなくなっていれば null */
+  /** 拡張機能からの要求（ログインのセッションがない）で、userId の人が使う ref のアイテムの置き場所を返す。今は開けない（アイテムがない・コースから外れた・非表示）なら null */
   itemOf: (ref: string, userId: number) => Promise<Pick<BundleContext, 'store' | 'sync'> | null>
+  /**
+   * 半年使える鍵（同期・コード）に入れる、userId の人の今の印。印が変わると、それより前に渡した鍵は使えない。
+   * Moodle モードは使うたびに Moodle のトークンで権限を確かめ直すので、渡さない
+   */
+  stampOf?: (userId: number) => string | undefined
   /** ストレージのキーの先頭。コースを消すときにまとめて消せるよう、コースごとに分ける */
   keyPrefix: (courseId: number) => string
   editUrl: (courseId: number, itemId: number) => string
@@ -324,7 +329,7 @@ export function bundleRoutes(h: ReturnType<typeof createBundleHandlers>) {
 const SYNC_EXPIRED = '同期の期限が切れました。STEP Learn の画面からもう一度開いてください。'
 
 /** STEP Learn for VSCode（vscode-extension/）が呼ぶ API。ログインのセッションの代わりに、リンクの鍵と、それと引き換えた鍵で確かめる */
-export function vscodeApi({ itemOf }: Pick<BundleBackend, 'itemOf'>) {
+export function vscodeApi({ itemOf, stampOf }: Pick<BundleBackend, 'itemOf' | 'stampOf'>) {
   // 上限を付けるのは、ログインしていなくても呼べ、鍵を総当たりで試されないようにするため
   const claimLimit = rateLimiter({ limit: 30, windowSec: 60 })
   // 拡張機能は保存から数秒待ってまとめて送るので、普通に使っていて届く回数ではない
@@ -333,9 +338,10 @@ export function vscodeApi({ itemOf }: Pick<BundleBackend, 'itemOf'>) {
 
   async function syncTarget(c: C) {
     const claims = verifySync(bearer(c))
-    const item = claims && (await itemOf(claims.ref, claims.userId))
+    if (!claims || claims.stamp !== stampOf?.(claims.userId)) return null
+    const item = await itemOf(claims.ref, claims.userId)
     // 利用者も確かめるのは、鍵が半年使え、そのあいだに利用者が消されているかもしれないため
-    if (!claims || !item?.sync.findUser(claims.userId)) return null
+    if (!item?.sync.findUser(claims.userId)) return null
     return { ...item, userId: claims.userId, limitKey: `${claims.ref} ${claims.userId}` }
   }
 
@@ -357,7 +363,7 @@ export function vscodeApi({ itemOf }: Pick<BundleBackend, 'itemOf'>) {
       grant: signGrant({ ref: claims.ref, userId: claims.userId }),
       files: item.store.list().map(({ path, size, sha256 }) => ({ path, size, sha256 })),
       // 同期が無効でも鍵を渡すのは、あとから教師が有効にしたときに、学生が画面から開き直さなくても送り始められるようにするため
-      sync: { token: signSync({ ref: claims.ref, userId: claims.userId }), enabled: item.sync.enabled() },
+      sync: { token: signSync({ ref: claims.ref, userId: claims.userId, stamp: stampOf?.(claims.userId) }), enabled: item.sync.enabled() },
     })
   })
 
