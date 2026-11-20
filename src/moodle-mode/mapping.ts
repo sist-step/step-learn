@@ -342,7 +342,15 @@ export type CourseLayout = { kind: 'list' } | TopcollLayout | TilesLayout
 
 const TILE_PROGRESS: TileProgress[] = ['none', 'fraction', 'percent']
 
-const fileName = (url: string) => decodeURIComponent(URL.parse(url)?.pathname.split('/').at(-1) ?? '')
+function fileName(url: string) {
+  const name = URL.parse(url)?.pathname.split('/').at(-1) ?? ''
+  // そのまま decodeURIComponent しないのは、ファイル名の % が別の文字と続かないと URIError になり、コースページを開けなくなるため
+  try {
+    return decodeURIComponent(name)
+  } catch {
+    return name
+  }
+}
 
 export function toLayout(format: MoodleFormat | undefined): CourseLayout {
   if (format?.topcoll) {
