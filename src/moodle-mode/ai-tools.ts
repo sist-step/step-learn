@@ -46,7 +46,7 @@ import { fetchFile } from './client'
 import { codeSettingsOf, codeStageOf } from './code-store'
 import { loadCourse, moodle, myCourses, otherCourses, type LoadedCourse } from './data'
 import { insertExtra, newExtraKey, updateExtraData } from './extra'
-import { CODE_KIND } from './extra-kinds'
+import { CODE_KIND, extraKindOf } from './extra-kinds'
 import { EXTRA_PATH, type MItem, type MSection } from './mapping'
 
 const moodleContext = (c: AiToolContext) => c as Context<MoodleEnv>
@@ -126,7 +126,7 @@ export const kindLabel = (it: MItem) =>
   codeKind(it)
     ? 'コーディング問題'
     : it.kind === 'extra'
-      ? (it.extra?.type ?? KIND_LABELS.extra)
+      ? (extraKindOf(it.extra?.type ?? '')?.label ?? KIND_LABELS.extra)
       : it.kind === 'moodle'
         ? `Moodle の活動（${it.modname}）`
         : KIND_LABELS[it.kind]
