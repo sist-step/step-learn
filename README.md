@@ -51,6 +51,7 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルはサーバーのロ�
     - 呼び出しのたびに使用量を記録し、提供元ごとの週の枠（管理 > AI の月の上限を日割りして、直近 4 週間に使った人数で割ったもの）を使い切ると、その週は使えない
     - 「難しい依頼」で答える Claude Sonnet 5.5 には、Claude 全体の枠とは別に、Sonnet だけの週の枠がある（Claude 全体の 1 人あたりの枠に対する割合。管理 > AI で設定し、保存するまでは 50%）。Sonnet で使った分は Claude 全体の枠にも数え、Sonnet だけの枠を使い切っても Claude Haiku 5.5 では続けられる
     - パネルの入力欄の下に今週の使い具合を出し、押すと枠ごと（Claude 全体・Sonnet のみ）の使った割合とリセットの日時を開く
+  - MCP サーバー（`/mcp`）：教師は、Claude・ChatGPT・Claude Code などの AI アプリから STEP Learn を使える。いまのツールは STEP Docs の検索（`search_docs`）と、ページ全体を読む（`read_doc`）だけ。使えるのは AI アシスタントと同じ教師で、AI の提供元が有効かどうかは問わない（AI の費用は利用者の AI アプリが持つ）。接続の URL と接続中のアプリの解除は、ユーザーメニューの「AI アプリとの接続」（`/account/apps`）にある。詳しくは「[AI アプリから使う（MCP）](#ai-アプリから使うmcp)」
   - 小テスト：セクションに「小テスト」アイテムを追加すると、学生が問題に答えて、その場で採点の結果を受け取れる。採点は正解との照合で行い、AI は使わない。Moodle モードでも、Moodle の小テストの活動とは別の、STEP Learn だけにある種類のアイテムとして使える（下の「Moodle モード」）
     - 出題の形式は 7 つ: 選択（選択肢から 1 つ選ぶ）、出力の予測（コードを見て実行結果を入力する。行末の空白・前後の空行・全角と半角の違いは区別しない）、並べ替え（ばらばらに出した行を正しい順に並べる。ドラッグか上下のボタンで動かす）、バグ探し（コードの間違っている行を選ぶ）、実行の順番（行が実行される順に、行を押してたどる。関数の呼び出しや繰り返しの流れを確かめる）、字下げ（字下げを消して出したコードに、行ごとのボタンで字下げを付け直す。空白の数ではなく深さが合っていれば正解）、変数の追跡（繰り返しの各回での変数の値を表に書く。空白と引用符の種類の違いは区別しない）。問題ごとに解説を書ける
     - 教師は追加したあとの編集画面で、問題（1 アイテムに 50 問まで）、合格にする正解の割合（保存するまでは 80%）、不正解だった問題の正解と解説を見せるかを決める。見せないと、採点のあとに出すのは問題ごとの正誤と、正解した問題の解説だけになる。問題と設定は `quiz_items` に置く（問題は JSON）
@@ -109,7 +110,7 @@ Node.js（Hono）＋ SQLite で動き、教材ファイルはサーバーのロ�
 | 速さ | SSR（hono/jsx）＋ 小さなクライアント JS。リンクとフォーム送信を fetch に置き換え、ホバー時の先読みと View Transitions で再読み込みなしに遷移する（SPA）。JavaScript は必須で、無効なブラウザには有効化を求める案内だけを表示する |
 | DB | `better-sqlite3`（WAL モード）＋ Drizzle ORM。DB サーバーは要らない。テーブル定義は `src/lib/schema.ts` で、マイグレーションは drizzle-kit で生成する。クエリも Drizzle のクエリビルダーで書き、結果に型が付く |
 | コスト | 必要なのは Node.js が動くサーバー 1 台だけ。DB も教材ファイルも同じサーバーのディスクに置く |
-| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`nodemailer`（確認メールの SMTP 送信）・`better-sqlite3`・`drizzle-orm`・`socket.io`（画面共有の中継）・`zod`（入力の検証。同じ規則をブラウザでも使うので、ブラウザ側は軽量版の `zod/mini`）・`@anthropic-ai/sdk`（Claude の呼び出し）・`yauzl`（ファイル自動配布でアップロードされた zip の展開）・`yjs` と `y-protocols`・`lib0`（共同編集の同期の中継と保存）だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる。ブラウザ側のライブラリは入力の検証の `zod/mini` と、Markdown エディターの CodeMirror、コードのエディターの Emmet（HTML の略記の展開）と Prettier（コードの整形）、ログイン画面の 3D アニメーションと小テストのゲームの見た目の three.js、PDF ビューアーの pdf.js、共同編集の Yjs・TipTap（文書）と、Office の形式の読み書きの docx・mammoth・exceljs・pptxgenjs・JSZip だけ。CodeMirror はエディターのある画面でだけ（HTML / CSS / JavaScript / Python の文法と Emmet は、コーディング問題とその編集画面でだけ）、Prettier は整形したときだけ、three.js はログイン前の画面と、ゲームの見た目の小テストを開いたときだけ、pdf.js は PDF のアイテムをビューアーで開いたときだけ、共同編集のライブラリはそのエディターを開いたときだけ（Office の形式の読み書きは保存・読み込みをしたときだけ）読み込む |
+| 依存の少なさ | ランタイム依存は `hono`・`@hono/node-server`・`nodemailer`（確認メールの SMTP 送信）・`better-sqlite3`・`drizzle-orm`・`socket.io`（画面共有の中継）・`zod`（入力の検証。同じ規則をブラウザでも使うので、ブラウザ側は軽量版の `zod/mini`）・`@anthropic-ai/sdk`（Claude の呼び出し）・`yauzl`（ファイル自動配布でアップロードされた zip の展開）・`yjs` と `y-protocols`・`lib0`（共同編集の同期の中継と保存）・`@modelcontextprotocol/server`（MCP サーバー。新旧の版のプロトコルの違いを自分で追わないため）だけ。ネイティブアドオンの `better-sqlite3` 以外は 1 ファイルにバンドルされる。ブラウザ側のライブラリは入力の検証の `zod/mini` と、Markdown エディターの CodeMirror、コードのエディターの Emmet（HTML の略記の展開）と Prettier（コードの整形）、ログイン画面の 3D アニメーションと小テストのゲームの見た目の three.js、PDF ビューアーの pdf.js、共同編集の Yjs・TipTap（文書）と、Office の形式の読み書きの docx・mammoth・exceljs・pptxgenjs・JSZip だけ。CodeMirror はエディターのある画面でだけ（HTML / CSS / JavaScript / Python の文法と Emmet は、コーディング問題とその編集画面でだけ）、Prettier は整形したときだけ、three.js はログイン前の画面と、ゲームの見た目の小テストを開いたときだけ、pdf.js は PDF のアイテムをビューアーで開いたときだけ、共同編集のライブラリはそのエディターを開いたときだけ（Office の形式の読み書きは保存・読み込みをしたときだけ）読み込む |
 | セキュリティ | PBKDF2（60 万回、ログイン時に旧設定のハッシュを再計算）、推測されやすいパスワードの拒否、ログイン失敗と確認メール・再設定メール送信のレート制限、登録画面と再設定画面からメールアドレスの登録有無がわからない設計、セッション Cookie は HMAC-SHA256 で署名しトークンは SHA-256 で保存、Microsoft アカウントでのログインは認可コードフロー（PKCE・state・nonce）で確かめ、持ち主を確認済みのメールアドレスだけを既存のアカウントとの照合に使う、CSRF 対策は Origin 検証と SameSite=Lax、ファイルは権限を確認したうえで配信（PDF と画像以外は添付として返す） |
 
 ## 開発
@@ -206,6 +207,18 @@ STEP Docs の本文は、非公開のリポジトリ（[sist-step/step-docs](htt
 npm run docs:index -- --docs ../step-docs/src/content/docs --dry-run    # 取り込むページと伏せる箇所を確かめる（何も書き込まない）
 npm run docs:index -- --docs ../step-docs/src/content/docs --out ai-docs # .env の OPENROUTER_API_KEY で索引を作る
 ```
+
+### AI アプリから使う（MCP）
+
+STEP Learn は MCP サーバー（Streamable HTTP、`<APP_ORIGIN>/mcp`）で、自分自身が OAuth 2.1 の認可サーバーにもなります。教師が AI アプリにこの URL を追加すると、初回に STEP Learn の同意の画面が開き、ログインしている本人として接続します。
+
+- 使えるのは、`AI_EMAIL_DOMAIN` のメールアドレスで、通常モードは管理者・全体ロールが教師・いずれかのコースの教師のどれか、Moodle モードは Moodle のサイト管理者かいずれかのコースを管理できる人です。同意するときと、`/mcp` を呼ぶたびの両方で確かめます
+- Moodle モードでは、同意するときに Moodle にログインしている必要があります。`/mcp` では、ログインしたときに受け取った Moodle のトークンが今も使えるかを確かめ、使えなければ AI アプリに認可をやり直させます（そのとき Moodle にログインし直します）
+- つなげるアプリは、戻り先（redirect_uri）で限ります: Claude（`https://claude.ai/api/mcp/auth_callback`・`https://claude.com/api/mcp/auth_callback`）、ChatGPT（`https://chatgpt.com/connector_platform_oauth_redirect`・`https://chatgpt.com/connector/oauth/…`）、手元のアプリ（`http://localhost` / `127.0.0.1` / `[::1]` の任意のポート）。誰でも登録できるようにしないのは、攻撃者が「Claude」を名乗るクライアントを自分のサーバーへの戻り先で登録し、同意の画面へのリンクを教師に踏ませると、本人のトークンを取られるためです
+- クライアントの登録は、Client ID Metadata Document（CIMD）と動的登録（RFC 7591）の両方に対応します。CIMD は、Claude・Claude Code・ChatGPT・VS Code が公開している文書の URL だけを受け付けます（`src/lib/oauth.ts` の `METADATA_DOCUMENTS`）。どの URL でも取りに行くと、サーバーから内部のネットワークへ要求させられるためです
+- PKCE は S256 だけ。認可の応答に `iss`（RFC 9207）を付けます。アクセストークンは 1 時間、リフレッシュトークンは 30 日で、使うたびに入れ替えます。入れ替えたあとの古いリフレッシュトークンが使われたら、その接続ごと無効にします。トークンは SHA-256 だけを DB（通常モードは `oauth_grants`、Moodle モードは `data/moodle-mode.db` の同じ名前のテーブル）に置きます
+- `search_docs` の検索語の埋め込みは、AI エージェントと同じく OpenRouter の月の上限に数えます。OpenRouter が使えないときは、ページの一覧を返します
+- 公開 URL は `APP_ORIGIN`（なければ要求の URL）から作ります。AI アプリは利用者が入力した URL と、サーバーが返す resource（`<APP_ORIGIN>/mcp`）が完全に一致することを求めるので、リバースプロキシの後ろでは `APP_ORIGIN` を設定してください
 
 ### ユーザーを CLI で作成する
 
@@ -448,6 +461,6 @@ sandbox/             学生が書いたコードを実行するコンテナ（se
 browser/             Web の提出を採点の前に headless Chromium で開き、実行の記録を返すコンテナ（server.mjs）
 vscode-extension/    ファイル自動配布のファイルを用意して開き、コーディングエージェントを動かし、発表ファイルを PowerPoint と同期する VS Code の拡張機能（STEP Learn for VSCode）。本体とは別にビルドする
 src/components/      レイアウトと UI 部品
-src/routes/<ルート>/ auth / account / admin / dashboard / courses / content / participants / screen / code / bundle / agent。
+src/routes/<ルート>/ auth / account / admin / dashboard / courses / content / participants / screen / code / bundle / agent / mcp。
                      ルートごとに index.ts（ルーティング）・handlers.tsx（処理）・views.tsx（画面）・<ルート>.css に分ける
 ```
