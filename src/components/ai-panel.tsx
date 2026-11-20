@@ -1,5 +1,6 @@
 // lib/ai-usage.ts などを読み込まず、描く内容を props で受け取るのは、AppShell を使う Moodle モードから DB を開くモジュールを読み込まないため
 import type { AiUsageMeter } from '../lib/ai-agent'
+import { AI_BUDDY_LOOKS, AI_BUDDY_MARKS, type AiBuddyState } from '../lib/ai-buddy'
 import type { AiCardState } from '../lib/ai-chat'
 import type { AiTouched } from '../lib/ai-tool-kit'
 import { formatBytes } from '../lib/bytes'
@@ -495,6 +496,33 @@ const FocusChip = ({ focus, removable }: { focus: { title: string; href: string 
   </div>
 )
 
+/**
+ * ヘッダーで作業するマスコット。チャットが始まるまでは隠し、client.ts（flyAiBuddy）が真ん中のマスコットから飛ばして出す。
+ * 状態の切り替えは client.ts の setAiBuddy
+ */
+// 印を状態ごとに全部描いておくのは、client.ts が hidden を切り替えるだけで出し分けられるようにするため
+const AiBuddy = ({ state, hidden }: { state: AiBuddyState; hidden: boolean }) => (
+  <div class="ai-buddy" data-ai-buddy data-state={state} hidden={hidden} aria-hidden="true">
+    <Mascot {...AI_BUDDY_LOOKS[state]} size={44} stand={false} data-steady={state === 'idle' ? undefined : ''} />
+    <span class="ai-buddy-mark is-dots" data-ai-buddy-mark="think" hidden={state !== 'think'}>
+      <span class="ai-dots" />
+    </span>
+    {Object.entries(AI_BUDDY_MARKS).map(([mark, icon]) => (
+      <span class="ai-buddy-mark" data-ai-buddy-mark={mark} hidden={state !== mark}>
+        <Icon name={icon} size={12} />
+      </span>
+    ))}
+  </div>
+)
+
+const buddyStateOf = (chat: AiPanelProps['chat']): AiBuddyState => {
+  if (!chat) return 'idle'
+  if (chat.busy) return 'think'
+  const pending = chat.entries.filter((e) => (e.kind === 'card' || e.kind === 'file') && e.state === 'pending')
+  if (pending.some((e) => e.kind === 'card')) return 'ask'
+  return pending.length > 0 ? 'wait-file' : 'idle'
+}
+
 export const AiPanelToggle = () => (
   <IconButton
     icon="assistant"
@@ -533,7 +561,10 @@ export const AiPanel = ({ models, revision, voice, images, chat }: AiPanelProps)
       data-busy={chat?.busy ? '' : undefined}
     >
       <header class="ai-panel-head">
-        <Icon name="assistant" size={18} class="ai-panel-mark" />
+        <span class="ai-panel-mark" hidden={!!chat} data-ai-mark>
+          <Icon name="assistant" size={18} />
+        </span>
+        <AiBuddy state={buddyStateOf(chat)} hidden={!chat} />
         <div class="ai-panel-heading">
           <strong>AI アシスタント</strong>
           {current && (
