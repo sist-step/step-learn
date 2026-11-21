@@ -623,6 +623,8 @@ const aiDecision = z.object({
   page: hidden(500),
   chat: hidden(20),
   file: z.transform((v: unknown) => (isFile(v) ? v : null)),
+  /** 質問カードの答え（features/ai/ai-questions.ts の AiAnswerInput の配列の JSON）。質問と照らし合わせるのは features/ai/ai-agent.ts */
+  answers: hidden(20_000),
 })
 
 const aiApproveAll = z.object({ 'call[]': list(), page: hidden(500), chat: hidden(20) })

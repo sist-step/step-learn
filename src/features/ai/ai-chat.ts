@@ -4,6 +4,7 @@ import { and, desc, eq, lt } from 'drizzle-orm'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { isAiModel, type AiMessage, type AiModel } from './ai'
 import type { AiFileKind } from './ai-file-kinds'
+import type { AiAnswer, AiQuestion } from './ai-questions'
 import type { AiChange, AiTouched } from './ai-tool-kit'
 import { config } from '../../lib/config'
 import type { aiChats as aiChatsTable } from '../../lib/schema'
@@ -15,7 +16,8 @@ export type AiCardState = 'pending' | 'approved' | 'rejected' | 'failed'
 
 /**
  * 確認カード。name と args は AI が呼んだツールと引数、note は実行した結果や取り消した理由。
- * request があるものはファイルを選んでもらうカード（features/ai/ai-agent.ts の REQUEST_FILE）で、kinds は受け取れる種類、received は受け取ったファイル
+ * request があるものはファイルを選んでもらうカード（features/ai/ai-agent.ts の REQUEST_FILE）で、kinds は受け取れる種類、received は受け取ったファイル。
+ * ask があるものは質問カード（features/ai/ai-questions.ts の ASK_USER）で、answers は利用者の答え
  */
 export type AiCard = {
   name: string
@@ -27,6 +29,8 @@ export type AiCard = {
   note?: string
   request?: { kinds: AiFileKind[] }
   received?: { name: string; size: number }
+  ask?: { questions: AiQuestion[] }
+  answers?: AiAnswer[]
 }
 
 /** チャットで選んでいるアイテム。コーディング問題の編集画面のボタンから始めたチャットにだけあり、AI はこのアイテムの作業として扱う */

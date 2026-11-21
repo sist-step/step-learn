@@ -5,7 +5,7 @@ import type { AiActivity } from './ai-agent'
 /**
  * AI のパネルのヘッダーにいるマスコットの状態（features/ai/components/ai-panel.tsx の AiBuddy、client.ts の setAiBuddy）。
  * AiActivity はツールを使っているあいだ。think は応答を待つ・write は本文を書く・summarize は会話を要約する・
- * ask は確認カードを、wait-file はファイルを選ぶカードを待つ・break と doze は手が空いて時間がたったところ・
+ * ask は確認カードか質問カードを、wait-file はファイルを選ぶカードを待つ・break と doze は手が空いて時間がたったところ・
  * applied / done / error / stopped は少しのあいだだけ見せる反応
  */
 export type AiBuddyState =
@@ -30,6 +30,7 @@ export const AI_BUDDY_LOOKS: Record<AiBuddyState, AiBuddyLook> = {
   arrange: { mood: 'normal', pose: 'open', motion: 'wiggle', look: 'down', prop: 'none' },
   propose: { mood: 'thinking', pose: 'type', motion: 'none', look: 'down', prop: 'laptop' },
   request: { mood: 'normal', pose: 'open', motion: 'float', look: 'front', prop: 'none' },
+  question: { mood: 'thinking', pose: 'hold', motion: 'nod', look: 'down', prop: 'notes' },
   apply: { mood: 'happy', pose: 'type', motion: 'none', look: 'down', prop: 'laptop' },
   ask: { mood: 'normal', pose: 'raise', motion: 'bounce', look: 'down', prop: 'none' },
   'wait-file': { mood: 'normal', pose: 'open', motion: 'bounce', look: 'down', prop: 'none' },
@@ -51,6 +52,7 @@ export const AI_BUDDY_MARKS: Partial<Record<AiBuddyState, IconName>> = {
   arrange: 'sort',
   propose: 'pencil',
   request: 'upload',
+  question: 'question',
   apply: 'check',
   summarize: 'note',
   ask: 'question',
@@ -74,5 +76,6 @@ export const AI_BUDDY_LABELS: Partial<Record<AiBuddyState, string>> = {
   arrange: '並べ替えの案を作っています…',
   propose: '変更の案を作っています…',
   request: 'ファイルを頼んでいます…',
+  question: '質問を考えています…',
   apply: '実行しています…',
 }
