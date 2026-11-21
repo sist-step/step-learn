@@ -1,4 +1,7 @@
 import fs from 'node:fs'
+import path from 'node:path'
+import { promisify } from 'node:util'
+import zlib from 'node:zlib'
 import devServer, { defaultOptions } from '@hono/vite-dev-server'
 import nodeAdapter from '@hono/vite-dev-server/node'
 import { defineConfig } from 'vite'
@@ -11,6 +14,18 @@ const PDFJS_DIR = 'node_modules/pdfjs-dist'
 const PDFJS_ASSETS = ['cmaps', 'standard_fonts', 'wasm']
 // 版のないパスにしないのは、/assets/ は長期キャッシュされるので、pdf.js を上げたあとも古い wasm を読み込み続けるため（src/pdf-viewer.ts が同じパスを組み立てる）
 const pdfjsBase = `/assets/pdfjs-${JSON.parse(fs.readFileSync(`${PDFJS_DIR}/package.json`, 'utf8')).version}/`
+
+// VS Code（src/features/code/vscode-workbench.ts）の部品。開発時に Vite の自動の検出に任せないのは、見つかるたびにまとめ直してページを読み込み直すうえ、
+// まとめる前はファイルが数千あり、ブラウザが 1 つずつ読み込んで固まるため
+const vscodePackages = Object.keys(JSON.parse(fs.readFileSync('package.json', 'utf8')).devDependencies).filter((name) =>
+  name.startsWith('@codingame/monaco-vscode-'),
+)
+
+const VSCODE_CSS = /node_modules\/(@codingame\/monaco-vscode|vscode|monaco-editor).*\.css$/
+const VSCODE_JS = /\/node_modules\/@codingame\/monaco-vscode-.*\.js$/
+const SOURCE_MAP_COMMENT = /\n\/\/# sourceMappingURL=\S+\s*$/
+
+const COMPRESSIBLE = /\.(js|css|json|txt|svg|wasm|html)$/
 
 export default defineConfig(({ command }) => ({
   plugins: [
@@ -49,6 +64,57 @@ export default defineConfig(({ command }) => ({
       },
     },
     {
+      name: 'vscode-no-source-maps',
+      apply: 'serve',
+      enforce: 'pre',
+      // 開発時にソースマップを読ませないのは、VS Code の部品のソースマップが同梱されていない元のファイルを指していて、
+      // 開くたびに「points to a source file outside its package」の警告がサーバーのログを埋めるため（本番は drop-vscode-source-maps で配らない）
+      async load(id) {
+        // ?v= だけは受けるのは、Vite が先にまとめた部品から読むときに、版の印として付けるため（?worker などは別の読み方なので触らない）
+        const [file, query] = id.split('?')
+        if (!VSCODE_JS.test(file) || (query && !/^v=\w+$/.test(query))) return null
+        const code = await fs.promises.readFile(file, 'utf8').catch(() => null)
+        return code === null ? null : { code: code.replace(SOURCE_MAP_COMMENT, ''), map: null }
+      },
+    },
+    {
+      name: 'vscode-css-inline',
+      enforce: 'pre',
+      // ページの <head> に読み込ませず文字列で受け取るのは、VS Code を Shadow DOM の中に置き（src/features/code/vscode-workbench.ts）、
+      // STEP Learn の CSS と互いに効かないようにするため。VS Code がその文字列を Shadow DOM に入れる
+      async resolveId(source, importer, options) {
+        const resolved = await this.resolve(source, importer, options)
+        if (!resolved || !VSCODE_CSS.test(resolved.id)) return null
+        return { ...resolved, id: `${resolved.id}?inline` }
+      },
+    },
+    {
+      name: 'drop-vscode-source-maps',
+      // 配らないのは、VS Code の部品が同梱しているソースマップだけで約 50MB あり、利用者は使わないため
+      generateBundle(_, bundle) {
+        if (this.environment.name !== 'client') return
+        for (const name of Object.keys(bundle)) if (name.endsWith('.map')) delete bundle[name]
+      },
+    },
+    {
+      name: 'precompress-assets',
+      // 配信のたびに圧縮しないのは、VS Code の部品だけで数十 MB あり、開くたびにサーバーが圧縮し直すことになるため（src/server.ts の precompressed が返す）
+      async writeBundle(options, bundle) {
+        if (this.environment.name !== 'client' || !options.dir) return
+        const brotli = promisify(zlib.brotliCompress)
+        const targets = Object.keys(bundle).filter((name) => COMPRESSIBLE.test(name))
+        await Promise.all(
+          targets.map(async (name) => {
+            const file = path.join(options.dir!, name)
+            const source = await fs.promises.readFile(file)
+            if (source.length < 1024) return
+            const compressed = await brotli(source, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9 } })
+            await fs.promises.writeFile(`${file}.br`, compressed)
+          }),
+        )
+      },
+    },
+    {
       name: 'screen-share',
       configureServer(server) {
         const httpServer = server.httpServer
@@ -69,6 +135,11 @@ export default defineConfig(({ command }) => ({
       },
     },
   ],
+  optimizeDeps: {
+    include: [...vscodePackages, '@codingame/monaco-vscode-api/extensions', 'vscode/localExtensionHost', 'marked'],
+  },
+  // VS Code の Worker が import を使うため
+  worker: { format: 'es' },
   // 既定の監視範囲のままにしないのは、worktree の中の編集や npm ci にまでメインの開発サーバーが反応してしまうため
   server: { watch: { ignored: ['**/.claude/worktrees/**'] } },
   environments: {

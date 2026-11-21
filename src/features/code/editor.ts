@@ -59,10 +59,15 @@ import {
   formatPeriodLength,
   formatWait,
   isPreviewMessage,
+  onCodeMessage,
+  sendCodeMessage,
   type CodeConstraint,
   type CodeFileKey,
   type CodeFiles,
+  type CodeViewPane,
   type PreviewMessage,
+  type VscodeMessage,
+  type WorkspaceMessage,
 } from './code'
 import { dateTimeInputToUnix, isDateTimeInput } from '../../lib/course-period'
 import { diffLines } from '../../lib/diff'
@@ -411,9 +416,9 @@ function flashAiLines(view: EditorView, before: string) {
 
 const viewOf = (field: Element) => [...mounted].find((m) => m.view && m.root.contains(field))?.view
 
-type CodeInputOptions = { toast?: Toast; peers?: Peers; onRun?: () => void; onSave?: () => void }
+type CodeInputOptions = { toast?: Toast; peers?: Peers }
 
-function mountCodeInput(root: HTMLElement, { toast, peers = () => '', onRun, onSave }: CodeInputOptions = {}) {
+function mountCodeInput(root: HTMLElement, { toast, peers = () => '' }: CodeInputOptions = {}) {
   const source = root.querySelector<HTMLTextAreaElement>('.code-input-source')
   const host = root.querySelector<HTMLElement>('[data-code-host]')
   const syntax = root.dataset.codeInput
@@ -460,9 +465,8 @@ function mountCodeInput(root: HTMLElement, { toast, peers = () => '', onRun, onS
       ),
       ...LANGUAGES[syntax](peers),
       keymap.of([
-        ...(onRun ? [{ key: 'Mod-Enter', run: () => (onRun(), true) }] : []),
         // 押してもブラウザの「ページを保存」を開かせないのは、VS Code の癖で押した人を驚かせないため
-        { key: 'Mod-s', run: () => (onSave?.(), true) },
+        { key: 'Mod-s', run: () => true },
         // Mac では Ctrl + Space が入力ソースの切り替えに取られるので、VS Code と同じ ⌘ + I でも出せるようにする
         { key: 'Mod-i', run: startCompletion },
         ...closeBracketsKeymap,
@@ -898,50 +902,42 @@ addEventListener('message', (e) => {
   if (root) appendConsole(root, e.data)
 })
 
-/** 右の枠のタブ（data-code-view）で、プレビューか実行結果と、提出の表示（data-code-view-panel）を切り替えられるようにする */
-function mountViewTabs(root: HTMLElement) {
-  const tabs = [...root.querySelectorAll<HTMLButtonElement>('[data-code-view]')]
-  const select = (tab: HTMLButtonElement) => {
-    const view = tab.dataset.codeView
-    for (const t of tabs) {
-      t.setAttribute('aria-selected', String(t === tab))
-      t.tabIndex = t === tab ? 0 : -1
-    }
-    for (const panel of root.querySelectorAll<HTMLElement>('[data-code-view-panel]')) panel.hidden = panel.dataset.codeViewPanel !== view
-    for (const el of root.querySelectorAll<HTMLElement>('[data-code-view-only]')) el.hidden = el.dataset.codeViewOnly !== view
-  }
-  for (const tab of tabs) {
-    tab.addEventListener('click', () => select(tab))
-    tab.addEventListener('keydown', (e) => {
-      const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
-      if (!step) return
-      e.preventDefault()
-      const next = tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length]
-      select(next)
-      next.focus()
-    })
-  }
-}
+const isViewPane = (v: string | undefined): v is CodeViewPane => v === 'problem' || v === 'output' || v === 'submissions'
 
-let showListening = false
+/** ブラウザエディターの画面（CodePage）の、VS Code の iframe の中の文書。読み込み中なら含めない */
+const frameDocuments = () =>
+  [...document.querySelectorAll<HTMLIFrameElement>('[data-code-vscode-frame]')].flatMap((f) =>
+    f.contentDocument ? [f.contentDocument] : [],
+  )
 
-/** ヘッダーの帯の提出の状況（data-code-show）を押すと、右の枠の対応するタブを開く。帯は採点が終わると差し替わるので、document で受ける */
-function listenShowView() {
-  if (showListening) return
-  showListening = true
+let barListening = false
+
+/**
+ * ヘッダーの帯の提出ボタン（data-code-submit-frame）で VS Code の iframe の中のフォームを送り、提出の状況（data-code-show）で VS Code の提出のビューを開く。
+ * 帯は採点が終わると差し替わるので、document で受ける
+ */
+function listenCodeBar() {
+  if (barListening) return
+  barListening = true
   document.addEventListener('click', (e) => {
-    const trigger = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-code-show]') : null
-    const tab = trigger && document.querySelector<HTMLButtonElement>(`[data-code-view="${trigger.dataset.codeShow}"]`)
-    if (!tab) return
-    tab.click()
-    tab.scrollIntoView({ block: 'nearest' })
+    const target = e.target instanceof Element ? e.target : null
+    if (target?.closest('[data-code-submit-frame]')) {
+      for (const doc of frameDocuments()) doc.querySelector<HTMLFormElement>('form.code-edit')?.requestSubmit()
+      return
+    }
+    const view = target?.closest<HTMLElement>('[data-code-show]')?.dataset.codeShow
+    if (!isViewPane(view)) return
+    for (const doc of frameDocuments()) {
+      const host = doc.querySelector('[data-code-vscode]')
+      if (host) sendCodeMessage<VscodeMessage>(host, { type: 'show', view })
+    }
   })
 }
 
 /**
  * 提出ボタン（data-code-submit-wait に描いた時点の、提出できるようになるまでの秒数、data-code-submit-close に受付が終わるまでの秒数）を、
- * 待つあいだと受付が終わったあとは押せなくし、ボタンと提出のタブ（data-code-countdown）に残りの時間を出す。
- * 提出のタブは採点が終わると差し替わるので、毎秒探し直す
+ * 待つあいだと受付が終わったあとは押せなくし、ボタンと提出のビュー（data-code-countdown。VS Code の iframe の中）に残りの時間を出す。
+ * 提出のビューは採点が終わると差し替わるので、毎秒探し直す
  */
 function mountSubmitCountdown(button: HTMLButtonElement) {
   if (button.hasAttribute('data-code-counting')) return
@@ -953,7 +949,9 @@ function mountSubmitCountdown(button: HTMLButtonElement) {
   const show = (buttonText: string, statusText: (status: HTMLElement) => string, blocked: boolean) => {
     button.disabled = blocked
     if (text) text.textContent = buttonText
-    for (const status of document.querySelectorAll<HTMLElement>('[data-code-countdown]')) {
+    for (const status of [document, ...frameDocuments()].flatMap((doc) => [
+      ...doc.querySelectorAll<HTMLElement>('[data-code-countdown]'),
+    ])) {
       status.toggleAttribute('data-waiting', blocked)
       const label = status.querySelector('[data-code-countdown-text]')
       if (label) label.textContent = statusText(status)
@@ -976,18 +974,30 @@ function mountSubmitCountdown(button: HTMLButtonElement) {
   tick()
 }
 
+/** AI がアイテムを変えたときに、VS Code の iframe の中のコードを取り直させる知らせ */
+const CODE_RELOAD = 'code-reload'
+
+/**
+ * VS Code の iframe（CodeVscodePage）の中の、コードを扱う画面。書きかけのコードを読み込んで VS Code に渡し、
+ * VS Code の書き換えを受けて、保存・プレビュー・実行をする
+ */
 async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
   const base = root.dataset.codeBase
   const form = root.querySelector<HTMLFormElement>('form.code-edit')
-  if (!base || !form || root.hasAttribute('data-code-ready')) return
+  const host = root.querySelector<HTMLElement>('[data-code-vscode]')
+  if (!base || !form || !host || root.hasAttribute('data-code-ready')) return
   root.setAttribute('data-code-ready', '')
-  mountViewTabs(root)
   const fieldOf = (name: string) => {
     const control = form.elements.namedItem(name)
     return control instanceof HTMLTextAreaElement ? control : null
   }
-  const saveStatus = root.querySelector<HTMLElement>('[data-code-save]')
-  const setStatus = (text: string) => saveStatus && (saveStatus.textContent = text)
+  const toVscode = (message: VscodeMessage) => sendCodeMessage(host, message)
+  // 最後の表示を覚えるのは、VS Code が読み込み終わる前に出した表示（読み込めなかったなど）を、読み込み終わったときに出し直すため
+  let status = ''
+  const setStatus = (text: string) => {
+    status = text
+    toVscode({ type: 'status', text })
+  }
 
   const fetchState = async () => {
     try {
@@ -1017,11 +1027,13 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
 
   // --- 書きかけのコードの保存
   let dirty = false
+  let sending = 0
   let saveTimer = 0
   const save = async (keepalive = false) => {
     clearTimeout(saveTimer)
     if (!dirty || !loaded) return
     dirty = false
+    sending++
     setStatus('保存中…')
     try {
       const res = await fetchJson(`${base}/draft`, {
@@ -1039,6 +1051,8 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
     } catch {
       dirty = true
       setStatus('保存できませんでした')
+    } finally {
+      sending--
     }
   }
   const discardPending = () => {
@@ -1047,14 +1061,16 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
   }
 
   // --- 実行（Python）
-  const runButton = root.querySelector<HTMLButtonElement>('[data-code-run]')
   const output = root.querySelector<HTMLElement>('[data-code-output]')
+  const canRun = !!root.querySelector('[data-code-can-run]')
+  let running = false
   const run = async () => {
-    if (!runButton || !output || runButton.disabled) return
-    runButton.disabled = true
-    runButton.classList.add('loading')
+    if (!output || !canRun || running) return
+    running = true
+    output.replaceChildren(el('p', 'muted', '実行しています…'))
     // サーバーが実行の前に同じ内容を保存するので、重ねて送らない
     discardPending()
+    sending++
     try {
       const res = await fetchJson(`${base}/run`, { method: 'POST', body: new FormData(form) })
       const data = (await res.json()) as { result?: RunResult; error?: string }
@@ -1063,22 +1079,21 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
         if (loaded) setStatus('保存しました')
       } else output.replaceChildren(el('p', 'code-output-status is-error', data.error ?? 'コードを実行できませんでした。'))
     } catch {
+      // 保存済みのままにしないのは、届かなかったときは、実行の前の保存も済んでいないため
+      dirty = true
       output.replaceChildren(
         el('p', 'code-output-status is-error', 'コードを実行できませんでした。通信の状態を確かめて、もう一度お試しください。'),
       )
     } finally {
-      runButton.disabled = false
-      runButton.classList.remove('loading')
+      sending--
+      running = false
     }
   }
-  runButton?.addEventListener('click', () => void run())
   root.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey) || e.defaultPrevented) return
     e.preventDefault()
     void run()
   })
-
-  mountFileTabs(root, { toast, onRun: runButton ? () => void run() : undefined, onSave: () => void save() })
 
   // --- プレビュー（Web）
   const preview = root.querySelector<HTMLIFrameElement>('[data-code-preview]')
@@ -1094,19 +1109,42 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
     }
     preview.srcdoc = buildWebDocument(Object.fromEntries(CODE_FILE_KEYS.map((key) => [key, fieldOf(key)?.value ?? ''])))
   }
-  root.querySelector('[data-code-refresh]')?.addEventListener('click', renderPreview)
   renderPreview()
 
-  // AI の変更を入れているあいだは書きかけとして保存しない。保存すると、そのあとの最初のコードの変更が、書きかけのコードに隠れて届かなくなる
-  let applyingAi = false
+  // --- エディター（VS Code。src/features/code/vscode-workbench.ts）
+  const currentFiles = (): CodeFiles =>
+    Object.fromEntries(CODE_FILE_KEYS.flatMap((key) => (fieldOf(key) ? [[key, fieldOf(key)!.value]] : [])))
+  onCodeMessage<WorkspaceMessage>(root, (message) => {
+    switch (message.type) {
+      case 'ready':
+        toVscode({ type: 'open', files: currentFiles() })
+        if (status) toVscode({ type: 'status', text: status })
+        return
+      case 'change': {
+        const field = fieldOf(message.key)
+        // 同じ中身なら知らせないのは、AI の変更を VS Code に入れたときの知らせで、受け取った中身を書きかけとして保存してしまうため
+        if (!field || field.value === message.content) return
+        field.value = message.content
+        field.dispatchEvent(new Event('input', { bubbles: true }))
+        return
+      }
+      case 'save':
+        return void save()
+      case 'run':
+        return void run()
+      case 'refresh':
+        return renderPreview()
+    }
+  })
+  // VS Code が先に読み込み終わって待っているときのために、こちらからも送る（まだなら、読み込み終わったときの ready に答える）
+  toVscode({ type: 'open', files: currentFiles() })
+
   root.addEventListener('input', (e) => {
     if (!(e.target instanceof HTMLTextAreaElement) || e.target.form !== form) return
-    if (!applyingAi) {
-      dirty = true
-      if (loaded) setStatus('')
-      clearTimeout(saveTimer)
-      saveTimer = window.setTimeout(() => void save(), SAVE_DELAY)
-    }
+    dirty = true
+    if (loaded) setStatus('')
+    clearTimeout(saveTimer)
+    saveTimer = window.setTimeout(() => void save(), SAVE_DELAY)
     if (preview && e.target.name !== 'stdin') {
       clearTimeout(previewTimer)
       previewTimer = window.setTimeout(renderPreview, PREVIEW_DELAY)
@@ -1116,56 +1154,40 @@ async function mountCodeWorkspace(root: HTMLElement, toast: Toast) {
   // 確認ダイアログの前の送信（client.ts が止める）では取り消さない
   root.addEventListener('submit', (e) => {
     const target = e.target as HTMLFormElement
-    // 提出のタブの中のフォーム（判定の確認を頼む）では取り消さないのは、書きかけのコードを書き換えず、保存を待っている分が消えるため
-    if (target.closest('[data-code-view-panel]')) return
+    // 提出のビューの中のフォーム（判定の確認を頼む）では取り消さないのは、書きかけのコードを書き換えず、保存を待っている分が消えるため
+    if (target.closest('[data-code-view-pane="submissions"]')) return
     if (!target.dataset.confirm || target.dataset.confirmed === '1') discardPending()
   })
-
-  // 書いている途中なら取り直さないのは、書いたばかりのコードを、AI の変えた最初のコードで消してしまうため
-  workspaceReloaders.set(root, async () => {
-    if (dirty || !loaded) return
-    const next = await fetchState()
-    if (!next || dirty || !root.isConnected) return
-    const changed = CODE_FILE_KEYS.filter((key) => {
-      const field = fieldOf(key)
-      return field && typeof next.files[key] === 'string' && next.files[key] !== field.value
-    })
-    applyingAi = true
-    try {
-      for (const key of changed) {
-        const field = fieldOf(key)!
-        const view = viewOf(field)
-        const before = field.value
-        setFieldValue(field, next.files[key]!)
-        if (view) flashAiLines(view, before)
-      }
-      const stdin = fieldOf('stdin')
-      if (stdin && stdin.value !== next.stdin) setFieldValue(stdin, next.stdin)
-    } finally {
-      applyingAi = false
-    }
-    if (changed.length === 0) return
-    const shown = root.querySelector<HTMLElement>('[data-code-file]:not([hidden])')?.dataset.codeFile
-    if (!changed.some((key) => key === shown)) fileTabSelectors.get(root)?.(changed[0])
-    const tabs = changed.flatMap((key) => [...root.querySelectorAll(`[data-code-tab="${key}"]`)])
-    tabs.forEach((tab) => tab.classList.add('ai-touch'))
-    window.setTimeout(() => tabs.forEach((tab) => tab.classList.remove('ai-touch')), AI_FLASH_MS)
-    renderPreview()
+  // フォームとリンクは親の画面ごと移るので、この画面が閉じる前に、保存を待っている分を送る
+  addEventListener('pagehide', () => void save(true))
+  addEventListener('beforeunload', (e) => {
+    if (dirty || sending > 0) e.preventDefault()
   })
 
-  mounted.add({
-    root,
-    release: () => {
-      clearTimeout(previewTimer)
-      void save(true)
-    },
+  // 書いている途中なら取り直さないのは、書いたばかりのコードを、AI の変えた最初のコードで消してしまうため。
+  // 取り直した中身で input を起こさないのは、書きかけとして保存すると、そのあとの最初のコードの変更が、書きかけのコードに隠れて届かなくなるため
+  root.addEventListener(CODE_RELOAD, () => {
+    void (async () => {
+      if (dirty || !loaded) return
+      const next = await fetchState()
+      if (!next || dirty || !root.isConnected) return
+      const changed = CODE_FILE_KEYS.filter((key) => {
+        const field = fieldOf(key)
+        return field && typeof next.files[key] === 'string' && next.files[key] !== field.value
+      })
+      for (const key of changed) fieldOf(key)!.value = next.files[key]!
+      const stdin = fieldOf('stdin')
+      if (stdin) stdin.value = next.stdin
+      if (changed.length === 0) return
+      toVscode({ type: 'update', files: Object.fromEntries(changed.map((key) => [key, next.files[key]])) })
+      renderPreview()
+    })()
   })
 }
 
-const workspaceReloaders = new WeakMap<HTMLElement, () => Promise<void>>()
-
-/** AI が変えたアイテムのエディターを取り直し、変わった行を光らせる。書いている途中なら何もしない */
-export const reloadCodeWorkspace = (root: HTMLElement) => workspaceReloaders.get(root)?.()
+/** AI が変えたアイテムの、VS Code の iframe の中のコードを取り直し、変わった行を光らせる。書いている途中なら何もしない */
+export const reloadCodeFrame = (frame: HTMLIFrameElement) =>
+  frame.contentDocument?.querySelector('[data-code-workspace]')?.dispatchEvent(new Event(CODE_RELOAD))
 
 /** AI の変更で差し替わった編集画面のコードの欄で、before から変わった行を光らせ、そのファイルのタブを開く */
 export function flashCodeChanges(field: HTMLTextAreaElement, before: string) {
@@ -1201,9 +1223,13 @@ function watchGrading(card: HTMLElement, toast: Toast) {
 }
 
 // 結果を JSON で受け取って組み立てないのは、サーバーが描くカードと同じ見た目を、ここでもう一度作ることになるため
+const fetchPage = async (url: string) => {
+  const res = await fetch(url, { headers: { Accept: 'text/html' } })
+  return new DOMParser().parseFromString(await res.text(), 'text/html')
+}
+
 async function showGrade(card: HTMLElement, toast: Toast) {
-  const res = await fetch(location.href, { headers: { Accept: 'text/html' } })
-  const doc = new DOMParser().parseFromString(await res.text(), 'text/html')
+  const doc = await fetchPage(location.href)
   const next = doc.getElementById(card.id)
   if (!card.isConnected || !next) return
   card.replaceWith(document.importNode(next, true))
@@ -1211,10 +1237,14 @@ async function showGrade(card: HTMLElement, toast: Toast) {
   const goals = document.getElementById(card.dataset.codeGradeWith ?? '')
   const nextGoals = doc.getElementById(card.dataset.codeGradeWith ?? '')
   if (goals && nextGoals) goals.replaceWith(document.importNode(nextGoals, true))
-  const chip = document.querySelector('[data-code-grade-chip]')
-  const nextChip = doc.querySelector('[data-code-grade-chip]')
-  if (chip && nextChip) chip.replaceWith(document.importNode(nextChip, true))
   toast('採点が終わりました。')
+  // 親の画面も取り直すのは、ヘッダーの帯の提出の状況が、VS Code の iframe の外（CodePage）にあるため
+  const page = window.frameElement?.ownerDocument
+  const chip = document.querySelector('[data-code-grade-chip]') ?? page?.querySelector('[data-code-grade-chip]')
+  if (!chip) return
+  const source = chip.ownerDocument === document ? doc : await fetchPage(chip.ownerDocument.location.href)
+  const nextChip = source.querySelector('[data-code-grade-chip]')
+  if (nextChip && chip.isConnected) chip.replaceWith(chip.ownerDocument.importNode(nextChip, true))
 }
 
 /** 画面から外れたエディターを片づける。保存を待っている書きかけのコードは、その場で送る */
@@ -1229,7 +1259,7 @@ export function releaseDetachedCodeEditors() {
 const MAC_KEY_LABELS: Record<string, string> = { mod: '⌘', alt: '⌥', shift: '⇧', ctrl: '⌃' }
 
 export function mountCodeEditors(toast: Toast, confirmNear: ConfirmNear) {
-  listenShowView()
+  listenCodeBar()
   if (/Mac|iPhone|iPad/.test(navigator.userAgent))
     for (const key of document.querySelectorAll<HTMLElement>('[data-code-key]'))
       key.textContent = MAC_KEY_LABELS[key.dataset.codeKey ?? ''] ?? key.textContent

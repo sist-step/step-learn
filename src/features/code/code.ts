@@ -243,6 +243,33 @@ export const isPreviewMessage = (v: unknown): v is PreviewMessage => {
   return m.source === PREVIEW_SOURCE && typeof m.text === 'string' && (m.level === 'log' || m.level === 'warn' || m.level === 'error')
 }
 
+/** ブラウザエディターの中の VS Code のビュー。VS Code の外で描いた中身（data-code-view-pane）を、src/features/code/vscode-workbench.ts がビューへ移す */
+export type CodeViewPane = 'problem' | 'output' | 'submissions'
+
+/** VS Code（src/features/code/vscode-workbench.ts）から、コードを扱う画面（src/features/code/editor.ts の data-code-workspace）へ送る知らせ */
+export type WorkspaceMessage =
+  { type: 'ready' } | { type: 'change'; key: CodeFileKey; content: string } | { type: 'save' } | { type: 'run' } | { type: 'refresh' }
+
+/** コードを扱う画面から VS Code（data-code-vscode）へ送る知らせ。open は読み込んだ中身、update は AI が変えた中身 */
+export type VscodeMessage =
+  | { type: 'open'; files: CodeFiles }
+  | { type: 'update'; files: CodeFiles }
+  | { type: 'status'; text: string }
+  | { type: 'show'; view: CodeViewPane }
+
+const CODE_MESSAGE = 'step-learn-code'
+
+export function sendCodeMessage<M extends WorkspaceMessage | VscodeMessage>(target: EventTarget, message: M) {
+  target.dispatchEvent(new CustomEvent(CODE_MESSAGE, { detail: message }))
+}
+
+// instanceof CustomEvent で確かめないのは、ヘッダーの提出の状況から送る知らせが、親のページの CustomEvent で作られるため
+export function onCodeMessage<M extends WorkspaceMessage | VscodeMessage>(target: EventTarget, listener: (message: M) => void) {
+  const handle = (e: Event) => listener((e as CustomEvent<M>).detail)
+  target.addEventListener(CODE_MESSAGE, handle)
+  return () => target.removeEventListener(CODE_MESSAGE, handle)
+}
+
 const CONSOLE_BRIDGE = `<script>
 (() => {
   const format = (v) => {

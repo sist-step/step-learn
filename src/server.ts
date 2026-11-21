@@ -32,6 +32,7 @@ server.use(
   '/assets/*',
   serveStatic({
     root: './dist/client',
+    precompressed: true,
     onFound: (_path, c) => c.header('Cache-Control', 'public, max-age=31536000, immutable'),
   }),
 )

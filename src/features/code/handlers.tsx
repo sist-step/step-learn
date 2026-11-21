@@ -36,6 +36,7 @@ import { SandboxError, runCode, sandboxEnabled } from './sandbox'
 import type { AppEnv, Completion } from '../../lib/types'
 import {
   CodePage,
+  CodeVscodePage,
   SUBMISSION_FILTERS,
   SubmissionPage,
   SubmissionsPage,
@@ -299,13 +300,28 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl, prepareA
         access={access}
         item={target}
         itemUrl={itemUrl(courseId, itemId)}
+        submissions={access.role === 'student' ? submissionsOf(ctx.store, ctx.userId, grader, ctx.period) : null}
+      />,
+      { title: `ブラウザエディター - ${settings.title}` },
+    )
+  }
+
+  /** ブラウザエディターの画面に iframe で埋め込む VS Code の画面 */
+  async function showVscode(c: C) {
+    const ctx = await open(c)
+    if (!ctx) return c.notFound()
+    const { access, target, settings } = ctx
+    return c.render(
+      <CodeVscodePage
+        base={ctx.page}
+        item={target}
         body={settings.body}
         goals={goalsOf(settings.constraints)}
         canRun={sandboxEnabled}
         submissions={access.role === 'student' ? submissionsOf(ctx.store, ctx.userId, grader, ctx.period) : null}
         completion={ctx.completion}
       />,
-      { title: `ブラウザエディター - ${settings.title}` },
+      { title: `VS Code - ${settings.title}`, baseTarget: '_top' },
     )
   }
 
@@ -634,6 +650,7 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl, prepareA
     reset,
     showGrading,
     showPage,
+    showVscode,
     launch,
     list,
     showListRevision,
@@ -654,6 +671,7 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl, prepareA
 export function codeRoutes(h: ReturnType<typeof createCodeHandlers>) {
   const app = new Hono<AppEnv>()
   app.get('/:id/items/:iid/code', h.showPage)
+  app.get('/:id/items/:iid/code/vscode', h.showVscode)
   app.post('/:id/items/:iid/code/launch', h.launch)
   app.get('/:id/items/:iid/code/state', h.showState)
   app.post('/:id/items/:iid/code/draft', h.save)

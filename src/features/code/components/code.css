@@ -155,21 +155,18 @@
   .code-constraint > .icon-btn { grid-column: 3; grid-row: 1 / span 2; align-self: center; }
 }
 
-/* ===== エディターと結果の画面（CodeWorkspace） */
-.code-stage {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  height: calc(100dvh - var(--topbar-h));
-  min-height: 480px;
-  background: var(--surface);
-}
-.code-edit, .code-result { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.code-result { border-left: 1px solid var(--border); background: var(--surface-2); }
+/* ===== VS Code の画面（CodeWorkspace）と、VS Code のビューに移す中身 */
+.code-vscode { position: fixed; inset: 0; }
+.code-vscode-loading { position: absolute; inset: 50% 0 auto; margin: 0; font-size: var(--fs-sm); text-align: center; }
+/* 背景を付けないのは、VS Code のビューの地の色（テーマごとに違う）をそのまま見せるため。
+   文字の大きさと色を書き直すのは、slot で差し込むと VS Code のビューの文字の設定を受け継ぐため */
+.code-view-pane { display: flex; flex-direction: column; flex: 1; min-width: 0; height: 100%; overflow: auto; color: var(--text); font: var(--fs-base)/1.6 var(--font); }
+.code-view-pane[hidden] { display: none; }
+.code-problem { gap: 16px; padding: 4px 20px 16px; }
+.code-problem > .btn { align-self: flex-start; }
 
-.code-task, .code-console { flex: none; max-height: 40%; overflow: auto; }
-.code-task { border-bottom: 1px solid var(--border); }
-.code-console { border-top: 1px solid var(--border); background: var(--surface); }
-.code-task > summary, .code-console > summary {
+.code-console { flex: none; max-height: 40%; overflow: auto; border-top: 1px solid var(--border); background: var(--surface); }
+.code-console > summary {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -184,11 +181,10 @@
   cursor: pointer;
   list-style: none;
 }
-.code-task > summary::-webkit-details-marker, .code-console > summary::-webkit-details-marker { display: none; }
+.code-console > summary::-webkit-details-marker { display: none; }
 .code-task-arrow { margin-left: auto; color: var(--muted); transition: transform 0.15s var(--ease); }
 details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
-.code-task > .prose { max-width: 80ch; padding: 0 16px 16px; }
-.code-goals { max-width: 80ch; margin: 0 16px 16px; padding: 12px 14px; border-radius: var(--radius); background: var(--surface-2); }
+.code-goals { padding: 12px 14px; border-radius: var(--radius); background: var(--surface-2); }
 .code-goals h3 { margin: 0 0 8px; font-size: var(--fs-sm); font-weight: 650; }
 .code-goals .code-goal { font-size: var(--fs-sm); }
 .code-goal-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
@@ -226,7 +222,6 @@ details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
   .code-open .link-card-lg > form > .btn { width: 100%; }
 }
 
-.code-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .code-pane-head {
   display: flex;
   align-items: center;
@@ -252,13 +247,9 @@ details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
   transition: background 0.15s, color 0.15s;
 }
 .code-tabs button[aria-selected='true'] { background: var(--c-soft); color: var(--c-ink); font-weight: 600; }
-.code-view-tabs button { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font); }
-/* .icon-btn と .btn が display を指定していて、hidden 属性だけでは隠れないため */
-.code-pane-head > [data-code-view-only][hidden] { display: none; }
 @media (hover: hover) {
   .code-tabs button:not([aria-selected='true']):hover { background: var(--surface-3); color: var(--text); }
 }
-.code-save { flex: none; font-size: var(--fs-xs); white-space: nowrap; }
 
 /* ===== エディターの道具（CodeEditorTools） */
 .code-keys { flex: none; }
@@ -275,9 +266,6 @@ details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
 @media (pointer: coarse) {
   .code-keys { display: none; }
 }
-.code-file, .code-view { flex: 1; min-height: 0; }
-.code-view { display: flex; flex-direction: column; }
-.code-file[hidden], .code-view[hidden] { display: none; }
 
 /* 背景をトークンにしないのは、プレビューするページが背景を指定していないとき、ダークモードでも白地に黒い文字というブラウザの既定で見せるため */
 .code-preview { flex: 1; width: 100%; min-height: 0; border: 0; background: Canvas; color-scheme: light; }
@@ -288,7 +276,7 @@ details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
 .code-console-line.is-warn { color: var(--warning-text); }
 .code-console-line.is-error { color: var(--danger-text); }
 
-.code-result > .alert { margin: 12px 16px 0; }
+.code-view-pane > .alert { margin: 12px 16px 0; }
 .code-stdin { flex: none; padding: 12px 16px 0; }
 .code-stdin textarea { resize: vertical; }
 .code-output { flex: 1; min-height: 0; padding: 12px 16px 16px; overflow: auto; }
@@ -352,16 +340,6 @@ details[open] > summary > .code-task-arrow { transform: rotate(180deg); }
 .code-grade-note h3 { margin: 0 0 6px; font-size: var(--fs-sm); font-weight: 650; color: var(--text-2); }
 .code-grade-note p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-@media (max-width: 900px) {
-  .code-stage { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 0; }
-  .code-submissions { flex: none; overflow: visible; }
-  .code-task, .code-console { max-height: none; }
-  .code-task > summary, .code-console > summary { position: static; }
-  .code-pane { flex: none; height: 60dvh; min-height: 320px; }
-  .code-result { border-top: 1px solid var(--border); border-left: 0; }
-  .code-preview { flex: none; height: 60dvh; min-height: 320px; }
-  .code-output { flex: none; min-height: 160px; }
-}
 @media (max-width: 640px), (pointer: coarse) {
   .code-tabs button { height: 40px; }
   /* 16px 未満にしないのは、iOS が入力欄にフォーカスしたときに画面を拡大するため */
