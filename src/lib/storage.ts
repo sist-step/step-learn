@@ -51,7 +51,14 @@ export async function uploadProblem(file: File | null) {
 }
 
 export type StoredFile = { key: string; name: string; size: number; type: string }
-export type ServeOptions = { filename: string; contentType: string; inline: boolean; range?: string }
+export type ServeOptions = {
+  filename: string
+  contentType: string
+  inline: boolean
+  range?: string
+  /** インラインでも付ける CSP。HTML をページとして開くときに、sandbox で別のオリジンにする */
+  csp?: string
+}
 
 interface Storage {
   put(key: string, file: File, contentType: string): Promise<void>
@@ -69,7 +76,7 @@ const disposition = ({ filename, inline }: ServeOptions) =>
   `${inline ? 'inline' : 'attachment'};filename*=UTF-8''${encodeURIComponent(filename)}`
 
 // アップロードされた HTML/SVG などを同一オリジンで実行させないため、
-// インライン表示は呼び出し側でブラウザが中身を実行しない種類（PDF・ラスタ画像・動画・音声）に限り、
+// インライン表示は呼び出し側でブラウザが中身を実行しない種類（PDF・ラスタ画像・動画・音声）か、csp の sandbox を付けた HTML に限り、
 // それ以外は octet-stream の添付として返す。
 const servedType = (opts: ServeOptions) => (opts.inline ? opts.contentType : 'application/octet-stream')
 
@@ -118,7 +125,7 @@ class LocalStorage implements Storage {
     const headers = {
       'Content-Type': servedType(opts),
       'Content-Disposition': disposition(opts),
-      ...(opts.inline ? {} : { 'Content-Security-Policy': 'sandbox' }),
+      ...(opts.csp ? { 'Content-Security-Policy': opts.csp } : opts.inline ? {} : { 'Content-Security-Policy': 'sandbox' }),
       'X-Content-Type-Options': 'nosniff',
       'Cache-Control': 'private, max-age=3600',
       'Accept-Ranges': 'bytes',

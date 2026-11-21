@@ -56,7 +56,7 @@ import { unixToDateTimeInput } from '../../lib/course-period'
 import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
 import { presentationBase } from '../presentation/presentation'
-import { previewKind } from '../../lib/preview'
+import { isHtmlFile, previewKind } from '../../lib/preview'
 import { quizFormRows, type QuizFormRow, type QuizLook, type QuizSettings } from '../quiz/quiz'
 import type { QuizView } from '../quiz/quiz-store'
 import { formatBytes } from '../../lib/bytes'
@@ -393,6 +393,7 @@ export const ItemPage = ({
   const fileUrl = `${base}/${item.id}/file`
   const preview = item.type === 'file' ? previewKind(item.fileType ?? '', item.fileName ?? '') : null
   const previewUrl = `${fileUrl}?inline=1`
+  const html = item.type === 'file' && isHtmlFile(item.fileType ?? '', item.fileName ?? '')
 
   const isTracked = (o: OutlineItem) => !!access.course.completionEnabled && o.completion !== 'none'
   const completeUrl = (o: OutlineItem) => `${base}/${o.id}/complete`
@@ -576,13 +577,26 @@ export const ItemPage = ({
             <>
               <LinkCard icon="file" class={`link-card-lg kind-${item.type}`}>
                 <span class="file-name">
-                  <span class="strong">ファイルをダウンロード</span>
+                  <span class="strong">{html ? 'ページを開く' : 'ファイルをダウンロード'}</span>
                   <span class="file-meta muted small">
                     <span class="truncate">{item.fileName}</span>
                     <span>{formatBytes(item.fileSize ?? 0)}</span>
                   </span>
                 </span>
-                <Button href={fileUrl} variant="primary" icon="download" data-no-prefetch download {...onOpen(item)}>
+                {html && (
+                  <Button
+                    href={`${fileUrl}?open=1`}
+                    variant="primary"
+                    iconEnd="external"
+                    target="_blank"
+                    rel="noopener"
+                    data-no-prefetch
+                    {...onOpen(item)}
+                  >
+                    開く
+                  </Button>
+                )}
+                <Button href={fileUrl} variant={html ? 'default' : 'primary'} icon="download" data-no-prefetch download {...onOpen(item)}>
                   ダウンロード
                 </Button>
               </LinkCard>

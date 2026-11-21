@@ -7,7 +7,7 @@ import type { CourseCardData } from '../components/course'
 import { config } from '../lib/config'
 import { firstError, isFile, validate, type FieldErrors } from '../lib/forms'
 import { field, intParam, readFields, readForm, redirectWith, safeNext, wantsJson, type Form } from '../lib/http'
-import { previewKind } from '../lib/preview'
+import { HTML_PAGE_CSP, isHtmlFile, previewKind } from '../lib/preview'
 import {
   MAX_RESTRICTION_JSON_LENGTH,
   checkRestrictionChoices,
@@ -819,18 +819,20 @@ export async function downloadFile(c: C) {
   const { item } = found
   const res = await fetchFile(c.var.token!, item.fileUrl, c.req.header('range'))
   if (!res || (!res.ok && res.status !== 416)) return c.notFound()
+  const page = c.req.query('open') === '1' && isHtmlFile(item.fileType, item.fileName)
   const preview = c.req.query('inline') === '1' ? previewKind(item.fileType, item.fileName) : null
   // テキストをインラインで返さないのは、HTML や SVG として同一オリジンで描かせないため（プレビューはサーバーで読んで埋め込む）
-  const inline = !!preview && preview !== 'text'
+  const inline = page || (!!preview && preview !== 'text')
   const headers = new Headers({
-    'Content-Type': inline ? item.fileType : 'application/octet-stream',
+    'Content-Type': page ? 'text/html' : inline ? item.fileType : 'application/octet-stream',
     'Content-Disposition': disposition(item.fileName, inline),
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': 'private, max-age=3600',
     'Accept-Ranges': 'bytes',
   })
   // PDF ビューアは sandbox CSP 下で表示されないため、sandbox は添付のときだけ
-  if (!inline) headers.set('Content-Security-Policy', 'sandbox')
+  if (page) headers.set('Content-Security-Policy', HTML_PAGE_CSP)
+  else if (!inline) headers.set('Content-Security-Policy', 'sandbox')
   for (const name of ['content-length', 'content-range']) {
     const value = res.headers.get(name)
     if (value) headers.set(name, value)

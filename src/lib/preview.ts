@@ -13,6 +13,13 @@ export function previewKind(type: string, name: string): PreviewKind | null {
   return null
 }
 
+/** ブラウザでページとして開けるファイル（HTML） */
+export const isHtmlFile = (type: string, name: string) => type === 'text/html' || /\.html?$/i.test(name)
+
+// allow-same-origin を付けないのは、教材の HTML のスクリプトを別のオリジンとして動かし、STEP Learn のクッキーや画面に触れさせないため
+/** アップロードされた HTML をページとして開くときの CSP */
+export const HTML_PAGE_CSP = 'sandbox allow-scripts allow-forms allow-modals allow-popups allow-downloads'
+
 export const isMediaFile = (file: { type: string; name: string }) => {
   const kind = previewKind(file.type, file.name)
   return kind === 'video' || kind === 'audio'
