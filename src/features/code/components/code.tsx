@@ -25,6 +25,7 @@ import {
   type CodeFiles,
   type CodeLanguage,
   type CodeStage,
+  type CodeViewPane,
   type ConstraintResult,
   type Goal,
   type GradingStatus,
@@ -962,16 +963,17 @@ export const CodeFinalizedFields = ({ code }: { code: FinalizedCode }) => (
 const CODE_FORM = 'code-form'
 const RESET_FORM = 'code-reset'
 
-/** 右の枠の表示。output はプレビュー（Web）か実行結果（Python） */
-type ResultView = 'output' | 'submissions'
+const OUTPUT_LABELS: Record<CodeLanguage, string> = { web: 'プレビュー', python: '実行結果' }
 
 /**
- * コードのアイテムの本体。ヘッダーの下いっぱいに、左に問題文とエディター、右にプレビュー（Web）か実行結果（Python）を出す。
+ * ブラウザエディターの中の iframe（src/features/code/views.tsx の CodeVscodePage）の本体。画面いっぱいに VS Code を開き、
+ * 問題・プレビュー（Web）か実行結果（Python）・提出は、ここで描いたものを src/features/code/vscode-workbench.ts が VS Code のビューへ移す。
  * コードは描かず、src/features/code/editor.ts が `${base}/state` から読み込む。ここに描くと、書きかけのコードや最初のコードが変わるたびに
  * 描く内容が変わり、コースの変更の反映（CourseLiveSync）が、書いている途中のエディターの入力欄を差し替えてしまう
  */
 export const CodeWorkspace = ({
   itemId,
+  title,
   base,
   language,
   body,
@@ -980,8 +982,9 @@ export const CodeWorkspace = ({
   submissions,
   completion,
 }: {
-  /** AI がこのアイテムを変えたときに、client.ts がエディターを取り直すための目印 */
   itemId: number
+  /** アイテムの名前。VS Code のフォルダーの名前にする */
+  title: string
   /** 実行・保存・提出の送信先の共通部分（`/courses/1/items/2/code`） */
   base: string
   language: CodeLanguage
@@ -991,70 +994,27 @@ export const CodeWorkspace = ({
   goals: readonly Goal[]
   /** Python を実行できるか（sandbox が設定されているか） */
   canRun: boolean
-  /** 見ている学生の提出。渡すと、右の枠に「提出」のタブを出す */
+  /** 見ている学生の提出。渡すと「提出」のビューを出す */
   submissions?: SubmissionsView | null
-  /** 提出のタブに出す、アイテムの完了の状態（通常モードの CompletionStatus） */
+  /** 提出のビューに出す、アイテムの完了の状態（通常モードの CompletionStatus） */
   completion?: Child
 }) => {
   useStyle('/src/features/code/components/code.css')
-  const files = CODE_FILES[language]
-  // 判定中なら提出のタブから始めるのは、提出した直後に結果を待つ画面へそのまま進めるため
-  const startView: ResultView = submissions?.grade?.status === 'pending' ? 'submissions' : 'output'
-  const output = language === 'web' ? { label: 'プレビュー', icon: 'eye' as const } : { label: '実行結果', icon: 'terminal' as const }
-  const viewAttrs = (view: ResultView) =>
-    submissions ? { role: 'tabpanel', id: `code-view-${view}`, 'aria-labelledby': `code-view-tab-${view}`, hidden: view !== startView } : {}
+  // 判定中なら提出のビューから始めるのは、提出した直後に結果を待つ画面へそのまま進めるため
+  const startView: CodeViewPane = submissions?.grade?.status === 'pending' ? 'submissions' : 'output'
+  // VS Code の Shadow DOM の中のビューに、slot で差し込む。読み込み終わるまでは隠す
+  const pane = (view: CodeViewPane, name: string) => ({
+    slot: view,
+    hidden: true,
+    'data-code-view-pane': view,
+    'data-code-view-name': name,
+  })
   return (
-    <div class="code-stage" data-code-workspace={language} data-code-base={base} data-ai-watch={`item:${itemId}`}>
-      <form id={CODE_FORM} method="post" action={`${base}/submit`} class="code-edit" data-loading-form>
-        {(body || goals.length > 0) && (
-          <details class="code-task" open>
-            <summary>
-              <Icon name="page" size={16} /> 問題
-              <Icon name="chevronDown" size={14} class="code-task-arrow" />
-            </summary>
-            {goals.length > 0 && (
-              <div class="code-goals" id="code-goals">
-                <h3>クリアの条件</h3>
-                <GoalList goals={goals} grade={submissions?.grade} />
-              </div>
-            )}
-            {body && <Markdown source={body} />}
-          </details>
-        )}
-        <div class="code-pane">
-          <div class="code-pane-head">
-            <div class="code-tabs" role="tablist" aria-label="ファイル">
-              {files.map((f, i) => (
-                <button
-                  type="button"
-                  role="tab"
-                  id={`code-tab-${f.key}`}
-                  aria-selected={i === 0 ? 'true' : 'false'}
-                  aria-controls={`code-file-${f.key}`}
-                  tabindex={i === 0 ? 0 : -1}
-                  data-code-tab={f.key}
-                >
-                  {f.name}
-                </button>
-              ))}
-            </div>
-            <span class="code-save muted" role="status" data-code-save />
-            <CodeEditorTools language={language} />
-            <IconButton type="submit" form={RESET_FORM} icon="undo" label="最初のコードに戻す" />
-          </div>
-          {files.map((f, i) => (
-            <div
-              class="code-file"
-              role="tabpanel"
-              id={`code-file-${f.key}`}
-              aria-labelledby={`code-tab-${f.key}`}
-              hidden={i > 0}
-              data-code-file={f.key}
-            >
-              <CodeInput syntax={f.key} id={`code-${f.key}`} name={f.key} aria-label={f.name} fill />
-            </div>
-          ))}
-        </div>
+    <div class="code-workspace" data-code-workspace={language} data-code-base={base} data-code-start-view={startView}>
+      <form id={CODE_FORM} method="post" action={`${base}/submit`} class="code-edit" data-loading-form hidden>
+        {CODE_FILES[language].map((f) => (
+          <textarea name={f.key} />
+        ))}
       </form>
       <form
         id={RESET_FORM}
@@ -1064,60 +1024,26 @@ export const CodeWorkspace = ({
         data-confirm-ok="戻す"
         hidden
       />
-
-      <div class="code-result">
-        <div class="code-pane-head">
-          {submissions ? (
-            <div class="code-tabs code-view-tabs" role="tablist" aria-label="右の表示">
-              {(
-                [
-                  { view: 'output', ...output },
-                  { view: 'submissions', label: '提出', icon: 'upload' },
-                ] as const
-              ).map((tab) => (
-                <button
-                  type="button"
-                  role="tab"
-                  id={`code-view-tab-${tab.view}`}
-                  aria-selected={tab.view === startView ? 'true' : 'false'}
-                  aria-controls={`code-view-${tab.view}`}
-                  tabindex={tab.view === startView ? 0 : -1}
-                  data-code-view={tab.view}
-                >
-                  <Icon name={tab.icon} size={16} />
-                  {tab.label}
-                </button>
-              ))}
+      <div
+        class="code-vscode"
+        data-code-vscode={language}
+        data-code-vscode-item={itemId}
+        data-code-vscode-folder={title.replaceAll('/', '／')}
+      >
+        <p class="code-vscode-loading muted">VS Code を読み込んでいます…</p>
+        <section class="code-view-pane code-problem" {...pane('problem', '問題')}>
+          {goals.length > 0 && (
+            <div class="code-goals" id="code-goals">
+              <h3>クリアの条件</h3>
+              <GoalList goals={goals} grade={submissions?.grade} />
             </div>
-          ) : (
-            <span class="code-pane-title">
-              <Icon name={output.icon} size={16} /> {output.label}
-            </span>
           )}
-          {language === 'web' ? (
-            <IconButton
-              icon="arrowPath"
-              label="プレビューを読み込み直す"
-              hidden={startView !== 'output'}
-              data-code-view-only="output"
-              data-code-refresh
-            />
-          ) : (
-            <Button
-              variant="primary"
-              size="sm"
-              icon="play"
-              title="実行（⌘Enter / Ctrl+Enter）"
-              disabled={!canRun}
-              hidden={startView !== 'output'}
-              data-code-view-only="output"
-              data-code-run
-            >
-              実行
-            </Button>
-          )}
-        </div>
-        <div class="code-view" {...viewAttrs('output')} data-code-view-panel="output">
+          {body && <Markdown source={body} />}
+          <Button type="submit" form={RESET_FORM} variant="ghost" size="sm" icon="undo">
+            最初のコードに戻す
+          </Button>
+        </section>
+        <section class="code-view-pane code-view" {...pane('output', OUTPUT_LABELS[language])} data-code-can-run={canRun ? '' : undefined}>
           {language === 'web' ? (
             <>
               {/* allow-same-origin を付けないのは、書いたコードが STEP Learn と同じオリジンで動き、Cookie や画面に触れられるようになるため */}
@@ -1139,15 +1065,15 @@ export const CodeWorkspace = ({
                 <Textarea id="code-stdin" name="stdin" form={CODE_FORM} rows={3} class="code-mono" spellcheck={false} />
               </div>
               <div class="code-output" aria-live="polite" data-code-output>
-                <p class="muted">「実行」を押すと、ここに結果が出ます。</p>
+                <p class="muted">ビューの上の ▷ か、⌘Enter / Ctrl+Enter で実行すると、ここに結果が出ます。</p>
               </div>
             </>
           )}
-        </div>
+        </section>
         {submissions && (
-          <div class="code-view" {...viewAttrs('submissions')} data-code-view-panel="submissions">
+          <section class="code-view-pane code-view" {...pane('submissions', '提出')}>
             <CodeSubmissions view={submissions} base={base} completion={completion} />
-          </div>
+          </section>
         )}
       </div>
     </div>
@@ -1382,7 +1308,8 @@ function submitStatus({ grade, wait, period }: SubmissionsView) {
 
 /**
  * ヘッダーの帯（ItemBar）に置く、提出の一覧への入口（教師）と、提出の状況・提出ボタン（学生）。
- * 続けて提出できないあいだや受付の前は、提出ボタンを押せなくして残りの時間を出し、受付が終わると押せなくする。数え直すのは src/features/code/editor.ts
+ * 続けて提出できないあいだや受付の前は、提出ボタンを押せなくして残りの時間を出し、受付が終わると押せなくする。数え直すのは src/features/code/editor.ts。
+ * 提出ボタンは、VS Code の iframe の中のフォームを src/features/code/editor.ts が送る
  */
 export const CodeBarActions = ({
   base,
@@ -1405,14 +1332,12 @@ export const CodeBarActions = ({
         </Button>
       )}
       {grade && (
-        <button type="button" class="item-bar-status" title="提出のタブを開く" data-code-grade-chip data-code-show="submissions">
+        <button type="button" class="item-bar-status" title="提出のビューを開く" data-code-grade-chip data-code-show="submissions">
           <SubmissionChip submission={grade} />
         </button>
       )}
       {submissions && status && (
         <Button
-          type="submit"
-          form={CODE_FORM}
           variant="primary"
           size="sm"
           icon="upload"
@@ -1423,6 +1348,7 @@ export const CodeBarActions = ({
           data-code-submit-close={submissions.period.closesIn ?? undefined}
           data-code-submit-label={submitLabel(!!grade)}
           data-code-submit-closed={CLOSED_LABEL}
+          data-code-submit-frame
         >
           <span data-code-submit-text>{status.button}</span>
         </Button>

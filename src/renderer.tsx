@@ -6,11 +6,11 @@ import { BOOT_SCRIPT } from './lib/settings'
 
 declare module 'hono' {
   interface ContextRenderer {
-    (content: string | Promise<string>, props: { title: string }): Response | Promise<Response>
+    (content: string | Promise<string>, props: { title: string; baseTarget?: '_top' }): Response | Promise<Response>
   }
 }
 
-export const renderer = jsxRenderer(({ children, title }) => (
+export const renderer = jsxRenderer(({ children, title, baseTarget }) => (
   <html lang="ja" data-theme="light">
     <head>
       <meta charset="utf-8" />
@@ -19,6 +19,7 @@ export const renderer = jsxRenderer(({ children, title }) => (
       <meta name="theme-color" content="" />
       <script>{raw(BOOT_SCRIPT)}</script>
       <title>{title ? `${title} | STEP Learn` : 'STEP Learn'}</title>
+      {baseTarget && <base target={baseTarget} />}
       <link rel="icon" href="/favicon.ico" sizes="32x32" />
       <link rel="icon" href="/favicon.png" type="image/png" sizes="160x160" />
       <link rel="apple-touch-icon" href="/apple-touch-icon.png" />

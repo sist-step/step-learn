@@ -51,3 +51,7 @@
 @media (max-width: 640px), (pointer: coarse) {
   .submission-history a { min-height: var(--tap); }
 }
+
+/* ===== ブラウザエディターの画面（CodePage） */
+/* 背景を付けないのは、VS Code が読み込み終わるまでの間に、ダークモードで白い地が光って見えないようにするため */
+.code-frame { display: block; width: 100%; height: calc(100dvh - var(--topbar-h)); min-height: 480px; border: 0; background: transparent; }

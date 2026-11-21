@@ -1597,8 +1597,8 @@ function showAiChange(touched: AiTouched) {
     )
   const codeBefore = new Map(codeFields().map((f) => [f.name, f.value]))
   void syncLive(liveRun, liveRevision, touched).then(() => flashCodeFields(codeBefore))
-  const workspace = watched.find((el) => el.matches('[data-code-workspace]'))
-  if (workspace) void codeEditor?.then(({ reloadCodeWorkspace }) => reloadCodeWorkspace(workspace))
+  const frame = watched.find((el): el is HTMLIFrameElement => el.matches('[data-code-vscode-frame]'))
+  if (frame) void codeEditor?.then(({ reloadCodeFrame }) => reloadCodeFrame(frame))
 }
 
 document.addEventListener('click', (e) => {
@@ -1643,9 +1643,12 @@ addEventListener('pagehide', saveScroll)
 const navType = (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type
 if (navType && navType !== 'navigate' && history.state?.scrollY) scrollTo(0, history.state.scrollY)
 
+// <base target> を見るのは、ブラウザエディターの中の VS Code の画面（CodeVscodePage）が、リンクとフォームを親の画面で開かせるため
+const baseTarget = () => document.querySelector('base[target]')?.getAttribute('target') || '_self'
+
 function linkUrl(target: EventTarget | null) {
   const a = (target as Element | null)?.closest?.<HTMLAnchorElement>('a[href]')
-  if (!a || (a.target && a.target !== '_self') || a.hasAttribute('download') || a.hasAttribute('data-reload')) return null
+  if (!a || (a.target || baseTarget()) !== '_self' || a.hasAttribute('download') || a.hasAttribute('data-reload')) return null
   const url = new URL(a.href)
   if (url.origin !== location.origin) return null
   // 同じページ内のアンカーはブラウザに任せないとスクロールの挙動が変わる
@@ -1895,7 +1898,7 @@ document.addEventListener('submit', (e) => {
   const form = e.target as HTMLFormElement
   const submitter = e.submitter as HTMLButtonElement | HTMLInputElement | null
   const method = submitter?.hasAttribute('formmethod') ? submitter.formMethod : form.method
-  const target = (submitter?.getAttribute('formtarget') ?? form.getAttribute('target')) || '_self'
+  const target = (submitter?.getAttribute('formtarget') ?? form.getAttribute('target')) || baseTarget()
   if (method === 'dialog' || target !== '_self' || form.hasAttribute('data-reload')) return
   const url = new URL(submitter?.hasAttribute('formaction') ? submitter.formAction : form.action)
   if (url.origin !== location.origin) return

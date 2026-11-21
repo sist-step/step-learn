@@ -5,6 +5,7 @@ import { CompletionStatus, ItemBar } from '../../components/course'
 import { Icon } from '../../components/icons'
 import { TextAreaField, validateWith } from '../../components/form'
 import { AppShell } from '../../components/layout'
+import { ConfirmChip } from '../../components/overlay'
 import { Styles } from '../../components/style'
 import {
   Alert,
@@ -47,29 +48,22 @@ const crumbs = (access: CourseAccess, item: CodeTarget, pageUrl: string, student
   ...(student ? [{ href: submissionsUrl(access.course.id, item.id), label: '提出' }] : []),
 ]
 
-/** ブラウザエディターの画面。アイテムの画面の「ブラウザエディターで開く」から開く */
+/**
+ * ブラウザエディターの画面。アイテムの画面の「ブラウザエディターで開く」から開く。ヘッダーの下いっぱいに、VS Code の画面（CodeVscodePage）を iframe で開く。
+ * VS Code をこの画面に直接置かないのは、VS Code は 1 つのページで 1 回しか起動できず、再読み込みなしの遷移でほかの画面へ移って戻ったときに、起動し直せないため
+ */
 export const CodePage = ({
   access,
   item,
   itemUrl,
-  body,
-  goals,
-  canRun,
   submissions,
-  completion,
 }: {
   access: CourseAccess
   item: CodeTarget
   /** アイテムの画面（戻る先） */
   itemUrl: string
-  body: string
-  /** 学生に見せるクリアの条件（制約のラベル） */
-  goals: Goal[]
-  canRun: boolean
   /** 見ている学生の提出 */
   submissions: SubmissionsView | null
-  /** 見ている学生の完了の状態。完了を数えないときは渡さない */
-  completion?: { completion: Completion; done: boolean }
 }) => {
   const base = `/courses/${access.course.id}/items/${item.id}/code`
   return (
@@ -94,19 +88,51 @@ export const CodePage = ({
         </ItemBar>
       }
     >
-      <CodeWorkspace
-        itemId={item.id}
-        base={base}
-        language={item.language}
-        body={body}
-        goals={goals}
-        canRun={canRun}
-        submissions={submissions}
-        completion={completion && <CompletionStatus itemId={item.id} type="code" {...completion} />}
-      />
+      <Styles use={['/src/features/code/code.css']} />
+      <iframe class="code-frame" title="VS Code" src={`${base}/vscode`} data-code-vscode-frame data-ai-watch={`item:${item.id}`} />
     </AppShell>
   )
 }
+
+/**
+ * ブラウザエディターの画面（CodePage）に iframe で埋め込む VS Code の画面。リンクとフォームは親の画面で開く（renderer の baseTarget）。
+ * iframe の中で遷移させないのは、VS Code が消え、起動し直すまで書けなくなるため
+ */
+export const CodeVscodePage = ({
+  base,
+  item,
+  body,
+  goals,
+  canRun,
+  submissions,
+  completion,
+}: {
+  base: string
+  item: CodeTarget
+  body: string
+  /** 学生に見せるクリアの条件（制約のラベル） */
+  goals: Goal[]
+  canRun: boolean
+  /** 見ている学生の提出 */
+  submissions: SubmissionsView | null
+  /** 見ている学生の完了の状態。完了を数えないときは渡さない */
+  completion?: { completion: Completion; done: boolean }
+}) => (
+  <>
+    <CodeWorkspace
+      itemId={item.id}
+      title={item.title}
+      base={base}
+      language={item.language}
+      body={body}
+      goals={goals}
+      canRun={canRun}
+      submissions={submissions}
+      completion={completion && <CompletionStatus itemId={item.id} type="code" {...completion} />}
+    />
+    <ConfirmChip />
+  </>
+)
 
 const StatusChip = ({ status }: { status: GradingStatus }) =>
   status === 'pending' ? (

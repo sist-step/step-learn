@@ -253,10 +253,16 @@ document.addEventListener('drop', (e) => {
 // ここに直接 import しないのは、CodeMirror と各言語の文法が大きく、コードの入力欄のない画面でも毎回読み込むことになるため
 export let codeEditor: Promise<typeof import('../features/code/editor')> | null = null
 export function initCodeEditors() {
+  const vscode = document.querySelector<HTMLElement>('[data-code-vscode]:not([data-code-ready])')
+  // CodeMirror と分けるのは、VS Code は数十 MB あり、ブラウザエディターの中の iframe（CodeVscodeFrame）でしか使わないため
+  if (vscode)
+    void import('../features/code/vscode')
+      .then(({ mountVscode }) => mountVscode(vscode))
+      .catch(() => toast('VS Code を読み込めませんでした。', 'error'))
   void codeEditor?.then(({ releaseDetachedCodeEditors }) => releaseDetachedCodeEditors())
   if (
     !document.querySelector(
-      '[data-code-input]:not([data-code-ready]), [data-code-grade]:not([data-code-watching]), [data-code-submit-timer]:not([data-code-counting])',
+      '[data-code-input]:not([data-code-ready]), [data-code-workspace]:not([data-code-ready]), [data-code-vscode-frame], [data-code-grade]:not([data-code-watching]), [data-code-submit-timer]:not([data-code-counting])',
     )
   )
     return
