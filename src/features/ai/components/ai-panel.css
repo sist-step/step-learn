@@ -209,6 +209,72 @@
 .ai-file-card .file-drop-zone { min-height: 96px; padding: 16px 12px; }
 .ai-file-card .file-drop-body { gap: 8px; font-size: var(--fs-sm); }
 
+/* ===== 質問カード（AskCard。1 問ずつ出すのと答えを覚えるのは client.ts の paintAiAsk） */
+.ai-ask { gap: 0; padding: 0; }
+.ai-ask[data-state='pending'] { border-color: color-mix(in srgb, var(--c-ink) 40%, var(--card-border)); }
+.ai-ask:not([data-state='pending']) { gap: 10px; padding: 12px; }
+.ai-ask-page { display: flex; flex-direction: column; gap: 10px; padding: 12px; animation: rise 0.2s var(--ease); }
+.ai-ask-page[hidden] { display: none; }
+.ai-ask-head { display: flex; align-items: flex-start; gap: 4px; }
+.ai-ask-question { flex: 1; min-width: 0; padding: 4px 4px 0 2px; font-size: var(--fs-base); font-weight: 650; line-height: 1.5; overflow-wrap: anywhere; }
+.ai-ask-pager { display: flex; flex: none; align-items: center; gap: 2px; color: var(--muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.ai-ask-pager .icon-btn, .ai-ask-close { width: 28px; height: 28px; }
+.ai-ask-pager .icon-btn:disabled { opacity: 0.35; cursor: default; }
+.ai-ask-count { min-width: 34px; text-align: center; white-space: nowrap; }
+.ai-ask-close { flex: none; color: var(--muted); }
+
+.ai-ask-options { display: flex; flex-direction: column; gap: 4px; }
+.ai-ask-option { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 8px 10px; border: 1px solid transparent; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font: inherit; font-size: var(--fs-sm); line-height: 1.5; text-align: left; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.ai-ask-option[aria-pressed='true'] { border-color: var(--c-ink); background: var(--c-soft); }
+.ai-ask-key { display: grid; flex: none; place-items: center; width: 22px; height: 22px; border: 1px solid var(--field-border); border-radius: 6px; background: var(--surface); color: var(--muted); font-size: var(--fs-xs); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ai-ask-key .icon { display: none; }
+.ai-ask-option[aria-pressed='true'] .ai-ask-key { border-color: var(--c-ink); background: var(--c-ink); color: var(--surface); }
+.ai-ask-page[data-type='multi'] .ai-ask-option[aria-pressed='true'] .ai-ask-key-num { display: none; }
+.ai-ask-page[data-type='multi'] .ai-ask-option[aria-pressed='true'] .ai-ask-key .icon { display: block; }
+.ai-ask-option-text { display: flex; flex-direction: column; min-width: 0; padding-top: 1px; overflow-wrap: anywhere; }
+.ai-ask-option-note { color: var(--muted); font-size: var(--fs-xs); }
+.ai-ask-other { display: flex; align-items: center; gap: 10px; padding: 0 10px; border: 1px solid var(--field-border); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); cursor: text; transition: border-color 0.15s, box-shadow 0.15s; }
+.ai-ask-other:focus-within { border-color: var(--focus); box-shadow: var(--ring-field); }
+.ai-ask-other .icon { flex: none; margin: 0 4px; }
+.ai-ask-other-input { flex: 1; min-width: 0; height: var(--control-h-sm); padding: 0; border: 0; background: none; color: var(--text); font: inherit; font-size: var(--fs-sm); outline: none; }
+.ai-ask-other-input:focus-visible { outline: none; }
+@media (hover: hover) {
+  .ai-ask-option:hover { border-color: var(--border-strong); }
+  .ai-ask-option[aria-pressed='true']:hover { border-color: var(--c-ink); }
+}
+
+.ai-ask-number { display: flex; flex-direction: column; gap: 6px; padding: 4px 4px 0; }
+.ai-ask-number-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.ai-ask-number-row .icon-btn { border: 1px solid var(--field-border); border-radius: 999px; }
+.ai-ask-value { min-width: 96px; color: var(--text); font-size: var(--fs-2xl); font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
+.ai-ask-unit { margin-left: 4px; color: var(--muted); font-size: var(--fs-sm); font-weight: 600; }
+.ai-ask-range { width: 100%; accent-color: var(--c-ink); }
+.ai-ask-range-ends { display: flex; justify-content: space-between; color: var(--muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+
+.ai-ask-text { min-height: 84px; font-size: var(--fs-sm); resize: vertical; }
+.ai-ask-image .file-drop-zone { min-height: 110px; padding: 16px 12px; }
+.ai-ask-image .file-drop-zone[hidden] { display: none; }
+.ai-ask-image .file-drop-body { gap: 8px; font-size: var(--fs-sm); }
+.ai-ask-preview { position: relative; align-self: flex-start; }
+.ai-ask-preview[hidden] { display: none; }
+.ai-ask-preview img { display: block; max-width: 100%; max-height: 200px; border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--card-border); object-fit: contain; }
+.ai-ask-preview-clear { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border: 1px solid var(--overlay-border); border-radius: 999px; background: var(--surface-raised); box-shadow: var(--shadow-sm); }
+
+.ai-ask-foot { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.ai-ask-hint { flex: 1; min-width: 0; color: var(--muted); font-size: var(--fs-xs); }
+/* 1 つ選ぶ質問で「次へ」を出さないのは、選んだ時点で次へ進むため。「その他」に書いたときだけ、決めるボタンとして出す */
+.ai-ask-page[data-type='choice']:not([data-other]) .ai-ask-next { display: none; }
+.ai-panel[data-busy] .ai-ask-page :is(.btn, .icon-btn, .ai-ask-option) { opacity: 0.5; pointer-events: none; }
+@media (max-width: 640px), (pointer: coarse) {
+  .ai-ask-option { min-height: var(--tap); align-items: center; }
+  .ai-ask-hint { display: none; }
+  .ai-ask-pager .icon-btn, .ai-ask-close { width: var(--tap); height: var(--tap); }
+  /* 16px 未満にしないのは、iOS が入力欄にフォーカスしたときに画面を拡大するため */
+  .ai-ask-other-input, .ai-ask-text { font-size: 16px; }
+}
+.ai-ask-skipped { color: var(--muted); }
+.ai-ask-answer-image img { display: block; max-width: 100%; max-height: 160px; margin-top: 2px; border-radius: var(--radius-sm); object-fit: contain; }
+
 .ai-approve-all { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 8px; padding: 10px 12px; border-top: 1px solid var(--border); background: color-mix(in srgb, var(--warning) 8%, transparent); animation: rise 0.2s var(--ease); }
 .ai-approve-all-text { flex: 1; min-width: 0; font-size: var(--fs-xs); color: var(--warning-text); }
 .ai-approve-all-text strong { font-variant-numeric: tabular-nums; }

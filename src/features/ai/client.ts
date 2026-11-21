@@ -3,6 +3,7 @@
 
 import type { AiAgentEvent, AiUsageMeter } from './ai-agent'
 import { AI_BUDDY_LABELS, AI_BUDDY_LOOKS, type AiBuddyState } from './ai-buddy'
+import type { AiAnswerInput } from './ai-questions'
 import type { AiTouched } from './ai-tool-kit'
 import { formatClock } from '../../lib/clock'
 import { renderMarkdown } from '../../lib/markdown'
@@ -282,6 +283,7 @@ async function refreshAiPanel(model?: string) {
   showAiVoice()
   initMascots()
   void fillAiSuggestions()
+  initAiAsks()
   scrollAiLog(true)
   watchAiCards()
   scheduleAiSync()
@@ -843,6 +845,12 @@ async function decideAiCard(form: HTMLFormElement, submitter: HTMLElement | null
   const data = new FormData(form, submitter)
   // 選んだファイルを添え直すのは、パネルを取り直すと、新しいカードのファイルの選択は空になっているため
   if (file && decision === 'approve') data.set('file', file)
+  if (form.matches('[data-ai-ask]') && decision === 'approve') {
+    const draft = aiAskDraft(form)
+    data.set('answers', JSON.stringify(aiAskAnswers(form, draft)))
+    data.delete('file')
+    if (draft.image) data.set('file', draft.image.file)
+  }
   $$<HTMLButtonElement>('button', form).forEach((btn) => (btn.disabled = true))
   $$('[data-ai-replies]', aiPanel() ?? document).forEach((el) => el.remove())
   const outcome = await streamAi(form.action, data)
@@ -850,6 +858,275 @@ async function decideAiCard(form: HTMLFormElement, submitter: HTMLElement | null
   // 取り直したパネルだけにしないのは、受け取れなかったファイルのカードは選ぶ前に戻り、断った理由まで消えるため
   if (outcome.retracted) for (const message of outcome.errors) noteAiProblem(message)
 }
+
+// --- AI の質問カード（features/ai/components/ai-panel.tsx の AskCard。送るのは確認カードと同じ decideAiCard）
+// 答えを画面の入力欄だけに置かないのは、ほかのタブの発言や断られた答えでパネルを取り直すと、答えかけの内容が消えるため
+type AiAskDraft = {
+  page: number
+  values: AiAnswerInput[]
+  done: ('answered' | 'skipped' | undefined)[]
+  image: { file: File; url: string } | null
+}
+type AiAskType = 'choice' | 'multi' | 'number' | 'text' | 'image'
+type AiAskAt = { page: HTMLElement; form: HTMLFormElement; index: number }
+const aiAskDrafts = new Map<string, AiAskDraft>()
+
+const aiAskPages = (form: HTMLFormElement) => $$<HTMLElement>('[data-ai-ask-page]', form)
+const aiAskCall = (form: HTMLFormElement) => form.querySelector<HTMLInputElement>('input[name="call"]')?.value ?? ''
+const aiAskType = (page: HTMLElement) => page.dataset.type as AiAskType
+
+function aiAskDraft(form: HTMLFormElement) {
+  const key = aiCardKey(aiAskCall(form))
+  let draft = aiAskDrafts.get(key)
+  if (!draft) {
+    const total = aiAskPages(form).length
+    draft = {
+      page: 0,
+      values: Array.from({ length: total }, () => ({})),
+      done: Array.from({ length: total }, () => undefined),
+      image: null,
+    }
+    aiAskDrafts.set(key, draft)
+  }
+  return draft
+}
+
+/** 質問ごとの答えを、サーバー（features/ai/ai-questions.ts の readAnswers）が読む形にする */
+function aiAskAnswers(form: HTMLFormElement, draft: AiAskDraft): AiAnswerInput[] {
+  return aiAskPages(form).map((page, i): AiAnswerInput => {
+    const v = draft.values[i]
+    if (draft.done[i] !== 'answered') return { skip: true }
+    switch (aiAskType(page)) {
+      case 'choice':
+      case 'multi':
+        return { choices: v.choices ?? [], ...(v.other?.trim() && { other: v.other.trim() }) }
+      case 'number':
+        return { value: v.value }
+      case 'text':
+        return { text: v.text ?? '' }
+      case 'image':
+        return { image: true }
+    }
+  })
+}
+
+function paintAiAskPage(page: HTMLElement, value: AiAnswerInput, draft: AiAskDraft) {
+  const chosen = new Set(value.choices ?? [])
+  for (const option of $$<HTMLElement>('[data-ai-ask-choice]', page))
+    option.setAttribute('aria-pressed', String(chosen.has(Number(option.dataset.aiAskChoice))))
+  const other = page.querySelector<HTMLInputElement>('[data-ai-ask-other]')
+  if (other && document.activeElement !== other) other.value = value.other ?? ''
+  page.toggleAttribute('data-other', !!value.other?.trim())
+  const range = page.querySelector<HTMLInputElement>('[data-ai-ask-range]')
+  if (range) {
+    if (value.value !== undefined) range.value = String(value.value)
+    const shown = page.querySelector('[data-ai-ask-value]')
+    if (shown) shown.textContent = range.value
+  }
+  const text = page.querySelector<HTMLTextAreaElement>('[data-ai-ask-text]')
+  if (text && document.activeElement !== text) text.value = value.text ?? ''
+  const preview = page.querySelector<HTMLElement>('[data-ai-ask-preview]')
+  const zone = page.querySelector<HTMLElement>('.ai-ask-drop')
+  if (preview && zone) {
+    preview.hidden = !draft.image
+    zone.hidden = !!draft.image
+    const img = preview.querySelector<HTMLImageElement>('img')
+    if (img && draft.image) img.src = draft.image.url
+  }
+}
+
+/** 覚えている答えと開いている質問を、描いたカードに写す */
+function paintAiAsk(form: HTMLFormElement) {
+  const draft = aiAskDraft(form)
+  aiAskPages(form).forEach((page, i) => {
+    page.hidden = i !== draft.page
+    paintAiAskPage(page, draft.values[i], draft)
+  })
+}
+
+/** パネルを描いたあとに呼ぶ。確認を待っていないカードの答えは捨てる */
+function initAiAsks() {
+  const forms = $$<HTMLFormElement>('[data-ai-ask]', aiPanel() ?? document)
+  const live = new Set(forms.map((form) => aiCardKey(aiAskCall(form))))
+  for (const [key, draft] of aiAskDrafts)
+    if (!live.has(key)) {
+      if (draft.image) URL.revokeObjectURL(draft.image.url)
+      aiAskDrafts.delete(key)
+    }
+  forms.forEach(paintAiAsk)
+}
+
+// カードの外にフォーカスがあるときに移さないのは、入力欄で次の発言を書いているあいだに、質問へフォーカスを奪うため
+/** 質問を移る */
+function showAiAskPage(form: HTMLFormElement, index: number) {
+  const draft = aiAskDraft(form)
+  const focused = form.contains(document.activeElement)
+  draft.page = index
+  paintAiAsk(form)
+  if (!focused) return
+  aiAskPages(form)
+    [index]?.querySelector<HTMLElement>(
+      '[data-ai-ask-choice], [data-ai-ask-range], [data-ai-ask-text], .ai-ask-drop:not([hidden]), [data-ai-ask-image-clear]',
+    )
+    ?.focus()
+}
+
+/** from の質問に答えたら、まだ答えていない次の質問へ移る。すべて答えたら送る */
+function advanceAiAsk(form: HTMLFormElement, from: number) {
+  const { done } = aiAskDraft(form)
+  const order = [...done.keys()]
+  const next = [...order.slice(from + 1), ...order.slice(0, from + 1)].find((i) => !done[i])
+  if (next !== undefined) return showAiAskPage(form, next)
+  form.querySelector<HTMLButtonElement>('[data-ai-ask-submit]')?.click()
+}
+
+/** 開いている質問の入力から答えを決める。決められなければ、利用者に見せる理由 */
+function commitAiAsk({ form, page, index }: AiAskAt) {
+  const draft = aiAskDraft(form)
+  const v = draft.values[index]
+  const type = aiAskType(page)
+  const problems: Record<AiAskType, string | null> = {
+    choice: !v.choices?.length && !v.other?.trim() ? '答えを選んでください。' : null,
+    multi: !v.choices?.length && !v.other?.trim() ? '答えを選んでください。' : null,
+    number: null,
+    text: !v.text?.trim() ? '答えを入力してください。' : null,
+    image: !draft.image ? '画像を選んでください。' : null,
+  }
+  if (problems[type]) return problems[type]
+  if (type === 'number') v.value ??= Number(page.querySelector<HTMLInputElement>('[data-ai-ask-range]')?.value)
+  draft.done[index] = 'answered'
+  return null
+}
+
+function aiAskAt(el: Element): AiAskAt | null {
+  const page = el.closest<HTMLElement>('[data-ai-ask-page]')
+  const form = page?.closest<HTMLFormElement>('[data-ai-ask]')
+  return page && form ? { page, form, index: Number(page.dataset.aiAskPage) } : null
+}
+
+function nextAiAsk(at: AiAskAt) {
+  const problem = commitAiAsk(at)
+  if (problem) return toast(problem, 'error')
+  advanceAiAsk(at.form, at.index)
+}
+
+async function setAiAskImage(form: HTMLFormElement, index: number, file: File) {
+  if (!file.type.startsWith('image/')) return toast('画像のファイルを選んでください。', 'error')
+  const shrunk = await shrinkAiImage(file)
+  if (!shrunk) return toast('この画像は読み込めません。PNG・JPEG・WebP・GIF の画像を選んでください。', 'error')
+  const draft = aiAskDraft(form)
+  if (draft.image) URL.revokeObjectURL(draft.image.url)
+  draft.image = { file: shrunk, url: URL.createObjectURL(shrunk) }
+  draft.done[index] = undefined
+  paintAiAsk(form)
+}
+
+document.addEventListener('click', (e) => {
+  const target = e.target as Element
+  const at = aiAskAt(target)
+  if (!at || aiPanel()?.hasAttribute('data-busy')) return
+  const { form, page, index } = at
+  const draft = aiAskDraft(form)
+  const value = draft.values[index]
+  const go = target.closest<HTMLElement>('[data-ai-ask-go]')
+  if (go) return showAiAskPage(form, index + Number(go.dataset.aiAskGo))
+  if (target.closest('[data-ai-ask-skip]')) {
+    draft.done[index] = 'skipped'
+    return advanceAiAsk(form, index)
+  }
+  if (target.closest('[data-ai-ask-next]')) return nextAiAsk(at)
+  const option = target.closest<HTMLElement>('[data-ai-ask-choice]')
+  if (option) {
+    const choice = Number(option.dataset.aiAskChoice)
+    if (aiAskType(page) === 'choice') {
+      draft.values[index] = { choices: [choice] }
+      draft.done[index] = 'answered'
+      paintAiAskPage(page, draft.values[index], draft)
+      return advanceAiAsk(form, index)
+    }
+    const chosen = new Set(value.choices ?? [])
+    if (!chosen.delete(choice)) chosen.add(choice)
+    value.choices = [...chosen]
+    draft.done[index] = undefined
+    return paintAiAskPage(page, value, draft)
+  }
+  const nudge = target.closest<HTMLElement>('[data-ai-ask-nudge]')
+  const range = page.querySelector<HTMLInputElement>('[data-ai-ask-range]')
+  if (nudge && range) {
+    if (nudge.dataset.aiAskNudge === '1') range.stepUp()
+    else range.stepDown()
+    value.value = Number(range.value)
+    draft.done[index] = undefined
+    return paintAiAskPage(page, value, draft)
+  }
+  if (target.closest('[data-ai-ask-image-clear]')) {
+    if (draft.image) URL.revokeObjectURL(draft.image.url)
+    draft.image = null
+    draft.done[index] = undefined
+    paintAiAsk(form)
+  }
+})
+
+document.addEventListener('input', (e) => {
+  const target = e.target as Element
+  const at = aiAskAt(target)
+  if (!at) return
+  const draft = aiAskDraft(at.form)
+  const value = draft.values[at.index]
+  if (target instanceof HTMLInputElement && target.matches('[data-ai-ask-other]')) {
+    value.other = target.value
+    // その他を書いたら選んでいた選択肢を外すのは、1 つだけ選ぶ質問で、どちらが答えなのか分からなくなるため
+    if (aiAskType(at.page) === 'choice' && value.other.trim()) value.choices = []
+  } else if (target instanceof HTMLInputElement && target.matches('[data-ai-ask-range]')) value.value = Number(target.value)
+  else if (target instanceof HTMLTextAreaElement && target.matches('[data-ai-ask-text]')) value.text = target.value
+  else return
+  draft.done[at.index] = undefined
+  paintAiAskPage(at.page, value, draft)
+})
+
+document.addEventListener('change', (e) => {
+  const input = e.target as Element
+  if (!(input instanceof HTMLInputElement) || !input.matches('[data-ai-ask-image]')) return
+  const at = aiAskAt(input)
+  const file = input.files?.[0]
+  input.value = ''
+  if (at && file) void setAiAskImage(at.form, at.index, file)
+})
+
+// 画像の質問を開いているときに入力欄への貼り付けを答えにするのは、カードの中には貼り付けられる場所がなく、入力欄に貼るしかないため。
+// 画像を発言に添える貼り付け（attachAiImage）より先に受けるので、取り込みの段階で拾う
+document.addEventListener(
+  'paste',
+  (e) => {
+    const target = e.target
+    const file = e.clipboardData && [...e.clipboardData.files].find((f) => f.type.startsWith('image/'))
+    if (!file || !(target instanceof Element) || e.clipboardData.types.includes('text/plain')) return
+    const page = $$<HTMLElement>('[data-ai-ask-page][data-type=image]:not([hidden])', aiPanel() ?? document)[0]
+    const at = page ? aiAskAt(page) : null
+    if (!at || !target.closest('[data-ai-panel]')) return
+    e.preventDefault()
+    e.stopPropagation()
+    void setAiAskImage(at.form, at.index, file)
+  },
+  true,
+)
+
+document.addEventListener('keydown', (e) => {
+  const target = e.target
+  const at = target instanceof Element ? aiAskAt(target) : null
+  if (!at || !(target instanceof Element) || e.isComposing || e.metaKey || e.ctrlKey || e.altKey) return
+  const typing = target.matches('input[type=text], textarea')
+  if (e.key === 'Enter' && !e.shiftKey && (typing || target.matches('[data-ai-ask-range]'))) {
+    e.preventDefault()
+    return nextAiAsk(at)
+  }
+  if (typing || !/^[1-9]$/.test(e.key)) return
+  const option = $$<HTMLElement>('[data-ai-ask-choice]', at.page)[Number(e.key) - 1]
+  if (!option) return
+  e.preventDefault()
+  option.focus()
+  option.click()
+})
 
 // --- AI の確認カードをまとめて承認する（features/ai/components/ai-panel.tsx の data-ai-approve-all。承認するのは /ai/chat/confirm-all）
 // カードの先頭と末尾を別々に見るのは、パネルより高いカードは一度に収まらず、末尾までスクロールして読み終えたことを見るため
@@ -1022,6 +1299,7 @@ export function initAiPanel() {
   $$('.ai-panel-toggle').forEach((el) => el.setAttribute('aria-expanded', String(open)))
   showAiVoice()
   void fillAiSuggestions()
+  initAiAsks()
   watchAiCards()
   scheduleAiSync()
 }

@@ -38,7 +38,15 @@ const TOOL_FALLBACK_LABEL = 'ツールを使いました'
 const cardChange = ({ label, before, after, long }: AiChange): AiCardChange =>
   long ? { label, hunks: diffHunks(diffLines(before, after), 1) } : { label, before, after }
 
-function cardEntry(callId: string, card: AiCard, touched: AiTouched | undefined): AiChatEntry {
+function cardEntry(callId: string, card: AiCard, touched: AiTouched | undefined, files: AiFilePart[] | undefined): AiChatEntry {
+  if (card.ask)
+    return {
+      kind: 'ask',
+      callId,
+      questions: card.ask.questions,
+      state: card.state,
+      answers: card.answers?.map((a) => ({ text: a.text, image: a.image && files?.[0] ? imageUrl(files[0]) : undefined })),
+    }
   if (card.request)
     return {
       kind: 'file',
@@ -67,6 +75,7 @@ const imageKey = ({ data }: AiFilePart) => crypto.createHash('sha256').update(da
 const imageUrl = (file: AiFilePart) => `/ai/chat/images/${imageKey(file)}`
 
 function entriesOf({ messages, labels, cards, touched, compactions = [] }: AiChatContent): AiChatEntry[] {
+  const resultFiles = new Map(messages.flatMap((m) => (m.role === 'tool' && m.files ? [[m.toolCallId, m.files] as const] : [])))
   return messages.flatMap((m, i): AiChatEntry[] => {
     const marks = compactions.includes(i) ? [{ kind: 'compacted' as const }] : []
     if (m.role === 'user') return [...marks, { kind: 'user', text: m.content, image: m.files?.[0] && imageUrl(m.files[0]) }]
@@ -80,7 +89,7 @@ function entriesOf({ messages, labels, cards, touched, compactions = [] }: AiCha
         .map((t): AiChatEntry => {
           const card = cards[t.id]
           if (!card) return { kind: 'tool', label: labels[t.id] ?? TOOL_FALLBACK_LABEL, touched: touched[t.id] }
-          return cardEntry(t.id, card, touched[t.id])
+          return cardEntry(t.id, card, touched[t.id], resultFiles.get(t.id))
         }),
     ]
   })
@@ -208,13 +217,15 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     })
   }
 
-  /** 発言に添えた画像。開いているチャットのものだけを返す */
+  /** 発言や質問カードの答えに添えた画像。開いているチャットのものだけを返す */
   async function image(c: Context<AppEnv>) {
     const user = c.var.user!
     if (!(await canUse(c))) return c.notFound()
     const key = c.req.param('key')
-    const file = (chats.currentChat(user.id)?.content.messages ?? [])
-      .flatMap((m) => (m.role === 'user' ? (m.files ?? []) : []))
+    const content = chats.currentChat(user.id)?.content
+    // ツールの結果のファイルをすべては探さないのは、read_file で読んだアイテムのファイルまで、この URL で開けるようになるため
+    const file = (content?.messages ?? [])
+      .flatMap((m) => (m.role === 'user' || (m.role === 'tool' && content?.cards[m.toolCallId]?.ask) ? (m.files ?? []) : []))
       .find((f) => imageKey(f) === key)
     if (!file) return c.notFound()
     const etag = `"${key}"`
@@ -227,7 +238,7 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
     return c.body(Buffer.from(file.data, 'base64'))
   }
 
-  /** 確認カードを決める。ファイルを選ぶカードでは、承認にファイルを添えて送る */
+  /** 確認カードを決める。ファイルを選ぶカードでは承認にファイルを、質問カードでは答え（と答えの画像）を添えて送る */
   async function decide(c: Context<AppEnv>) {
     const user = c.var.user!
     if (!(await canUse(c))) return c.notFound()
@@ -244,7 +255,8 @@ export function createAiHandlers({ agent, canUse }: AiBackend) {
         return emit({ type: 'closed' })
       }
       if (problem) return emit({ type: 'error', message: problem, retract: true })
-      if (file) await agent.receive({ c, chat, callId, file, page }, emit)
+      if (approve && fields.answers) await agent.answer({ c, chat, callId, answers: fields.answers, image: file, page }, emit)
+      else if (file) await agent.receive({ c, chat, callId, file, page }, emit)
       else await agent.decide({ c, chat, callId, approve, page }, emit)
     })
   }

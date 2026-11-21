@@ -28,6 +28,7 @@ import {
   readableMediaType,
 } from './ai-file-kinds'
 import type { AiLedger } from './ai-ledger'
+import { ASK_TOOLS, ASK_USER, answersResult, readAnswers, readQuestions } from './ai-questions'
 import type { AiQuota, AiQuotaState } from './ai-quota'
 import { judgeOffTopic } from './ai-scope'
 import { createAiSuggester } from './ai-suggestions'
@@ -52,7 +53,7 @@ import { parseJson } from '../../lib/json'
 
 /**
  * パネルへ流す出来事。chat は新しく始めたチャットの ID、error の retract は送った発言を会話に残さなかったこと（入力欄に戻してよい）、
- * confirm は確認カード（ファイルを選ぶカードも）を出したこと、applied はツールが内容を変えたこと、closed は開いていたチャットがもうないこと、
+ * confirm は確認カード（ファイルを選ぶカード・質問カードも）を出したこと、applied はツールが内容を変えたこと、closed は開いていたチャットがもうないこと、
  * outdated は送った画面が古く、発言を受け付けなかったこと、replies は押して送れる続きの依頼、
  * stopped は利用者が生成を止めたこと（retract は何も答えないうちに止めたので、送った発言を会話に残さなかったこと）、
  * compacting は古いやり取りの要約を始めたこと、compacted は要約し終えたこと、
@@ -78,7 +79,8 @@ export type AiAgentEvent =
 type Emit = (event: AiAgentEvent) => void
 
 /** AI がツールでしていること。client.ts が、パネルのマスコットの動きと作成中の文言をこれに合わせる */
-export type AiActivity = 'courses' | 'course' | 'item' | 'file' | 'docs' | 'doc' | 'create' | 'arrange' | 'propose' | 'request' | 'apply'
+export type AiActivity =
+  'courses' | 'course' | 'item' | 'file' | 'docs' | 'doc' | 'create' | 'arrange' | 'propose' | 'request' | 'question' | 'apply'
 
 // ツールの定義に持たせないのは、通常モード・Moodle モード・STEP Docs のツールで名前がそろっていて、ここで 1 つの表にすれば足りるため
 const TOOL_ACTIVITIES: Record<string, AiActivity> = {
@@ -96,6 +98,7 @@ const TOOL_ACTIVITIES: Record<string, AiActivity> = {
   update_item: 'propose',
   set_visibility: 'propose',
   request_file: 'request',
+  ask_user: 'question',
 }
 
 const toolActivity = (name: string, tool?: AiAgentTool): AiActivity =>
@@ -211,8 +214,8 @@ const SUGGEST_TOOL = toolOf(
   SUGGEST_REPLIES,
   [
     '回答の最後に、利用者がボタンを押すだけで送れる続きの依頼や返事の候補を出します。',
-    '確かめた内容を踏まえた次の作業、提案した内容を実際に作る依頼、質問で終えたときの答えの候補などを出してください。次に勧める作業がなく、会話がそこで完結しているときは呼ばないでください。',
-    '回答の本文を書き終えたあと、ほかのツールと一緒にせず、最後に 1 回だけ呼んでください。確認カードを出したときは呼ばないでください。',
+    '確かめた内容を踏まえた次の作業、提案した内容を実際に作る依頼などを出してください。次に勧める作業がなく、会話がそこで完結しているときは呼ばないでください。',
+    `回答の本文を書き終えたあと、ほかのツールと一緒にせず、最後に 1 回だけ呼んでください。確認カードを出したときは呼ばないでください。利用者に決めてもらうことがあるときは、これではなく ${ASK_USER} で質問してください。`,
   ].join(''),
   suggestArgs,
 )
@@ -283,9 +286,14 @@ const sentFileSize = (content: AiChatContent) =>
 export const MAX_CHAT_IMAGES = 3
 
 // 要約より前の画像も数えるのは、要約のたびに枠が戻ると、同じチャットで何枚でも送れるようになるため
-/** このチャットであと何枚の画像を添えられるか */
-export const imagesLeft = ({ messages }: AiChatContent) =>
-  Math.max(0, MAX_CHAT_IMAGES - messages.filter((m) => m.role === 'user' && m.files?.length).length)
+/** このチャットであと何枚の画像を添えられるか。質問カードの答えに添えた画像も数える */
+export const imagesLeft = ({ messages, cards }: AiChatContent) =>
+  Math.max(
+    0,
+    MAX_CHAT_IMAGES -
+      messages.filter((m) => m.role === 'user' && m.files?.length).length -
+      Object.values(cards).filter((card) => card.answers?.some((a) => a.image)).length,
+  )
 
 const isBlankStop = (m: AiMessage | undefined) => m?.role === 'assistant' && !!m.stopped && !m.content && !m.toolCalls?.length
 
@@ -301,7 +309,7 @@ const focusPrompt = ({ courseId, itemId, title }: AiFocus) => [
   '- 最初に get_item で、今の問題文・制約・最初のコードを読んでください（編集画面で保存していない変更は読めません）。',
   '- 問題文と制約がどちらもあるときは、良いところを短く伝えたうえで、改善案を具体的に示してください。見る観点は、あいまいな要件、問題文と制約の食い違い、問題文にあるのに制約にない要件、コードを読んでも判定しにくい制約、学生に分かりにくい表現です。直す内容が決まったら update_item で確認カードを出してください。直すところがなければ、そう伝えてください。',
   '- 問題文か制約のどちらかがないときは、それを埋めるのを手伝ってください。問題文だけがあれば、それに沿った制約を、制約だけがあれば、それに合う問題文を作って update_item で確認カードを出してください。',
-  '- どちらもないときや、作るのに必要なことが分からないときは、推測で作らずに、先に利用者に質問してください（何を作らせる課題か、対象の学生と難しさ、学ばせたいこと、使ってほしい書き方など）。質問は一度に 3 つまでにし、答えやすいように例や選択肢を添えてください。答えがそろったら、問題文と制約を作って update_item で確認カードを出してください。',
+  `- どちらもないときや、作るのに必要なことが分からないときは、推測で作らずに、先に ${ASK_USER} で利用者に質問してください（何を作らせる課題か、対象の学生と難しさ、学ばせたいこと、使ってほしい書き方など）。質問は一度に 3 つまでにし、答えやすいように選択肢を添えてください。答えがそろったら、問題文と制約を作って update_item で確認カードを出してください。`,
   '- 問題文は学生が読むもので、何を作るか・満たす条件・ヒントが分かるように Markdown で書きます。制約は問題文の要件を 1 つずつにしたもので、3〜8 個にします。label は学生にも見える短い名前（15 字程度）、text は AI が判定に使う、コードを読めば判定できる内容（40 字程度）です。最初のコードにはじめから書いてある部分は制約にしません。',
 ]
 
@@ -369,6 +377,7 @@ export function createAiAgent({
   // 候補をあとから別の要求で作らないのは、候補を出すだけのために、応答をもう 1 回作らせることになるため
   const wireTools = (model: AiModel) => [
     ...baseTools,
+    ASK_TOOLS[readsFiles(model) ? 'image' : 'text'],
     ...(canRead(model) ? [READ_TOOL] : []),
     ...(hidesPrelude(model) ? [] : [SUGGEST_TOOL]),
   ]
@@ -403,6 +412,7 @@ export function createAiAgent({
           ]),
       '- 確認カードは、確認が必要なツールを呼んだときにだけ出ます。ツールを呼ばずに「カードを出します」と書かないでください。',
       '- 確認カードを出したら、利用者が承認するか取り消すまで、それ以上ツールを呼ばずに、カードを確かめてほしいことを一言伝えて終えてください。',
+      `- 作業を進めるのに利用者に決めてもらうことがあるときは、本文で質問を並べずに ${ASK_USER} で質問カードを出してください。質問カードを出したら、利用者が答えるか閉じるまで、それ以上ツールを呼ばずに終えてください。質問の中身はカードに出るので、本文に書き写さないでください。`,
       ...(files
         ? [
             `- ${REQUEST_FILE} でファイルを選ぶカードを出したときも同じです。利用者がファイルを送るか取り消すまで、それ以上ツールを呼ばずに、選んでほしいファイルを一言伝えて終えてください。`,
@@ -533,7 +543,23 @@ export function createAiAgent({
     const args = parseJson(call.arguments)
     emit({ type: 'working', activity: toolActivity(call.name, tool) })
     let result: AiToolResult
-    if (call.name === REQUEST_FILE && files) {
+    if (call.name === ASK_USER) {
+      const questions = readQuestions(args, readsFiles(model) && imagesLeft(chat.content) > 0)
+      if (typeof questions !== 'string') {
+        cards[call.id] = {
+          name: call.name,
+          args: call.arguments,
+          title: '',
+          changes: [],
+          snapshot: null,
+          state: 'pending',
+          ask: { questions },
+        }
+        emit({ type: 'confirm' })
+        return true
+      }
+      result = failure(questions, `${ASK_USER} の引数が正しくありません`)
+    } else if (call.name === REQUEST_FILE && files) {
       const parsed = requestArgs.safeParse(args)
       if (parsed.success) {
         cards[call.id] = {
@@ -679,8 +705,8 @@ export function createAiAgent({
       if (reply.stop !== 'end' || !reply.text.trim()) return false
       content.summary = reply.text.trim()
       content.compactions = [...(content.compactions ?? []), at]
-      // 要約より前のファイルを残さないのは、AI にはもう渡さず、保存した会話の大きさだけが膨らむため
-      for (const m of content.messages.slice(0, at)) if (m.role === 'tool') delete m.files
+      // 要約より前のファイルを残さないのは、AI にはもう渡さず、保存した会話の大きさだけが膨らむため。質問カードの答えの画像はパネルに出し続けるので残す
+      for (const m of content.messages.slice(0, at)) if (m.role === 'tool' && !content.cards[m.toolCallId]?.ask) delete m.files
       delete content.contextTokens
       emit({ type: 'compacted' })
       return true
@@ -693,15 +719,17 @@ export function createAiAgent({
   // 確認を待っているカードを残したまま次の発言を送らないのは、ツールの結果がないまま続けると、次の要求が弾かれるため
   function dismissPending(content: AiChatContent) {
     for (const [callId, card] of pendingCalls(content)) {
-      const note = card.request ? 'ファイルを選ぶ前に次の発言をしたため、' : '確認する前に次の発言をしたため、'
+      const note = card.ask
+        ? '質問に答える前に次の発言をしたため、'
+        : card.request
+          ? 'ファイルを選ぶ前に次の発言をしたため、'
+          : '確認する前に次の発言をしたため、'
       card.state = 'rejected'
       card.note = note
-      content.messages.push({
-        role: 'tool',
-        toolCallId: callId,
-        content: JSON.stringify({ error: `${note}${card.request ? '受け取っていません' : '実行していません'}。` }),
-        isError: true,
-      })
+      const error = card.ask
+        ? `${note}答えを受け取っていません。次の発言に答えが書かれていれば、それを答えとして扱ってください。`
+        : `${note}${card.request ? '受け取っていません' : '実行していません'}。`
+      content.messages.push({ role: 'tool', toolCallId: callId, content: JSON.stringify({ error }), isError: true })
     }
   }
 
@@ -799,7 +827,7 @@ export function createAiAgent({
       chat.content.touched[callId] = touched
       emit({ type: 'applied', touched })
     }
-    chat.content.messages.push({ role: 'tool', toolCallId: callId, content: result.content, isError: result.isError })
+    chat.content.messages.push({ role: 'tool', toolCallId: callId, content: result.content, isError: result.isError, files: result.files })
   }
 
   /** 待っているカードがなくなったら、AI に続きを答えさせる */
@@ -818,7 +846,7 @@ export function createAiAgent({
       : failure(`${card.name} というツールはありません。`, TOOL_FAILED)
   }
 
-  /** 確認カードを承認か取り消しで閉じる。ファイルを選ぶカードは取り消しだけで、送るのは receive */
+  /** 確認カードを承認か取り消しで閉じる。ファイルを選ぶカードと質問カードは取り消しだけで、送るのは receive と answer */
   const decide = (
     { c, chat, callId, approve, page }: { c: AiToolContext; chat: AiChat; callId: string; approve: boolean; page: string },
     emit: Emit,
@@ -829,16 +857,18 @@ export function createAiAgent({
         emit({ type: 'error', message: 'この確認はもう終わっています。' })
         return false
       }
-      if (card.request && approve) {
-        emit({ type: 'error', message: 'ファイルを選んでください。', retract: true })
+      if ((card.request || card.ask) && approve) {
+        emit({ type: 'error', message: card.ask ? '質問に答えてください。' : 'ファイルを選んでください。', retract: true })
         return false
       }
       delete chat.content.replies
       if (approve) emit({ type: 'working', activity: 'apply' })
       const result: AiToolResult = !approve
-        ? card.request
-          ? failure('利用者がファイルを選ばずに取り消しました。受け取っていません。', '取り消しました')
-          : failure('利用者が取り消しました。実行していません。', '取り消しました')
+        ? card.ask
+          ? failure('利用者が質問に答えずにカードを閉じました。同じことを尋ね直さずに、分かっていることで進めてください。', '閉じました')
+          : card.request
+            ? failure('利用者がファイルを選ばずに取り消しました。受け取っていません。', '取り消しました')
+            : failure('利用者が取り消しました。実行していません。', '取り消しました')
         : await approveCard(c, card)
       closeCard(chat, callId, emit, !approve ? 'rejected' : result.isError ? 'failed' : 'approved', result)
       await proceed({ c, chat, page, emit, signal })
@@ -846,13 +876,13 @@ export function createAiAgent({
     })
 
   /**
-   * callIds の確認カードを並んだ順にすべて承認し、終えてから AI に続きを答えさせる。ファイルを選ぶカードは含めない。
+   * callIds の確認カードを並んだ順にすべて承認し、終えてから AI に続きを答えさせる。ファイルを選ぶカードと質問カードは含めない。
    * 待っているカードを全部ではなく callIds で受けるのは、利用者が画面で見たカードだけを承認し、ほかのタブで増えたカードを見ずに実行しないため
    */
   const approveAll = ({ c, chat, callIds, page }: { c: AiToolContext; chat: AiChat; callIds: string[]; page: string }, emit: Emit) =>
     exclusive(c, chat, emit, async (signal) => {
       const chosen = new Set(callIds)
-      const targets = pendingCalls(chat.content).filter(([callId, card]) => chosen.has(callId) && !card.request)
+      const targets = pendingCalls(chat.content).filter(([callId, card]) => chosen.has(callId) && !card.request && !card.ask)
       if (targets.length === 0) {
         emit({ type: 'error', message: 'この確認はもう終わっています。' })
         return false
@@ -905,11 +935,52 @@ export function createAiAgent({
       return true
     })
 
+  /**
+   * 質問カードに利用者の答えを渡す。answers は client.ts が送る質問ごとの答えの JSON、image は答えに添えた画像。
+   * 答えが正しくなければ、カードを閉じずに断る（retract は答え直してよいこと）
+   */
+  const answer = (
+    {
+      c,
+      chat,
+      callId,
+      answers,
+      image,
+      page,
+    }: { c: AiToolContext; chat: AiChat; callId: string; answers: string; image: File | null; page: string },
+    emit: Emit,
+  ) =>
+    exclusive(c, chat, emit, async (signal) => {
+      const card = chat.content.cards[callId]
+      if (card?.state !== 'pending' || !card.ask) {
+        emit({ type: 'error', message: 'この質問はもう終わっています。' })
+        return false
+      }
+      const read = readAnswers(card.ask.questions, answers, !!image)
+      if (typeof read === 'string') {
+        emit({ type: 'error', message: read, retract: true })
+        return false
+      }
+      const { turnModel } = chat.content
+      const file = image && (await attachImage(turnModel && isAiModel(turnModel) ? turnModel : chat.model, chat.content, image))
+      if (typeof file === 'string') {
+        emit({ type: 'error', message: file, retract: true })
+        return false
+      }
+      delete chat.content.replies
+      card.answers = read
+      const result: AiToolResult = { ...success(answersResult(card.ask.questions, read), '答えました'), ...(file && { files: [file] }) }
+      closeCard(chat, callId, emit, 'approved', result)
+      await proceed({ c, chat, page, emit, signal })
+      return true
+    })
+
   return {
     send,
     decide,
     approveAll,
     receive,
+    answer,
     stop,
     hardTaskModel,
     usageOf,

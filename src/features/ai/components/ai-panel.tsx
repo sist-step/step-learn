@@ -2,6 +2,7 @@
 import type { AiUsageMeter } from '../ai-agent'
 import { AI_BUDDY_LOOKS, AI_BUDDY_MARKS, type AiBuddyState } from '../ai-buddy'
 import type { AiCardState } from '../ai-chat'
+import type { AiQuestion } from '../ai-questions'
 import type { AiTouched } from '../ai-tool-kit'
 import { formatBytes } from '../../../lib/bytes'
 import { formatClock } from '../../../lib/clock'
@@ -9,7 +10,7 @@ import type { DiffLine } from '../../../lib/diff'
 import { IMAGE_ACCEPT } from '../../../lib/images'
 import { FILE_TOO_LARGE, MAX_FILE_SIZE } from '../../../lib/storage'
 import { Button, IconButton } from '../../../components/button'
-import { FieldError, FileChip, FileInput, SegmentedControl, validateWith } from '../../../components/form'
+import { FieldError, FileChip, FileInput, SegmentedControl, Textarea, validateWith } from '../../../components/form'
 import { Icon } from '../../../components/icons'
 import { Markdown } from '../../../components/markdown'
 import { Mascot } from '../../../components/mascot'
@@ -28,6 +29,7 @@ export type AiChatEntry =
   | { kind: 'tool'; label: string; touched?: AiTouched }
   | { kind: 'card'; callId: string; title: string; changes: AiCardChange[]; state: AiCardState; note?: string; touched?: AiTouched }
   | AiFileEntry
+  | AiAskEntry
 
 /**
  * AI がファイルを選んでもらうために出したカード（features/ai/ai-agent.ts の REQUEST_FILE）。accept はファイルの選択に渡す拡張子（なければ種類を問わない）、
@@ -42,6 +44,15 @@ type AiFileEntry = {
   state: AiCardState
   note?: string
   received?: { name: string; size: string }
+}
+
+/** AI が出した質問カード（features/ai/ai-questions.ts の ASK_USER）。answers の text が null なら飛ばした質問、image は答えに添えた画像の URL */
+type AiAskEntry = {
+  kind: 'ask'
+  callId: string
+  questions: AiQuestion[]
+  state: AiCardState
+  answers?: { text: string | null; image?: string }[]
 }
 
 /**
@@ -222,6 +233,204 @@ const FileRequest = ({ entry, chatId }: { entry: AiFileEntry; chatId: number }) 
   </div>
 )
 
+const ASK_STATE_LABELS: Record<AiCardState, string> = {
+  pending: '質問に答えてください',
+  approved: '答えました',
+  rejected: '答えずに閉じました',
+  failed: '答えを受け取れませんでした',
+}
+
+const AskPager = ({ index, total }: { index: number; total: number }) => (
+  <div class="ai-ask-pager">
+    <IconButton icon="chevronLeft" label="前の質問" iconSize={14} data-ai-ask-go="-1" disabled={index === 0} />
+    <span class="ai-ask-count">
+      {index + 1} / {total}
+    </span>
+    <IconButton icon="chevronRight" label="次の質問" iconSize={14} data-ai-ask-go="1" disabled={index === total - 1} />
+  </div>
+)
+
+const AskOptions = ({ question }: { question: Extract<AiQuestion, { type: 'choice' | 'multi' }> }) => (
+  <div class="ai-ask-options">
+    {question.options.map((o, j) => (
+      <button type="button" class="ai-ask-option" data-ai-ask-choice={String(j)} aria-pressed="false">
+        <span class="ai-ask-key" aria-hidden="true">
+          <span class="ai-ask-key-num">{j + 1}</span>
+          <Icon name="check" size={13} />
+        </span>
+        <span class="ai-ask-option-text">
+          <span class="ai-ask-option-label">{o.label}</span>
+          {o.description && <span class="ai-ask-option-note">{o.description}</span>}
+        </span>
+      </button>
+    ))}
+    <label class="ai-ask-other">
+      <Icon name="pencil" size={14} />
+      <input type="text" class="ai-ask-other-input" placeholder="その他（自由に入力）" aria-label="その他の答え" data-ai-ask-other />
+    </label>
+  </div>
+)
+
+const AskNumber = ({ question: q }: { question: Extract<AiQuestion, { type: 'number' }> }) => (
+  <div class="ai-ask-number">
+    <div class="ai-ask-number-row">
+      <IconButton icon="minus" label="減らす" iconSize={14} data-ai-ask-nudge="-1" />
+      <output class="ai-ask-value">
+        <span data-ai-ask-value>{q.initial}</span>
+        {q.unit && <span class="ai-ask-unit">{q.unit}</span>}
+      </output>
+      <IconButton icon="plus" label="増やす" iconSize={14} data-ai-ask-nudge="1" />
+    </div>
+    <input
+      type="range"
+      class="ai-ask-range"
+      min={String(q.min)}
+      max={String(q.max)}
+      step={String(q.step)}
+      value={String(q.initial)}
+      aria-label={q.text}
+      data-ai-ask-range
+    />
+    <div class="ai-ask-range-ends" aria-hidden="true">
+      <span>
+        {q.min}
+        {q.unit}
+      </span>
+      <span>
+        {q.max}
+        {q.unit}
+      </span>
+    </div>
+  </div>
+)
+
+/** 答えの画像。選んだ画像は client.ts（paintAiAsk）が縮めて覚え、ここに出す */
+const AskImage = ({ id }: { id: string }) => (
+  <div class="file-drop ai-ask-image">
+    <input type="file" id={id} class="file-input" accept={IMAGE_ACCEPT} data-ai-ask-image />
+    <label for={id} class="file-drop-zone ai-ask-drop">
+      <span class="file-drop-body">
+        <span class="file-drop-icon">
+          <Icon name="photo" size={18} />
+        </span>
+        <span>
+          <span class="file-drop-drag">ドラッグ＆ドロップ・貼り付け または </span>
+          <span class="file-drop-link">画像を選択</span>
+        </span>
+      </span>
+    </label>
+    <div class="ai-ask-preview" data-ai-ask-preview hidden>
+      <img alt="答えに添える画像" data-ai-ask-preview-img />
+      <IconButton icon="x" label="画像を外す" iconSize={14} class="ai-ask-preview-clear" data-ai-ask-image-clear />
+    </div>
+  </div>
+)
+
+function AskInput({ question, id }: { question: AiQuestion; id: string }) {
+  switch (question.type) {
+    case 'choice':
+    case 'multi':
+      return <AskOptions question={question} />
+    case 'number':
+      return <AskNumber question={question} />
+    case 'text':
+      return (
+        <Textarea
+          class="ai-ask-text"
+          rows={3}
+          placeholder={question.placeholder || '答えを入力'}
+          aria-label={question.text}
+          data-ai-ask-text
+        />
+      )
+    case 'image':
+      return <AskImage id={id} />
+  }
+}
+
+const ASK_HINTS: Record<AiQuestion['type'], string> = {
+  choice: '数字キーでも選べます',
+  multi: 'いくつでも選べます',
+  number: '',
+  text: 'Shift + Enter で改行',
+  image: '',
+}
+
+/**
+ * 質問カード。1 問ずつ出し、答えは client.ts（initAiAsks）が覚えて、最後の答えで /ai/chat/confirm に送る。
+ * 送るのは確認カードと同じ承認で、答えの JSON（answers）と画像（file）を添える
+ */
+const AskCard = ({ entry, chatId }: { entry: AiAskEntry; chatId: number }) => {
+  if (entry.state !== 'pending') return <AskResult entry={entry} />
+  const total = entry.questions.length
+  return (
+    <form method="post" action="/ai/chat/confirm" class="ai-card ai-ask" data-state="pending" data-ai-confirm data-ai-ask>
+      <input type="hidden" name="chat" value={String(chatId)} />
+      <input type="hidden" name="call" value={entry.callId} />
+      <input type="hidden" name="answers" value="" />
+      {entry.questions.map((q, i) => {
+        const id = `ai-ask-${entry.callId}-${i}`
+        return (
+          <div class="ai-ask-page" role="group" aria-labelledby={id} data-ai-ask-page={String(i)} data-type={q.type} hidden={i > 0}>
+            <div class="ai-ask-head">
+              <p class="ai-ask-question" id={id}>
+                {q.text}
+              </p>
+              {total > 1 && <AskPager index={i} total={total} />}
+              <IconButton type="submit" name="decision" value="reject" icon="x" label="質問を閉じる" iconSize={16} class="ai-ask-close" />
+            </div>
+            <AskInput question={q} id={`${id}-image`} />
+            <div class="ai-ask-foot">
+              <span class="ai-ask-hint">{ASK_HINTS[q.type]}</span>
+              <Button size="sm" variant="ghost" data-ai-ask-skip>
+                スキップ
+              </Button>
+              <Button size="sm" variant="primary" class="ai-ask-next" data-ai-ask-next>
+                {i === total - 1 ? '送信' : '次へ'}
+              </Button>
+            </div>
+          </div>
+        )
+      })}
+      <button type="submit" name="decision" value="approve" hidden data-ai-ask-submit />
+    </form>
+  )
+}
+
+const AskResult = ({ entry }: { entry: AiAskEntry }) => (
+  <div class="ai-card ai-ask" data-state={entry.state}>
+    <p class="ai-card-title">
+      <Icon name="question" size={15} />
+      <strong>{entry.questions.length > 1 ? `${entry.questions.length} つの質問` : '質問'}</strong>
+    </p>
+    <dl class="ai-card-changes">
+      {entry.questions.map((q, i) => {
+        const answer = entry.answers?.[i]
+        return (
+          <div class="ai-change">
+            <dt>{q.text}</dt>
+            {answer && (
+              <dd class={answer.text === null ? 'ai-ask-skipped' : undefined}>
+                {answer.image ? (
+                  <a href={answer.image} target="_blank" rel="noopener" class="ai-ask-answer-image">
+                    <img src={answer.image} alt="答えに添えた画像" loading="lazy" />
+                  </a>
+                ) : (
+                  (answer.text ?? 'スキップ')
+                )}
+              </dd>
+            )}
+          </div>
+        )
+      })}
+    </dl>
+    <p class="ai-card-state">
+      <Icon name={entry.state === 'approved' ? 'checkCircle' : entry.state === 'failed' ? 'alert' : 'x'} size={15} />
+      {ASK_STATE_LABELS[entry.state]}
+    </p>
+  </div>
+)
+
 /** 確認を待つカードがあるときに出す。すべて見終えるまでは承認のボタンを出さず、まだ見ていないカードへ移るボタンを出す（client.ts の paintAiApproveAll） */
 const ApproveAll = ({ chatId, calls }: { chatId: number; calls: string[] }) => (
   <form method="post" action="/ai/chat/confirm-all" class="ai-approve-all" data-ai-approve-all data-unseen={String(calls.length)}>
@@ -247,6 +456,7 @@ const ApproveAll = ({ chatId, calls }: { chatId: number; calls: string[] }) => (
 const Entry = ({ entry, chatId }: { entry: AiChatEntry; chatId: number }) => {
   if (entry.kind === 'card') return <Card entry={entry} chatId={chatId} />
   if (entry.kind === 'file') return <FileRequest entry={entry} chatId={chatId} />
+  if (entry.kind === 'ask') return <AskCard entry={entry} chatId={chatId} />
   if (entry.kind === 'tool') return <ToolLine label={entry.label} touched={entry.touched} />
   if (entry.kind === 'user') return <UserMessage text={entry.text} image={entry.image} />
   if (entry.kind === 'stopped') return <StoppedLine />
@@ -518,8 +728,8 @@ const AiBuddy = ({ state, hidden }: { state: AiBuddyState; hidden: boolean }) =>
 const buddyStateOf = (chat: AiPanelProps['chat']): AiBuddyState => {
   if (!chat) return 'idle'
   if (chat.busy) return 'think'
-  const pending = chat.entries.filter((e) => (e.kind === 'card' || e.kind === 'file') && e.state === 'pending')
-  if (pending.some((e) => e.kind === 'card')) return 'ask'
+  const pending = chat.entries.filter((e) => (e.kind === 'card' || e.kind === 'file' || e.kind === 'ask') && e.state === 'pending')
+  if (pending.some((e) => e.kind !== 'file')) return 'ask'
   return pending.length > 0 ? 'wait-file' : 'idle'
 }
 
