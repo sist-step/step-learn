@@ -561,7 +561,11 @@ export const ItemPage = ({
                 <span class="strong">画面共有を開く</span>
                 <span class="muted small truncate">別のタブで開きます</span>
               </span>
-              {sharing && <Chip tone="live">配信中</Chip>}
+              {sharing && (
+                <Chip tone="live" icon="monitor">
+                  配信中
+                </Chip>
+              )}
               <Button as="span" variant="primary" iconEnd="external">
                 開く
               </Button>

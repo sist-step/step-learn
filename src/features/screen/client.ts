@@ -47,6 +47,7 @@ function setup(root: HTMLElement) {
   const placeholder = $<HTMLElement>('[data-screen-placeholder]')
   const message = $<HTMLElement>('[data-screen-message]')
   const stateChip = $<HTMLElement>('[data-screen-state]')
+  const stateLabel = $<HTMLElement>('[data-screen-state-label]')
   const statsText = root.querySelector<HTMLElement>('[data-screen-stats]')
   const errorText = $<HTMLElement>('[data-screen-error]')
   const fullscreenBtn = $<HTMLButtonElement>('[data-screen-fullscreen]')
@@ -72,7 +73,7 @@ function setup(root: HTMLElement) {
     fullscreenBtn.hidden = false
   }
   function setState(label: string, live: boolean) {
-    stateChip.textContent = label
+    stateLabel.textContent = label
     stateChip.classList.toggle('chip-live', live)
   }
   function showError(text: string) {
