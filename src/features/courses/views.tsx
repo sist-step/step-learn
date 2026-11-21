@@ -207,7 +207,11 @@ const ItemRow = ({
           {COMPLETION_LABELS[completion]}
         </Chip>
       )}
-      {sharing && !locked && <Chip tone="live">配信中</Chip>}
+      {sharing && !locked && (
+        <Chip tone="live" icon="monitor">
+          配信中
+        </Chip>
+      )}
       {!locked &&
         (newTab || external ? (
           <Icon name="external" size={14} class="item-ext" />

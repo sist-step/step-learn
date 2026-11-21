@@ -37,7 +37,6 @@
 .chip-accent { background: var(--primary-soft); color: var(--primary-text); }
 .chip-success { background: var(--success-soft); color: var(--success-text); }
 .chip-live { background: var(--danger-soft); color: var(--danger-text); }
-.chip-live::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 1.6s ease-in-out infinite; }
 
 .avatar {
   flex: none;

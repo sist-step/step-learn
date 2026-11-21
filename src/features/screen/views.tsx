@@ -18,7 +18,9 @@ export const ScreenPage = ({ access, item }: { access: CourseAccess; item: { id:
           <span class="muted small truncate">{access.course.title}</span>
         </div>
       </div>
-      <Chip data-screen-state>待機中</Chip>
+      <Chip icon="monitor" data-screen-state>
+        <span data-screen-state-label>待機中</span>
+      </Chip>
       {access.canManage && <span class="muted small truncate screen-stats" data-screen-stats hidden />}
       <div class="screen-actions">
         <Button variant="ghost" size="sm" icon="maximize" data-screen-fullscreen hidden>
