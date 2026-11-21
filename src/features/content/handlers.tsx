@@ -49,7 +49,7 @@ import { completionError, firstError, isFile, readConstraints, solutionOf, valid
 import { ITEM_KINDS, deleteStoredFiles, insertItem, itemFileColumns, sectionStoredFiles, storedFilesOf } from '../../lib/item-kinds'
 import { field, fileField, intParam, readFields, readForm, redirectWith, sameOriginReferer, wantsJson, type Form } from '../../lib/http'
 import { presentationStore } from '../presentation/presentation-items'
-import { previewKind } from '../../lib/preview'
+import { HTML_PAGE_CSP, isHtmlFile, previewKind } from '../../lib/preview'
 import { DEFAULT_PASS_PERCENT, MAX_QUIZ_JSON_LENGTH, isQuizLook, readQuizForm } from '../quiz/quiz'
 import { getQuizSettings, quizStore, saveQuizSettings } from '../quiz/quiz-items'
 import { quizViewOf } from '../quiz/quiz-store'
@@ -835,6 +835,10 @@ export async function downloadFile(c: Context<AppEnv>) {
 
   const type = item.fileType ?? 'application/octet-stream'
   const filename = item.fileName ?? 'file'
+  if (c.req.query('open') === '1' && isHtmlFile(type, filename)) {
+    const res = await storage.serve(item.fileKey, { filename, contentType: 'text/html', inline: true, csp: HTML_PAGE_CSP })
+    return res ?? c.notFound()
+  }
   const preview = c.req.query('inline') === '1' ? previewKind(type, filename) : null
   // PDF ビューアは sandbox CSP 下で表示されないため、sandbox は添付時のみ。
   // テキストをインラインで返さないのは、HTML や SVG として同一オリジンで描かせないため（プレビューはサーバーで読んで埋め込む）
