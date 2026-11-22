@@ -99,6 +99,13 @@ import variable from 'heroicons/24/outline/variable.svg?raw'
 import squares2x2 from 'heroicons/24/outline/squares-2x2.svg?raw'
 import chevronUp from 'heroicons/24/outline/chevron-up.svg?raw'
 import squaresPlus from 'heroicons/24/outline/squares-plus.svg?raw'
+import pause from 'heroicons/24/outline/pause.svg?raw'
+import backward from 'heroicons/24/outline/backward.svg?raw'
+import forward from 'heroicons/24/outline/forward.svg?raw'
+import volume from 'heroicons/24/outline/speaker-wave.svg?raw'
+import volumeMuted from 'heroicons/24/outline/speaker-x-mark.svg?raw'
+import minimize from 'heroicons/24/outline/arrows-pointing-in.svg?raw'
+import pip from 'heroicons/24/outline/window.svg?raw'
 
 // 外部アイコンフォントを読み込まず、使う分だけをビルド時に文字列として埋め込む
 const svgs = {
@@ -202,6 +209,13 @@ const svgs = {
   squares2x2,
   chevronUp,
   squaresPlus,
+  pause,
+  backward,
+  forward,
+  volume,
+  volumeMuted,
+  minimize,
+  pip,
 } as const
 
 export type IconName = keyof typeof svgs

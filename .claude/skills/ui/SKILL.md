@@ -26,6 +26,7 @@ description: "STEP Learn の見た目と UI の作り方（既存の UI 部品�
 | `features/quiz/components/quiz.tsx` / `quiz-animal.tsx` | 小テストの編集欄・解答・結果・動物のキャラクター | |
 | `features/bundle/components/bundle.tsx` / `restriction.tsx` / `ai-panel.tsx` / `pdf.tsx` / `presentation.tsx` | ファイル自動配布・アクセス制限・AI のパネル・PDF・発表ファイル | |
 | `components/mascot.tsx` | `Mascot` / `MascotYard` / `WalkingMascot` | 飾りなので、伝える情報のない空きにだけ置く |
+| `components/media.tsx` | `VideoPlayer` / `ImageViewer` | 動画や、拡大して見せたい画像を出すときは `<video controls>` や生の `<img>` ではなくこれを使う |
 
 クラス名を条件で組み立てるときは `components/cx.ts` の `cx('a', cond && 'b')`。
 
