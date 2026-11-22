@@ -19,6 +19,9 @@ const SETTINGS = z.object({
   aiPanel: z.boolean().catch(false),
   mdSplit: z.boolean().catch(true),
   outlineHidden: z.array(z.string()).catch([]),
+  mediaVolume: z.number().min(0).max(1).catch(1),
+  mediaMuted: z.boolean().catch(false),
+  mediaRate: z.number().min(0.25).max(4).catch(1),
 })
 
 type Settings = z.infer<typeof SETTINGS>

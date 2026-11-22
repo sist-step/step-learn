@@ -43,6 +43,7 @@ import { SegmentedControl, SelectField, TextField, validateWith } from '../../co
 import { Markdown, MarkdownEditor } from '../../components/markdown'
 import { Card, LinkCard } from '../../components/card'
 import { PdfBar, PdfStage } from '../../components/pdf'
+import { ImageViewer, VideoPlayer } from '../../components/media'
 import { PresentationBar, PresentationEditNote, PresentationStage, type PresentationSummary } from '../presentation/components/presentation'
 import { QuizEditor, QuizGradingCard, QuizLookCard, QuizPanel } from '../quiz/components/quiz'
 import { CollabPanel, CollabSettingsCard } from '../collab/components/collab'
@@ -610,13 +611,19 @@ export const ItemPage = ({
                   )}
                 </div>
               )}
-              {preview === 'image' && <img class="file-preview-img" src={previewUrl} alt={item.title} loading="lazy" />}
-              {preview === 'video' && (
-                <video
-                  class="file-preview-video"
+              {preview === 'image' && (
+                <ImageViewer
+                  id={`image-${item.id}`}
                   src={previewUrl}
-                  controls
-                  preload="metadata"
+                  alt={item.title}
+                  name={item.fileName ?? item.title}
+                  downloadHref={fileUrl}
+                />
+              )}
+              {preview === 'video' && (
+                <VideoPlayer
+                  src={previewUrl}
+                  title={item.title}
                   data-complete-on-ended={waitsFor(item, 'play') ? completeUrl(item) : undefined}
                 />
               )}

@@ -15,6 +15,7 @@ import './client/datetime'
 import { initMascots, initWalkers } from './client/mascot'
 import { aiDocked, aiHooks, initAiPanel, setAiOpen } from './features/ai/client'
 import { initAgentModelPickers } from './features/agent/client'
+import { initVideoPlayers } from './client/media'
 import { $$, fetchJson, reducedMotion } from './client/dom'
 
 // --- モバイルのメニュー
@@ -2143,6 +2144,7 @@ function initContent() {
   initCodeEditors()
   applyPdfMode()
   initPdfViewers()
+  initVideoPlayers()
   initPresentations()
   initQuizWorlds()
   initCollabs()

@@ -18,6 +18,7 @@ const STYLESHEETS = [
   '/src/components/card.css',
   '/src/components/course.css',
   '/src/components/pdf.css',
+  '/src/components/media.css',
   '/src/features/presentation/components/presentation.css',
   '/src/features/code/components/code.css',
   '/src/features/bundle/components/bundle.css',

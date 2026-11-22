@@ -26,6 +26,7 @@ import { Markdown } from '../components/markdown'
 import { WalkingMascot } from '../components/mascot'
 import { MenuItem, Modal, Popover } from '../components/overlay'
 import { PdfBar, PdfStage } from '../components/pdf'
+import { ImageViewer, VideoPlayer } from '../components/media'
 import { RestrictionNote } from '../components/restriction'
 import { Styles, useStyle } from '../components/style'
 import { Alert, Breadcrumbs, Chip, EmptyState, TabPanel } from '../components/ui'
@@ -1146,8 +1147,10 @@ export const ItemPage = ({
                   )}
                 </div>
               )}
-              {preview === 'image' && <img class="file-preview-img" src={previewUrl} alt={item.title} loading="lazy" />}
-              {preview === 'video' && <video class="file-preview-video" src={previewUrl} controls preload="metadata" />}
+              {preview === 'image' && (
+                <ImageViewer id={`image-${item.id}`} src={previewUrl} alt={item.title} name={item.fileName} downloadHref={fileUrl} />
+              )}
+              {preview === 'video' && <VideoPlayer src={previewUrl} title={item.title} />}
               {preview === 'audio' && <audio class="file-preview-audio" src={previewUrl} controls preload="metadata" />}
             </>
           )}
