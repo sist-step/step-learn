@@ -1807,7 +1807,8 @@ function render(doc: Document, scroll: () => void, settled?: () => void) {
   const tabSlide = markTabSwitch(doc)
   const swap = () => {
     document.title = doc.title
-    swapBody(doc.body)
+    // DOMParser の文書の要素をそのまま移さず複製するのは、読み込みの動かないその文書の中で video・audio が src を読めずに失敗し、移したあとも読み直さないため
+    swapBody(document.importNode(doc.body, true))
     slideTabIndicator()
     holdRail()
     initPage()
