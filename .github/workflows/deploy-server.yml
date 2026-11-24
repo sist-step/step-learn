@@ -1,0 +1,113 @@
+name: Deploy to server
+
+# deploy.yml から beta と本番で呼ぶ。ジョブを 2 つ並べて書かないのは、片方だけ直してもう片方が古い手順のまま残るのを避けるため
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub の Environment の名前。サーバーのセルフホストランナーのラベルも同じ名前にする
+        type: string
+        required: true
+      project:
+        description: Compose のプロジェクト名（ボリューム <名前>_data にデータが入る）。Environment の変数 DEPLOY_COMPOSE_PROJECT があればそちらを使う
+        type: string
+        required: true
+      tag:
+        description: デプロイするイメージのタグ（コミットの SHA）
+        type: string
+        required: true
+
+jobs:
+  deploy:
+    name: deploy (${{ inputs.environment }})
+    runs-on: [self-hosted, linux, '${{ inputs.environment }}']
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    env:
+      APP_IMAGE: ghcr.io/${{ github.repository }}/step-learn:${{ inputs.tag }}
+      SANDBOX_IMAGE: ghcr.io/${{ github.repository }}/step-learn-sandbox:${{ inputs.tag }}
+      BROWSER_IMAGE: ghcr.io/${{ github.repository }}/step-learn-browser:${{ inputs.tag }}
+      # 空なら compose.yaml の既定を使う。1GB の VPS での目安は docs/docker.md の「小さな VPS で動かす」
+      APP_MEM_LIMIT: ${{ vars.DEPLOY_APP_MEM_LIMIT }}
+      APP_HEAP_MB: ${{ vars.DEPLOY_APP_HEAP_MB }}
+      SANDBOX_MEM_LIMIT: ${{ vars.DEPLOY_SANDBOX_MEM_LIMIT }}
+      BROWSER_MEM_LIMIT: ${{ vars.DEPLOY_BROWSER_MEM_LIMIT }}
+      BROWSER_SLOTS: ${{ vars.DEPLOY_BROWSER_SLOTS }}
+      COMPOSE_PROJECT_NAME: ${{ vars.DEPLOY_COMPOSE_PROJECT || inputs.project }}
+      HOST_PORT: ${{ vars.DEPLOY_HOST_PORT || '3000' }}
+      HOST_BIND: ${{ vars.DEPLOY_HOST_BIND || '127.0.0.1' }}
+      # 既定の ./ai-docs にしないのは、ランナーの作業ディレクトリは実行のたびに作り直され、step-docs のワークフローが書いた索引が届かないため
+      AI_DOCS_HOST_DIR: ${{ vars.DEPLOY_AI_DOCS_DIR || '/srv/step-learn/ai-docs' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Write env file
+        env:
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          APP_ORIGIN: ${{ vars.APP_ORIGIN }}
+          TRUST_PROXY: ${{ vars.TRUST_PROXY }}
+          SMTP_HOST: ${{ vars.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          SMTP_USER: ${{ vars.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+          MOODLE_URL: ${{ vars.MOODLE_URL }}
+          MOODLE_EXCHANGE_TOKEN: ${{ secrets.MOODLE_EXCHANGE_TOKEN }}
+          MOODLE_BACKCHANNEL_SECRET: ${{ secrets.MOODLE_BACKCHANNEL_SECRET }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          AI_EMAIL_DOMAIN: ${{ vars.AI_EMAIL_DOMAIN }}
+          MICROSOFT_CLIENT_ID: ${{ vars.MICROSOFT_CLIENT_ID }}
+          MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
+          MICROSOFT_TENANT: ${{ vars.MICROSOFT_TENANT }}
+        run: |
+          ENV_FILE="$RUNNER_TEMP/step-learn.env"
+          echo "ENV_FILE=$ENV_FILE" >> "$GITHUB_ENV"
+          umask 077
+          : > "$ENV_FILE"
+          for name in SESSION_SECRET APP_ORIGIN TRUST_PROXY \
+            SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASS MAIL_FROM \
+            MOODLE_URL MOODLE_EXCHANGE_TOKEN MOODLE_BACKCHANNEL_SECRET \
+            OPENROUTER_API_KEY CLAUDE_API_KEY AI_EMAIL_DOMAIN \
+            MICROSOFT_CLIENT_ID MICROSOFT_CLIENT_SECRET MICROSOFT_TENANT; do
+            value="${!name}"
+            [ -z "$value" ] && continue
+            # 引用符なしやダブルクォートで書かないのは、Compose が値の中の $ を変数として展開してしまうため
+            case "$value" in
+              *"'"* | *$'\n'*)
+                echo "::error::$name に ' や改行は使えません"
+                exit 1
+                ;;
+            esac
+            printf "%s='%s'\n" "$name" "$value" >> "$ENV_FILE"
+          done
+      - name: Pull images
+        run: docker compose pull
+      - name: Start
+        run: docker compose up -d --no-build --wait --wait-timeout 60
+      # ログを出さないのは、SMTP 未設定のときはパスワード再設定や登録のリンク（トークン付き）が標準出力に出ていて、
+      # Actions のログを読める人に渡ってしまうため。ログはサーバー上で docker compose logs を実行して見る
+      - name: Show status
+        if: failure()
+        run: docker compose ps -a
+      # 3 日より新しいものを残すのは、直前の版に戻したいときに pull し直さずに済むようにするため。
+      # ビルドキャッシュも消すのは、サーバーでビルドしていたころのキャッシュが残り続けるため
+      - name: Prune old images
+        run: |
+          docker image prune -af --filter "until=72h"
+          docker builder prune -af
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout ghcr.io
+      - name: Remove env file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/step-learn.env"
