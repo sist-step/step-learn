@@ -2,7 +2,7 @@
 
 STEP Docs の本文は、非公開のリポジトリ（[sist-step/step-docs](https://github.com/sist-step/step-docs)）の `src/content/docs` にあります。step-learn は公開リポジトリなので、本文も索引もこのリポジトリとイメージには入れません。
 
-1. step-docs の `main` の docs が変わると、step-docs のワークフロー（`.github/workflows/ai-index.yml`）が、beta のサーバーの self-hosted ランナーで動く
+1. step-docs の `main` の docs が変わると、step-docs のワークフロー（`.github/workflows/ai-index.yml`）が、本番のサーバーの self-hosted ランナーで動く
 2. ワークフローは step-docs の docs と、step-learn の `scripts/docs-index.ts` だけを checkout し、索引（本文を見出しごとに分けた断片と、そのベクトル）をサーバーの専用ディレクトリ（既定 `/srv/step-learn/ai-docs`）の `step-docs.json` に書く
 3. STEP Learn のコンテナは、`compose.yaml` でそのディレクトリを `/app/ai-docs` に読み取り専用でマウントして読む。ファイルが変わったら次の検索のときに読み直すので、再起動は要らない
 
@@ -13,7 +13,7 @@ STEP Docs の本文は、非公開のリポジトリ（[sist-step/step-docs](htt
 
 準備（最初に一度）:
 
-1. beta のサーバーで、ランナーのユーザーが書けて、コンテナ（`node` ユーザー）が読めるディレクトリを作る。例: `sudo mkdir -p /srv/step-learn/ai-docs && sudo chown <ランナーのユーザー> /srv/step-learn/ai-docs`
+1. 本番のサーバーで、ランナーのユーザーが書けて、コンテナ（`node` ユーザー）が読めるディレクトリを作る。例: `sudo mkdir -p /srv/step-learn/ai-docs && sudo chown <ランナーのユーザー> /srv/step-learn/ai-docs`
 2. step-docs のリポジトリに、同じサーバーの self-hosted ランナー（ラベル `self-hosted` / `linux` / `beta`）を登録する。step-learn のランナーはリポジトリごとの登録なので、step-docs からは使えません
 3. step-docs のリポジトリに Environment `beta` を作り、Secret `OPENROUTER_API_KEY` を登録する。ディレクトリを変えるときは、step-docs の変数 `AI_DOCS_DIR` と step-learn の変数 `DEPLOY_AI_DOCS_DIR` を同じ値にする
 
