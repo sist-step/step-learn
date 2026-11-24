@@ -59,10 +59,10 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
   deploy:
-    name: deploy (beta)
+    name: deploy (production)
     needs: build
-    runs-on: [self-hosted, linux, beta]
-    environment: beta
+    runs-on: [self-hosted, linux, production]
+    environment: production
     timeout-minutes: 20
     permissions:
       contents: read
@@ -77,8 +77,6 @@ jobs:
       SANDBOX_MEM_LIMIT: ${{ vars.DEPLOY_SANDBOX_MEM_LIMIT }}
       BROWSER_MEM_LIMIT: ${{ vars.DEPLOY_BROWSER_MEM_LIMIT }}
       BROWSER_SLOTS: ${{ vars.DEPLOY_BROWSER_SLOTS }}
-      # 既定の step-learn にしないのは、beta のデータが入っているボリューム step-learn-beta_data を使い続けるため
-      COMPOSE_PROJECT_NAME: step-learn-beta
       HOST_PORT: ${{ vars.DEPLOY_HOST_PORT || '3000' }}
       HOST_BIND: ${{ vars.DEPLOY_HOST_BIND || '127.0.0.1' }}
       # 既定の ./ai-docs にしないのは、ランナーの作業ディレクトリは実行のたびに作り直され、step-docs のワークフローが書いた索引が届かないため

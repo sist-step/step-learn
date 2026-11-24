@@ -8,7 +8,7 @@ npm run db:backup -- --out /backup --keep 14        # 書き出す先と残す�
 docker compose exec app node dist/server/backup.js  # Docker のとき（ボリュームの data/backups に書き出す）
 ```
 
-Moodle モードの `moodle-mode.db` があれば、それも一緒に複製します。教材ファイル（`data/files`）は書き換えないので、そのままコピーしてかまいません。たとえば Docker では、毎日 cron で次を実行し、できたファイルをサーバーの外へ送ります（自動デプロイの beta ではボリュームが `step-learn-beta_data` で、`docker compose` には `-p step-learn-beta` を付けます）。
+Moodle モードの `moodle-mode.db` があれば、それも一緒に複製します。教材ファイル（`data/files`）は書き換えないので、そのままコピーしてかまいません。たとえば Docker では、毎日 cron で次を実行し、できたファイルをサーバーの外へ送ります。
 
 ```sh
 docker compose exec -T app node dist/server/backup.js
