@@ -66,8 +66,6 @@ jobs:
     uses: ./.github/workflows/deploy-server.yml
     with:
       environment: beta
-      # 既定の step-learn にしないのは、beta のデータが入っているボリューム step-learn-beta_data を使い続けるため
-      project: step-learn-beta
       tag: ${{ github.event.workflow_run.head_sha || github.sha }}
     secrets: inherit
 
@@ -82,6 +80,5 @@ jobs:
     uses: ./.github/workflows/deploy-server.yml
     with:
       environment: production
-      project: step-learn
       tag: ${{ github.event.workflow_run.head_sha || github.sha }}
     secrets: inherit

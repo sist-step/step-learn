@@ -8,10 +8,6 @@ on:
         description: GitHub の Environment の名前。サーバーのセルフホストランナーのラベルも同じ名前にする
         type: string
         required: true
-      project:
-        description: Compose のプロジェクト名（ボリューム <名前>_data にデータが入る）。Environment の変数 DEPLOY_COMPOSE_PROJECT があればそちらを使う
-        type: string
-        required: true
       tag:
         description: デプロイするイメージのタグ（コミットの SHA）
         type: string
@@ -36,7 +32,7 @@ jobs:
       SANDBOX_MEM_LIMIT: ${{ vars.DEPLOY_SANDBOX_MEM_LIMIT }}
       BROWSER_MEM_LIMIT: ${{ vars.DEPLOY_BROWSER_MEM_LIMIT }}
       BROWSER_SLOTS: ${{ vars.DEPLOY_BROWSER_SLOTS }}
-      COMPOSE_PROJECT_NAME: ${{ vars.DEPLOY_COMPOSE_PROJECT || inputs.project }}
+      COMPOSE_PROJECT_NAME: ${{ vars.DEPLOY_COMPOSE_PROJECT || 'step-learn' }}
       HOST_PORT: ${{ vars.DEPLOY_HOST_PORT || '3000' }}
       HOST_BIND: ${{ vars.DEPLOY_HOST_BIND || '127.0.0.1' }}
       # 既定の ./ai-docs にしないのは、ランナーの作業ディレクトリは実行のたびに作り直され、step-docs のワークフローが書いた索引が届かないため
