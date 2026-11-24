@@ -103,15 +103,14 @@ export default defineConfig(({ command }) => ({
         if (this.environment.name !== 'client' || !options.dir) return
         const brotli = promisify(zlib.brotliCompress)
         const targets = Object.keys(bundle).filter((name) => COMPRESSIBLE.test(name))
-        await Promise.all(
-          targets.map(async (name) => {
-            const file = path.join(options.dir!, name)
-            const source = await fs.promises.readFile(file)
-            if (source.length < 1024) return
-            const compressed = await brotli(source, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9 } })
-            await fs.promises.writeFile(`${file}.br`, compressed)
-          }),
-        )
+        // Promise.all で一度に始めないのは、同時に圧縮できるのは libuv のスレッドの数（4）までなのに、待っているファイルの中身と圧縮の状態まで全部メモリに残り、ビルドの最大使用量が数百 MB 増えるため
+        for (const name of targets) {
+          const file = path.join(options.dir, name)
+          const source = await fs.promises.readFile(file)
+          if (source.length < 1024) continue
+          const compressed = await brotli(source, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 9 } })
+          await fs.promises.writeFile(`${file}.br`, compressed)
+        }
       },
     },
     {
