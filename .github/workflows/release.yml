@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  # ここでイメージをビルドし直さないのは、beta で動くのを確かめたものと同じイメージを本番に入れるため
+  check-beta:
+    name: check beta deployed
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      statuses: read
+    steps:
+      - name: Check commit status
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          state=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/status" \
+            --jq '[.statuses[] | select(.context == "deploy/beta")][0].state // ""')
+          if [ "$state" != success ]; then
+            echo "::error::${{ github.sha }} は beta へのデプロイに成功していません。master のこのコミットが beta に入ってからリリースしてください"
+            exit 1
+          fi
+
+  production:
+    needs: check-beta
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/deploy-server.yml
+    with:
+      environment: production
+      tag: ${{ github.sha }}
+    secrets: inherit
