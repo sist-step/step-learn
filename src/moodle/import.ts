@@ -3,11 +3,22 @@ import fs from 'node:fs'
 import { styleText } from 'node:util'
 import { NO_PASSWORD } from '../lib/auth'
 import { formatBytes } from '../lib/bytes'
+import { unixToDateTimeInput } from '../lib/course-period'
 import { db } from '../lib/db'
-import { courses, enrollments, items, sections, users } from '../lib/schema'
+import { courses, enrollments, items, publicationFiles, publicationItems, sections, users } from '../lib/schema'
+import { PUBLICATION_STATE_LABELS, publicationStateOf } from '../features/publication/publication'
 import { type StoredFile, deleteCourseFiles, isExecutable, putCourseFile } from '../lib/storage'
 import { COMPLETION_LABELS, COURSE_ROLE_LABELS, ITEM_TYPE_LABELS, LINK_TARGET_LABELS, type ItemType } from '../lib/types'
-import { type Backup, type BackupItem, type BackupParticipant, type BackupSection, backupItems, moduleLabel } from './backup'
+import {
+  type Backup,
+  type BackupItem,
+  type BackupParticipant,
+  type BackupPublication,
+  type BackupPublicationFile,
+  type BackupSection,
+  backupItems,
+  moduleLabel,
+} from './backup'
 
 type PlannedParticipant = BackupParticipant & {
   existingId: number | null
@@ -27,6 +38,13 @@ export async function planImport(backup: Backup): Promise<Plan> {
     if (item.type === 'file' && item.file && (await isExecutable(await openFile(item.file)))) {
       item.type = null
       item.notes.push('実行ファイル（.exe など）は保存できないため取り込みません')
+    }
+    if (item.publication) {
+      const kept: typeof item.publication.files = []
+      for (const f of item.publication.files) if (!(await isExecutable(await openFile(f.file)))) kept.push(f)
+      if (kept.length < item.publication.files.length)
+        item.notes.push(`実行ファイル（.exe など）${item.publication.files.length - kept.length} 個は保存できないため取り込みません`)
+      item.publication.files = kept
     }
   }
 
@@ -118,6 +136,20 @@ const NATIVE_MODULE: Record<ItemType, string> = {
   agent: '',
   quiz: '',
   collab: '',
+  publication: 'publication',
+}
+
+function publicationSummary({ settings, files }: BackupPublication) {
+  const states = count(files, (f) => PUBLICATION_STATE_LABELS[publicationStateOf(settings, f.status)])
+  const size = files.reduce((n, f) => n + f.file.size, 0)
+  const when = (unix: number | null) => (unix ? unixToDateTimeInput(unix).replace('T', ' ') : '')
+  const parts = [
+    settings.approval ? '承認してから公開' : 'すぐに公開',
+    settings.showNames ? '' : '名前を見せない',
+    settings.opensAt || settings.closesAt ? `提出 ${when(settings.opensAt)}〜${when(settings.closesAt)}` : '',
+    files.length ? `学生のファイル ${files.length}（${states}）${formatBytes(size)}` : '学生のファイルなし',
+  ]
+  return parts.filter(Boolean).join('・')
 }
 
 /** source はプレビューの見出しに出す取り込み元（ファイル名やコースの URL） */
@@ -128,7 +160,7 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
   const imported = all.filter((i) => i.type)
   const subsections = backup.sections.flatMap((s) => s.items.filter((i) => i.subsection)).length
   const skipped = all.filter((i) => !i.type)
-  const fileBytes = imported.reduce((n, i) => n + (i.file?.size ?? 0), 0)
+  const fileBytes = imported.reduce((n, i) => n + (i.file?.size ?? 0) + (i.publication?.files.reduce((m, f) => m + f.file.size, 0) ?? 0), 0)
   const joining = participants.filter((p) => !p.skip)
   const out: string[] = []
 
@@ -145,14 +177,12 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
   )
   if (skipped.length)
     out.push(warn(`  取り込まないアクティビティ ${skipped.length}`) + dim(`（${count(skipped, (i) => moduleLabel(i.module))}）`))
-  if (backup.usersIncluded) {
-    const breakdown = `${count(joining, (p) => COURSE_ROLE_LABELS[p.role])}。新規 ${joining.filter((p) => !p.existingId).length}・既存 ${joining.filter((p) => p.existingId).length}`
-    out.push(
-      `  参加者 ${joining.length} 人` +
-        (joining.length ? dim(`（${breakdown}）`) : '') +
-        (participants.length > joining.length ? warn(`・取り込まない ${participants.length - joining.length} 人`) : ''),
-    )
-  } else out.push(warn(`  参加者なし（${backup.usersNote ?? 'ユーザーを含まないバックアップ'}）`))
+  const breakdown = `${count(joining, (p) => COURSE_ROLE_LABELS[p.role])}。新規 ${joining.filter((p) => !p.existingId).length}・既存 ${joining.filter((p) => p.existingId).length}`
+  out.push(
+    `  参加者 ${joining.length} 人` +
+      (joining.length ? dim(`（${breakdown}）`) : '') +
+      (participants.length > joining.length ? warn(`・取り込まない ${participants.length - joining.length} 人`) : ''),
+  )
 
   backup.sections.forEach((s, i) => {
     out.push(
@@ -169,6 +199,7 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
       const extra = [
         item.type === 'file' && item.file ? formatBytes(item.file.size) : '',
         item.type === 'link' ? `${line(item.url)}（${LINK_TARGET_LABELS[item.linkTarget]}）` : '',
+        item.publication ? publicationSummary(item.publication) : '',
         item.completion !== 'none' ? `完了: ${COMPLETION_LABELS[item.completion]}` : '',
         item.hidden ? warn('学生に非表示') : '',
       ].filter(Boolean)
@@ -227,7 +258,15 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
 
 // ---------------------------------------------------------------- 書き込み
 
-type ImportResult = { courseId: number; sections: number; subsections: number; items: number; createdUsers: number; enrolled: number }
+type ImportResult = {
+  courseId: number
+  sections: number
+  subsections: number
+  items: number
+  createdUsers: number
+  enrolled: number
+  studentFiles: number
+}
 
 export async function runImport(plan: Plan, progress: (message: string) => void): Promise<ImportResult> {
   const { backup } = plan
@@ -244,15 +283,23 @@ export async function runImport(plan: Plan, progress: (message: string) => void)
     .get()
 
   try {
-    const fileItems = backup.sections.flatMap(backupItems).filter((i) => i.type === 'file' && i.file)
-    const stored = new Map<BackupItem, StoredFile>()
+    const all = backup.sections.flatMap(backupItems).filter((i) => i.type)
+    const fileItems = all.filter((i) => i.type === 'file' && i.file)
+    const studentFiles = all.flatMap((i) => i.publication?.files ?? [])
+    const stored = new Map<BackupItem | BackupPublicationFile, StoredFile>()
     for (const [n, item] of fileItems.entries()) {
       progress(`ファイルを保存しています（${n + 1}/${fileItems.length}）${item.file!.name}`)
       stored.set(item, await putCourseFile(courseId, await openFile(item.file!)))
     }
+    for (const [n, f] of studentFiles.entries()) {
+      progress(`学生フォルダのファイルを保存しています（${n + 1}/${studentFiles.length}）${f.file.name}`)
+      stored.set(f, await putCourseFile(courseId, await openFile(f.file)))
+    }
 
     return db.transaction((tx) => {
-      const result: ImportResult = { courseId, sections: 0, subsections: 0, items: 0, createdUsers: 0, enrolled: 0 }
+      const result: ImportResult = { courseId, sections: 0, subsections: 0, items: 0, createdUsers: 0, enrolled: 0, studentFiles: 0 }
+      // アイテムより先に参加者を作るのは、学生フォルダのファイルに持ち主の ID が要るため
+      const userIdOf = enrollParticipants(tx, plan, courseId, result)
       const insertSection = (s: BackupSection, position: number, parentId: number | null) => {
         const { id: sectionId } = tx
           .insert(sections)
@@ -267,7 +314,8 @@ export async function runImport(plan: Plan, progress: (message: string) => void)
             continue
           }
           const file = stored.get(item)
-          tx.insert(items)
+          const { id: itemId } = tx
+            .insert(items)
             .values({
               courseId,
               sectionId,
@@ -281,30 +329,13 @@ export async function runImport(plan: Plan, progress: (message: string) => void)
               position: n + 1,
               ...(file && { fileKey: file.key, fileName: file.name, fileSize: file.size, fileType: file.type }),
             })
-            .run()
+            .returning({ id: items.id })
+            .get()
           result.items++
+          if (item.publication) result.studentFiles += insertPublication(tx, itemId, item.publication, userIdOf, stored)
         }
       }
       for (const [sn, s] of backup.sections.entries()) insertSection(s, sn + 1, null)
-
-      for (const p of plan.participants.filter((p) => !p.skip)) {
-        let userId = p.existingId
-        if (!userId) {
-          // 事前の確認だけに頼らないのは、プレビューのあとに同じメールアドレスで登録されると UNIQUE 制約違反になるため
-          userId =
-            tx
-              .insert(users)
-              .values({ email: p.email, name: p.name, username: p.newUsername, passwordHash: NO_PASSWORD, role: p.role })
-              .onConflictDoNothing()
-              .returning({ id: users.id })
-              .get()?.id ?? null
-          if (userId) result.createdUsers++
-          else userId = tx.select({ id: users.id }).from(users).where(eq(users.email, p.email)).get()?.id ?? null
-        }
-        if (!userId) continue
-        const res = tx.insert(enrollments).values({ courseId, userId, role: p.role }).onConflictDoNothing().run()
-        result.enrolled += res.changes
-      }
       return result
     })
   } catch (err) {
@@ -312,4 +343,64 @@ export async function runImport(plan: Plan, progress: (message: string) => void)
     await deleteCourseFiles(courseId).catch((e) => console.error('[moodle] 保存したファイルを消せませんでした', e))
     throw err
   }
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/** 参加者を作ってコースに登録する。返すのは、Moodle のユーザーの ID から STEP Learn のユーザーの ID への対応 */
+function enrollParticipants(tx: Tx, plan: Plan, courseId: number, result: ImportResult) {
+  const userIdOf = new Map<string, number>()
+  for (const p of plan.participants.filter((p) => !p.skip)) {
+    let userId = p.existingId
+    if (!userId) {
+      // 事前の確認だけに頼らないのは、プレビューのあとに同じメールアドレスで登録されると UNIQUE 制約違反になるため
+      userId =
+        tx
+          .insert(users)
+          .values({ email: p.email, name: p.name, username: p.newUsername, passwordHash: NO_PASSWORD, role: p.role })
+          .onConflictDoNothing()
+          .returning({ id: users.id })
+          .get()?.id ?? null
+      if (userId) result.createdUsers++
+      else userId = tx.select({ id: users.id }).from(users).where(eq(users.email, p.email)).get()?.id ?? null
+    }
+    if (!userId) continue
+    userIdOf.set(p.moodleId, userId)
+    const res = tx.insert(enrollments).values({ courseId, userId, role: p.role }).onConflictDoNothing().run()
+    result.enrolled += res.changes
+  }
+  return userIdOf
+}
+
+/** 学生フォルダの設定と学生のファイルを足す。足したファイルの数 */
+function insertPublication(
+  tx: Tx,
+  itemId: number,
+  publication: BackupPublication,
+  userIdOf: Map<string, number>,
+  stored: ReadonlyMap<BackupItem | BackupPublicationFile, StoredFile>,
+) {
+  tx.insert(publicationItems)
+    .values({ itemId, ...publication.settings })
+    .run()
+  const rows = publication.files.flatMap((f) => {
+    const userId = userIdOf.get(f.moodleUserId)
+    const file = stored.get(f)
+    return userId && file
+      ? [
+          {
+            itemId,
+            userId,
+            fileKey: file.key,
+            fileName: file.name,
+            fileSize: file.size,
+            fileType: file.type,
+            status: f.status,
+            createdAt: f.createdAt || undefined,
+          },
+        ]
+      : []
+  })
+  if (rows.length) tx.insert(publicationFiles).values(rows).run()
+  return rows.length
 }

@@ -2,16 +2,18 @@ import { and, eq, inArray, or } from 'drizzle-orm'
 import { bundleKeysOf } from '../features/bundle/bundle-items'
 import { DEFAULT_STARTER, type CodeConstraint, type CodeLanguage } from '../features/code/code'
 import type { CollabKind, CollabScope } from '../features/collab/collab'
+import type { PublicationSettings } from '../features/publication/publication'
 import { collabStore } from '../features/collab/collab-items'
+import { publicationKeysOf } from '../features/publication/publication-items'
 import { nextPosition, placeBefore, sectionEntries, type EntryRef } from './courses'
 import { db, type DB } from './db'
-import { codeItems, collabItems, items, sections } from './schema'
+import { codeItems, collabItems, items, publicationItems, sections } from './schema'
 import { deleteKeys, inBackground, storage, type StoredFile } from './storage'
 import type { Completion, ItemType, LinkTarget } from './types'
 
 type Tx = Parameters<Parameters<DB['transaction']>[0]>[0]
 
-/** 新しく作るアイテム。種類ごとの欄（code・collab）は、その種類のときだけ読む */
+/** 新しく作るアイテム。種類ごとの欄（code・collab・publication）は、その種類のときだけ読む */
 type NewItem = {
   courseId: number
   sectionId: number
@@ -27,6 +29,7 @@ type NewItem = {
   file?: StoredFile | null
   code?: { language: CodeLanguage; criteria?: string; constraints?: CodeConstraint[] }
   collab?: { kind: CollabKind; scope: CollabScope }
+  publication?: Partial<PublicationSettings>
 }
 
 /** 作ったあとに開く画面と、知らせる文言。null ならセクションの一覧へ戻る */
@@ -87,6 +90,16 @@ export const ITEM_KINDS: Record<ItemType, ItemKind> = {
     storedFiles: (_courseId, itemId) => ({ keys: bundleKeysOf([itemId]), prefixes: [] }),
   },
   agent: { ...NONE, afterCreate: { page: 'edit', message: '使える期間と上限を設定してください。' } },
+  // 既定の公開の方法（承認してから公開）が授業に合うかを決めてもらうため、編集画面へ進める
+  publication: {
+    afterCreate: { page: 'edit', message: '公開の方法と提出の期間を確かめてください。' },
+    createRows(tx, itemId, { publication }) {
+      tx.insert(publicationItems)
+        .values({ itemId, ...publication })
+        .run()
+    },
+    storedFiles: (_courseId, itemId) => ({ keys: publicationKeysOf(itemId), prefixes: [] }),
+  },
 }
 
 /** 置いたファイルを、アイテムの列に書く値 */

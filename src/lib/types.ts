@@ -45,7 +45,19 @@ export type Item = typeof items.$inferSelect
 
 export type CodeItem = typeof codeItems.$inferSelect
 
-export const ITEM_TYPES = ['page', 'link', 'file', 'presentation', 'screen', 'code', 'quiz', 'collab', 'bundle', 'agent'] as const
+export const ITEM_TYPES = [
+  'page',
+  'link',
+  'file',
+  'presentation',
+  'screen',
+  'code',
+  'quiz',
+  'collab',
+  'bundle',
+  'agent',
+  'publication',
+] as const
 
 export type ItemType = (typeof ITEM_TYPES)[number]
 
@@ -60,6 +72,7 @@ export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   collab: '共同編集',
   bundle: 'ファイル自動配布',
   agent: 'コーディングエージェント',
+  publication: '学生フォルダ',
 }
 
 export const COMPLETIONS = ['none', 'manual', 'view', 'play', 'clear', 'pass'] as const

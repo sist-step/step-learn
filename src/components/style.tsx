@@ -26,6 +26,7 @@ const STYLESHEETS = [
   '/src/features/quiz/components/quiz.css',
   '/src/features/quiz/components/quiz-game.css',
   '/src/features/collab/components/collab.css',
+  '/src/features/publication/components/publication.css',
   '/src/components/restriction.css',
   '/src/features/ai/components/ai-panel.css',
   '/src/components/auth.css',

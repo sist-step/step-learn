@@ -17,6 +17,7 @@ import { COLLAB_KINDS, COLLAB_SCOPES } from '../features/collab/collab'
 import { dateInputToUnix, dateTimeInputToUnix, isDateInput, isDateTimeInput } from './course-period'
 import { checkPassword } from './password'
 import { isMediaFile } from './preview'
+import { PUBLICATION_STATUSES } from '../features/publication/publication'
 import { QUIZ_LOOKS, readQuizForm } from '../features/quiz/quiz'
 import { readRestrictionForm } from './restriction'
 import { COMPLETIONS, COURSE_COLORS, COURSE_ROLES, ITEM_TYPES, LINK_TARGETS, ROLES, type Completion, type ItemType } from './types'
@@ -339,6 +340,8 @@ const itemEdit = z
     show_answers: flag(),
     look: choice(QUIZ_LOOKS, 'plain'),
     agent_model: z.optional(text('モデル', 200)),
+    approval: flag(),
+    show_names: flag(),
     url: z.optional(z.pipe(text('URL', 2000), z.string().check(rule((s: string) => (isHttpUrl(s) ? null : URL_INVALID))))),
   })
   .check(
@@ -346,7 +349,15 @@ const itemEdit = z
       const message = completionIssue(v)
       if (message) ctx.issues.push({ code: 'custom', message, input: v, path: ['completion'] })
       const issues =
-        v.type === 'code' ? codeItemIssues(v) : v.type === 'agent' ? agentItemIssues(v) : v.type === 'quiz' ? quizItemIssues(v) : []
+        v.type === 'code'
+          ? codeItemIssues(v)
+          : v.type === 'agent'
+            ? agentItemIssues(v)
+            : v.type === 'quiz'
+              ? quizItemIssues(v)
+              : v.type === 'publication'
+                ? uploadPeriodIssues(v.opens_at ?? '', v.closes_at ?? '')
+                : []
       for (const issue of issues) ctx.issues.push({ code: 'custom', input: v, ...issue })
     }),
   )
@@ -388,6 +399,14 @@ function codeItemIssues(v: Parameters<typeof readConstraints>[0] & { opens_at?: 
 /** コードのアイテムの提出の期間（日時の入力欄の値）の誤り。形の誤りは欄ごとのスキーマ（dateTime）が出すので、ここでは見ない */
 const submitPeriodIssues = (opensAt: string, closesAt: string) =>
   periodIssues(opensAt, closesAt, MAX_SUBMIT_PERIOD, `提出の期間は ${MAX_SUBMIT_PERIOD / 86_400} 日以内にしてください。`)
+
+/** 学生フォルダの提出の期間。どちらも空でよく、両方あるときだけ前後を確かめる */
+function uploadPeriodIssues(opensAt: string, closesAt: string) {
+  if (!isDateTimeInput(opensAt) || !isDateTimeInput(closesAt)) return []
+  return dateTimeInputToUnix(closesAt) > dateTimeInputToUnix(opensAt)
+    ? []
+    : [{ message: '締め切りは開始日時より後にしてください。', path: ['closes_at'] }]
+}
 
 function periodIssues(opensAt: string, closesAt: string, maxLength: number, tooLong: string) {
   const issues: { message: string; path: string[] }[] = []
@@ -606,6 +625,16 @@ const bundleUpload = z.object({
   skipped: z.catch(z.pipe(hidden(20), z.pipe(z.transform(Number), z.int().check(z.minimum(0), z.maximum(1_000_000)))), 0),
 })
 
+// 大きさと中身をここで確かめないのは、上限の値がストレージの設定にあり、実行ファイルかどうかは中身を読まないと分からないため
+const publicationUpload = z.object({
+  files: z.pipe(
+    files(),
+    z.array(z.custom<File>()).check(rule((list: File[]) => (list.some(isFile) ? null : 'ファイルを選択してください。'))),
+  ),
+})
+
+const publicationStatus = z.object({ status: z.enum(PUBLICATION_STATUSES) })
+
 const bundleRemove = z.object({ path: hidden(1000), folder: hidden(1000), all: flag() })
 
 const bundleSync = z.object({ sync: flag() })
@@ -688,6 +717,8 @@ const FORMS = {
   quizGrade,
   bundleUpload,
   bundleRemove,
+  publicationUpload,
+  publicationStatus,
   bundleSync,
   presentationReleased,
   aiDecision,

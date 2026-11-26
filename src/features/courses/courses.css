@@ -81,6 +81,7 @@
 .item-form:not([data-kind='quiz']) .when-quiz { display: none; }
 .item-form:not([data-kind='collab']) .when-collab { display: none; }
 .item-form:not([data-kind='presentation']) .when-presentation { display: none; }
+.item-form:not([data-kind='publication']) .when-publication { display: none; }
 .item-form[data-kind='code'] .unless-code, .item-form:is([data-kind='bundle'], [data-kind='code'], [data-kind='agent'], [data-kind='quiz'], [data-kind='presentation']) .unless-edit-next { display: none; }
 
 :root:not([data-edit-mode]) .edit-only,

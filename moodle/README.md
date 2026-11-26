@@ -1,6 +1,6 @@
 # Moodle モードとプラグイン
 
-STEP Learn の Moodle モードと、Moodle の Web サービスからの取り込み（`npm run moodle:migrate`）で使うものです。完全移行のあとはディレクトリごと削除します。
+STEP Learn の Moodle モードと、Moodle からの取り込み（`npm run moodle:migrate`）で使うものです。完全移行のあとはディレクトリごと削除します。
 
 ```
 local_steplearn/   Moodle 5.1 のプラグイン（public/local/steplearn/ に置く）
@@ -25,7 +25,7 @@ Moodle 側は下の「本番の Moodle での設定」のとおりにプラグ�
 - `src/moodle-mode/`・`migrations-moodle/`・`drizzle.moodle.config.ts`・`moodle/`
 - `src/index.tsx` のモードの切り替え（`./app` だけを読み込む形に戻す）と、`src/server.ts`・`vite.config.ts` の `config.moodle` の分岐
 - `src/lib/config.ts` の `moodle` / `moodleDatabasePath` / `moodleMigrate`、`src/lib/db.ts` の Moodle モードのガード、`src/components/style.tsx` の `moodle-mode.css`
-- `src/moodle/remote.ts` と `src/cli.ts` の `moodle:migrate`、`src/lib/forms.ts` の `extraItemFields` / `extraItem` / `extraCode`、`src/features/bundle/bundle.ts` の `BUNDLE_MODULE`、`src/client.ts` の `setKindOnly`
+- `src/moodle/` と `src/cli.ts` の `moodle:migrate`、`src/lib/forms.ts` の `extraItemFields` / `extraItem` / `extraCode`、`src/features/bundle/bundle.ts` の `BUNDLE_MODULE`、`src/client.ts` の `setKindOnly`
 - コーディング問題を 2 つのモードで使い回すための分け方（`src/features/code/handlers.tsx` の `CodeBackend`、`src/features/code/code-store.ts` の `CodeStore`、`src/features/code/code-grader.ts` の `createGrader`、`src/features/code/views.tsx` の `CodePage`）は、通常モードの実装（`src/features/code/backend.ts`・`src/features/code/code-items.ts`・`src/features/code/code-grading.ts`）だけになるので、まとめてかまいません
 - ほかの機能の、2 つのモードのための分け方も同じです。実装が 1 つになるので、`backend.ts` の中身をハンドラに入れ、型だけのインターフェースは消してかまいません
   - `src/features/<機能>/backend.ts` と `create<機能>Handlers(backend)` の組（agent・bundle・code・collab・presentation・quiz・mcp・ai の `AiBackend`・admin の `AiAdminBackend`）
@@ -34,9 +34,9 @@ Moodle 側は下の「本番の Moodle での設定」のとおりにプラグ�
   - DB とテーブルを受け取って作る `createOAuthStore`・`createAiLedger`・`createAiChatStore`
 - `package.json` の `moodle:migrate` / `db:generate:moodle` / `db:check:moodle`、CI の「Check Moodle mode migrations」、`Dockerfile` の `migrations-moodle`、`.dockerignore` の `moodle`
 
-## Moodle から直接取り込む
+## Moodle から取り込む
 
-.mbz を使わず、Moodle の Web サービスからコースを読んで取り込むこともできます。取り込むのはコース・セクションと URL・ファイル・フォルダーだけです（参加者・ページ・ラベル・課題などは取り込みません）。
+Moodle の Web サービスからコースを読んで、STEP Learn の新しいコースとして取り込みます（CLI は `npm run build` で生成されます）。
 
 ```sh
 MOODLE_MIGRATE_URL=https://moodle.example.ac.jp MOODLE_MIGRATE_TOKEN=<トークン> \
@@ -44,10 +44,26 @@ MOODLE_MIGRATE_URL=https://moodle.example.ac.jp MOODLE_MIGRATE_TOKEN=<トーク�
 ```
 
 - Moodle に `local_steplearn` のプラグインが入っている必要があります（Moodle モードと同じもの）
-- トークンは、すべてのコースを見られるアカウント（システムのコンテキストで「マネージャー」を割り当てたアカウントなど）のものを、外部サービス「STEP Learn」で発行します
-- コースごとにプレビューを表示し、確認してから取り込みます。`--yes`・`--verbose` は `moodle:import`（[docs/moodle-import.md](../docs/moodle-import.md)）と同じです
-- サブセクションは、親のセクションの中の同じ位置にサブセクションとして取り込みます
-- Moodle モードで追加した、STEP Learn にしかない種類のアイテムは引き継ぎません
+- トークンは、すべてのコースでユーザーを含めたバックアップを作れるアカウント（システムのコンテキストで「マネージャー」を割り当てたアカウントなど）のものを、外部サービス「STEP Learn」で発行します。参加者と学生のファイルを読むのに、`moodle/backup:backupcourse` と `moodle/backup:userinfo` が要ります
+- コースごとに、作られるセクション・アイテム・参加者と、取り込まないもの・変換で失われるものをプレビューに表示し、確認してから取り込みます。`--yes` で確認を省き、`--verbose` で学生をすべて表示します
+- 1 回の実行で、コースごとに新しいコースを 1 つ作ります。同じコースを 2 回取り込むとコースが 2 つできます（プレビューで警告します）
+
+| Moodle | STEP Learn |
+| --- | --- |
+| URL | リンク（http / https のみ） |
+| ファイル | ファイル（メインのファイル 1 つ） |
+| フォルダ | 中のファイルごとにファイルのアイテム |
+| 学生フォルダ（mod_publication） | 学生フォルダ。教師の承認・名前の表示・提出の期間と、学生のファイル（Moodle で公開されていたものは公開、承認を断られたものは非公開、それ以外は承認待ち）を引き継ぐ。学生のファイルは、持ち主を参加者として取り込むときだけ移す（グループでの提出は移さない）。学生の承認は教師の承認として扱い、期限の延長・上書き、ファイルの種類の制限、課題からの取り込みは引き継がない |
+| サブセクション | 親のセクションの中の同じ位置のサブセクション |
+| ページ・ラベル・ブック・課題・小テスト・フォーラムなど | 取り込まない |
+| Moodle モードで追加した、STEP Learn にしかない種類のアイテム | 取り込まない |
+| 表示 / 非表示、完了トラッキング | 学生に非表示、完了の条件（手動は「学生が自分で完了にする」、自動は「開いたら完了」） |
+| アクセス制限（日付・条件） | 取り込まない（制限なしで表示される） |
+| 教師・編集権限のない教師・マネージャー / 学生（コースで割り当てたロール） | 教師 / 学生（削除・停止されたユーザーと、受講が止まっている人は除く） |
+
+- 同じメールアドレスのユーザーがすでにいれば、そのユーザーを参加者に加えます。いなければ作成します（Moodle のユーザー名が規則に合い、空いていれば引き継ぎます）
+- Moodle のパスワードは引き継げません。新しく作ったユーザーには、ログイン画面の「パスワードを忘れた場合」からパスワードを設定してもらってください（SMTP の設定が必要です）
+- 学生の完了状況や評定は取り込みません
 
 ## プラグインがすること
 
@@ -61,6 +77,7 @@ MOODLE_MIGRATE_URL=https://moodle.example.ac.jp MOODLE_MIGRATE_TOKEN=<トーク�
 | 新しい STEP Learn の案内 | 設定の「新しい STEP Learn を案内する」をオンにすると、ログイン画面（ログインフォームの中）とダッシュボード（通知）に「新しい STEP Learn を使う」ボタンを出す。ボタンは STEP Learn の `GET /auth/moodle/start` に移り、そのままログインの受け渡しを始める（Moodle にログイン済みなら画面を挟まずに入れる）。STEP Learn の「旧STEP Learnでログイン」から来てログイン画面にいる人には出さない |
 | 教材の編集 | `local_steplearn_save_url` / `local_steplearn_save_resource`（URL・ファイルの活動の作成と更新）、`local_steplearn_create_section` / `local_steplearn_update_section`。Moodle 5.1 のコアには URL・ファイルの活動を作る Web サービスがないため |
 | アクセス制限 | `local_steplearn_get_restrictions` が、編集できる人にセクションと活動の制限（教師向けのすべての条件の説明と、STEP Learn で編集できる形か）を返す（Moodle は条件を満たせる教師には制限の説明を返さないため）。`local_steplearn_set_restriction` は、日付（開始・終了）と活動の完了をすべて満たす形の制限で置き換える。それ以外の条件（グループ・評点・「いずれか」など）を含む制限は書き換えを断り、Moodle の画面で編集してもらう |
+| 取り込み | `local_steplearn_get_participants` がコースでロールを割り当てた人（ロールの元の種類・受講の状態付き）を、`local_steplearn_get_publications` が学生フォルダ（mod_publication）の設定と学生のファイルを返す。`npm run moodle:migrate` が使う。学生の個人情報をまとめて読むので、ユーザーを含めたバックアップを作れる人（`moodle/backup:backupcourse` と `moodle/backup:userinfo`）にだけ返す。mod_publication がない Moodle では、学生フォルダは空の一覧になる |
 
 並べ替え・表示の切り替え・削除は、コアの `core_courseformat_update_course` を使います（トピック形式・週形式など、コンポーネントに対応したコースフォーマットが必要です）。
 

@@ -87,6 +87,18 @@ $functions = [
         'description' => 'Remember which sections the current user collapsed on the course page.',
         'type' => 'write',
     ],
+    'local_steplearn_get_participants' => [
+        'classname' => 'local_steplearn\external\get_participants',
+        'description' => 'People with a role in a course, for the STEP Learn migration tool.',
+        'type' => 'read',
+        'capabilities' => 'moodle/backup:backupcourse, moodle/backup:userinfo',
+    ],
+    'local_steplearn_get_publications' => [
+        'classname' => 'local_steplearn\external\get_publications',
+        'description' => 'Student folders (mod_publication) in a course and the files students uploaded, for the STEP Learn migration tool.',
+        'type' => 'read',
+        'capabilities' => 'moodle/backup:backupcourse, moodle/backup:userinfo',
+    ],
     'local_steplearn_check_session' => [
         'classname' => 'local_steplearn\external\check_session',
         'description' => 'Whether the Moodle session a STEP Learn session started from is still active. Extends it if so.',
@@ -120,6 +132,8 @@ $services = [
             'local_steplearn_set_restriction',
             'local_steplearn_set_sections_collapsed',
             'local_steplearn_check_session',
+            'local_steplearn_get_participants',
+            'local_steplearn_get_publications',
         ],
         'restrictedusers' => 0,
         'enabled' => 1,

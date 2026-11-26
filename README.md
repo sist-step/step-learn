@@ -33,7 +33,6 @@ npm run dev:users    # 開発用のユーザー admin / teacher / student（パ�
 - [Microsoft アカウントでのログイン](docs/microsoft-login.md)
 - [STEP Docs を AI エージェントに取り込む](docs/ai-docs.md)
 - [AI アプリから使う（MCP）](docs/mcp.md)
-- [Moodle のバックアップから移行する](docs/moodle-import.md)
 
 特定のディレクトリだけに関わるもの:
 

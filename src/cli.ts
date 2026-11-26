@@ -11,8 +11,6 @@ import { isEmail } from './lib/forms'
 import { checkPassword } from './lib/password'
 import { ROLE_LABELS, type Role } from './lib/types'
 import { checkUsername, normalizeUsername } from './lib/username'
-import { openBackup } from './moodle/archive'
-import { readBackup } from './moodle/backup'
 import { PARTICIPANT_LIMIT, planImport, printPreview, runImport, type Plan } from './moodle/import'
 import { readRemoteCourse } from './moodle/remote'
 
@@ -21,27 +19,18 @@ const USER_CREATE_USAGE = `使い方: npm run user:create -- --email <メール�
 ユーザーを作成します。ロールを省略すると管理者になります。
 パスワードは対話的に入力します（パイプで渡した場合は 1 行目を使います）。`
 
-const MOODLE_IMPORT_USAGE = `使い方: npm run moodle:import -- <バックアップ.mbz または展開したディレクトリ> [--dry-run] [--yes] [--verbose]
-
-Moodle のコースバックアップから、コース・セクション・アイテム・参加者を取り込みます。
-取り込む前に内容のプレビューを表示し、確認してから書き込みます。
-
-  --dry-run   プレビューだけを表示して、何も書き込まずに終了する
-  --yes, -y   確認せずに取り込む（パイプやスクリプトから実行するとき）
-  --verbose   プレビューで学生をすべて表示する（既定は ${PARTICIPANT_LIMIT} 人まで）`
-
 const MOODLE_MIGRATE_USAGE = `使い方: npm run moodle:migrate -- <コース ID>... [--dry-run] [--yes] [--verbose]
 
-Moodle の Web サービスからコースを読み、セクション・サブセクションと URL・ファイル・フォルダーを取り込みます（参加者とほかの活動は取り込みません）。
+Moodle の Web サービスからコースを読み、参加者・セクション・サブセクションと URL・ファイル・フォルダー・学生フォルダを取り込みます（ほかの活動は取り込みません）。
 コースごとに内容のプレビューを表示し、確認してから書き込みます。
 
   --dry-run   プレビューだけを表示して、何も書き込まずに終了する
   --yes, -y   確認せずに取り込む（パイプやスクリプトから実行するとき）
-  --verbose   プレビューで学生をすべて表示する
+  --verbose   プレビューで学生をすべて表示する（既定は ${PARTICIPANT_LIMIT} 人まで）
 
 環境変数 MOODLE_MIGRATE_URL（Moodle の URL）と MOODLE_MIGRATE_TOKEN（すべてのコースを見られるアカウントの、外部サービス「STEP Learn」のトークン）が必要です。`
 
-const USAGE = `${USER_CREATE_USAGE}\n\n${MOODLE_IMPORT_USAGE}\n\n${MOODLE_MIGRATE_USAGE}`
+const USAGE = `${USER_CREATE_USAGE}\n\n${MOODLE_MIGRATE_USAGE}`
 
 function fail(message: string): never {
   console.error(message)
@@ -154,35 +143,10 @@ async function confirmAndImport(plan: Plan, values: { 'dry-run': boolean; yes: b
   console.log(
     [
       `コース「${plan.backup.course.title}」を作成しました（/courses/${result.courseId}）。`,
-      `セクション ${result.sections}${result.subsections ? `・サブセクション ${result.subsections}` : ''}・アイテム ${result.items}・参加者 ${result.enrolled} 人（うち新規ユーザー ${result.createdUsers} 人）`,
+      `セクション ${result.sections}${result.subsections ? `・サブセクション ${result.subsections}` : ''}・アイテム ${result.items}・参加者 ${result.enrolled} 人（うち新規ユーザー ${result.createdUsers} 人）` +
+        (result.studentFiles ? `・学生フォルダのファイル ${result.studentFiles} 個` : ''),
     ].join('\n'),
   )
-}
-
-async function moodleImportCommand(args: string[]) {
-  const { values, positionals } = parseArgs({
-    args,
-    allowPositionals: true,
-    options: {
-      'dry-run': { type: 'boolean', default: false },
-      yes: { type: 'boolean', short: 'y', default: false },
-      verbose: { type: 'boolean', default: false },
-    },
-  })
-  if (positionals.length !== 1) fail(MOODLE_IMPORT_USAGE)
-  const [source] = positionals
-
-  console.log(`${source} を読み込んでいます…`)
-  const { dir, cleanup } = await openBackup(source)
-  // fail() を使わずに throw するのは、process.exit() だと finally が動かず、展開した一時ファイルが残るため
-  try {
-    const plan = await planImport(readBackup(dir))
-    printPreview(plan, path.basename(source), { verbose: values.verbose })
-
-    await confirmAndImport(plan, values)
-  } finally {
-    await cleanup()
-  }
 }
 
 async function moodleMigrateCommand(args: string[]) {
@@ -218,7 +182,6 @@ async function moodleMigrateCommand(args: string[]) {
 const [command, ...rest] = process.argv.slice(2)
 try {
   if (command === 'user:create') await createUserCommand(rest)
-  else if (command === 'moodle:import') await moodleImportCommand(rest)
   else if (command === 'moodle:migrate') await moodleMigrateCommand(rest)
   else fail(USAGE)
 } catch (err) {
