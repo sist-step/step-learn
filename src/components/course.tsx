@@ -331,7 +331,19 @@ export const ItemGrip = ({ action }: { action: string }) => {
 }
 
 /** 編集モードでアイテムの行の上の境目に置き、ホバーで出すプラスボタン。押すと追加のモーダルを、この行の前に入れる設定で開く */
-export const ItemInsertButton = ({ modal, sectionId, before }: { modal: string; sectionId: number; before: number }) => {
+export const ItemInsertButton = ({
+  modal,
+  sectionId,
+  before,
+  beforeSection,
+}: {
+  modal: string
+  sectionId: number
+  /** この行がアイテムならその ID */
+  before?: number
+  /** この行がサブセクションならその ID */
+  beforeSection?: number
+}) => {
   useStyle('/src/components/course.css')
   return (
     <span class="item-insert edit-only">
@@ -341,6 +353,7 @@ export const ItemInsertButton = ({ modal, sectionId, before }: { modal: string; 
         popovertarget={modal}
         data-add-item-section={sectionId}
         data-add-item-before={before}
+        data-add-item-before-section={beforeSection}
         aria-label="ここにアイテムを追加"
         title="ここにアイテムを追加"
       >

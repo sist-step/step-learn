@@ -138,6 +138,7 @@ export async function show(c: Context<AppEnv>) {
       fileType: items.fileType,
       hidden: items.hidden,
       completion: items.completion,
+      position: items.position,
     })
     .from(items)
     .where(and(eq(items.courseId, id), manage ? undefined : visibleItem()))

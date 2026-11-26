@@ -11,6 +11,7 @@ import {
   moveItem,
   moveSection,
   placeItem,
+  placeSection,
   prepareCode,
   removeItem,
   removeSection,
@@ -30,6 +31,7 @@ app.use(requireAuth)
 app.post('/:id/sections', createSection)
 app.post('/:id/sections/:sid', updateSection)
 app.post('/:id/sections/:sid/move', moveSection)
+app.post('/:id/sections/:sid/place', placeSection)
 app.post('/:id/sections/:sid/delete', removeSection)
 app.post('/:id/sections/:sid/visibility', setSectionHidden)
 app.get('/:id/sections/:sid/restriction', editRestriction)

@@ -45,6 +45,7 @@ import type { CourseAccess } from '../../lib/courses'
 import { MAX_IMAGE_SIZE } from '../../lib/images'
 import { previewKind } from '../../lib/preview'
 import { findLessons, lessonWhen } from '../../lib/section-date'
+import { entryItems, sectionOptions, sectionTree, treeItems, type TreeEntry } from '../../lib/section-tree'
 import { formatBytes } from '../../lib/bytes'
 import { CODE_LANGUAGE_LABELS, type CodeLanguage } from '../code/code'
 import type { Availability } from '../../lib/restriction'
@@ -52,7 +53,7 @@ import { COMPLETION_LABELS, ITEM_TYPES, ITEM_TYPE_LABELS, type Completion, type 
 
 export type ItemLite = Pick<
   Item,
-  'id' | 'sectionId' | 'type' | 'title' | 'url' | 'linkTarget' | 'fileName' | 'fileSize' | 'fileType' | 'hidden' | 'completion'
+  'id' | 'sectionId' | 'type' | 'title' | 'url' | 'linkTarget' | 'fileName' | 'fileSize' | 'fileType' | 'hidden' | 'completion' | 'position'
 >
 
 // ---------------------------------------------------------------- 一覧
@@ -368,6 +369,7 @@ const AddItemModal = ({
     >
       <input type="hidden" name="type" value="page" />
       <input type="hidden" name="before" value="" />
+      <input type="hidden" name="before_section" value="" />
       <div class="item-step kind-picker" role="group" aria-label="種類">
         {ITEM_TYPES.map((t) => (
           <button type="button" class="kind-option" data-pick-kind={t}>
@@ -433,12 +435,7 @@ const AddItemModal = ({
           fieldClass="unless-code"
         />
         <div class="grid-2">
-          <SelectField
-            label="セクション"
-            name="section_id"
-            id="new-item-section"
-            options={sections.map((s) => ({ value: String(s.id), label: s.title }))}
-          />
+          <SelectField label="セクション" name="section_id" id="new-item-section" options={sectionOptions(sections)} />
           <fieldset class="field">
             <legend>学生への表示</legend>
             <SegmentedControl
@@ -467,8 +464,8 @@ const AddItemModal = ({
 
 const ADD_SECTION_MODAL = 'add-section'
 
-const AddSectionModal = ({ courseId }: { courseId: number }) => (
-  <Modal id={ADD_SECTION_MODAL} heading="セクションを追加" description="コースの最後に追加されます。">
+const AddSectionModal = ({ courseId, sections }: { courseId: number; sections: Section[] }) => (
+  <Modal id={ADD_SECTION_MODAL} heading="セクションを追加" description="セクションの中に入れると、サブセクションになります。">
     <form
       method="post"
       action={`/courses/${courseId}/sections`}
@@ -478,6 +475,17 @@ const AddSectionModal = ({ courseId }: { courseId: number }) => (
       {...validateWith('section')}
     >
       <TextField label="セクション名" name="title" id="new-section-title" placeholder="例：第2週 データの扱い方" autofocus />
+      {sections.some((s) => !s.parentId) && (
+        <SelectField
+          label="追加する場所"
+          name="parent_id"
+          id="new-section-parent"
+          options={[
+            { value: '', label: 'コースの最後' },
+            ...sections.filter((s) => !s.parentId).map((s) => ({ value: String(s.id), label: `「${s.title}」の中（サブセクション）` })),
+          ]}
+        />
+      )}
       <div class="form-actions">
         <Button variant="ghost" popovertarget={ADD_SECTION_MODAL} popovertargetaction="hide">
           キャンセル
@@ -492,11 +500,13 @@ const AddSectionModal = ({ courseId }: { courseId: number }) => (
 
 const SectionEditBar = ({ courseId, section }: { courseId: number; section: Section }) => {
   const base = `/courses/${courseId}/sections/${section.id}`
+  const sub = !!section.parentId
   return (
     <div class="row-actions edit-only">
-      <Popover trigger={<IconButton as="summary" icon="pencil" label="セクションを編集" title="編集" />}>
+      {sub && <ItemGrip action={`${base}/place`} />}
+      <Popover trigger={<IconButton as="summary" icon="pencil" label={sub ? 'サブセクションを編集' : 'セクションを編集'} title="編集" />}>
         <form method="post" action={base} class="stack" {...validateWith('section')}>
-          <TextField label="セクション名" name="title" id={`st-${section.id}`} value={section.title} />
+          <TextField label={sub ? 'サブセクション名' : 'セクション名'} name="title" id={`st-${section.id}`} value={section.title} />
           <TextAreaField label="説明" name="summary" id={`ss-${section.id}`} value={section.summary ?? undefined} rows={3} />
           <div class="form-actions">
             <Button type="submit" variant="primary" size="sm">
@@ -509,9 +519,76 @@ const SectionEditBar = ({ courseId, section }: { courseId: number; section: Sect
         base={base}
         moveAction={`${base}/move`}
         hidden={!!section.hidden}
-        confirm={`セクション「${section.title}」と中のアイテムをすべて削除しますか？`}
+        confirm={`${sub ? 'サブセクション' : 'セクション'}「${section.title}」と中のアイテムをすべて削除しますか？`}
       />
     </div>
+  )
+}
+
+type ItemRowContext = {
+  courseId: number
+  done: Set<number>
+  sharing: Set<number>
+  tracking: boolean
+  isStudent: boolean
+  manage: boolean
+  availability: CourseAvailability
+}
+
+const ItemRows = ({ list, ctx }: { list: ItemLite[]; ctx: ItemRowContext }) => (
+  <>
+    {list.map((it) => (
+      <ItemRow
+        item={it}
+        courseId={ctx.courseId}
+        done={ctx.done.has(it.id)}
+        sharing={ctx.sharing.has(it.id)}
+        completion={ctx.tracking ? it.completion : null}
+        isStudent={ctx.isStudent}
+        manage={ctx.manage}
+        restriction={ctx.availability.items.get(it.id)}
+        note={ctx.availability.notes.get(`item:${it.id}`)}
+      />
+    ))}
+  </>
+)
+
+const SubsectionRow = ({ section, list, ctx }: { section: Section; list: ItemLite[]; ctx: ItemRowContext }) => {
+  const restriction = ctx.availability.sections.get(section.id)
+  const locked = restriction?.open === false
+  const note = ctx.availability.notes.get(`section:${section.id}`)
+  const shown = list.filter((it) => !it.hidden).length
+  return (
+    <li
+      class={cx('item-subsection', !!section.hidden && 'is-hidden edit-only', locked && 'is-locked')}
+      id={`section-${section.id}`}
+      data-item-drop={ctx.manage ? section.id : undefined}
+      data-subsection={section.id}
+    >
+      <div class="item-row subsection-head">
+        {ctx.manage && <ItemInsertButton modal={ADD_ITEM_MODAL} sectionId={section.parentId ?? section.id} beforeSection={section.id} />}
+        <span class="item-link">
+          <span class="item-icon kind-subsection">
+            <Icon name={locked ? 'lock' : 'folder'} size={16} />
+          </span>
+          <span class="item-text">
+            <span class="item-title">{section.title}</span>
+            <span class="item-meta truncate">{locked ? 'まだ開けません' : `${shown} アイテム`}</span>
+            {restriction && locked && <RestrictionNote text={restriction.text} />}
+            {note && <RestrictionNote text={note} />}
+          </span>
+          {section.hidden ? <HiddenChip /> : null}
+        </span>
+        {ctx.manage && <SectionEditBar courseId={ctx.courseId} section={section} />}
+      </div>
+      {section.summary && !locked && <p class="subsection-summary">{section.summary}</p>}
+      {list.length > 0 && (
+        <ul class="items subsection-items">
+          <ItemRows list={list} ctx={ctx} />
+        </ul>
+      )}
+      {ctx.manage && <AddItemButton sectionId={section.id} />}
+    </li>
   )
 }
 
@@ -540,18 +617,30 @@ export const CoursePage = ({
   const manage = access.canManage
   const isStudent = access.role === 'student'
 
-  const bySection = new Map<number, ItemLite[]>()
-  for (const it of itemList) bySection.set(it.sectionId, [...(bySection.get(it.sectionId) ?? []), it])
-  const visibleSections = sectionList.filter((s) => !s.hidden)
+  const tree = sectionTree(sectionList, itemList)
+  const topSections = tree.map((t) => t.section)
+  const visibleSections = topSections.filter((s) => !s.hidden)
   // 学生にも同じ番号で見えるよう、表示しているセクションだけで数える
   const sectionNumber = new Map(visibleSections.map((s, i) => [s.id, String(i + 1).padStart(2, '0')]))
   const lessons = findLessons(visibleSections.filter((s) => !availability.sections.get(s.id)?.hidden))
   const tracking = !!access.course.completionEnabled
   const isTracked = (it: ItemLite) => tracking && it.completion !== 'none'
-  const trackedItems = itemList.filter((it) => !it.hidden && sectionNumber.has(it.sectionId) && isTracked(it))
-  const ordered = visibleSections
-    .flatMap((s) => (bySection.get(s.id) ?? []).filter((it) => !it.hidden))
-    .filter((it) => availability.items.get(it.id)?.open !== false)
+  const visibleTree = tree
+    .filter((t) => !t.section.hidden)
+    .map((t) => ({ ...t, entries: t.entries.filter((e) => e.kind === 'item' || !e.section.hidden) }))
+  const visibleItems = treeItems(visibleTree).filter((it) => !it.hidden)
+  const trackedItems = visibleItems.filter(isTracked)
+  const ordered = visibleItems.filter((it) => availability.items.get(it.id)?.open !== false)
+  const ctx: ItemRowContext = { courseId: id, done, sharing, tracking, isStudent, manage, availability }
+  // 開けないサブセクションの中身を出さないのは、セクションと同じく、条件を満たすまでは名前と条件だけを見せるため
+  const listedEntries = (entries: TreeEntry<Section, ItemLite>[]) =>
+    entries.flatMap((e): TreeEntry<Section, ItemLite>[] => {
+      if (e.kind === 'item') return availability.items.get(e.item.id)?.hidden ? [] : [e]
+      const restriction = availability.sections.get(e.section.id)
+      if (restriction?.hidden) return []
+      const items = restriction?.open === false ? [] : e.items.filter((it) => !availability.items.get(it.id)?.hidden)
+      return [{ ...e, items }]
+    })
   const doneCount = trackedItems.filter((it) => done.has(it.id)).length
   const nextItem = ordered.find((it) => isTracked(it) && !done.has(it.id)) ?? (trackedItems.length === 0 ? ordered[0] : undefined)
 
@@ -620,15 +709,17 @@ export const CoursePage = ({
         )}
         {sectionList.length > 0 && (
           <div class="sections">
-            {sectionList.map((s) => {
+            {tree.map(({ section: s, entries }) => {
               const when = lessonWhen(lessons, s.id)
               const restriction = availability.sections.get(s.id)
               if (restriction?.hidden) return null
               const locked = restriction?.open === false
               const note = availability.notes.get(`section:${s.id}`)
               // 開けないセクションの中身を出さないのは、Moodle と同じく、条件を満たすまではセクションの名前と条件だけを見せるため
-              const list = locked ? [] : (bySection.get(s.id) ?? []).filter((it) => !availability.items.get(it.id)?.hidden)
-              const shown = list.filter((it) => !it.hidden)
+              const listed = locked ? [] : listedEntries(entries)
+              const list = entryItems(listed)
+              const hiddenSubsections = new Set(listed.flatMap((e) => (e.kind === 'section' && e.section.hidden ? [e.section.id] : [])))
+              const shown = list.filter((it) => !it.hidden && !hiddenSubsections.has(it.sectionId))
               const hiddenCount = list.length - shown.length
               const shownTracked = shown.filter(isTracked)
               const sectionDone = shownTracked.filter((it) => done.has(it.id)).length
@@ -675,24 +766,25 @@ export const CoursePage = ({
                   {s.summary && <p class="section-summary">{s.summary}</p>}
                   {restriction && locked && <RestrictionNote text={restriction.text} />}
                   {note && <RestrictionNote text={note} />}
-                  {list.length > 0 && (
+                  {listed.length > 0 && (
                     <ul class="items">
-                      {list.map((it) => (
-                        <ItemRow
-                          item={it}
-                          courseId={id}
-                          done={done.has(it.id)}
-                          sharing={sharing.has(it.id)}
-                          completion={tracking ? it.completion : null}
-                          isStudent={isStudent}
-                          manage={manage}
-                          restriction={availability.items.get(it.id)}
-                          note={availability.notes.get(`item:${it.id}`)}
-                        />
-                      ))}
+                      {listed.map((e) =>
+                        e.kind === 'item' ? (
+                          <ItemRows list={[e.item]} ctx={ctx} />
+                        ) : (
+                          <SubsectionRow section={e.section} list={e.items} ctx={ctx} />
+                        ),
+                      )}
                     </ul>
                   )}
-                  {manage && <AddItemButton sectionId={s.id} />}
+                  {manage && (
+                    <div class="section-adds edit-only">
+                      <AddItemButton sectionId={s.id} />
+                      <button type="button" class="add-item" popovertarget={ADD_SECTION_MODAL} data-add-section-parent={s.id}>
+                        <Icon name="folder" size={16} /> サブセクションを追加
+                      </button>
+                    </div>
+                  )}
                 </details>
               )
             })}
@@ -700,7 +792,7 @@ export const CoursePage = ({
         )}
         {manage && sectionList.length > 0 && <AddSectionButton modal={ADD_SECTION_MODAL} />}
 
-        {manage && <AddSectionModal courseId={id} />}
+        {manage && <AddSectionModal courseId={id} sections={sectionList} />}
         {manage && sectionList.length > 0 && (
           <AddItemModal courseId={id} sections={sectionList} tracking={tracking} codeLanguages={codeLanguages} />
         )}

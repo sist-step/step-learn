@@ -219,7 +219,26 @@
   .add-item:hover { color: var(--primary-text); border-color: var(--primary); background: var(--primary-soft); }
 }
 .items + .add-item { margin-top: 0; }
+.section-adds { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 8px 10px; }
+.items + .section-adds { margin-top: 0; }
+.section-adds > .add-item { flex: 1 0 auto; width: auto; margin: 0; white-space: nowrap; }
+.section-adds > .add-item:first-child { flex-grow: 999; }
 .add-item.add-section { justify-content: center; width: 100%; margin: 12px 0 0; padding: 12px; }
+
+/* サブセクション: セクションの中の行に、中のアイテムを入れ子で並べる */
+.kind-subsection { --kind: var(--c1, var(--accent)); }
+.item-subsection { margin: 2px 0 6px; }
+.subsection-head .item-title { font-weight: 650; }
+.subsection-head .item-link { cursor: default; }
+.item-subsection.is-hidden .subsection-head :is(.item-title, .item-icon) { color: var(--muted); }
+.item-subsection.is-locked .subsection-head :is(.item-title, .item-icon) { color: var(--muted); }
+.subsection-items { margin-left: 27px; padding: 0 0 0 8px; border-left: 2px solid var(--border); }
+.item-subsection > .add-item { width: calc(100% - 43px); margin: 4px 8px 4px 35px; }
+.subsection-summary { margin: 0 8px 4px 56px; color: var(--muted); font-size: var(--fs-sm); white-space: pre-line; }
+@media (hover: hover) {
+  .subsection-head:hover { background: none; }
+  .subsection-head:hover .item-title { color: var(--text); }
+}
 
 /* アイテムの追加: 種類を選ぶ → 設定する */
 .item-steps { position: relative; }

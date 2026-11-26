@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, or } from 'drizzle-orm'
+import { and, asc, desc, eq, isNull, or } from 'drizzle-orm'
 import * as z from 'zod/mini'
 import {
   NOT_FOUND,
@@ -37,13 +37,14 @@ import {
   type CodeFiles,
 } from '../code/code'
 import { unixToDateInput } from '../../lib/course-period'
-import { getCourseAccessFor, nextPosition, touchCourse } from '../../lib/courses'
+import { courseSections, getCourseAccessFor, nextPosition, reorderRows, sectionEntries, touchCourse } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
 import { insertItem, itemFileColumns } from '../../lib/item-kinds'
 import { isHttpUrl } from '../../lib/forms'
 import { getQuizSettings } from '../quiz/quiz-items'
 import { availableCodeLanguages } from '../code/sandbox'
 import { bundleFiles, codeItems, courses, enrollments, items, sections } from '../../lib/schema'
+import { sectionTree } from '../../lib/section-tree'
 import { deleteKeys, inBackground, storage } from '../../lib/storage'
 import { ITEM_TYPE_LABELS, LINK_TARGET_LABELS, LINK_TARGETS, type Item, type User } from '../../lib/types'
 
@@ -118,31 +119,62 @@ const listCourses = defineTool(
 
 const outline = (courseId: number) => {
   const sectionRows = db
-    .select({ id: sections.id, title: sections.title, summary: sections.summary, hidden: sections.hidden })
+    .select({
+      id: sections.id,
+      parentId: sections.parentId,
+      position: sections.position,
+      title: sections.title,
+      summary: sections.summary,
+      hidden: sections.hidden,
+    })
     .from(sections)
     .where(eq(sections.courseId, courseId))
     .orderBy(asc(sections.position), asc(sections.id))
     .all()
   const itemRows = db
-    .select({ id: items.id, sectionId: items.sectionId, type: items.type, title: items.title, hidden: items.hidden })
+    .select({
+      id: items.id,
+      sectionId: items.sectionId,
+      position: items.position,
+      type: items.type,
+      title: items.title,
+      hidden: items.hidden,
+    })
     .from(items)
     .where(eq(items.courseId, courseId))
     .orderBy(asc(items.position), asc(items.id))
     .all()
-  return sectionRows.map((s) => ({
+  const itemOutline = (i: (typeof itemRows)[number]) => ({
+    id: i.id,
+    type: i.type,
+    type_label: ITEM_TYPE_LABELS[i.type],
+    title: i.title,
+    hidden: i.hidden === 1,
+  })
+  return sectionTree(sectionRows, itemRows).map(({ section: s, entries }) => ({
     id: s.id,
     title: s.title,
     summary: s.summary,
     hidden: s.hidden === 1,
-    items: itemRows
-      .filter((i) => i.sectionId === s.id)
-      .map((i) => ({ id: i.id, type: i.type, type_label: ITEM_TYPE_LABELS[i.type], title: i.title, hidden: i.hidden === 1 })),
+    items: entries.map((e) =>
+      e.kind === 'item'
+        ? itemOutline(e.item)
+        : {
+            id: e.section.id,
+            type: 'subsection',
+            type_label: 'サブセクション',
+            title: e.section.title,
+            summary: e.section.summary,
+            hidden: e.section.hidden === 1,
+            items: e.items.map(itemOutline),
+          },
+    ),
   }))
 }
 
 const getCourse = defineTool(
   'get_course',
-  'コースの設定と、セクションごとのアイテムの一覧（ID・種類・タイトル・表示/非表示）を並び順で返す。アイテムの中身は get_item で読む。',
+  'コースの設定と、セクションごとのアイテムの一覧（ID・種類・タイトル・表示/非表示）を並び順で返す。type が subsection のものはサブセクションで、中のアイテムを items に持ち、その ID はセクションの ID として使える。アイテムの中身は get_item で読む。',
   z.object({ course_id: id('コースの ID') }),
   async (c, { course_id }) => {
     const access = await manageable(c.var.user!, course_id)
@@ -271,43 +303,68 @@ export const readItemFile: AiFileReader = async (c, itemId) => {
 // 追加と並べ替えもすぐ実行しないのは、AI が読んだ教材（ほかの教師が書いたもの）に指示を仕込まれると、利用者の知らないうちに、
 // ほかのコースの非公開の内容を書き写したアイテムを作らせたり、ほかのコースの並びを変えさせたりできるため
 
+/** サブセクションを作れるセクション（同じコースの、サブセクションでないセクション）。parentId がなければ null */
+const parentOf = (courseId: number, parentId: number | undefined) =>
+  parentId === undefined
+    ? null
+    : db
+        .select({ id: sections.id, title: sections.title, parentId: sections.parentId })
+        .from(sections)
+        .where(and(eq(sections.id, parentId), eq(sections.courseId, courseId)))
+        .get()
+
+const PARENT_PROBLEM =
+  'parent_section_id のセクションが、このコースにないか、サブセクションです。サブセクションの中にはサブセクションを作れません。'
+
 const createSection = defineConfirmTool(
   'create_section',
-  'コースの末尾にセクションを追加する。学生には非表示の状態で作られる。利用者が確認カードで承認してから実行される。',
+  'コースの末尾にセクションを追加する。parent_section_id を指定すると、そのセクションの末尾にサブセクションとして追加する。学生には非表示の状態で作られる。利用者が確認カードで承認してから実行される。',
   z.object({
     course_id: id('コースの ID'),
     title: describedString('セクション名', 120, 1),
     summary: z.optional(describedString('セクションの説明（Markdown）', 2000)),
+    parent_section_id: z.optional(id('サブセクションとして入れるセクションの ID。省略するとコースの末尾に追加する')),
   }),
-  async (c, { course_id, title, summary }) => {
+  async (c, { course_id, title, summary, parent_section_id }) => {
     const access = await manageable(c.var.user!, course_id)
     if (!access) return failure(NOT_FOUND, 'セクションを追加できませんでした')
     const name = title.trim()
     if (!name) return failure('セクション名が空です。', 'セクションを追加できませんでした')
+    const parent = parentOf(course_id, parent_section_id)
+    if (parent === undefined || parent?.parentId) return failure(PARENT_PROBLEM, 'セクションを追加できませんでした')
     return {
-      title: `「${access.course.title}」にセクションを追加する（学生には非表示）`,
+      title: parent
+        ? `「${parent.title}」にサブセクションを追加する（学生には非表示）`
+        : `「${access.course.title}」にセクションを追加する（学生には非表示）`,
       changes: [{ label: 'セクション名', before: '', after: name }, ...changed('説明', '', summary?.trim(), true)],
       snapshot: null,
     }
   },
-  async (c, { course_id, title, summary }) => {
+  async (c, { course_id, title, summary, parent_section_id }) => {
     const access = await manageable(c.var.user!, course_id)
     if (!access) return failure(NOT_FOUND, 'セクションを追加できませんでした')
     const name = title.trim()
     if (!name) return failure('セクション名が空です。', 'セクションを追加できませんでした')
+    const parent = parentOf(course_id, parent_section_id)
+    if (parent === undefined || parent?.parentId) return failure(PARENT_PROBLEM, 'セクションを追加できませんでした')
     const row = db
       .insert(sections)
       .values({
         courseId: course_id,
+        parentId: parent?.id ?? null,
         title: name,
         summary: summary?.trim() ?? '',
         hidden: 1,
-        position: nextPosition(sections, eq(sections.courseId, course_id)),
+        position: nextPosition(parent ? sectionEntries(parent.id) : courseSections(course_id)),
       })
       .returning({ id: sections.id })
       .get()
     touchCourse(course_id)
-    return success({ section_id: row.id, hidden: true }, `セクション「${name}」を追加しました（非表示）`, inCourse(course_id, row.id))
+    return success(
+      { section_id: row.id, hidden: true },
+      `${parent ? 'サブセクション' : 'セクション'}「${name}」を追加しました（非表示）`,
+      inCourse(course_id, row.id),
+    )
   },
 )
 
@@ -417,7 +474,7 @@ const sectionRows = (courseId: number) =>
   db
     .select({ id: sections.id, title: sections.title })
     .from(sections)
-    .where(eq(sections.courseId, courseId))
+    .where(and(eq(sections.courseId, courseId), isNull(sections.parentId)))
     .orderBy(asc(sections.position), asc(sections.id))
     .all()
 
@@ -429,15 +486,9 @@ const itemRows = (sectionId: number) =>
     .orderBy(asc(items.position), asc(items.id))
     .all()
 
-function reorder(table: typeof sections | typeof items, ids: number[]) {
-  db.transaction((tx) => {
-    ids.forEach((rowId, position) => tx.update(table).set({ position }).where(eq(table.id, rowId)).run())
-  })
-}
-
 const reorderSections = defineConfirmTool(
   'reorder_sections',
-  'コースのセクションを並べ替える。section_ids には、コースのすべてのセクションの ID を新しい順に並べる。利用者が確認カードで承認してから実行される。',
+  'コースのセクションを並べ替える。section_ids には、コースのすべてのセクション（サブセクションは除く）の ID を新しい順に並べる。利用者が確認カードで承認してから実行される。',
   z.object({
     course_id: id('コースの ID'),
     section_ids: z.array(id('セクションの ID')).check(z.describe('すべてのセクションの ID を新しい順に')),
@@ -456,7 +507,7 @@ const reorderSections = defineConfirmTool(
     const current = sectionRows(course_id).map((r) => r.id)
     if (!sameSnapshot(current, snapshot)) return failure(STALE, label)
     if (!sameMembers(section_ids, current)) return failure(SECTIONS_MISMATCH, label)
-    reorder(sections, section_ids)
+    reorderRows(courseSections(course_id), 'section', section_ids)
     touchCourse(course_id)
     return success({ ok: true }, `「${access.course.title}」のセクションを並べ替えました`, inCourse(course_id))
   },
@@ -464,7 +515,7 @@ const reorderSections = defineConfirmTool(
 
 const reorderItems = defineConfirmTool(
   'reorder_items',
-  'セクションの中のアイテムを並べ替える。item_ids には、そのセクションのすべてのアイテムの ID を新しい順に並べる。別のセクションへ移すときは update_item を使う。利用者が確認カードで承認してから実行される。',
+  'セクションの中のアイテムを並べ替える。item_ids には、そのセクションのすべてのアイテム（サブセクションの中のものは除く）の ID を新しい順に並べる。サブセクションは今の位置のまま残る。別のセクションへ移すときは update_item を使う。利用者が確認カードで承認してから実行される。',
   z.object({
     section_id: id('セクションの ID'),
     item_ids: z.array(id('アイテムの ID')).check(z.describe('セクションのすべてのアイテムの ID を新しい順に')),
@@ -482,7 +533,7 @@ const reorderItems = defineConfirmTool(
     const current = itemRows(section_id).map((r) => r.id)
     if (!sameSnapshot(current, snapshot)) return failure(STALE, label)
     if (!sameMembers(item_ids, current)) return failure(ITEMS_MISMATCH, label)
-    reorder(items, item_ids)
+    reorderRows(sectionEntries(section_id), 'item', item_ids)
     touchCourse(found.section.courseId)
     return success({ ok: true }, `「${found.section.title}」のアイテムを並べ替えました`, inCourse(found.section.courseId, section_id))
   },
@@ -665,7 +716,7 @@ const updateItem = defineConfirmTool(
           url: args.url?.trim() ?? item.url,
           linkTarget: args.link_target ?? item.linkTarget,
           ...itemFileColumns(stored),
-          ...(moving && { sectionId: args.section_id, position: nextPosition(items, eq(items.sectionId, args.section_id!)) }),
+          ...(moving && { sectionId: args.section_id, position: nextPosition(sectionEntries(args.section_id!)) }),
         })
         .where(eq(items.id, item.id))
         .run()

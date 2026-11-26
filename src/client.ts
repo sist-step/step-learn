@@ -349,16 +349,29 @@ document.addEventListener('click', (e) => {
   const modal = btn && document.getElementById(btn.getAttribute('popovertarget') ?? '')
   const select = modal?.querySelector<HTMLSelectElement>('select[name=section_id]')
   const before = modal?.querySelector<HTMLInputElement>('input[name=before]')
+  const beforeSection = modal?.querySelector<HTMLInputElement>('input[name=before_section]')
   if (btn && select) select.value = btn.dataset.addItemSection ?? ''
   if (btn && before) before.value = btn.dataset.addItemBefore ?? ''
+  if (btn && beforeSection) beforeSection.value = btn.dataset.addItemBeforeSection ?? ''
+})
+
+// --- セクションの追加を開いたボタンが、セクションの中の「サブセクションを追加」なら、追加する場所にそのセクションを選んでおく
+document.addEventListener('click', (e) => {
+  const btn = (e.target as Element).closest<HTMLElement>('[popovertarget]')
+  const modal = btn && document.getElementById(btn.getAttribute('popovertarget') ?? '')
+  const select = modal?.querySelector<HTMLSelectElement>('select[name=parent_id]')
+  if (btn && select && !modal?.contains(btn)) select.value = btn.dataset.addSectionParent ?? ''
 })
 
 // 位置を残さないのは、別のセクションに移すと、選んだ行の前という位置がそのセクションにないため
 document.addEventListener('change', (e) => {
   const select = e.target as HTMLElement
   if (select.matches('select[name=section_id]')) {
-    const before = select.closest('form')?.querySelector<HTMLInputElement>('input[name=before]')
-    if (before) before.value = ''
+    const form = select.closest('form')
+    for (const name of ['before', 'before_section']) {
+      const input = form?.querySelector<HTMLInputElement>(`input[name=${name}]`)
+      if (input) input.value = ''
+    }
   }
 })
 
@@ -638,7 +651,11 @@ function submitItemDrop(entry: HTMLElement, action: string, drop: ItemDrop) {
   drop.list?.insertBefore(entry, drop.before)
   void visit(new URL(action, location.href), {
     method: 'POST',
-    body: new URLSearchParams({ section_id: drop.zone.dataset.itemDrop ?? '', before: (drop.before && itemIdOf(drop.before)) ?? '' }),
+    body: new URLSearchParams({
+      section_id: drop.zone.dataset.itemDrop ?? '',
+      before: (drop.before && itemIdOf(drop.before)) ?? '',
+      before_section: drop.before?.dataset.subsection ?? '',
+    }),
     onFail: () => parent?.insertBefore(entry, next),
   })
 }

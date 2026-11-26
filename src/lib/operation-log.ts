@@ -72,6 +72,7 @@ const RULES: Rule[] = [
   post('/courses/:id/sections', 'section.create', 'セクションを追加', 'change'),
   post('/courses/:id/sections/:sid', 'section.update', 'セクションを編集', 'change', 'section'),
   post('/courses/:id/sections/:sid/move', 'section.move', 'セクションを並べ替え', 'change', 'section'),
+  post('/courses/:id/sections/:sid/place', 'section.move', 'セクションを並べ替え', 'change', 'section'),
   post('/courses/:id/sections/:sid/visibility', 'section.visibility', 'セクションの表示を切り替え', 'change', 'section'),
   post('/courses/:id/sections/:sid/delete', 'section.delete', 'セクションを削除', 'important', 'section'),
   post('/courses/:id/items', 'item.create', 'アイテムを追加', 'change'),

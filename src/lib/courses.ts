@@ -1,4 +1,4 @@
-import { and, eq, inArray, max, ne, notInArray, sql, type SQL, type SQLWrapper } from 'drizzle-orm'
+import { and, eq, inArray, isNull, ne, notInArray, or, sql, type SQLWrapper } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import type { Context } from 'hono'
 import type { AppEnv, Course, CourseRole, User } from './types'
@@ -38,9 +38,17 @@ export async function getCourseAccessFor(user: User, courseId: number): Promise<
   return { course: row.course, role: row.role, canManage }
 }
 
-/** items を FROM に含むクエリで使う、学生に見えるアイテム（アイテムもセクションも非表示でない）の条件 */
-export const visibleItem = () =>
-  and(eq(items.hidden, 0), notInArray(items.sectionId, db.select({ id: sections.id }).from(sections).where(eq(sections.hidden, 1))))
+/** 学生に非表示のセクションと、非表示のセクションに入っているサブセクションの ID */
+const hiddenSectionIds = () =>
+  db
+    .select({ id: sections.id })
+    .from(sections)
+    .where(
+      or(eq(sections.hidden, 1), inArray(sections.parentId, db.select({ id: sections.id }).from(sections).where(eq(sections.hidden, 1)))),
+    )
+
+/** items を FROM に含むクエリで使う、学生に見えるアイテム（アイテムも、入っているセクションとその親も非表示でない）の条件 */
+export const visibleItem = () => and(eq(items.hidden, 0), notInArray(items.sectionId, hiddenSectionIds()))
 
 export const isVisibleItem = (itemId: number) =>
   !!db
@@ -84,50 +92,73 @@ export function teacherNames() {
     .where(and(eq(t.courseId, courses.id), eq(t.role, 'teacher')))})`
 }
 
-type Ordered = typeof sections | typeof items
+/** セクションの中の並びの 1 つ。サブセクションは親のセクションのアイテムと同じ並びに入る */
+export type EntryRef = { kind: 'item' | 'section'; id: number }
 
-/** 末尾に足すときの position */
-export function nextPosition(table: Ordered, scope: SQL) {
-  const row = db
-    .select({ last: max(table.position) })
-    .from(table)
-    .where(scope)
-    .get()
-  return (row?.last ?? 0) + 1
+type PositionRow = EntryRef & { position: number }
+
+const KIND_ORDER: Record<EntryRef['kind'], number> = { item: 0, section: 1 }
+
+const byPosition = (a: PositionRow, b: PositionRow) => a.position - b.position || KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.id - b.id
+
+/** コースの（サブセクションでない）セクションの並び */
+export const courseSections = (courseId: number): PositionRow[] =>
+  db
+    .select({ id: sections.id, position: sections.position })
+    .from(sections)
+    .where(and(eq(sections.courseId, courseId), isNull(sections.parentId)))
+    .all()
+    .map((r) => ({ kind: 'section' as const, ...r }))
+    .sort(byPosition)
+
+/** セクションの中のアイテムとサブセクションの並び */
+export function sectionEntries(sectionId: number): PositionRow[] {
+  const itemRows = db.select({ id: items.id, position: items.position }).from(items).where(eq(items.sectionId, sectionId)).all()
+  const childRows = db.select({ id: sections.id, position: sections.position }).from(sections).where(eq(sections.parentId, sectionId)).all()
+  return [...itemRows.map((r) => ({ kind: 'item' as const, ...r })), ...childRows.map((r) => ({ kind: 'section' as const, ...r }))].sort(
+    byPosition,
+  )
 }
 
-type PositionRow = { id: number; position: number }
-
-const orderedRows = (table: Ordered, scope: SQL): PositionRow[] =>
-  db.select({ id: table.id, position: table.position }).from(table).where(scope).orderBy(table.position, table.id).all()
+/** 並びの末尾に足すときの position */
+export const nextPosition = (rows: PositionRow[]) => Math.max(0, ...rows.map((r) => r.position)) + 1
 
 /** 並べ替えた rows の position を 1..n に正規化し、変化した行だけ更新する */
-function renumber(table: Ordered, rows: PositionRow[]) {
+function renumber(rows: PositionRow[]) {
   const updates = rows.map((r, idx) => ({ ...r, next: idx + 1 })).filter((r) => r.position !== r.next)
   db.transaction((tx) => {
-    for (const r of updates) tx.update(table).set({ position: r.next }).where(eq(table.id, r.id)).run()
+    for (const r of updates) {
+      const table = r.kind === 'item' ? items : sections
+      tx.update(table).set({ position: r.next }).where(eq(table.id, r.id)).run()
+    }
   })
 }
 
-/** position を持つ行を1つ上下に動かす */
-export function moveRow(table: Ordered, scope: SQL, id: number, dir: 'up' | 'down') {
-  const rows = orderedRows(table, scope)
-  const i = rows.findIndex((r) => r.id === id)
+const sameEntry = (a: EntryRef) => (b: EntryRef) => a.kind === b.kind && a.id === b.id
+
+/** 並びの中の target を1つ上下に動かす */
+export function moveRow(rows: PositionRow[], target: EntryRef, dir: 'up' | 'down') {
+  const i = rows.findIndex(sameEntry(target))
   const j = dir === 'up' ? i - 1 : i + 1
   if (i < 0 || j < 0 || j >= rows.length) return
   ;[rows[i], rows[j]] = [rows[j], rows[i]]
-  renumber(table, rows)
+  renumber(rows)
 }
 
-/** id の行を、同じ scope の beforeId の行の直前に移す。beforeId がなければ何もしない */
-export function placeBefore(table: Ordered, scope: SQL, id: number, beforeId: number) {
-  const rows = orderedRows(table, scope)
-  const moving = rows.find((r) => r.id === id)
-  const rest = rows.filter((r) => r.id !== id)
-  const j = rest.findIndex((r) => r.id === beforeId)
+/** 並びの中の target を before の直前に移す。before が並びになければ何もしない */
+export function placeBefore(rows: PositionRow[], target: EntryRef, before: EntryRef) {
+  const moving = rows.find(sameEntry(target))
+  const rest = rows.filter((r) => !sameEntry(target)(r))
+  const j = rest.findIndex(sameEntry(before))
   if (!moving || j < 0) return
   rest.splice(j, 0, moving)
-  renumber(table, rest)
+  renumber(rest)
+}
+
+/** 並びを order の順にする。order にない行（サブセクションなど）は、もとの位置のまま残す */
+export function reorderRows(rows: PositionRow[], kind: EntryRef['kind'], order: number[]) {
+  const queue = order.map((id) => rows.find((r) => r.kind === kind && r.id === id)).filter((r) => r !== undefined)
+  renumber(rows.map((r) => (r.kind === kind ? (queue.shift() ?? r) : r)))
 }
 
 // DB に持たないのは、画面に変更を知らせるためだけの値で、再起動で失われても開いている画面が一度取り直すだけで済むため

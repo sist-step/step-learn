@@ -2,17 +2,20 @@ import { and, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 import {
   courseRevision,
+  courseSections,
   getCourseAccess,
   manageAccess,
   isVisibleItem,
   moveRow,
   nextPosition,
   placeBefore,
+  sectionEntries,
   touchCourse,
   trackedDoneCount,
   trackedItemCount,
   visibleItem,
   type CourseAccess,
+  type EntryRef,
 } from '../../lib/courses'
 import type { BundleView } from '../bundle/components/bundle'
 import type { PresentationSummary } from '../presentation/components/presentation'
@@ -69,7 +72,17 @@ import {
   type RestrictionSet,
 } from '../../lib/restriction'
 import type { AppEnv, CodeItem, Completion, ItemType } from '../../lib/types'
-import { ItemEditPage, ItemPage, TEXT_PREVIEW_MAX, editUrl, type ItemInput, type OutlineItem, type RestrictedOutline } from './views'
+import { sectionTree, treeItems } from '../../lib/section-tree'
+import {
+  ItemEditPage,
+  ItemPage,
+  TEXT_PREVIEW_MAX,
+  editUrl,
+  type ItemInput,
+  type OutlineItem,
+  type OutlineSection,
+  type RestrictedOutline,
+} from './views'
 
 function bundleView(c: Context<AppEnv>, access: CourseAccess, itemId: number): BundleView {
   const courseId = access.course.id
@@ -154,18 +167,32 @@ const listSections = (courseId: number) =>
 
 // ---------------------------------------------------------------- セクション
 
+/** before_section があればそのサブセクション、before があればそのアイテムの前。どちらもなければ末尾 */
+const beforeRef = ({ before, before_section: section }: { before: number; before_section: number }): EntryRef | undefined =>
+  section ? { kind: 'section', id: section } : before ? { kind: 'item', id: before } : undefined
+
 export async function createSection(c: Context<AppEnv>) {
   const access = await manageAccess(c)
   if (!access) return c.notFound()
   const id = access.course.id
-  const result = validate('section', await readForm(c))
+  const form = await readForm(c)
+  const result = validate('section', form)
   if (!result.ok) return redirectWith(c, editUrl(id), firstError(result.errors), 'error')
+  const placement = validate('sectionParent', form)
+  const parent = placement.ok && placement.values.parent_id ? getSection(id, placement.values.parent_id) : undefined
+  // サブセクションの中に作らないのは、Moodle と同じく入れ子を 1 段にして、どこに何があるかを見失わないようにするため
+  const inside = parent && !parent.parentId ? parent : undefined
   const row = db
     .insert(sections)
-    .values({ courseId: id, title: result.values.title, position: nextPosition(sections, eq(sections.courseId, id)) })
+    .values({
+      courseId: id,
+      parentId: inside?.id ?? null,
+      title: result.values.title,
+      position: nextPosition(inside ? sectionEntries(inside.id) : courseSections(id)),
+    })
     .returning({ id: sections.id })
     .get()
-  return redirectWith(c, editUrl(id, row.id), 'セクションを追加しました。')
+  return redirectWith(c, editUrl(id, row.id), inside ? `「${inside.title}」にサブセクションを追加しました。` : 'セクションを追加しました。')
 }
 
 export async function updateSection(c: Context<AppEnv>) {
@@ -184,11 +211,34 @@ export async function updateSection(c: Context<AppEnv>) {
 export async function moveSection(c: Context<AppEnv>) {
   const access = await manageAccess(c)
   const sid = intParam(c, 'sid')
-  if (!access || !sid) return c.notFound()
+  const section = access && sid ? getSection(access.course.id, sid) : undefined
+  if (!access || !section) return c.notFound()
   const fields = await readFields(c, 'move')
   if (!fields) return c.notFound()
-  moveRow(sections, eq(sections.courseId, access.course.id), sid, fields.dir)
-  return c.redirect(editUrl(access.course.id, sid), 303)
+  moveRow(
+    section.parentId ? sectionEntries(section.parentId) : courseSections(access.course.id),
+    { kind: 'section', id: section.id },
+    fields.dir,
+  )
+  return c.redirect(editUrl(access.course.id, section.id), 303)
+}
+
+/** サブセクションを、ドラッグで同じセクションの中か別のセクションへ移す */
+export async function placeSection(c: Context<AppEnv>) {
+  const access = await manageAccess(c)
+  const sid = intParam(c, 'sid')
+  const section = access && sid ? getSection(access.course.id, sid) : undefined
+  const fields = await readFields(c, 'itemPlace')
+  const target = access && fields ? getSection(access.course.id, fields.section_id) : undefined
+  // セクションをサブセクションにしないのは、中のサブセクションごと 2 段の入れ子になってしまうため
+  if (!access || !section?.parentId || !fields || !target || target.parentId) return c.notFound()
+  db.update(sections)
+    .set({ parentId: target.id, position: nextPosition(sectionEntries(target.id)) })
+    .where(eq(sections.id, section.id))
+    .run()
+  const before = beforeRef(fields)
+  if (before) placeBefore(sectionEntries(target.id), { kind: 'section', id: section.id }, before)
+  return c.redirect(editUrl(access.course.id, section.id), 303)
 }
 
 // トグルにせず値を送らせるのは、二重送信や古い画面からの送信で意図と逆の状態になるのを避けるため
@@ -214,13 +264,17 @@ export async function setSectionHidden(c: Context<AppEnv>) {
 export async function removeSection(c: Context<AppEnv>) {
   const access = await manageAccess(c)
   const sid = intParam(c, 'sid')
-  if (!access || !sid) return c.notFound()
-  const files = sectionStoredFiles(access.course.id, sid)
-  db.delete(sections)
-    .where(and(eq(sections.id, sid), eq(sections.courseId, access.course.id)))
-    .run()
+  const section = access && sid ? getSection(access.course.id, sid) : undefined
+  if (!access || !section) return c.notFound()
+  const files = sectionStoredFiles(access.course.id, section.id)
+  // サブセクションを外部キーの cascade に任せないのは、drizzle-kit が列を足すマイグレーションに ON DELETE を出さず、parent_id には付いていないため
+  db.transaction((tx) => {
+    tx.delete(sections).where(eq(sections.parentId, section.id)).run()
+    tx.delete(sections).where(eq(sections.id, section.id)).run()
+  })
   deleteStoredFiles(files)
-  return redirectWith(c, editUrl(access.course.id), 'セクションを削除しました。', 'info')
+  const back = section.parentId ?? undefined
+  return redirectWith(c, editUrl(access.course.id, back), `${section.parentId ? 'サブセクション' : 'セクション'}を削除しました。`, 'info')
 }
 
 // ---------------------------------------------------------------- アイテム作成・更新
@@ -317,7 +371,7 @@ export async function createItem(c: Context<AppEnv>) {
   const id = insertItem({
     courseId,
     sectionId,
-    before: placement.values.before || undefined,
+    before: beforeRef(placement.values),
     type,
     title: input.title,
     body: input.body,
@@ -439,7 +493,7 @@ export async function updateItem(c: Context<AppEnv>) {
       hidden,
       completion,
       ...itemFileColumns(stored),
-      ...(sectionId !== item.sectionId && { sectionId, position: nextPosition(items, eq(items.sectionId, sectionId)) }),
+      ...(sectionId !== item.sectionId && { sectionId, position: nextPosition(sectionEntries(sectionId)) }),
     })
     .where(and(eq(items.id, iid), eq(items.courseId, courseId)))
     .run()
@@ -537,7 +591,7 @@ export async function moveItem(c: Context<AppEnv>) {
   if (!item) return c.notFound()
   const fields = await readFields(c, 'move')
   if (!fields) return c.notFound()
-  moveRow(items, eq(items.sectionId, item.sectionId), iid, fields.dir)
+  moveRow(sectionEntries(item.sectionId), { kind: 'item', id: iid }, fields.dir)
   return c.redirect(editUrl(access.course.id, item.sectionId), 303)
 }
 
@@ -548,12 +602,12 @@ export async function placeItem(c: Context<AppEnv>) {
   const item = getItem(access.course.id, iid)
   const fields = await readFields(c, 'itemPlace')
   if (!item || !fields || !getSection(access.course.id, fields.section_id)) return c.notFound()
-  const scope = eq(items.sectionId, fields.section_id)
   db.update(items)
-    .set({ sectionId: fields.section_id, position: nextPosition(items, scope) })
+    .set({ sectionId: fields.section_id, position: nextPosition(sectionEntries(fields.section_id)) })
     .where(eq(items.id, iid))
     .run()
-  if (fields.before) placeBefore(items, scope, iid, fields.before)
+  const before = beforeRef(fields)
+  if (before) placeBefore(sectionEntries(fields.section_id), { kind: 'item', id: iid }, before)
   return c.redirect(editUrl(access.course.id, fields.section_id), 303)
 }
 
@@ -707,8 +761,8 @@ export async function showItem(c: Context<AppEnv>) {
   if (!item || (!manage && !isVisibleItem(iid))) return c.notFound()
   const availability = courseAvailability(c.var.user!, access)
   if (availability.items.get(iid)?.open === false) return c.notFound()
-  const sectionList = db
-    .select({ id: sections.id, title: sections.title, hidden: sections.hidden })
+  const sectionList: OutlineSection[] = db
+    .select({ id: sections.id, parentId: sections.parentId, position: sections.position, title: sections.title, hidden: sections.hidden })
     .from(sections)
     .where(and(eq(sections.courseId, id), manage ? undefined : eq(sections.hidden, 0)))
     .orderBy(sections.position, sections.id)
@@ -725,6 +779,7 @@ export async function showItem(c: Context<AppEnv>) {
       fileType: items.fileType,
       hidden: items.hidden,
       completion: items.completion,
+      position: items.position,
     })
     .from(items)
     .where(and(eq(items.courseId, id), manage ? undefined : visibleItem()))
@@ -745,7 +800,7 @@ export async function showItem(c: Context<AppEnv>) {
   const done = new Set(doneRows.map((r) => r.itemId))
 
   // セクション順 → アイテム順でコース全体を並べ、前後のアイテムを求める
-  const ordered = sectionList.flatMap((s) => outline.filter((o) => o.sectionId === s.id && !locked.has(o.id)))
+  const ordered = treeItems(sectionTree(sectionList, outline)).filter((o) => !locked.has(o.id))
   const idx = ordered.findIndex((o) => o.id === item.id)
   const prev = ordered[idx - 1]
   const next = ordered[idx + 1]

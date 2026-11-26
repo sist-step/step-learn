@@ -1,11 +1,11 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray, or } from 'drizzle-orm'
 import { bundleKeysOf } from '../features/bundle/bundle-items'
 import { DEFAULT_STARTER, type CodeConstraint, type CodeLanguage } from '../features/code/code'
 import type { CollabKind, CollabScope } from '../features/collab/collab'
 import { collabStore } from '../features/collab/collab-items'
-import { nextPosition, placeBefore } from './courses'
+import { nextPosition, placeBefore, sectionEntries, type EntryRef } from './courses'
 import { db, type DB } from './db'
-import { codeItems, collabItems, items } from './schema'
+import { codeItems, collabItems, items, sections } from './schema'
 import { deleteKeys, inBackground, storage, type StoredFile } from './storage'
 import type { Completion, ItemType, LinkTarget } from './types'
 
@@ -15,8 +15,8 @@ type Tx = Parameters<Parameters<DB['transaction']>[0]>[0]
 type NewItem = {
   courseId: number
   sectionId: number
-  /** この ID のアイテムの前に入れる。なければ末尾 */
-  before?: number
+  /** このアイテムかサブセクションの前に入れる。なければ末尾 */
+  before?: EntryRef
   type: ItemType
   title: string
   body: string
@@ -110,14 +110,14 @@ export function insertItem(item: NewItem): number {
         hidden: item.hidden,
         completion: item.completion ?? 'none',
         ...itemFileColumns(item.file),
-        position: nextPosition(items, eq(items.sectionId, item.sectionId)),
+        position: nextPosition(sectionEntries(item.sectionId)),
       })
       .returning({ id: items.id })
       .get()
     ITEM_KINDS[item.type].createRows?.(tx, row.id, item)
     return row.id
   })
-  if (item.before) placeBefore(items, eq(items.sectionId, item.sectionId), id, item.before)
+  if (item.before) placeBefore(sectionEntries(item.sectionId), { kind: 'item', id }, item.before)
   return id
 }
 
@@ -142,12 +142,20 @@ export function deleteStoredFiles({ keys, prefixes }: ReturnType<typeof storedFi
   for (const prefix of prefixes) inBackground(storage.deletePrefix(prefix))
 }
 
-/** セクションのアイテム全部の、DB の外のファイル */
+/** セクションのアイテム全部（サブセクションの中のものも）の、DB の外のファイル */
 export const sectionStoredFiles = (courseId: number, sectionId: number) =>
   storedFilesOf(
     db
       .select({ id: items.id, courseId: items.courseId, type: items.type, fileKey: items.fileKey })
       .from(items)
-      .where(and(eq(items.sectionId, sectionId), eq(items.courseId, courseId)))
+      .where(
+        and(
+          or(
+            eq(items.sectionId, sectionId),
+            inArray(items.sectionId, db.select({ id: sections.id }).from(sections).where(eq(sections.parentId, sectionId))),
+          ),
+          eq(items.courseId, courseId),
+        ),
+      )
       .all(),
   )

@@ -1,7 +1,7 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { filesFor, isCleared, type CodeConstraint, type CodeFiles, type CodeLanguage, type SubmitPeriod } from './code'
 import type { CodeStore } from './code-store'
-import { nextPosition } from '../../lib/courses'
+import { nextPosition, sectionEntries } from '../../lib/courses'
 import { db, type DB } from '../../lib/db'
 import { codeDrafts, codeItems, codeSubmissions, completions, courses, enrollments, items, users } from '../../lib/schema'
 import type { CodeItem, Item } from '../../lib/types'
@@ -54,7 +54,7 @@ export const setCodeStage = (itemId: number, stage: 'preparing') =>
  * 提出の期間を写さないのは、直しているあいだに期間が始まり、元の問題と同じ時間に受け付けることになるため
  */
 export function duplicateCodeItem(item: Item, code: CodeItem) {
-  const position = nextPosition(items, eq(items.sectionId, item.sectionId))
+  const position = nextPosition(sectionEntries(item.sectionId))
   return db.transaction((tx) => {
     const { id } = tx
       .insert(items)

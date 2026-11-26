@@ -215,6 +215,9 @@
 .outline-dot.done { background: var(--success-strong); border-color: var(--success-strong); color: var(--on-strong); }
 .outline-kind { flex: none; color: var(--muted); }
 .outline-link.active .outline-kind { color: var(--c-ink); }
+.outline-sub { display: flex; align-items: center; gap: 6px; padding: 6px 10px 2px; font-size: var(--fs-xs); font-weight: 600; color: var(--text-2); }
+.outline-sub.is-hidden { color: var(--muted); }
+.is-nested > .outline-link { margin-left: 16px; }
 .outline-dot .icon { stroke-width: 3; }
 
 /* 幅の狭い画面で閉じないのは、目次が本文の下に回って本文の幅を取らないため */
