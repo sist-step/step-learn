@@ -13,6 +13,7 @@ import {
   type RestrictionChoices,
 } from './restriction'
 import { codeSubmissions, completions, items, sections } from './schema'
+import { sectionLabel, sectionTree, treeItems } from './section-tree'
 import type { Course, User } from './types'
 
 const PROFILE_FIELDS = [
@@ -32,12 +33,20 @@ type OutlineRow = {
   hidden: number
   completion: string
   availability: string | null
+  position: number
 }
-type SectionRow = { id: number; title: string; hidden: number; availability: string | null }
+type SectionRow = { id: number; parentId: number | null; position: number; title: string; hidden: number; availability: string | null }
 
 function loadOutline(courseId: number) {
   const sectionRows: SectionRow[] = db
-    .select({ id: sections.id, title: sections.title, hidden: sections.hidden, availability: sections.availability })
+    .select({
+      id: sections.id,
+      parentId: sections.parentId,
+      position: sections.position,
+      title: sections.title,
+      hidden: sections.hidden,
+      availability: sections.availability,
+    })
     .from(sections)
     .where(eq(sections.courseId, courseId))
     .orderBy(sections.position, sections.id)
@@ -51,14 +60,14 @@ function loadOutline(courseId: number) {
       hidden: items.hidden,
       completion: items.completion,
       availability: items.availability,
+      position: items.position,
     })
     .from(items)
     .where(eq(items.courseId, courseId))
     .orderBy(items.position, items.id)
     .all()
-  const order = new Map(sectionRows.map((s, i) => [s.id, i]))
-  const ordered = [...itemRows].sort((a, b) => (order.get(a.sectionId) ?? 0) - (order.get(b.sectionId) ?? 0))
-  return { sectionRows, ordered }
+  const tree = sectionTree(sectionRows, itemRows)
+  return { sectionRows, tree, ordered: treeItems(tree) }
 }
 
 type Outline = ReturnType<typeof loadOutline>
@@ -66,7 +75,7 @@ type Outline = ReturnType<typeof loadOutline>
 const isGraded = (it: OutlineRow) => it.type === 'code' || it.type === 'quiz'
 
 function choicesOf(course: Pick<Course, 'completionEnabled'>, { sectionRows, ordered }: Outline, exclude?: number): RestrictionChoices {
-  const sectionTitles = new Map(sectionRows.map((s) => [s.id, s.title]))
+  const sectionTitles = new Map(sectionRows.map((s) => [s.id, sectionLabel(sectionRows, s.id)]))
   const tracked = course.completionEnabled ? ordered.filter((it) => it.completion !== 'none' && it.id !== exclude) : []
   const graded = ordered.filter((it) => isGraded(it) && it.id !== exclude)
   const unavailable: RestrictionChoices['unavailable'] = {}
@@ -168,16 +177,31 @@ export function courseAvailability(user: User, access: CourseAccess): CourseAvai
     profile: (field: string) => profileValue(user, field),
   })
 
-  const hiddenSections = new Set(sectionRows.filter((s) => s.hidden).map((s) => s.id))
+  const hiddenParents = new Set(sectionRows.filter((s) => s.hidden).map((s) => s.id))
+  const hiddenSections = new Set(sectionRows.filter((s) => s.hidden || (s.parentId && hiddenParents.has(s.parentId))).map((s) => s.id))
   // 「直前のアイテム」を完了の条件がないアイテムや学生に見えないアイテムにしないのは、学生が完了にできず、ずっと開けなくなるため
   let previous: number | null = null
-  for (const s of sectionRows) {
-    const sectionResult = checkRestriction(parseRestriction(s.availability), env(previous), choices)
-    result.sections.set(s.id, sectionResult)
-    for (const it of ordered.filter((o) => o.sectionId === s.id)) {
-      const own = checkRestriction(parseRestriction(it.availability), env(previous), choices)
-      result.items.set(it.id, sectionResult.open ? own : { ...sectionResult, text: '' })
-      if (visibleTracked(it, hiddenSections)) previous = it.id
+  const visit = (it: OutlineRow, outer: Availability) => {
+    const own = checkRestriction(parseRestriction(it.availability), env(previous), choices)
+    result.items.set(it.id, outer.open ? own : { ...outer, text: '' })
+    if (visibleTracked(it, hiddenSections)) previous = it.id
+  }
+  // サブセクションの判定に親の結果を重ねるのは、親のセクションが開けないうちは、中のサブセクションも開けないようにするため
+  const within = (outer: Availability, set: string | null) => {
+    const own = checkRestriction(parseRestriction(set), env(previous), choices)
+    return outer.open ? own : { ...outer, text: '' }
+  }
+  for (const { section, entries } of outline.tree) {
+    const sectionResult = checkRestriction(parseRestriction(section.availability), env(previous), choices)
+    result.sections.set(section.id, sectionResult)
+    for (const entry of entries) {
+      if (entry.kind === 'item') {
+        visit(entry.item, sectionResult)
+        continue
+      }
+      const subResult = within(sectionResult, entry.section.availability)
+      result.sections.set(entry.section.id, subResult)
+      for (const it of entry.items) visit(it, subResult)
     }
   }
   return result

@@ -1,5 +1,17 @@
 import { sql } from 'drizzle-orm'
-import { blob, check, customType, index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import {
+  blob,
+  check,
+  customType,
+  index,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+  type AnySQLiteColumn,
+} from 'drizzle-orm/sqlite-core'
 import {
   CODE_LANGUAGES,
   CODE_STAGES,
@@ -142,14 +154,17 @@ export const sections = sqliteTable(
     courseId: integer('course_id')
       .notNull()
       .references(() => courses.id, { onDelete: 'cascade' }),
+    /** サブセクションなら、入っているセクション。入れ子は 1 段だけで、親もサブセクションにはしない */
+    parentId: integer('parent_id').references((): AnySQLiteColumn => sections.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
     summary: text('summary').notNull().default(''),
     hidden: integer('hidden').notNull().default(0),
     /** アクセス制限。Moodle の availability と同じ形の JSON（lib/restriction.ts）。NULL は制限なし */
     availability: text('availability'),
+    /** サブセクションでは、親のセクションのアイテムと同じ並びの中の位置 */
     position: integer('position').notNull().default(0),
   },
-  (t) => [index('sections_course').on(t.courseId, t.position)],
+  (t) => [index('sections_course').on(t.courseId, t.position), index('sections_parent').on(t.parentId, t.position)],
 )
 
 export const items = sqliteTable(

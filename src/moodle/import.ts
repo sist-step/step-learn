@@ -7,7 +7,7 @@ import { db } from '../lib/db'
 import { courses, enrollments, items, sections, users } from '../lib/schema'
 import { type StoredFile, deleteCourseFiles, isExecutable, putCourseFile } from '../lib/storage'
 import { COMPLETION_LABELS, COURSE_ROLE_LABELS, ITEM_TYPE_LABELS, LINK_TARGET_LABELS, type ItemType } from '../lib/types'
-import { type Backup, type BackupItem, type BackupParticipant, moduleLabel } from './backup'
+import { type Backup, type BackupItem, type BackupParticipant, type BackupSection, backupItems, moduleLabel } from './backup'
 
 type PlannedParticipant = BackupParticipant & {
   existingId: number | null
@@ -23,7 +23,7 @@ const openFile = async (f: NonNullable<BackupItem['file']>) =>
 
 /** 取り込み先の DB と突き合わせ、既存のユーザーや使われているユーザー名を調べる。DB には書き込まない */
 export async function planImport(backup: Backup): Promise<Plan> {
-  for (const item of backup.sections.flatMap((s) => s.items)) {
+  for (const item of backup.sections.flatMap(backupItems)) {
     if (item.type === 'file' && item.file && (await isExecutable(await openFile(item.file)))) {
       item.type = null
       item.notes.push('実行ファイル（.exe など）は保存できないため取り込みません')
@@ -124,8 +124,9 @@ const NATIVE_MODULE: Record<ItemType, string> = {
 export function printPreview(plan: Plan, source: string, { verbose = false } = {}) {
   const { backup, participants } = plan
   const { course } = backup
-  const all = backup.sections.flatMap((s) => s.items)
+  const all = backup.sections.flatMap(backupItems)
   const imported = all.filter((i) => i.type)
+  const subsections = backup.sections.flatMap((s) => s.items.filter((i) => i.subsection)).length
   const skipped = all.filter((i) => !i.type)
   const fileBytes = imported.reduce((n, i) => n + (i.file?.size ?? 0), 0)
   const joining = participants.filter((p) => !p.skip)
@@ -138,7 +139,7 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
   if (course.summary) out.push(`  概要          ${fit(course.summary, 60).trimEnd()}`)
   out.push('')
   out.push(
-    `  セクション ${backup.sections.length}・アイテム ${imported.length}` +
+    `  セクション ${backup.sections.length}${subsections ? `・サブセクション ${subsections}` : ''}・アイテム ${imported.length}` +
       (imported.length ? dim(`（${count(imported, (i) => ITEM_TYPE_LABELS[i.type!])}）`) : '') +
       (fileBytes ? `・ファイル合計 ${formatBytes(fileBytes)}` : ''),
   )
@@ -160,10 +161,10 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
     )
     if (s.summary) out.push(dim(`    ${fit(s.summary, 70).trimEnd()}`))
     for (const note of s.notes) out.push(warn(`      ↳ ${note}`))
-    for (const item of s.items) {
+    const printItem = (item: BackupItem, indent: string) => {
       if (!item.type) {
-        out.push(ng(`  × ${fit(moduleLabel(item.module), 10)}`) + dim(`${fit(item.title, 36)}${item.notes.join('。')}`))
-        continue
+        out.push(ng(`${indent}× ${fit(moduleLabel(item.module), 10)}`) + dim(`${fit(item.title, 36)}${item.notes.join('。')}`))
+        return
       }
       const extra = [
         item.type === 'file' && item.file ? formatBytes(item.file.size) : '',
@@ -172,8 +173,23 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
         item.hidden ? warn('学生に非表示') : '',
       ].filter(Boolean)
       const from = item.module !== NATIVE_MODULE[item.type] ? dim(`←${moduleLabel(item.module)} `) : ''
-      out.push(`    ${fit(ITEM_TYPE_LABELS[item.type], 10)}${fit(item.title, 36)}${from}${dim(extra.join('  '))}`)
-      for (const note of item.notes) out.push(warn(`      ↳ ${note}`))
+      out.push(`${indent}  ${fit(ITEM_TYPE_LABELS[item.type], 10)}${fit(item.title, 36)}${from}${dim(extra.join('  '))}`)
+      for (const note of item.notes) out.push(warn(`${indent}    ↳ ${note}`))
+    }
+    for (const item of s.items) {
+      const sub = item.subsection
+      if (!sub) {
+        printItem(item, '  ')
+        continue
+      }
+      out.push(
+        `  ${bold(`▸ サブセクション「${line(sub.title)}」`)}` +
+          (sub.hidden ? warn(' [学生に非表示]') : '') +
+          (sub.items.length ? '' : dim('  （アイテムなし）')),
+      )
+      if (sub.summary) out.push(dim(`      ${fit(sub.summary, 66).trimEnd()}`))
+      for (const note of sub.notes) out.push(warn(`        ↳ ${note}`))
+      for (const child of sub.items) printItem(child, '    ')
     }
   })
 
@@ -211,7 +227,7 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
 
 // ---------------------------------------------------------------- 書き込み
 
-type ImportResult = { courseId: number; sections: number; items: number; createdUsers: number; enrolled: number }
+type ImportResult = { courseId: number; sections: number; subsections: number; items: number; createdUsers: number; enrolled: number }
 
 export async function runImport(plan: Plan, progress: (message: string) => void): Promise<ImportResult> {
   const { backup } = plan
@@ -228,7 +244,7 @@ export async function runImport(plan: Plan, progress: (message: string) => void)
     .get()
 
   try {
-    const fileItems = backup.sections.flatMap((s) => s.items).filter((i) => i.type === 'file' && i.file)
+    const fileItems = backup.sections.flatMap(backupItems).filter((i) => i.type === 'file' && i.file)
     const stored = new Map<BackupItem, StoredFile>()
     for (const [n, item] of fileItems.entries()) {
       progress(`ファイルを保存しています（${n + 1}/${fileItems.length}）${item.file!.name}`)
@@ -236,15 +252,20 @@ export async function runImport(plan: Plan, progress: (message: string) => void)
     }
 
     return db.transaction((tx) => {
-      const result: ImportResult = { courseId, sections: 0, items: 0, createdUsers: 0, enrolled: 0 }
-      for (const [sn, s] of backup.sections.entries()) {
+      const result: ImportResult = { courseId, sections: 0, subsections: 0, items: 0, createdUsers: 0, enrolled: 0 }
+      const insertSection = (s: BackupSection, position: number, parentId: number | null) => {
         const { id: sectionId } = tx
           .insert(sections)
-          .values({ courseId, title: s.title, summary: s.summary, hidden: s.hidden ? 1 : 0, position: sn + 1 })
+          .values({ courseId, parentId, title: s.title, summary: s.summary, hidden: s.hidden ? 1 : 0, position })
           .returning({ id: sections.id })
           .get()
-        result.sections++
-        for (const [n, item] of s.items.filter((i) => i.type).entries()) {
+        if (parentId) result.subsections++
+        else result.sections++
+        for (const [n, item] of s.items.filter((i) => i.type || (i.subsection && !parentId)).entries()) {
+          if (item.subsection) {
+            insertSection(item.subsection, n + 1, sectionId)
+            continue
+          }
           const file = stored.get(item)
           tx.insert(items)
             .values({
@@ -264,6 +285,7 @@ export async function runImport(plan: Plan, progress: (message: string) => void)
           result.items++
         }
       }
+      for (const [sn, s] of backup.sections.entries()) insertSection(s, sn + 1, null)
 
       for (const p of plan.participants.filter((p) => !p.skip)) {
         let userId = p.existingId

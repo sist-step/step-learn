@@ -46,7 +46,7 @@ MOODLE_MIGRATE_URL=https://moodle.example.ac.jp MOODLE_MIGRATE_TOKEN=<トーク�
 - Moodle に `local_steplearn` のプラグインが入っている必要があります（Moodle モードと同じもの）
 - トークンは、すべてのコースを見られるアカウント（システムのコンテキストで「マネージャー」を割り当てたアカウントなど）のものを、外部サービス「STEP Learn」で発行します
 - コースごとにプレビューを表示し、確認してから取り込みます。`--yes`・`--verbose` は `moodle:import`（[docs/moodle-import.md](../docs/moodle-import.md)）と同じです
-- サブセクションは、親のセクションのすぐ後ろに「親 › 子」という名前のセクションとして並べます
+- サブセクションは、親のセクションの中の同じ位置にサブセクションとして取り込みます
 - Moodle モードで追加した、STEP Learn にしかない種類のアイテムは引き継ぎません
 
 ## プラグインがすること

@@ -32,7 +32,7 @@ Moodle のコースバックアップから、コース・セクション・ア�
 
 const MOODLE_MIGRATE_USAGE = `使い方: npm run moodle:migrate -- <コース ID>... [--dry-run] [--yes] [--verbose]
 
-Moodle の Web サービスからコースを読み、セクションと URL・ファイル・フォルダーを取り込みます（参加者とほかの活動は取り込みません）。
+Moodle の Web サービスからコースを読み、セクション・サブセクションと URL・ファイル・フォルダーを取り込みます（参加者とほかの活動は取り込みません）。
 コースごとに内容のプレビューを表示し、確認してから書き込みます。
 
   --dry-run   プレビューだけを表示して、何も書き込まずに終了する
@@ -154,7 +154,7 @@ async function confirmAndImport(plan: Plan, values: { 'dry-run': boolean; yes: b
   console.log(
     [
       `コース「${plan.backup.course.title}」を作成しました（/courses/${result.courseId}）。`,
-      `セクション ${result.sections}・アイテム ${result.items}・参加者 ${result.enrolled} 人（うち新規ユーザー ${result.createdUsers} 人）`,
+      `セクション ${result.sections}${result.subsections ? `・サブセクション ${result.subsections}` : ''}・アイテム ${result.items}・参加者 ${result.enrolled} 人（うち新規ユーザー ${result.createdUsers} 人）`,
     ].join('\n'),
   )
 }

@@ -537,8 +537,12 @@ const linkToken = z.object({ token: hidden(100) })
 
 const move = z.object({ dir: z.enum(['up', 'down']) })
 
-// before を失敗にしないのは、ドラッグの間に消えた行を指していても、移す先のセクションの末尾に入れれば済むため
-const itemPlace = z.object({ section_id: id(), before: z.catch(id(), 0) })
+// before を失敗にしないのは、ドラッグの間に消えた行を指していても、移す先のセクションの末尾に入れれば済むため。
+// サブセクションの前を before と別の欄にするのは、Moodle モードでは before が活動の ID で、サブセクションも活動の 1 つとして送るため
+const itemPlace = z.object({ section_id: id(), before: z.catch(id(), 0), before_section: z.catch(id(), 0) })
+
+// 正しくなければコースの末尾に足すのは、セクションの追加のモーダルからは、選んだセクションが消えていても追加できれば済むため
+const sectionParent = z.object({ parent_id: z.catch(id(), 0) })
 
 const visibility = z.object({ hidden: flag() })
 
@@ -549,6 +553,7 @@ const collapse = z.object({ open: ids(), closed: ids() })
 const itemPlacement = z.object({
   section_id: z.catch(id(), 0),
   before: z.catch(id(), 0),
+  before_section: z.catch(id(), 0),
   after: choice(['edit', 'view'], 'edit'),
   type: hidden(50),
 })
@@ -667,6 +672,7 @@ const FORMS = {
   linkToken,
   move,
   itemPlace,
+  sectionParent,
   visibility,
   collapse,
   itemPlacement,

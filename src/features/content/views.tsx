@@ -61,6 +61,7 @@ import { isHtmlFile, previewKind } from '../../lib/preview'
 import { quizFormRows, type QuizFormRow, type QuizLook, type QuizSettings } from '../quiz/quiz'
 import type { QuizView } from '../quiz/quiz-store'
 import { formatBytes } from '../../lib/bytes'
+import { entryItems, sectionLabel, sectionOptions, sectionTree } from '../../lib/section-tree'
 import type { CodeItem, Item, Section } from '../../lib/types'
 
 export type ItemInput = {
@@ -97,10 +98,10 @@ type CodeView = { language: CodeLanguage; goals: Goal[]; grade: GradeView | null
 
 export type OutlineItem = Pick<
   Item,
-  'id' | 'sectionId' | 'type' | 'title' | 'url' | 'linkTarget' | 'fileName' | 'fileType' | 'hidden' | 'completion'
+  'id' | 'sectionId' | 'type' | 'title' | 'url' | 'linkTarget' | 'fileName' | 'fileType' | 'hidden' | 'completion' | 'position'
 >
 
-type OutlineSection = Pick<Section, 'id' | 'title' | 'hidden'>
+export type OutlineSection = Pick<Section, 'id' | 'parentId' | 'position' | 'title' | 'hidden'>
 
 /** 学生がアクセス制限でまだ開けないアイテムと、目次にも出さないアイテム・セクション */
 export type RestrictedOutline = { locked: Set<number>; hidden: Set<number>; hiddenSections: Set<number> }
@@ -197,7 +198,7 @@ export const ItemEditPage = ({
   const crumbs = [
     { href: '/courses', label: 'コース一覧' },
     { href: `/courses/${courseId}`, label: access.course.title },
-    ...(section ? [{ href: editUrl(courseId, section.id), label: section.title }] : []),
+    ...(section ? [{ href: editUrl(courseId, section.id), label: sectionLabel(sections, section.id) }] : []),
   ]
   const lost = `${bundle ? '配布するファイルと、' : presentation ? 'PDF と、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : agent ? '利用状況と' : quiz ? '受験の記録と' : collab ? 'ファイルと' : ''}完了記録も消え、元に戻せません。`
   return (
@@ -326,7 +327,7 @@ export const ItemEditPage = ({
                   label="セクション"
                   name="section_id"
                   id="f-section"
-                  options={sections.map((s) => ({ value: String(s.id), label: s.title }))}
+                  options={sectionOptions(sections)}
                   value={String(v.sectionId)}
                 />
                 {!!access.course.completionEnabled && (
@@ -418,15 +419,23 @@ export const ItemPage = ({
   const navHref = (o: OutlineItem) => `${base}/${o.id}`
   const opensNewTab = (o: OutlineItem) =>
     o.type === 'screen' || o.type === 'presentation' || (o.type === 'file' && previewKind(o.fileType ?? '', o.fileName ?? '') === 'pdf')
-  const hiddenSections = new Set(sections.filter((s) => s.hidden).map((s) => s.id))
+  const hiddenParents = new Set(sections.filter((s) => s.hidden).map((s) => s.id))
+  const hiddenSections = new Set(sections.filter((s) => s.hidden || (s.parentId && hiddenParents.has(s.parentId))).map((s) => s.id))
   const isHidden = (o: OutlineItem) => !!o.hidden || hiddenSections.has(o.sectionId)
   const listed = outline.filter((o) => !restricted.hidden.has(o.id))
   const siblings = listed.filter((o) => o.sectionId === item.sectionId)
   const position = siblings.findIndex((o) => o.id === item.id) + 1
-  const outlineSections = sections
-    .filter((s) => !restricted.hiddenSections.has(s.id))
-    .map((s) => ({ section: s, items: listed.filter((o) => o.sectionId === s.id) }))
+  const sectionById = new Map(sections.map((s) => [s.id, s]))
+  const outlineSections = sectionTree(sections, listed)
+    .filter(({ section: s }) => !restricted.hiddenSections.has(s.id))
+    .map(({ section: s, entries }) => ({
+      section: s,
+      items: entryItems(entries.filter((e) => e.kind === 'item' || !restricted.hiddenSections.has(e.section.id))),
+    }))
     .filter((s) => access.canManage || s.items.length > 0)
+  const startsSubsection = (list: OutlineItem[], i: number) =>
+    list[i].sectionId !== list[i - 1]?.sectionId && !!sectionById.get(list[i].sectionId)?.parentId
+  const sectionTitle = section ? sectionLabel(sections, section.id) : ''
 
   const pdf = preview === 'pdf'
   const presenting = item.type === 'presentation'
@@ -443,7 +452,7 @@ export const ItemPage = ({
       <header class="reader-head">
         {section && position > 0 && (
           <span class="eyebrow">
-            <a href={editUrl(id, section.id)}>{section.title}</a> · {position} / {siblings.length}
+            <a href={editUrl(id, section.id)}>{sectionTitle}</a> · {position} / {siblings.length}
           </span>
         )}
         <ItemIcon type={item.type} />
@@ -466,7 +475,7 @@ export const ItemPage = ({
   const barCrumbs = [
     { href: '/courses', label: 'コース一覧' },
     { href: `/courses/${id}`, label: access.course.title },
-    ...(section && position > 0 ? [{ href: editUrl(id, section.id), label: `${section.title} · ${position} / ${siblings.length}` }] : []),
+    ...(section && position > 0 ? [{ href: editUrl(id, section.id), label: `${sectionTitle} · ${position} / ${siblings.length}` }] : []),
   ]
   const hiddenNote =
     access.canManage && isHidden(item) ? `${item.hidden ? 'このアイテム' : 'このアイテムのセクション'}は学生に非表示です。` : undefined
@@ -720,8 +729,14 @@ export const ItemPage = ({
               </div>
               {items.length > 0 && (
                 <ul>
-                  {items.map((o) => (
-                    <li>
+                  {items.map((o, i) => (
+                    <li class={o.sectionId !== s.id ? 'is-nested' : undefined}>
+                      {startsSubsection(items, i) && (
+                        <span class={cx('outline-sub', hiddenSections.has(o.sectionId) && 'is-hidden')}>
+                          <Icon name="folder" size={12} />
+                          <span class="truncate">{sectionById.get(o.sectionId)?.title}</span>
+                        </span>
+                      )}
                       {restricted.locked.has(o.id) ? (
                         <span class="outline-link is-locked" data-item={o.id}>
                           <Icon name="lock" size={14} class="outline-kind" />

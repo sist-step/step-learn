@@ -21,9 +21,14 @@ export type BackupItem = {
   completion: Completion
   /** 取り込まない理由や、変換で失われるもの */
   notes: string[]
+  /** サブセクションの活動なら、その中身（Moodle から直接読むときだけ）。アイテムにはしないので type は null */
+  subsection?: BackupSection
 }
 
 export type BackupSection = { title: string; summary: string; hidden: boolean; items: BackupItem[]; notes: string[] }
+
+/** セクションのアイテム。サブセクションの中のものも、並びの順に含む */
+export const backupItems = (s: BackupSection): BackupItem[] => s.items.flatMap((i) => (i.subsection ? backupItems(i.subsection) : [i]))
 
 export type BackupParticipant = {
   moodleUsername: string
