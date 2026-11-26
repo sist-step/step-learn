@@ -8,7 +8,17 @@ import { isHttpUrl } from '../lib/forms'
 import type { Completion } from '../lib/types'
 import { callSite, fetchSiteFile, type MoodleCourse, type MoodleModule, type MoodleSection } from '../moodle-mode/client'
 import { displayOf, extraKeyOf } from '../moodle-mode/mapping'
-import { LIMITS, RESTRICTION_NOTE, cut, moduleLabel, type Backup, type BackupFile, type BackupItem, type BackupSection } from './backup'
+import {
+  LIMITS,
+  RESTRICTION_NOTE,
+  backupItems,
+  cut,
+  moduleLabel,
+  type Backup,
+  type BackupFile,
+  type BackupItem,
+  type BackupSection,
+} from './backup'
 import { linkTargetOf } from './display'
 import { toMarkdown, toPlainText } from './html'
 
@@ -88,31 +98,42 @@ export async function readRemoteCourse(site: MoodleSite, courseId: number, dir: 
     }
   }
 
-  const readSection = async (s: MoodleSection, title: string, hidden: boolean): Promise<BackupSection> => {
+  const delegated = new Map(contents.filter((s) => s.component === 'mod_subsection' && s.itemid).map((s) => [s.itemid!, s]))
+
+  // サブセクションの中のサブセクションを入れ子にしないのは、Moodle が 1 段しか作らせず、STEP Learn も 1 段だけにしているため
+  async function readSection(s: MoodleSection, title: string, nested = false): Promise<BackupSection> {
     const notes: string[] = s.availabilityinfo ? [RESTRICTION_NOTE] : []
     const items: BackupItem[] = []
-    for (const m of s.modules) if (m.modname !== 'subsection') items.push(...(await readModule(m)))
+    for (const m of s.modules) items.push(...(m.modname === 'subsection' && !nested ? await readSubsection(m) : await readModule(m)))
     return {
       title: cut(title, LIMITS.sectionTitle, notes, 'セクション名'),
       summary: cut(toPlainText(s.summary, s.summaryformat), LIMITS.summary, notes, '説明'),
-      hidden,
+      hidden: s.visible === 0,
       items,
       notes,
     }
   }
 
-  const delegated = new Map(contents.filter((s) => s.component === 'mod_subsection' && s.itemid).map((s) => [s.itemid!, s]))
-  const sections: BackupSection[] = []
-  for (const s of contents.filter((s) => !s.component)) {
-    const title = s.name || (s.section === 0 ? '一般' : `セクション ${s.section}`)
-    const hidden = s.visible === 0
-    sections.push(await readSection(s, title, hidden))
-    // 入れ子にしないのは、STEP Learn のセクションに入れ子がないため。親のすぐ後ろに並べ、名前で親が分かるようにする
-    for (const m of s.modules.filter((m) => m.modname === 'subsection')) {
-      const child = delegated.get(m.instance)
-      if (child) sections.push(await readSection(child, `${title} › ${child.name || m.name}`, hidden || child.visible === 0 || !m.visible))
+  async function readSubsection(m: MoodleModule): Promise<BackupItem[]> {
+    const child = delegated.get(m.instance)
+    const base = {
+      module: m.modname,
+      title: m.name,
+      body: '',
+      url: '',
+      linkTarget: 'new' as const,
+      file: null,
+      completion: 'none' as const,
     }
+    if (!child) return [{ ...base, type: null, hidden: false, notes: ['サブセクションの中身を読めなかったため取り込みません'] }]
+    const subsection = await readSection(child, child.name || m.name || moduleLabel(m.modname), true)
+    const hidden = subsection.hidden || !m.visible
+    return [{ ...base, type: null, hidden, notes: [], subsection: { ...subsection, hidden } }]
   }
+
+  const sections: BackupSection[] = []
+  for (const s of contents.filter((s) => !s.component))
+    sections.push(await readSection(s, s.name || (s.section === 0 ? '一般' : `セクション ${s.section}`)))
 
   const courseNotes: string[] = []
   return {
@@ -125,7 +146,7 @@ export async function readRemoteCourse(site: MoodleSite, courseId: number, dir: 
       completionEnabled: course.completionenabled,
     },
     // 中身のない「一般」セクションを作らないのは、.mbz の取り込みと同じく、取り込むと空のセクションが先頭に残るため
-    sections: sections.filter((s, i) => i > 0 || s.summary || s.items.some((item) => item.type)),
+    sections: sections.filter((s, i) => i > 0 || s.summary || backupItems(s).some((item) => item.type)),
     usersIncluded: false,
     usersNote: 'Moodle から直接読むときは参加者を取り込みません',
     participants: [],
