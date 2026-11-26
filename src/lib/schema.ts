@@ -22,6 +22,7 @@ import {
 } from '../features/code/code'
 import { COLLAB_KINDS, COLLAB_SCOPES } from '../features/collab/collab'
 import { DEFAULT_PASS_PERCENT, QUIZ_LOOKS, type QuizAnswerRecord, type QuizQuestion } from '../features/quiz/quiz'
+import { PUBLICATION_STATUSES } from '../features/publication/publication'
 import type { RunResult } from '../features/code/sandbox'
 import { LOG_KINDS } from './types'
 
@@ -177,7 +178,9 @@ export const items = sqliteTable(
     sectionId: integer('section_id')
       .notNull()
       .references(() => sections.id, { onDelete: 'cascade' }),
-    type: text('type', { enum: ['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab', 'presentation'] }).notNull(),
+    type: text('type', {
+      enum: ['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab', 'presentation', 'publication'],
+    }).notNull(),
     title: text('title').notNull(),
     body: text('body').notNull().default(''),
     url: text('url').notNull().default(''),
@@ -204,7 +207,10 @@ export const items = sqliteTable(
   (t) => [
     index('items_section').on(t.sectionId, t.position),
     index('items_course').on(t.courseId),
-    check('items_type', sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab', 'presentation')`),
+    check(
+      'items_type',
+      sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab', 'presentation', 'publication')`,
+    ),
     check('items_completion', sql`${t.completion} IN ('none', 'manual', 'view', 'play', 'clear', 'pass')`),
     check('items_link_target', sql`${t.linkTarget} IN ('new', 'same', 'embed')`),
   ],
@@ -609,6 +615,42 @@ export const presentationItems = sqliteTable('presentation_items', {
   syncedAt: integer('synced_at'),
   exportedAt: integer('exported_at'),
 })
+
+/** 学生フォルダのアイテム（items.type が publication）の設定。行がなければ既定（features/publication/publication.ts） */
+export const publicationItems = sqliteTable('publication_items', {
+  itemId: integer('item_id')
+    .primaryKey()
+    .references(() => items.id, { onDelete: 'cascade' }),
+  approval: integer('approval').notNull().default(1),
+  showNames: integer('show_names').notNull().default(1),
+  /** 学生がファイルを上げられる期間。NULL はその側を制限しない */
+  opensAt: integer('opens_at'),
+  closesAt: integer('closes_at'),
+})
+
+/** 学生フォルダに学生が上げたファイル */
+export const publicationFiles = sqliteTable(
+  'publication_files',
+  {
+    id: integer('id').primaryKey(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    fileKey: text('file_key').notNull(),
+    fileName: text('file_name').notNull(),
+    fileSize: integer('file_size').notNull(),
+    fileType: text('file_type').notNull(),
+    status: text('status', { enum: PUBLICATION_STATUSES }).notNull().default('pending'),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [
+    index('publication_files_item').on(t.itemId, t.userId),
+    check('publication_files_status', sql`${t.status} IN ('pending', 'approved', 'rejected')`),
+  ],
+)
 
 /** 操作ログ。種類ごとの保存期間を過ぎたものは消す（lib/operation-log.ts） */
 export const operationLogs = sqliteTable(

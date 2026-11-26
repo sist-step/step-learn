@@ -47,6 +47,7 @@ import { ImageViewer, VideoPlayer } from '../../components/media'
 import { PresentationBar, PresentationEditNote, PresentationStage, type PresentationSummary } from '../presentation/components/presentation'
 import { QuizEditor, QuizGradingCard, QuizLookCard, QuizPanel } from '../quiz/components/quiz'
 import { CollabPanel, CollabSettingsCard } from '../collab/components/collab'
+import { PublicationPanel, PublicationSettingsCard } from '../publication/components/publication'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import type { CollabSettings, CollabView } from '../collab/collab'
 import { agentBase, type AgentView } from '../agent/agent'
@@ -57,6 +58,7 @@ import { unixToDateTimeInput } from '../../lib/course-period'
 import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
 import { presentationBase } from '../presentation/presentation'
+import { publicationBase, type PublicationSettings, type PublicationView } from '../publication/publication'
 import { isHtmlFile, previewKind } from '../../lib/preview'
 import { quizFormRows, type QuizFormRow, type QuizLook, type QuizSettings } from '../quiz/quiz'
 import type { QuizView } from '../quiz/quiz-store'
@@ -91,6 +93,9 @@ export type ItemInput = {
   look: QuizLook
   /** コーディングエージェントの、選んだモデルの ID */
   model: string
+  /** 学生フォルダの、承認してから公開するか・上げた人の名前を見せるか */
+  approval: number
+  showNames: number
 }
 
 /** コードのアイテムの言語と、見ている学生のいちばん新しい提出。goals は学生に見せるクリアの条件（制約のラベル） */
@@ -134,6 +139,7 @@ export const ItemEditPage = ({
   agent,
   quiz,
   collab,
+  publication,
   agentModels = null,
   gradingEnabled,
   judge,
@@ -156,6 +162,8 @@ export const ItemEditPage = ({
   quiz?: QuizSettings
   /** 共同編集のアイテムの種類と分け方 */
   collab?: CollabSettings
+  /** 学生フォルダのアイテムの設定 */
+  publication?: PublicationSettings
   /** コーディングエージェントのアイテムで選べる OpenRouter のモデル。一覧を取れなければ null */
   agentModels?: OpenRouterModelInfo[] | null
   /** AI が設定されていて、提出を自動で採点するか */
@@ -182,8 +190,8 @@ export const ItemEditPage = ({
     constraints: (code?.constraints ?? []).map((c) => ({ label: c.label, text: c.text, optional: !!c.optional })),
     solution: code?.solution ?? {},
     solutionPublic: code?.solutionPublic === 1,
-    opensAt: unixToDateTimeInput(code?.opensAt ?? agent?.settings.opensAt ?? undefined),
-    closesAt: unixToDateTimeInput(code?.closesAt ?? agent?.settings.closesAt ?? undefined),
+    opensAt: unixToDateTimeInput(code?.opensAt ?? agent?.settings.opensAt ?? publication?.opensAt ?? undefined),
+    closesAt: unixToDateTimeInput(code?.closesAt ?? agent?.settings.closesAt ?? publication?.closesAt ?? undefined),
     userLimit: agent ? String(agent.settings.userLimit) : '',
     instructions: agent?.settings.instructions ?? '',
     questions: quizFormRows(quiz?.questions ?? []),
@@ -191,6 +199,8 @@ export const ItemEditPage = ({
     showAnswers: quiz?.showAnswers ?? 1,
     look: quiz?.look ?? 'plain',
     model: agent?.settings.model.id ?? '',
+    approval: publication?.approval ?? 1,
+    showNames: publication?.showNames ?? 1,
     ...values,
   }
   const finalized = !!code && isFinalized(code.stage)
@@ -200,7 +210,7 @@ export const ItemEditPage = ({
     { href: `/courses/${courseId}`, label: access.course.title },
     ...(section ? [{ href: editUrl(courseId, section.id), label: sectionLabel(sections, section.id) }] : []),
   ]
-  const lost = `${bundle ? '配布するファイルと、' : presentation ? 'PDF と、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : agent ? '利用状況と' : quiz ? '受験の記録と' : collab ? 'ファイルと' : ''}完了記録も消え、元に戻せません。`
+  const lost = `${bundle ? '配布するファイルと、' : presentation ? 'PDF と、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : agent ? '利用状況と' : quiz ? '受験の記録と' : collab || publication ? 'ファイルと' : ''}完了記録も消え、元に戻せません。`
   return (
     <AppShell
       tone={access.course.color}
@@ -307,6 +317,14 @@ export const ItemEditPage = ({
             {quiz && <QuizGradingCard passPercent={v.passPercent} showAnswers={v.showAnswers} errors={errors} />}
             {quiz && <QuizLookCard look={v.look} />}
             {collab && <CollabSettingsCard settings={collab} />}
+            {publication && (
+              <PublicationSettingsCard
+                settings={{ approval: v.approval, showNames: v.showNames }}
+                opensAt={v.opensAt}
+                closesAt={v.closesAt}
+                errors={errors}
+              />
+            )}
             {agent && <AgentModelCard value={v.model} saved={agent.settings.model} models={agentModels} error={errors.agent_model} />}
             {agent && <AgentPeriodCard opensAt={v.opensAt} closesAt={v.closesAt} userLimit={v.userLimit} errors={errors} />}
             <Card heading="公開と配置">
@@ -368,6 +386,7 @@ export const ItemPage = ({
   agent,
   quiz,
   collab,
+  publication,
   revision,
 }: {
   access: CourseAccess
@@ -386,6 +405,7 @@ export const ItemPage = ({
   agent?: AgentView
   quiz?: QuizView
   collab?: CollabView
+  publication?: PublicationView
   revision: string
 }) => {
   const id = access.course.id
@@ -411,6 +431,7 @@ export const ItemPage = ({
     item.type === 'agent' ||
     item.type === 'quiz' ||
     item.type === 'collab' ||
+    item.type === 'publication' ||
     embedded ||
     !!code ||
     (!!preview && (preview !== 'text' || textPreview !== null))
@@ -655,6 +676,8 @@ export const ItemPage = ({
           {quiz && <QuizPanel quiz={quiz} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />}
 
           {collab && <CollabPanel collab={collab} />}
+
+          {publication && <PublicationPanel base={publicationBase(id, item.id)} view={publication} />}
 
           {waitsFor(item, 'view') && opensOnView && <span hidden data-complete-on-view={completeUrl(item)} />}
 

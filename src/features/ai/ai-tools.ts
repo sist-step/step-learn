@@ -42,6 +42,7 @@ import { contains, db } from '../../lib/db'
 import { insertItem, itemFileColumns } from '../../lib/item-kinds'
 import { isHttpUrl } from '../../lib/forms'
 import { getQuizSettings } from '../quiz/quiz-items'
+import { getPublicationSettings } from '../publication/publication-items'
 import { availableCodeLanguages } from '../code/sandbox'
 import { bundleFiles, codeItems, courses, enrollments, items, sections } from '../../lib/schema'
 import { sectionTree } from '../../lib/section-tree'
@@ -242,6 +243,17 @@ function itemDetail(item: Item) {
     }
     case 'agent':
       return { description: item.body.slice(0, MAX_BODY_LENGTH) }
+    // 学生のファイルを返さないのは、承認していないファイルや、名前を伏せたファイルの持ち主まで読めてしまうため
+    case 'publication': {
+      const settings = getPublicationSettings(item.id)
+      return {
+        description: item.body.slice(0, MAX_BODY_LENGTH),
+        approval: settings.approval === 1,
+        show_names: settings.showNames === 1,
+        opens_at: settings.opensAt,
+        closes_at: settings.closesAt,
+      }
+    }
     case 'quiz': {
       const quiz = getQuizSettings(item.id)
       return {
@@ -592,6 +604,7 @@ const BODY_LABELS: Record<Item['type'], string> = {
   agent: '説明',
   quiz: '説明',
   collab: '説明',
+  publication: '説明',
 }
 
 const codeOf = (itemId: number) => db.select().from(codeItems).where(eq(codeItems.itemId, itemId)).get()

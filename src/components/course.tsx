@@ -303,6 +303,7 @@ export const ITEM_ICONS: Record<ItemType, IconName> = {
   collab: 'userGroup',
   bundle: 'folder',
   agent: 'cpuChip',
+  publication: 'folderOpen',
 }
 
 export const ItemIcon = ({ type }: { type: ItemType }) => {
@@ -518,6 +519,7 @@ const COMPLETION_HINTS: Record<ItemType | 'any', string> = {
   collab: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
   bundle: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
   agent: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
+  publication: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
   any: '「開いたら完了」はページ・リンク・ファイルで、「最後まで再生したら完了」は動画・音声のファイルで、「制約をすべてクリアしたら完了」はコードで、「合格したら完了」は小テストで選べます。',
 }
 
@@ -542,6 +544,7 @@ const COMPLETION_WAITING: Record<Exclude<Completion, 'none' | 'manual'>, Partial
     code: 'このアイテムを開くと完了になります',
     quiz: 'このアイテムを開くと完了になります',
     bundle: 'このアイテムを開くと完了になります',
+    publication: 'このアイテムを開くと完了になります',
   },
   play: { file: '最後まで再生すると完了になります' },
   clear: { code: '制約をすべてクリアすると完了になります' },

@@ -27,6 +27,7 @@ import dashboard from './features/dashboard'
 import mcp from './features/mcp'
 import participants from './features/participants'
 import presentation, { isPresentationUpload, api as presentationApi } from './features/presentation'
+import publication from './features/publication'
 import quiz from './features/quiz'
 import collab from './features/collab'
 import screen from './features/screen'
@@ -96,6 +97,7 @@ app.route('/courses', collab)
 app.route('/courses', bundle)
 app.route('/courses', agent)
 app.route('/courses', presentation)
+app.route('/courses', publication)
 app.route('/api/vscode/agent', agentApi)
 app.route('/api/vscode/code', codeApi)
 app.route('/api/vscode/presentation', presentationApi)

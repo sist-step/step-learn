@@ -41,6 +41,7 @@ const RULES: Rule[] = [
   get('/courses/:id/items/:iid/file', 'item.file', 'ファイルを開いた', 'item'),
   get('/courses/:id/items/:iid/screen', 'screen.view', '画面共有を開いた', 'item'),
   get('/courses/:id/items/:iid/bundle/zip', 'bundle.zip', 'zip をダウンロードした', 'item'),
+  get('/courses/:id/items/:iid/publication/files/:fid', 'publication.file', '学生フォルダのファイルを開いた', 'item'),
   get('/courses/:id/items/:iid/code/submissions/:uid', 'code.submission.view', '提出を見た', 'user'),
   get('/courses/:id/items/:iid/bundle/history/:uid', 'bundle.history.view', '変更履歴を見た', 'user'),
   get('/courses/:id/items/:iid/quiz/results/:uid', 'quiz.result.view', '小テストの受験を見た', 'user'),
@@ -97,6 +98,23 @@ const RULES: Rule[] = [
   post('/courses/:id/items/:iid/bundle/files/delete', 'bundle.delete', '配布するファイルを削除', 'change', 'item'),
   post('/courses/:id/items/:iid/bundle/launch', 'bundle.launch', 'VS Code で開いた', 'change', 'item'),
   post('/courses/:id/items/:iid/bundle/sync', 'bundle.sync', 'データの同期を切り替え', 'change', 'item'),
+
+  post('/courses/:id/items/:iid/publication/files', 'publication.upload', '学生フォルダにファイルをアップロード', 'change', 'item'),
+  post('/courses/:id/items/:iid/publication/files/:fid/delete', 'publication.delete', '学生フォルダのファイルを削除', 'change', 'item'),
+  post(
+    '/courses/:id/items/:iid/publication/files/:fid/status',
+    'publication.status',
+    '学生フォルダのファイルの公開を変更',
+    'change',
+    'item',
+  ),
+  post(
+    '/courses/:id/items/:iid/publication/approve-all',
+    'publication.approve.all',
+    '学生フォルダのファイルをすべて承認',
+    'change',
+    'item',
+  ),
 
   post('/courses/:id/items/:iid/agent/launch', 'agent.launch', 'コーディングエージェントを VS Code で開いた', 'change', 'item'),
   post('/courses/:id/items/:iid/agent/key', 'agent.key', 'コーディングエージェントの API キー・全体の上限を保存', 'important', 'item'),

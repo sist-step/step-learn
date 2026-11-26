@@ -52,6 +52,7 @@ import { completionError, firstError, isFile, readConstraints, solutionOf, valid
 import { ITEM_KINDS, deleteStoredFiles, insertItem, itemFileColumns, sectionStoredFiles, storedFilesOf } from '../../lib/item-kinds'
 import { field, fileField, intParam, readFields, readForm, redirectWith, sameOriginReferer, wantsJson, type Form } from '../../lib/http'
 import { presentationStore } from '../presentation/presentation-items'
+import { getPublicationSettings, publicationViewOf, savePublicationSettings } from '../publication/publication-items'
 import { HTML_PAGE_CSP, isHtmlFile, previewKind } from '../../lib/preview'
 import { DEFAULT_PASS_PERCENT, MAX_QUIZ_JSON_LENGTH, isQuizLook, readQuizForm } from '../quiz/quiz'
 import { getQuizSettings, quizStore, saveQuizSettings } from '../quiz/quiz-items'
@@ -117,8 +118,11 @@ function collabView(access: CourseAccess, itemId: number): CollabView | undefine
 }
 
 type KindData<P> = (c: Context<AppEnv>, access: CourseAccess, itemId: number) => Partial<P> | Promise<Partial<P>>
-type EditData = Pick<Parameters<typeof ItemEditPage>[0], 'bundle' | 'presentation' | 'agent' | 'quiz' | 'collab' | 'agentModels'>
-type ViewData = Pick<Parameters<typeof ItemPage>[0], 'bundle' | 'agent' | 'quiz' | 'collab'>
+type EditData = Pick<
+  Parameters<typeof ItemEditPage>[0],
+  'bundle' | 'presentation' | 'agent' | 'quiz' | 'collab' | 'publication' | 'agentModels'
+>
+type ViewData = Pick<Parameters<typeof ItemPage>[0], 'bundle' | 'agent' | 'quiz' | 'collab' | 'publication'>
 const nothing = () => ({})
 
 // Record にするのは、種類を足したときに、編集画面とアイテムの画面に渡すデータの決め忘れを型エラーにするため
@@ -133,6 +137,7 @@ const EDIT_DATA: Record<ItemType, KindData<EditData>> = {
   collab: (_c, _access, itemId) => ({ collab: getCollabSettings(itemId) ?? undefined }),
   bundle: (c, access, itemId) => ({ bundle: bundleView(c, access, itemId) }),
   agent: async (c, access, itemId) => ({ agent: agentView(c, access, itemId), agentModels: await agentOpenRouterModels() }),
+  publication: (_c, _access, itemId) => ({ publication: getPublicationSettings(itemId) }),
 }
 
 const VIEW_DATA: Record<ItemType, KindData<ViewData>> = {
@@ -146,6 +151,9 @@ const VIEW_DATA: Record<ItemType, KindData<ViewData>> = {
   collab: (_c, access, itemId) => ({ collab: collabView(access, itemId) }),
   bundle: (c, access, itemId) => ({ bundle: bundleView(c, access, itemId) }),
   agent: (c, access, itemId) => ({ agent: agentView(c, access, itemId) }),
+  publication: (c, access, itemId) => ({
+    publication: publicationViewOf(itemId, { id: c.var.user!.id, manage: access.canManage }, Math.floor(Date.now() / 1000)),
+  }),
 }
 
 const getItem = (courseId: number, itemId: number) =>
@@ -325,6 +333,8 @@ function readItemInput(form: Form): ItemInput {
     passPercent: field(form, 'pass_percent', 5),
     showAnswers: field(form, 'show_answers', 1) === '0' ? 0 : 1,
     look: quizLookField(form),
+    approval: field(form, 'approval', 1) === '0' ? 0 : 1,
+    showNames: field(form, 'show_names', 1) === '0' ? 0 : 1,
     model: field(form, 'agent_model', 200),
   }
 }
@@ -533,6 +543,13 @@ export async function updateItem(c: Context<AppEnv>) {
       passPercent: input.pass_percent ?? DEFAULT_PASS_PERCENT,
       showAnswers: input.show_answers,
       look: input.look,
+    })
+  if (item.type === 'publication')
+    savePublicationSettings(iid, {
+      approval: input.approval,
+      showNames: input.show_names,
+      opensAt: dateTimeInputToUnix(input.opens_at ?? '') || null,
+      closesAt: dateTimeInputToUnix(input.closes_at ?? '') || null,
     })
   if (stored && item.fileKey) inBackground(deleteKeys([item.fileKey]))
   return redirectWith(c, `/courses/${courseId}/items/${iid}/edit`, '保存しました。')

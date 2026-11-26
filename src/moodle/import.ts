@@ -118,6 +118,7 @@ const NATIVE_MODULE: Record<ItemType, string> = {
   agent: '',
   quiz: '',
   collab: '',
+  publication: 'publication',
 }
 
 /** source はプレビューの見出しに出す取り込み元（ファイル名やコースの URL） */

@@ -325,6 +325,7 @@ const ITEM_TYPE_DESCRIPTIONS: Record<ItemType, string> = {
   collab: '文書・表計算・スライド・キャンバスを、みんなで同時に編集する',
   bundle: 'プログラムのファイルを VS Code で開けるように配る',
   agent: 'VS Code で AI にコードを書いてもらう',
+  publication: '学生がファイルを上げて、クラスのみんなに見せる',
 }
 
 const AddItemButton = ({ sectionId }: { sectionId: number }) => (
@@ -418,6 +419,7 @@ const AddItemModal = ({
         <p class="when-presentation muted small">
           PDF は、追加したあとのアイテムの画面の「PowerPoint と同期」から、VS Code の拡張機能でアップロードします。
         </p>
+        <p class="when-publication muted small">公開の方法（教師の承認）と提出の期間は、追加したあとの編集画面で設定します。</p>
         <p class="when-agent muted small">
           使える期間と上限は、追加したあとの編集画面で設定します。学生が使えるようになるのは、管理者が API キーを入れてからです。
         </p>
