@@ -1,4 +1,37 @@
-import { decodeEntities } from './xml'
+// HTML のパーサーのライブラリを使わないのは、ランタイム依存を増やさないため
+
+const NAMED_ENTITIES: Record<string, string> = {
+  lt: '<',
+  gt: '>',
+  amp: '&',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+  copy: '©',
+  reg: '®',
+  hellip: '…',
+  mdash: '—',
+  ndash: '–',
+  lsquo: '‘',
+  rsquo: '’',
+  ldquo: '“',
+  rdquo: '”',
+  laquo: '«',
+  raquo: '»',
+  middot: '·',
+  times: '×',
+  yen: '¥',
+}
+
+function codePoint(n: number) {
+  return Number.isInteger(n) && n > 0 && n <= 0x10_ffff ? String.fromCodePoint(n) : ''
+}
+
+const decodeEntities = (s: string) =>
+  s.replace(/&(#[xX][0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (m, e: string) => {
+    if (e[0] !== '#') return NAMED_ENTITIES[e] ?? m
+    return codePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1)))
+  })
 
 type Converted = { markdown: string; images: number; tables: number }
 

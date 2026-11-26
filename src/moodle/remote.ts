@@ -4,8 +4,10 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream } from 'node:stream/web'
 import { BUNDLE_MODULE } from '../features/bundle/bundle'
-import { isHttpUrl } from '../lib/forms'
-import type { Completion } from '../lib/types'
+import type { PublicationStatus } from '../features/publication/publication'
+import { isEmail, isHttpUrl } from '../lib/forms'
+import { COMPLETION_LABELS, type Completion, type CourseRole } from '../lib/types'
+import { checkUsername, normalizeUsername } from '../lib/username'
 import { callSite, fetchSiteFile, type MoodleCourse, type MoodleModule, type MoodleSection } from '../moodle-mode/client'
 import { displayOf, extraKeyOf } from '../moodle-mode/mapping'
 import {
@@ -17,6 +19,8 @@ import {
   type Backup,
   type BackupFile,
   type BackupItem,
+  type BackupParticipant,
+  type BackupPublication,
   type BackupSection,
 } from './backup'
 import { linkTargetOf } from './display'
@@ -24,25 +28,140 @@ import { toMarkdown, toPlainText } from './html'
 
 type MoodleSite = { url: string; token: string }
 
-type Content = NonNullable<MoodleModule['contents']>[number]
+/** Moodle から落とすファイル */
+type RemoteFile = { filename: string; fileurl: string; mimetype?: string }
 
-// 評定や提出による自動の完了を「なし」にしないのは、.mbz の取り込みと同じく、完了を記録する項目だったことは残したいため
+/** local_steplearn_get_participants の 1 人 */
+type MoodleParticipant = {
+  id: number
+  username: string
+  email: string
+  firstname: string
+  lastname: string
+  suspended: boolean
+  deleted: boolean
+  active: boolean
+  archetypes: string[]
+}
+
+/** local_steplearn_get_publications の学生フォルダ 1 つ */
+type MoodlePublication = {
+  cmid: number
+  mode: number
+  obtainteacherapproval: boolean
+  obtainstudentapproval: boolean
+  showparticipantnames: boolean
+  allowsubmissionsfromdate: number
+  duedate: number
+  completionupload: boolean
+  allowedfiletypes: string
+  extensions: number
+  missing: number
+  files: (RemoteFile & { userid: number; filesize: number; timecreated: number; teacherapproval: number; studentapproval: number })[]
+}
+
+// 評定や提出による自動の完了を「なし」にしないのは、完了を記録する項目だったことは残したいため
 const completionOf = (m: MoodleModule): Completion => (m.completion === 1 ? 'manual' : m.completion === 2 ? 'view' : 'none')
 
+/** 参加者と学生フォルダを読む関数を呼べないときの、直し方を添えたエラー */
+function needsPlugin(err: unknown): never {
+  const detail = err instanceof Error ? `（${err.message}）` : ''
+  throw new Error(
+    `参加者と学生フォルダを読めませんでした${detail}。Moodle の local_steplearn を 2026112600 以降の版に更新し、トークンのアカウントにユーザーを含めたバックアップの権限（moodle/backup:backupcourse・moodle/backup:userinfo）があるか確かめてください。`,
+  )
+}
+
+const TEACHER_ARCHETYPES = new Set(['editingteacher', 'teacher', 'manager'])
+
+const roleOf = (archetypes: string[]): CourseRole | null =>
+  archetypes.some((a) => TEACHER_ARCHETYPES.has(a)) ? 'teacher' : archetypes.includes('student') ? 'student' : null
+
+/** コースの教師・学生。取り込めない人も、理由（skip）を付けて含める */
+function participantsOf(rows: MoodleParticipant[]): BackupParticipant[] {
+  const seen = new Set<string>()
+  const participants: BackupParticipant[] = []
+  for (const u of rows) {
+    const role = roleOf(u.archetypes)
+    if (!role) continue
+    const email = u.email.trim().toLowerCase()
+    const name =
+      [u.lastname, u.firstname]
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(' ')
+        .slice(0, LIMITS.name) || u.username
+    const username = normalizeUsername(u.username)
+    const skip = u.deleted
+      ? 'Moodle で削除済み'
+      : u.suspended
+        ? 'Moodle でアカウントが停止されている'
+        : !u.active
+          ? 'Moodle で受講が停止されている'
+          : !isEmail(email)
+            ? 'メールアドレスがない'
+            : seen.has(email)
+              ? 'メールアドレスがほかの参加者と重複している'
+              : null
+    if (!skip) seen.add(email)
+    participants.push({
+      moodleId: String(u.id),
+      moodleUsername: u.username,
+      name,
+      email,
+      username: checkUsername(username) ? '' : username,
+      role,
+      skip,
+    })
+  }
+  return participants
+}
+
 /**
- * Moodle の Web サービスでコースを読み、.mbz を読んだときと同じ形にする。ファイルは dir に保存する。
- * 取り込むのはセクションと URL・ファイル・フォルダーだけで、参加者は取り込まない
+ * 学生フォルダのファイルの扱い。Moodle で学生に見えていたファイルは公開、承認を断られたファイルは非公開、それ以外は承認待ちにする。
+ * 学生の承認を教師の承認と同じに扱うのは、STEP Learn には学生の承認がなく、見えていなかったファイルを見せてしまわないため
+ */
+function publicationStatusOf(p: MoodlePublication, file: MoodlePublication['files'][number]): PublicationStatus {
+  const { obtainteacherapproval: askTeacher, obtainstudentapproval: askStudent } = p
+  if ((!askTeacher || file.teacherapproval === 1) && (!askStudent || file.studentapproval === 1)) return 'approved'
+  if ((askTeacher && file.teacherapproval === 2) || (askStudent && file.studentapproval === 2)) return 'rejected'
+  return 'pending'
+}
+
+/** 学生フォルダの設定で、STEP Learn にないため変わるもの */
+function publicationNotes(p: MoodlePublication, completion: Completion) {
+  const notes: string[] = []
+  if (p.obtainstudentapproval && !p.obtainteacherapproval)
+    notes.push('学生の承認は STEP Learn にないため、教師が承認してから公開する設定にします')
+  else if (p.obtainstudentapproval) notes.push('学生の承認は STEP Learn にないため、教師の承認だけにします')
+  if (p.mode === 1)
+    notes.push('課題からの取り込みは STEP Learn にないため、取り込んだ時点のファイルだけを引き継ぎ、これからは学生が直接アップロードします')
+  if (p.extensions) notes.push('学生・グループごとの期限の延長と上書きは取り込めないため、全員に同じ期間を使います')
+  if (p.allowedfiletypes.trim()) notes.push('受け付けるファイルの種類の制限は取り込めないため、どの種類も受け付けます')
+  if (p.completionupload && completion !== 'none')
+    notes.push(`完了の条件「ファイルを提出したら完了」は STEP Learn にないため、「${COMPLETION_LABELS[completion]}」にします`)
+  if (p.missing) notes.push(`中身が Moodle にないファイル ${p.missing} 個は取り込みません`)
+  return notes
+}
+
+/**
+ * Moodle の Web サービスでコースを読み、取り込む形にする。ファイルは dir に保存する。
+ * 取り込むのは参加者とセクションと、URL・ファイル・フォルダー・学生フォルダだけ
  */
 export async function readRemoteCourse(site: MoodleSite, courseId: number, dir: string): Promise<Backup> {
   const call = <T>(wsfunction: string, params = {}) => callSite<T>(site.url, site.token, wsfunction, params)
-  const [info, course, contents] = await Promise.all([
+  const [info, course, contents, people, publications] = await Promise.all([
     call<{ release: string }>('core_webservice_get_site_info'),
     call<MoodleCourse>('local_steplearn_get_course', { courseid: courseId }),
     call<MoodleSection[]>('core_course_get_contents', { courseid: courseId }),
+    call<MoodleParticipant[]>('local_steplearn_get_participants', { courseid: courseId }).catch(needsPlugin),
+    call<MoodlePublication[]>('local_steplearn_get_publications', { courseid: courseId }).catch(needsPlugin),
   ])
+  const participants = participantsOf(people)
+  const joining = new Set(participants.filter((p) => !p.skip).map((p) => p.moodleId))
+  const publicationOf = new Map(publications.map((p) => [p.cmid, p]))
 
   let saved = 0
-  async function download(content: Content, notes: string[]): Promise<BackupFile | null> {
+  async function download(content: RemoteFile, notes: string[]): Promise<BackupFile | null> {
     const res = await fetchSiteFile(site.url, site.token, content.fileurl)
     if (!res?.ok || !res.body) {
       notes.push(`ファイル「${content.filename}」を取得できなかったため取り込みません`)
@@ -91,10 +210,38 @@ export async function readRemoteCourse(site: MoodleSite, courseId: number, dir: 
         }
         return items
       }
+      case 'publication': {
+        const found = publicationOf.get(m.id)
+        if (!found) return skip('学生フォルダの設定を読めなかったため取り込みません')
+        const completion = completionOf(m)
+        notes.push(...publicationNotes(found, completion))
+        return [{ ...base, type: 'publication', publication: await readPublication(found, notes), completion }]
+      }
       case BUNDLE_MODULE:
         return skip('Moodle モードで追加したアイテムは引き継ぎません')
       default:
-        return skip('URL・ファイル・フォルダー以外の活動は取り込みません')
+        return skip('URL・ファイル・フォルダー・学生フォルダ以外の活動は取り込みません')
+    }
+  }
+
+  async function readPublication(p: MoodlePublication, notes: string[]): Promise<BackupPublication> {
+    // 持ち主が参加者にならないファイルを落とさないのは、STEP Learn のファイルには持ち主が要り、取り込めないファイルのために時間をかけないため
+    const owned = p.files.filter((f) => joining.has(String(f.userid)))
+    if (owned.length < p.files.length)
+      notes.push(`持ち主を参加者として取り込まないファイル ${p.files.length - owned.length} 個（グループでの提出を含む）は取り込みません`)
+    const files: BackupPublication['files'] = []
+    for (const f of owned) {
+      const file = await download(f, notes)
+      if (file) files.push({ file, moodleUserId: String(f.userid), status: publicationStatusOf(p, f), createdAt: f.timecreated })
+    }
+    return {
+      settings: {
+        approval: p.obtainteacherapproval || p.obtainstudentapproval ? 1 : 0,
+        showNames: p.showparticipantnames ? 1 : 0,
+        opensAt: p.allowsubmissionsfromdate || null,
+        closesAt: p.duedate || null,
+      },
+      files,
     }
   }
 
@@ -145,11 +292,9 @@ export async function readRemoteCourse(site: MoodleSite, courseId: number, dir: 
       visible: course.visible,
       completionEnabled: course.completionenabled,
     },
-    // 中身のない「一般」セクションを作らないのは、.mbz の取り込みと同じく、取り込むと空のセクションが先頭に残るため
+    // 中身のない「一般」セクションを作らないのは、Moodle では告知用のフォーラムだけが置かれていることが多く、取り込むと空のセクションが先頭に残るため
     sections: sections.filter((s, i) => i > 0 || s.summary || backupItems(s).some((item) => item.type)),
-    usersIncluded: false,
-    usersNote: 'Moodle から直接読むときは参加者を取り込みません',
-    participants: [],
+    participants,
     warnings: courseNotes,
   }
 }
