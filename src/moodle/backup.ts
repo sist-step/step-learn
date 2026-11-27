@@ -1,3 +1,4 @@
+import type { FolderSettings } from '../features/folder/folder'
 import type { PublicationSettings, PublicationStatus } from '../features/publication/publication'
 import type { Completion, CourseRole, ItemType, LinkTarget } from '../lib/types'
 
@@ -7,6 +8,11 @@ export type BackupFile = { path: string; name: string; size: number; type: strin
 export type BackupPublicationFile = { file: BackupFile; moodleUserId: string; status: PublicationStatus; createdAt: number }
 
 export type BackupPublication = { settings: PublicationSettings; files: BackupPublicationFile[] }
+
+/** フォルダーのファイル。path はフォルダーの中の場所（/ 区切り） */
+export type BackupFolderFile = { path: string; file: BackupFile }
+
+export type BackupFolder = { settings: FolderSettings; files: BackupFolderFile[] }
 
 export type BackupItem = {
   module: string
@@ -18,6 +24,8 @@ export type BackupItem = {
   file: BackupFile | null
   /** 学生フォルダのときだけ */
   publication?: BackupPublication
+  /** フォルダーのときだけ */
+  folder?: BackupFolder
   hidden: boolean
   completion: Completion
   /** 取り込まない理由や、変換で失われるもの */
@@ -55,7 +63,7 @@ const MODULE_LABELS: Record<string, string> = {
   page: 'ページ',
   url: 'URL',
   resource: 'ファイル',
-  folder: 'フォルダ',
+  folder: 'フォルダー',
   label: 'ラベル',
   book: 'ブック',
   assign: '課題',

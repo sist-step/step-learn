@@ -52,7 +52,7 @@ MOODLE_MIGRATE_URL=https://moodle.example.ac.jp MOODLE_MIGRATE_TOKEN=<トーク�
 | --- | --- |
 | URL | リンク（http / https のみ） |
 | ファイル | ファイル（メインのファイル 1 つ） |
-| フォルダ | 中のファイルごとにファイルのアイテム |
+| フォルダ | フォルダー。中のファイルをサブフォルダーの場所ごと移し、表示の方法（コースのページに表示するか）・サブフォルダーを開いておくか・まとめてダウンロードのボタン・ダウンロードの強制を引き継ぐ。中身が空でも取り込む |
 | 学生フォルダ（mod_publication） | 学生フォルダ。教師の承認・名前の表示・提出の期間と、学生のファイル（Moodle で公開されていたものは公開、承認を断られたものは非公開、それ以外は承認待ち）を引き継ぐ。学生のファイルは、持ち主を参加者として取り込むときだけ移す（グループでの提出は移さない）。学生の承認は教師の承認として扱い、期限の延長・上書き、ファイルの種類の制限、課題からの取り込みは引き継がない |
 | サブセクション | 親のセクションの中の同じ位置のサブセクション |
 | ページ・ラベル・ブック・課題・小テスト・フォーラムなど | 取り込まない |
@@ -77,7 +77,7 @@ MOODLE_MIGRATE_URL=https://moodle.example.ac.jp MOODLE_MIGRATE_TOKEN=<トーク�
 | 新しい STEP Learn の案内 | 設定の「新しい STEP Learn を案内する」をオンにすると、ログイン画面（ログインフォームの中）とダッシュボード（通知）に「新しい STEP Learn を使う」ボタンを出す。ボタンは STEP Learn の `GET /auth/moodle/start` に移り、そのままログインの受け渡しを始める（Moodle にログイン済みなら画面を挟まずに入れる）。STEP Learn の「旧STEP Learnでログイン」から来てログイン画面にいる人には出さない |
 | 教材の編集 | `local_steplearn_save_url` / `local_steplearn_save_resource`（URL・ファイルの活動の作成と更新）、`local_steplearn_create_section` / `local_steplearn_update_section`。Moodle 5.1 のコアには URL・ファイルの活動を作る Web サービスがないため |
 | アクセス制限 | `local_steplearn_get_restrictions` が、編集できる人にセクションと活動の制限（教師向けのすべての条件の説明と、STEP Learn で編集できる形か）を返す（Moodle は条件を満たせる教師には制限の説明を返さないため）。`local_steplearn_set_restriction` は、日付（開始・終了）と活動の完了をすべて満たす形の制限で置き換える。それ以外の条件（グループ・評点・「いずれか」など）を含む制限は書き換えを断り、Moodle の画面で編集してもらう |
-| 取り込み | `local_steplearn_get_participants` がコースでロールを割り当てた人（ロールの元の種類・受講の状態付き）を、`local_steplearn_get_publications` が学生フォルダ（mod_publication）の設定と学生のファイルを返す。`npm run moodle:migrate` が使う。学生の個人情報をまとめて読むので、ユーザーを含めたバックアップを作れる人（`moodle/backup:backupcourse` と `moodle/backup:userinfo`）にだけ返す。mod_publication がない Moodle では、学生フォルダは空の一覧になる |
+| 取り込み | `local_steplearn_get_participants` がコースでロールを割り当てた人（ロールの元の種類・受講の状態付き）を、`local_steplearn_get_publications` が学生フォルダ（mod_publication）の設定と学生のファイルを返す。`npm run moodle:migrate` が使う。学生の個人情報をまとめて読むので、ユーザーを含めたバックアップを作れる人（`moodle/backup:backupcourse` と `moodle/backup:userinfo`）にだけ返す。mod_publication がない Moodle では、学生フォルダは空の一覧になる。フォルダーの設定は、外部サービスに入れたコアの `mod_folder_get_folders_by_courses` で読む |
 
 並べ替え・表示の切り替え・削除は、コアの `core_courseformat_update_course` を使います（トピック形式・週形式など、コンポーネントに対応したコースフォーマットが必要です）。
 
