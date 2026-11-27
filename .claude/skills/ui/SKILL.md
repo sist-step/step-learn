@@ -100,6 +100,10 @@ Moodle モードの種類ごとの入力欄（`moodle-mode/extra-kinds.tsx`）�
 - アイテムを読む画面（`.reader`）の面は影を `--shadow-rest` にする。本文・前後のアイテム・目次がそれぞれ浮いて見えると落ち着かないため
 - ガラスの面は必ずトークンで書く。`prefers-reduced-transparency` / `prefers-contrast` で `base.css` がトークンを不透明の面に置き換えるので、`rgb(255 255 255 / 0.6)` のように直接書くと切り替えが効かない
 
+### テーマ
+
+既定（ガラス）以外のテーマは `<html data-ui-theme>` で切り替わる。部品の CSS はトークンで書き、テーマごとの上書きは `features/theme/themes/<テーマ>.css` にだけ書く。テーマを足すときは `features/theme/theme.ts` の `THEMES` に足して型エラーになる Record を埋め、`lib/schema.ts` の CHECK（`users_theme`）も変えてマイグレーションを生成する。
+
 ### ダークモード
 
 利用者がユーザーメニューで選んだときだけ（`<html data-theme>`）。サーバーは常にライトで描き、`renderer.tsx` の `<head>` のスクリプトが描画前に切り替える。上書きは `[data-theme='dark'] .foo` で書き、`prefers-color-scheme` は使わない。
@@ -133,7 +137,7 @@ Moodle モードの種類ごとの入力欄（`moodle-mode/extra-kinds.tsx`）�
 
 ## クライアント JS（src/client.ts）
 
-- データを変える操作はフォーム送信で作る。テーマのような表示だけの状態は端末ごとの設定に保存し、POST のルートは作らない
+- データを変える操作はフォーム送信で作る。ダークモードのような表示だけの状態は端末ごとの設定に保存し、POST のルートは作らない（テーマだけは最初の描画で CSS を出すためにアカウントに保存する）
 - 要素には `data-*` で目印を付け、`document` へのイベント委譲で拾う（要素ごとに addEventListener しない）
 - body を差し替えても `<script>` は実行されない。毎回の表示で要る初期化は `initPage()` に足す
 - 区切りは `// --- 何の処理か` の見出しに合わせる
