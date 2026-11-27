@@ -40,6 +40,7 @@ const KIND_ICONS: Record<RestrictionKind | 'set' | 'other', IconName> = {
   completion: 'checkCircle',
   grade: 'academicCap',
   profile: 'user',
+  group: 'userGroup',
   set: 'layers',
   other: 'users',
 }
@@ -47,6 +48,9 @@ const KIND_ICONS: Record<RestrictionKind | 'set' | 'other', IconName> = {
 type Ctx = { choices: RestrictionChoices; errors: FieldErrors }
 
 const isFormSet = (n: RestrictionFormNode): n is FormSet => 'c' in n
+
+// グループの一覧がないときにボタンごと出さないのは、Moodle モードではグループを Moodle の画面で編集し、ここでは足せないため
+const addableKinds = (choices: RestrictionChoices) => RESTRICTION_KINDS.filter((kind) => kind !== 'group' || choices.groups)
 
 const opOptions = RESTRICTION_OPS.map((op) => ({ value: op, label: RESTRICTION_OP_LABELS[op] }))
 
@@ -105,6 +109,11 @@ const itemOptions = (choices: RestrictionChoices, current: string): Option[] => 
 const gradeOptions = (choices: RestrictionChoices, current: string): Option[] => {
   const options = choices.grades.map((g) => ({ value: String(g.id), label: g.meta ? `${g.label}（${g.meta}）` : g.label }))
   return current && !options.some((o) => o.value === current) ? [{ value: current, label: '（削除されたアイテム）' }, ...options] : options
+}
+
+const groupOptions = (groups: NonNullable<RestrictionChoices['groups']>, current: string): Option[] => {
+  const options = [{ value: '', label: 'いずれかのグループ' }, ...groups.map((g) => ({ value: String(g.id), label: g.label }))]
+  return current && !options.some((o) => o.value === current) ? [{ value: current, label: '（削除されたグループ）' }, ...options] : options
 }
 
 const profileOptions = (choices: RestrictionChoices, current: string): Option[] =>
@@ -192,6 +201,20 @@ function LeafFields({ node, ctx }: { node: FormLeaf; ctx: Ctx }) {
         </>
       )
     }
+    case 'group':
+      // グループの一覧がなければ（Moodle モード）、選ぶ欄の代わりに説明を出し、保存されていた値を隠しの欄でそのまま送り返す
+      return choices.groups ? (
+        <RsField id={`${k}-id`} label="グループ" error={errors[`${k}.id`]} class="rs-grow">
+          <Select compact {...control(k, 'id', errors)} options={groupOptions(choices.groups, node.id)} value={node.id} />
+        </RsField>
+      ) : (
+        <>
+          <p class="rs-other">
+            {choices.other?.({ type: 'group', ...(node.id ? { id: Number(node.id) } : {}) }, false) ?? 'グループの条件'}
+          </p>
+          <input type="hidden" name={`${k}.id`} value={node.id} />
+        </>
+      )
     case 'other':
       return <p class="rs-other">{choices.other?.(node.raw, false) ?? 'そのほかの条件'}</p>
   }
@@ -255,7 +278,7 @@ function RsSet({ node, ctx, root }: { node: FormSet; ctx: Ctx; root?: boolean })
         {root ? '条件がありません。下のボタンから追加してください。条件がなければ、だれでも開けます。' : '条件がありません。'}
       </p>
       <div class="rs-add" role="group" aria-label="条件を追加">
-        {RESTRICTION_KINDS.map((kind) => {
+        {addableKinds(choices).map((kind) => {
           const reason = choices.kinds.includes(kind) ? null : (choices.unavailable[kind] ?? 'このコースでは使えません。')
           return (
             <Button size="sm" icon="plus" data-rs-add={kind} disabled={!!reason} title={reason ?? undefined}>
@@ -282,6 +305,8 @@ const blank = (kind: RestrictionKind | 'set', choices: RestrictionChoices): Rest
       return { k, type: 'grade', id: String(choices.grades[0]?.id ?? ''), min: '', max: '' }
     case 'profile':
       return { k, type: 'profile', field: choices.profile[0]?.value ?? '', op: 'isequalto', v: '' }
+    case 'group':
+      return { k, type: 'group', id: String(choices.groups?.[0]?.id ?? '') }
     case 'set':
       return { k, op: '&', c: [] }
   }
@@ -310,7 +335,7 @@ export const RestrictionEditor = ({
       <input type="hidden" name="availability" id="f-availability" value={JSON.stringify(root)} data-rs-value />
       <FieldError id="f-availability" error={errors.availability} />
       <RsSet node={root} ctx={ctx} root />
-      {[...RESTRICTION_KINDS, 'set' as const].map((kind) => (
+      {[...addableKinds(choices), 'set' as const].map((kind) => (
         <template data-rs-template={kind}>
           <RsNode node={blank(kind, choices)} ctx={{ choices, errors: {} }} hidden={false} />
         </template>

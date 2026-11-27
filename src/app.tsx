@@ -27,6 +27,7 @@ import dashboard from './features/dashboard'
 import folder from './features/folder'
 import mcp from './features/mcp'
 import participants from './features/participants'
+import groups from './features/groups'
 import presentation, { isPresentationUpload, api as presentationApi } from './features/presentation'
 import publication from './features/publication'
 import quiz from './features/quiz'
@@ -91,6 +92,7 @@ app.route('/dashboard', dashboard)
 app.route('/courses', courses)
 app.route('/courses', content)
 app.route('/courses', participants)
+app.route('/courses', groups)
 app.route('/courses', screen)
 app.route('/courses', code)
 app.route('/courses', quiz)

@@ -2,6 +2,7 @@ import { and, eq, inArray } from 'drizzle-orm'
 import type { CourseAccess } from './courses'
 import { isCleared, verdictCounts } from '../features/code/code'
 import { db } from './db'
+import { groupIdsOf, groupsOf } from '../features/groups/group-items'
 import { quizGradesOf } from '../features/quiz/quiz-items'
 import {
   RESTRICTION_KINDS,
@@ -74,7 +75,11 @@ type Outline = ReturnType<typeof loadOutline>
 
 const isGraded = (it: OutlineRow) => it.type === 'code' || it.type === 'quiz'
 
-function choicesOf(course: Pick<Course, 'completionEnabled'>, { sectionRows, ordered }: Outline, exclude?: number): RestrictionChoices {
+function choicesOf(
+  course: Pick<Course, 'id' | 'completionEnabled'>,
+  { sectionRows, ordered }: Outline,
+  exclude?: number,
+): RestrictionChoices {
   const sectionTitles = new Map(sectionRows.map((s) => [s.id, sectionLabel(sectionRows, s.id)]))
   const tracked = course.completionEnabled ? ordered.filter((it) => it.completion !== 'none' && it.id !== exclude) : []
   const graded = ordered.filter((it) => isGraded(it) && it.id !== exclude)
@@ -82,6 +87,8 @@ function choicesOf(course: Pick<Course, 'completionEnabled'>, { sectionRows, ord
   if (!course.completionEnabled) unavailable.completion = 'このコースでは完了ステータスを使っていません。'
   else if (tracked.length === 0) unavailable.completion = '完了の条件があるアイテムがありません。'
   if (graded.length === 0) unavailable.grade = '評点が付くアイテム（コーディング問題・小テスト）がありません。'
+  const groups = groupsOf(course.id)
+  if (groups.length === 0) unavailable.group = 'このコースにはグループがありません。参加者の画面から作れます。'
   return {
     kinds: RESTRICTION_KINDS.filter((k) => !unavailable[k]),
     unavailable,
@@ -89,6 +96,7 @@ function choicesOf(course: Pick<Course, 'completionEnabled'>, { sectionRows, ord
     previous: tracked.length > 0,
     grades: graded.map((it) => ({ id: it.id, label: it.title, meta: sectionTitles.get(it.sectionId) })),
     profile: PROFILE_FIELDS,
+    groups: groups.map((g) => ({ id: g.id, label: g.name })),
   }
 }
 
@@ -169,7 +177,9 @@ export function courseAvailability(user: User, access: CourseAccess): CourseAvai
     return gradedIds.has(id) ? 'fail' : 'incomplete'
   }
   const now = Math.floor(Date.now() / 1000)
+  const groups = groupIdsOf(course.id, user.id)
   const env = (previous: number | null) => ({
+    groups,
     now,
     previous,
     completion: completionOf,

@@ -19,6 +19,10 @@
 
 .block .empty { padding: 28px 24px; }
 
+.participant-filter { margin-bottom: 16px; }
+.participant-filter .input { width: auto; }
+.participant-groups { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 0 52px; }
+
 @media (max-width: 640px) {
   .col-actions { width: 1%; white-space: nowrap; }
 }
