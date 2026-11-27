@@ -60,6 +60,7 @@ const RULES: Rule[] = [
   post('/admin/users', 'admin.user.create', 'ユーザーを作成', 'important'),
   post('/admin/users/:uid/role', 'admin.role', 'ユーザーのロールを変更', 'important', 'user'),
   post('/admin/users/:uid/password', 'admin.password', 'ユーザーのパスワードを再設定', 'important', 'user'),
+  post('/admin/users/:uid/delete', 'admin.user.delete', 'ユーザーを削除', 'important', 'user'),
   post('/admin/ai', 'admin.ai', 'AI の月の上限を変更', 'important'),
 
   post('/courses', 'course.create', 'コースを作成', 'important'),

@@ -4,6 +4,7 @@ import { Button, IconButton } from '../../components/button'
 import { SearchBox, Select, SelectField, TextField, validateWith } from '../../components/form'
 import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
+import { MenuItem, Popover } from '../../components/overlay'
 import { Block, Card, Stat, Stats, Table } from '../../components/card'
 import { Styles } from '../../components/style'
 import {
@@ -180,12 +181,26 @@ export const UsersPage = ({
             <td>
               {isManagedRole(u.role) && (
                 <div class="row-actions">
-                  <IconButton
-                    href={`/admin/users/${u.id}/password`}
-                    icon="lock"
-                    label={`${u.name} のパスワードを再設定`}
-                    title="パスワードを再設定"
-                  />
+                  <Popover
+                    class="row-menu"
+                    panelClass="row-menu-panel"
+                    trigger={<IconButton as="summary" icon="ellipsis" label={`${u.name} のその他の操作`} />}
+                  >
+                    <MenuItem href={`/admin/users/${u.id}/password`} icon="lock">
+                      パスワードを再設定
+                    </MenuItem>
+                    <div class="menu-sep" role="separator" />
+                    <form
+                      method="post"
+                      action={`/admin/users/${u.id}/delete`}
+                      data-confirm={`${u.name} さんを削除しますか？提出や成績、AI とのチャットも消え、元に戻せません。`}
+                      data-confirm-ok="削除する"
+                    >
+                      <MenuItem type="submit" icon="trash" class="is-danger">
+                        ユーザーを削除
+                      </MenuItem>
+                    </form>
+                  </Popover>
                 </div>
               )}
             </td>
