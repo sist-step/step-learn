@@ -15,6 +15,7 @@ import './client/datetime'
 import { initMascots, initWalkers } from './client/mascot'
 import { aiDocked, aiHooks, initAiPanel, setAiOpen } from './features/ai/client'
 import { initAgentModelPickers } from './features/agent/client'
+import { prepareTheme, startTheme, themePage } from './features/theme/client'
 import { initVideoPlayers } from './client/media'
 import { $$, fetchJson, reducedMotion } from './client/dom'
 
@@ -1816,7 +1817,7 @@ function slideTabIndicator() {
   to.style.setProperty('--tab-from-right', `${t.right - f.right}px`)
 }
 
-function render(doc: Document, scroll: () => void, settled?: () => void) {
+function render(doc: Document, scroll: () => void, settled?: () => void, applyTheme?: (() => void) | null) {
   // DOMParser はスクリプト無効として解析し noscript の中身を要素にするので、そのまま差し込むと表示されるブラウザがある
   $$('noscript', doc.body).forEach((el) => el.remove())
   liveBase = cloneRegions(doc)
@@ -1824,6 +1825,7 @@ function render(doc: Document, scroll: () => void, settled?: () => void) {
   const tabSlide = markTabSwitch(doc)
   const swap = () => {
     document.title = doc.title
+    applyTheme?.()
     // DOMParser の文書の要素をそのまま移さず複製するのは、読み込みの動かないその文書の中で video・audio が src を読めずに失敗し、移したあとも読み直さないため
     swapBody(document.importNode(doc.body, true))
     slideTabIndicator()
@@ -1864,7 +1866,7 @@ async function visit(url: URL, { method = 'GET', body, pop = false, onFail }: Vi
     const doc = new DOMParser().parseFromString(page.html, 'text/html')
     if (needsFullLoad(doc)) return location.assign(page.url)
     if (fromPrefetch) navigator.sendBeacon('/views', new URLSearchParams({ path: new URL(page.url).pathname }))
-    await loadStyles(doc)
+    const [, applyTheme] = await Promise.all([loadStyles(doc), prepareTheme(doc)])
     if (controller.signal.aborted) return
 
     const next = new URL(page.url)
@@ -1889,6 +1891,7 @@ async function visit(url: URL, { method = 'GET', body, pop = false, onFail }: Vi
         keepScroll ? scrollTo(0, y) : scrollToHash(next.hash)
       },
       () => arrive?.(),
+      applyTheme,
     )
   } catch {
     if (controller.signal.aborted) return
@@ -2149,6 +2152,7 @@ function initPage() {
   initAuthArt()
   initAiPanel()
   spotArrival()
+  themePage()
 }
 
 function initContent() {
@@ -2172,3 +2176,4 @@ function initContent() {
   initAgentModelPickers()
 }
 initPage()
+startTheme()

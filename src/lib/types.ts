@@ -1,6 +1,6 @@
 import type { Child } from 'hono/jsx'
 import type { LogAs } from './operation-log'
-import type { codeItems, courses, items, sections } from './schema'
+import type { codeItems, courses, items, sections, users } from './schema'
 
 export const ROLES = ['admin', 'teacher', 'student'] as const
 export type Role = (typeof ROLES)[number]
@@ -24,6 +24,8 @@ export type AppEnv = {
     user: User | null
     navCourses: NavCourse[]
     flash: Flash | null
+    /** 利用者が選んだ見た目のテーマ。ログインしていないときと Moodle モードでは未設定で、既定のテーマで描く */
+    theme?: (typeof users.$inferSelect)['theme']
     /** 描画中に部品が登録したスタイルシート（components/style.tsx） */
     styles?: Set<string>
     /** AI のパネルを描く。AI を使えない利用者や Moodle モードでは未設定か null を返す（app.tsx） */

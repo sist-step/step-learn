@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `theme` text DEFAULT 'glass' NOT NULL;

@@ -244,7 +244,7 @@ const userColumns = { id: users.id, email: users.email, name: users.name, userna
 
 const findSessionUser = (sid: string) =>
   db
-    .select({ ...userColumns, expiresAt: sessions.expiresAt })
+    .select({ ...userColumns, theme: users.theme, expiresAt: sessions.expiresAt })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
     .where(and(eq(sessions.id, sid), gt(sessions.expiresAt, now())))
@@ -268,8 +268,9 @@ export const session = createMiddleware<AppEnv>(async (c, next) => {
     return next()
   }
 
-  const { expiresAt, ...user } = row
+  const { expiresAt, theme, ...user } = row
   c.set('user', user)
+  c.set('theme', theme)
   if (c.req.method === 'GET') {
     c.set(
       'navCourses',
@@ -313,7 +314,7 @@ export async function userFromCookieHeader(header: string | undefined) {
   if (typeof token !== 'string') return null
   const row = findSessionUser(await sessionIdFromToken(token))
   if (!row) return null
-  const { expiresAt, ...user } = row
+  const { expiresAt, theme, ...user } = row
   return user
 }
 

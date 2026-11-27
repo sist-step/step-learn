@@ -1,0 +1,270 @@
+/* ==========================================================================
+   テーマ「かわいい」
+   ピンクの水玉の背景に、太いふちと影をずらしたシールのような面。動きは cute.ts
+   ========================================================================== */
+
+/* トークンを :where() で包まないのは、base.css の :root[data-theme='dark'] より詳細度が低くなり、ダークで base の色に負けるため。
+   ダークの組にもライトと同じトークンをすべて書くのは、書き漏らしたものにライトの値が残るため */
+:root[data-ui-theme='cute'] {
+  --font: 'Hiragino Maru Gothic ProN', 'Zen Maru Gothic', 'M PLUS Rounded 1c', 'Kosugi Maru', ui-rounded, 'Arial Rounded MT Bold', -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', 'Noto Sans JP', Meiryo, sans-serif;
+  --cute-ink: #4a2f5e;
+  --cute-pop: #ffb3d4;
+  --cute-dot: rgb(255 143 192 / 0.32);
+  --cute-marker: #fff08a;
+  --cute-spark-1: #ff5fa2;
+  --cute-spark-2: #a78bfa;
+  --cute-spark-3: #ffc94d;
+  --cute-spark-4: #5ed3f3;
+  --bg: #fff0f6;
+  --chrome: #fff5fa;
+  --surface: #ffffff;
+  --surface-2: #fff6fa;
+  --surface-3: #fde6f0;
+  --border: #f8d7e6;
+  --border-strong: #efbcd3;
+  --card-border: #f4c9dc;
+  --field-border: #b88dc6;
+  --surface-raised: #ffffff;
+  --overlay-border: var(--cute-ink);
+  --glass: #ffffff;
+  --glass-hover: #fffafc;
+  --glass-faint: rgb(255 255 255 / 0.5);
+  --glass-read: #ffffff;
+  --glass-raised: #ffffff;
+  --glass-modal: #ffffff;
+  --glass-chrome: rgb(255 240 246 / 0.95);
+  --glass-border: var(--cute-ink);
+  --glass-blur: saturate(1.2) blur(10px);
+  --scrim: rgb(74 47 94 / 0.3);
+  --aura-2: #b8a4ff;
+  --aura-3: #8fe3ff;
+  --aura-1-mix: 26%;
+  --aura-2-mix: 30%;
+  --aura-3-mix: 24%;
+  --primary-fill: linear-gradient(180deg, #f2649f, #d63384);
+  --primary-fill-hover: linear-gradient(180deg, #f577ab, #df4290);
+  --progress-fill: linear-gradient(90deg, #ff7ab4, #b28cff, #6fd6f5);
+  --control-border: var(--cute-ink);
+  --control-bg: #ffffff;
+  --track: #fde6f0;
+  --track-border: #f4c9dc;
+  --thumb: #ffffff;
+  --text: #43294f;
+  --text-2: #5d4468;
+  --muted: #7d6187;
+  --primary: #d63384;
+  --primary-soft: #ffe0ee;
+  --primary-text: #c2256f;
+  --on-primary: #ffffff;
+  --accent: #ff8fc0;
+  --on-accent: #4a1030;
+  --success: #32b87d;
+  --success-soft: #def7ea;
+  --success-text: #13784b;
+  --success-strong: #1f9461;
+  --success-strong-hover: #1a8355;
+  --danger: #f0506e;
+  --danger-soft: #ffe4ea;
+  --danger-text: #c22448;
+  --danger-strong: #d8355a;
+  --danger-strong-hover: #c42c4f;
+  --warning: #ffb020;
+  --warning-soft: #fff3d6;
+  --warning-text: #8a5400;
+  --info: #5b8ef0;
+  --info-text: #2f62c7;
+  --focus: #c2256f;
+  --ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--focus);
+  --ring-field: 0 0 0 4px color-mix(in srgb, var(--focus) 18%, transparent);
+  --shadow-sm: 2px 2px 0 var(--cute-pop);
+  --shadow-rest: 3px 3px 0 var(--cute-pop);
+  --shadow-card: 5px 5px 0 var(--cute-pop);
+  --shadow: 7px 7px 0 var(--cute-pop);
+  --shadow-lg: 8px 8px 0 var(--cute-pop), 0 24px 48px -20px rgb(74 47 94 / 0.35);
+  --radius-sm: 10px;
+  --radius: 16px;
+  --radius-lg: 22px;
+  --radius-field: 14px;
+}
+
+:root[data-ui-theme='cute'][data-theme='dark'] {
+  --font: 'Hiragino Maru Gothic ProN', 'Zen Maru Gothic', 'M PLUS Rounded 1c', 'Kosugi Maru', ui-rounded, 'Arial Rounded MT Bold', -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', 'Noto Sans JP', Meiryo, sans-serif;
+  --cute-ink: #e9a6ff;
+  --cute-pop: rgb(255 120 190 / 0.38);
+  --cute-dot: rgb(255 140 198 / 0.16);
+  --cute-marker: rgb(255 214 90 / 0.35);
+  --cute-spark-1: #ff8cc6;
+  --cute-spark-2: #c4b0ff;
+  --cute-spark-3: #ffd76e;
+  --cute-spark-4: #7fe0ff;
+  --bg: #1d1427;
+  --chrome: #22182d;
+  --surface: #2a1d38;
+  --surface-2: #33243f;
+  --surface-3: #3d2c4b;
+  --border: #45324f;
+  --border-strong: #5a4267;
+  --card-border: #4f3a5c;
+  --field-border: #a382b4;
+  --surface-raised: #2f2140;
+  --overlay-border: var(--cute-ink);
+  --glass: #2a1d38;
+  --glass-hover: #32233f;
+  --glass-faint: rgb(42 29 56 / 0.5);
+  --glass-read: #2a1d38;
+  --glass-raised: #2f2140;
+  --glass-modal: #2f2140;
+  --glass-chrome: rgb(29 20 39 / 0.95);
+  --glass-border: var(--cute-ink);
+  --glass-blur: saturate(1.2) blur(10px);
+  --scrim: rgb(0 0 0 / 0.55);
+  --aura-2: #7c5cff;
+  --aura-3: #2bb7e0;
+  --aura-1-mix: 20%;
+  --aura-2-mix: 24%;
+  --aura-3-mix: 16%;
+  --primary-fill: linear-gradient(180deg, #ffa3d3, #ff7fbf);
+  --primary-fill-hover: linear-gradient(180deg, #ffb6dc, #ff92c9);
+  --progress-fill: linear-gradient(90deg, #ff8cc6, #c4b0ff, #7fe0ff);
+  --control-border: var(--cute-ink);
+  --control-bg: #2a1d38;
+  --track: #3d2c4b;
+  --track-border: #4f3a5c;
+  --thumb: #4a3658;
+  --text: #fbeaf5;
+  --text-2: #e5cfe0;
+  --muted: #c3a8cc;
+  --primary: #ff8cc6;
+  --primary-soft: rgb(255 140 198 / 0.18);
+  --primary-text: #ffa3d3;
+  --on-primary: #3a0a24;
+  --accent: #ff8cc6;
+  --on-accent: #3a0a24;
+  --success: #4fd197;
+  --success-soft: rgb(79 209 151 / 0.15);
+  --success-text: #6fe0ad;
+  --success-strong: #1c8a5a;
+  --success-strong-hover: #23a06a;
+  --danger: #ff6f8c;
+  --danger-soft: rgb(255 111 140 / 0.16);
+  --danger-text: #ff94a9;
+  --danger-strong: #cc3a5c;
+  --danger-strong-hover: #dc4a6b;
+  --warning: #ffc04d;
+  --warning-soft: rgb(255 192 77 / 0.14);
+  --warning-text: #ffd27f;
+  --info: #7ea8ff;
+  --info-text: #a0c0ff;
+  --focus: #ffa3d3;
+  --ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--focus);
+  --ring-field: 0 0 0 4px color-mix(in srgb, var(--focus) 26%, transparent);
+  --shadow-sm: 2px 2px 0 var(--cute-pop);
+  --shadow-rest: 3px 3px 0 var(--cute-pop);
+  --shadow-card: 5px 5px 0 var(--cute-pop);
+  --shadow: 7px 7px 0 var(--cute-pop);
+  --shadow-lg: 8px 8px 0 var(--cute-pop), 0 24px 48px -20px rgb(0 0 0 / 0.6);
+  --radius-sm: 10px;
+  --radius: 16px;
+  --radius-lg: 22px;
+  --radius-field: 14px;
+}
+
+/* 部品の上書きを :where() で包むのは、上書きの詳細度を元の規則と同じにして、元の :hover などの状態の規則が今までどおり勝つようにするため */
+:where(:root[data-ui-theme='cute']) {
+  & body { letter-spacing: 0.02em; }
+  & h1, & h2, & h3 { font-weight: 700; }
+
+  & .content::before {
+    background:
+      radial-gradient(circle, var(--cute-dot) 2px, transparent 2.6px) 0 0 / 26px 26px,
+      radial-gradient(60% 55% at 100% 0%, color-mix(in srgb, var(--c1, var(--accent)) var(--aura-1-mix), transparent), transparent 72%),
+      radial-gradient(55% 60% at 0% 100%, color-mix(in srgb, var(--aura-2) var(--aura-2-mix), transparent), transparent 72%),
+      radial-gradient(45% 40% at 22% -8%, color-mix(in srgb, var(--aura-3) var(--aura-3-mix), transparent), transparent 70%);
+  }
+
+  /* ガラスの面をシールにする。ふちの色はトークン（--glass-border）で変わるので、ここでは太さだけを変える */
+  & :is(.card, .stat, .table-card, .link-card, .empty, .course-card, .section-card, .sec-tile, .dash-card, .pager-link, .search, .rail, .popover-panel, .toast) {
+    border-width: 2px;
+  }
+  & .empty-page { border-width: 0; }
+  & .tabs { box-shadow: inset 0 0 0 2px var(--cute-ink), var(--shadow-card); }
+  & .tab.active::before { background: var(--primary-soft); box-shadow: inset 0 0 0 2px var(--cute-ink); }
+  & .tab.active { color: var(--primary-text); }
+  & .card-head h2 { display: flex; align-items: center; gap: 8px; }
+  & .card-head h2::before {
+    content: '';
+    flex: none;
+    width: 12px;
+    height: 12px;
+    background: var(--cute-spark-1);
+    clip-path: polygon(50% 0%, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0% 50%, 38% 38%);
+  }
+  & .page-header h1 {
+    text-decoration: underline wavy var(--cute-spark-1);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 6px;
+    text-decoration-skip-ink: none;
+  }
+  & .page-header p { margin-top: 10px; }
+
+  & .btn { border-width: 2px; box-shadow: 3px 3px 0 var(--cute-ink); transition: background 0.15s, translate 0.1s, box-shadow 0.1s, opacity 0.15s; }
+  & .btn-primary { --btn-border: var(--cute-ink); }
+  & :is(.btn-success, .btn-danger) { --btn-border: var(--cute-ink); }
+  & .btn-ghost { border-color: transparent; box-shadow: none; }
+  & .btn:active { transform: none; translate: 2px 2px; box-shadow: 1px 1px 0 var(--cute-ink); }
+  & .btn-ghost:active { translate: none; box-shadow: none; }
+  & .icon-btn { border-radius: 12px; }
+
+  & .input { border-width: 2px; }
+  & .input:focus { border-color: var(--primary); }
+  & .file-drop-zone { border-width: 2px; border-color: var(--field-border); }
+
+  & .segmented { box-shadow: inset 0 0 0 2px var(--track-border); }
+  & .switch-track { box-shadow: inset 0 0 0 2px var(--cute-ink); }
+  & .chip { border: 1.5px solid color-mix(in srgb, currentColor 45%, transparent); }
+
+  & .rail-link.active { background: var(--primary-soft); color: var(--primary-text); box-shadow: inset 0 0 0 2px var(--cute-ink); }
+  & .avatar { box-shadow: 0 0 0 2px var(--cute-ink); }
+
+  & .toast { background: var(--surface-raised); }
+}
+
+@media (hover: hover) {
+  :where(:root[data-ui-theme='cute']) :is(.course-card, .link-card, .dash-course, .pager-link, .stat-link):hover { rotate: -0.6deg; }
+  :where(:root[data-ui-theme='cute']) .btn:not(:disabled, .btn-ghost):hover { translate: -1px -1px; box-shadow: 4px 4px 0 var(--cute-ink); }
+}
+
+/* ===== キラキラ（cute.ts） */
+.cute-sky { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.cute-star {
+  position: absolute;
+  width: var(--size);
+  height: var(--size);
+  background: var(--c);
+  clip-path: polygon(50% 0%, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0% 50%, 38% 38%);
+  opacity: 0.55;
+  animation: cute-twinkle var(--dur) ease-in-out var(--delay) infinite;
+}
+.cute-sparks { position: fixed; inset: 0; z-index: 1001; overflow: hidden; pointer-events: none; }
+.cute-spark {
+  position: absolute;
+  width: var(--size);
+  height: var(--size);
+  margin: calc(var(--size) / -2) 0 0 calc(var(--size) / -2);
+  background: var(--c);
+  animation: cute-burst 0.7s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+.cute-spark-star { clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+.cute-spark-sparkle { clip-path: polygon(50% 0%, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0% 50%, 38% 38%); }
+.cute-spark-dot { border-radius: 50%; }
+@keyframes cute-twinkle {
+  0%, 100% { opacity: 0.15; scale: 0.6; rotate: 0deg; }
+  50% { opacity: 0.75; scale: 1; rotate: 45deg; }
+}
+@keyframes cute-burst {
+  from { translate: 0 0; scale: 0.3; rotate: 0deg; opacity: 1; }
+  70% { opacity: 1; }
+  to { translate: var(--dx) var(--dy); scale: 1; rotate: var(--rot); opacity: 0; }
+}

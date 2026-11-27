@@ -8,6 +8,8 @@ import type { FieldErrors } from '../../lib/forms'
 import { PASSWORD_HINT } from '../../lib/password'
 import { ROLE_LABELS, type User } from '../../lib/types'
 import { USERNAME_HINT } from '../../lib/username'
+import { ThemePicker } from '../theme/components/theme'
+import type { ThemeName } from '../theme/theme'
 
 export type Profile = { name: string; username: string }
 
@@ -96,11 +98,13 @@ const MicrosoftCard = ({ account, hasPassword }: { account: { email: string } | 
 
 export const AccountPage = ({
   user,
+  theme,
   security,
   errors = {},
   values,
 }: {
   user: User
+  theme: ThemeName
   security: AccountSecurity
   errors?: FieldErrors
   values?: Profile
@@ -136,6 +140,8 @@ export const AccountPage = ({
           </div>
         </form>
       </Card>
+
+      <ThemePicker current={theme} />
 
       <PasswordCard user={user} hasPassword={security.hasPassword} errors={errors} />
 

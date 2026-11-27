@@ -89,6 +89,11 @@ const UserMenu = ({ editable }: { editable?: boolean }) => {
             AI アプリとの接続
           </MenuItem>
         )}
+        {c.var.theme && (
+          <MenuItem href="/account#theme" icon="swatch">
+            テーマ
+          </MenuItem>
+        )}
         <Switch class="menu-item" icon="moon" label="ダークモード" checked={false} data-theme-toggle />
         {editable && <Switch class="menu-item" icon="pencil" label="編集モード" checked={false} data-edit-mode-toggle />}
       </div>

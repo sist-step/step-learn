@@ -4,8 +4,9 @@ import { USERNAME_TAKEN, revokeOtherCredentials, hasPassword, hashPassword, isUs
 import { config } from '../../lib/config'
 import { db } from '../../lib/db'
 import { validate, type FieldErrors } from '../../lib/forms'
-import { type Form, field, readForm, redirectWith } from '../../lib/http'
+import { type Form, field, readFields, readForm, redirectWith } from '../../lib/http'
 import { microsoftAccountOf, startMicrosoftAuth, unlinkMicrosoft } from '../auth/microsoft'
+import { THEME_LABELS } from '../theme/theme'
 import { checkPassword } from '../../lib/password'
 import { rateLimiter } from '../../lib/rate-limit'
 import { users } from '../../lib/schema'
@@ -25,7 +26,9 @@ const securityOf = (user: User): AccountSecurity => ({
 
 function render(c: Context<AppEnv>, { errors, values }: { errors?: FieldErrors; values?: Profile } = {}) {
   const user = c.var.user!
-  return c.render(<AccountPage user={user} security={securityOf(user)} errors={errors} values={values} />, { title: 'アカウント' })
+  return c.render(<AccountPage user={user} theme={c.var.theme!} security={securityOf(user)} errors={errors} values={values} />, {
+    title: 'アカウント',
+  })
 }
 
 export const show = (c: Context<AppEnv>) => render(c)
@@ -84,6 +87,13 @@ export async function changePassword(c: Context<AppEnv>) {
   db.update(users).set({ passwordHash }).where(eq(users.id, user.id)).run()
   await revokeOtherCredentials(c, user.id)
   return redirectWith(c, '/account', 'パスワードを変更しました。')
+}
+
+export async function changeTheme(c: Context<AppEnv>) {
+  const values = await readFields(c, 'theme')
+  if (!values) return c.notFound()
+  db.update(users).set(values).where(eq(users.id, c.var.user!.id)).run()
+  return redirectWith(c, '/account', `テーマを「${THEME_LABELS[values.theme]}」に変更しました。`)
 }
 
 /** Microsoft アカウントで登録したなど、まだパスワードがないユーザーが最初に設定する。照らし合わせる現在のパスワードがないので聞かない */
