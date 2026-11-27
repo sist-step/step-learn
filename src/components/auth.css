@@ -1,3 +1,5 @@
+/* ページの外側も画面の背景色にそろえるのは、Mac のトラックパッドで上下の端を越えてスクロールしたときに、暗い背景の外に明るい既定の --bg が見えないようにするため */
+:root:has(.auth), :root:has(.auth) body { background: var(--auth-stage); }
 .auth {
   display: grid;
   place-items: center;
@@ -63,6 +65,8 @@
 .auth-art-canvas.is-dragging { cursor: grabbing; }
 
 @media (max-width: 900px) {
+  /* 狭い画面ではフォームの面が画面いっぱいに広がるので、端の外側もその色にそろえる */
+  :root:has(.auth), :root:has(.auth) body { background: var(--surface); }
   .auth { padding: 0; place-items: stretch; }
   .auth-frame { grid-template-columns: 1fr; min-height: 100dvh; padding: 0; border-radius: 0; box-shadow: none; }
   .auth-main, .auth-main:has(.tab-panel) { align-items: flex-start; padding: 48px 20px; border-radius: 0; box-shadow: none; }
