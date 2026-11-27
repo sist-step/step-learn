@@ -179,7 +179,7 @@ export const items = sqliteTable(
       .notNull()
       .references(() => sections.id, { onDelete: 'cascade' }),
     type: text('type', {
-      enum: ['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab', 'presentation', 'publication'],
+      enum: ['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab', 'presentation', 'publication', 'folder'],
     }).notNull(),
     title: text('title').notNull(),
     body: text('body').notNull().default(''),
@@ -209,7 +209,7 @@ export const items = sqliteTable(
     index('items_course').on(t.courseId),
     check(
       'items_type',
-      sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab', 'presentation', 'publication')`,
+      sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab', 'presentation', 'publication', 'folder')`,
     ),
     check('items_completion', sql`${t.completion} IN ('none', 'manual', 'view', 'play', 'clear', 'pass')`),
     check('items_link_target', sql`${t.linkTarget} IN ('new', 'same', 'embed')`),
@@ -650,6 +650,39 @@ export const publicationFiles = sqliteTable(
     index('publication_files_item').on(t.itemId, t.userId),
     check('publication_files_status', sql`${t.status} IN ('pending', 'approved', 'rejected')`),
   ],
+)
+
+/** フォルダーのアイテム（items.type が folder）の設定。行がなければ既定（features/folder/folder.ts） */
+export const folderItems = sqliteTable('folder_items', {
+  itemId: integer('item_id')
+    .primaryKey()
+    .references(() => items.id, { onDelete: 'cascade' }),
+  /** コースのページに中身を並べる */
+  showInline: integer('show_inline').notNull().default(0),
+  /** サブフォルダーを開いた状態で見せる */
+  showExpanded: integer('show_expanded').notNull().default(1),
+  /** まとめて zip でダウンロードするボタンを見せる */
+  showDownload: integer('show_download').notNull().default(1),
+  /** ファイルをブラウザで開かずに保存させる */
+  forceDownload: integer('force_download').notNull().default(0),
+})
+
+/** フォルダーのアイテムに教師が置いたファイル。path はフォルダーの中の場所（/ 区切り） */
+export const folderFiles = sqliteTable(
+  'folder_files',
+  {
+    id: integer('id').primaryKey(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    // NOCASE にするのは、Windows と macOS では大文字と小文字だけが違う名前を同じファイルとして扱い、zip で展開すると上書きされるため
+    path: textNocase('path').notNull(),
+    fileKey: text('file_key').notNull(),
+    fileSize: integer('file_size').notNull(),
+    fileType: text('file_type').notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [uniqueIndex('folder_files_item_path').on(t.itemId, t.path)],
 )
 
 /** 操作ログ。種類ごとの保存期間を過ぎたものは消す（lib/operation-log.ts） */

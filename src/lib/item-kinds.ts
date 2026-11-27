@@ -4,6 +4,7 @@ import { DEFAULT_STARTER, type CodeConstraint, type CodeLanguage } from '../feat
 import type { CollabKind, CollabScope } from '../features/collab/collab'
 import type { PublicationSettings } from '../features/publication/publication'
 import { collabStore } from '../features/collab/collab-items'
+import { folderKeysOf } from '../features/folder/folder-items'
 import { publicationKeysOf } from '../features/publication/publication-items'
 import { nextPosition, placeBefore, sectionEntries, type EntryRef } from './courses'
 import { db, type DB } from './db'
@@ -53,6 +54,12 @@ export const ITEM_KINDS: Record<ItemType, ItemKind> = {
   page: NONE,
   link: NONE,
   file: NONE,
+  // ファイルを置くまで学生に見せるものがないので、アップロードする編集画面へ進める
+  folder: {
+    ...NONE,
+    afterCreate: { page: 'edit', message: 'フォルダーに置くファイルをアップロードしてください。' },
+    storedFiles: (_courseId, itemId) => ({ keys: folderKeysOf(itemId), prefixes: [] }),
+  },
   // PDF を上げるまで学生に見せるものがないので、同期を始めるアイテムの画面へ進める
   presentation: { ...NONE, afterCreate: { page: 'view', message: '「PowerPoint と同期」から PDF をアップロードしてください。' } },
   screen: NONE,

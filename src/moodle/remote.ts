@@ -4,8 +4,11 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream } from 'node:stream/web'
 import { BUNDLE_MODULE } from '../features/bundle/bundle'
+import { DEFAULT_FOLDER_SETTINGS, type FolderSettings } from '../features/folder/folder'
 import type { PublicationStatus } from '../features/publication/publication'
+import { isExcludedPath, samePath, toTreePath } from '../lib/file-tree'
 import { isEmail, isHttpUrl } from '../lib/forms'
+import { parseJson } from '../lib/json'
 import { COMPLETION_LABELS, type Completion, type CourseRole } from '../lib/types'
 import { checkUsername, normalizeUsername } from '../lib/username'
 import { callSite, fetchSiteFile, type MoodleCourse, type MoodleModule, type MoodleSection } from '../moodle-mode/client'
@@ -18,6 +21,7 @@ import {
   moduleLabel,
   type Backup,
   type BackupFile,
+  type BackupFolder,
   type BackupItem,
   type BackupParticipant,
   type BackupPublication,
@@ -58,6 +62,39 @@ type MoodlePublication = {
   extensions: number
   missing: number
   files: (RemoteFile & { userid: number; filesize: number; timecreated: number; teacherapproval: number; studentapproval: number })[]
+}
+
+/** mod_folder_get_folders_by_courses のフォルダー 1 つ。真偽は 0 / 1 */
+type MoodleFolder = { coursemodule: number; display: number; showexpanded: number; showdownloadfolder: number; forcedownload: number }
+
+const FOLDER_DISPLAY_INLINE = 1
+
+const bit = (v: unknown) => (Number(v) ? 1 : 0)
+
+/**
+ * フォルダーの設定。mod_folder_get_folders_by_courses を呼べない古いプラグインでは、コースのページに並べるフォルダーだけ
+ * core_course_get_contents の customdata（Moodle がコースのページに並べるときにだけ設定を入れる）から読む
+ */
+function folderSettingsOf(m: MoodleModule, found: MoodleFolder | undefined, notes: string[]): FolderSettings {
+  if (found)
+    return {
+      showInline: Number(found.display === FOLDER_DISPLAY_INLINE),
+      showExpanded: bit(found.showexpanded),
+      showDownload: bit(found.showdownloadfolder),
+      forceDownload: bit(found.forcedownload),
+    }
+  const inline = parseJson(m.customdata ?? null)
+  if (inline && typeof inline === 'object' && 'showexpanded' in inline)
+    return {
+      showInline: 1,
+      showExpanded: bit(inline.showexpanded),
+      showDownload: 'showdownloadfolder' in inline ? bit(inline.showdownloadfolder) : 1,
+      forceDownload: 'forcedownload' in inline ? bit(inline.forcedownload) : 0,
+    }
+  notes.push(
+    'サブフォルダーの開き方・まとめてダウンロード・ファイルを押したときの設定を読めなかったため、既定にします（local_steplearn を 2026112700 以降の版に更新すると読めます）',
+  )
+  return DEFAULT_FOLDER_SETTINGS
 }
 
 // 評定や提出による自動の完了を「なし」にしないのは、完了を記録する項目だったことは残したいため
@@ -149,16 +186,19 @@ function publicationNotes(p: MoodlePublication, completion: Completion) {
  */
 export async function readRemoteCourse(site: MoodleSite, courseId: number, dir: string): Promise<Backup> {
   const call = <T>(wsfunction: string, params = {}) => callSite<T>(site.url, site.token, wsfunction, params)
-  const [info, course, contents, people, publications] = await Promise.all([
+  const [info, course, contents, people, publications, folders] = await Promise.all([
     call<{ release: string }>('core_webservice_get_site_info'),
     call<MoodleCourse>('local_steplearn_get_course', { courseid: courseId }),
     call<MoodleSection[]>('core_course_get_contents', { courseid: courseId }),
     call<MoodleParticipant[]>('local_steplearn_get_participants', { courseid: courseId }).catch(needsPlugin),
     call<MoodlePublication[]>('local_steplearn_get_publications', { courseid: courseId }).catch(needsPlugin),
+    // 呼べなくても止めないのは、フォルダーの設定が読めなくても、中身のファイルは取り込めるため
+    call<{ folders: MoodleFolder[] }>('mod_folder_get_folders_by_courses', { courseids: [courseId] }).catch(() => null),
   ])
   const participants = participantsOf(people)
   const joining = new Set(participants.filter((p) => !p.skip).map((p) => p.moodleId))
   const publicationOf = new Map(publications.map((p) => [p.cmid, p]))
+  const folderOf = new Map(folders?.folders.map((f) => [f.coursemodule, f]))
 
   let saved = 0
   async function download(content: RemoteFile, notes: string[]): Promise<BackupFile | null> {
@@ -195,20 +235,8 @@ export async function readRemoteCourse(site: MoodleSite, courseId: number, dir: 
         return [{ ...base, type: 'file', file, completion: completionOf(m) }]
       }
       case 'folder': {
-        if (!files.length) return skip('フォルダが空のため取り込みません')
-        const items: BackupItem[] = []
-        for (const content of files) {
-          const itemNotes: string[] = []
-          const file = await download(content, itemNotes)
-          const name = `${(content.filepath ?? '/').slice(1)}${content.filename}`
-          const itemTitle = cut(`${title} / ${name}`, LIMITS.itemTitle, [], '')
-          items.push(
-            file
-              ? { ...base, title: itemTitle, notes: itemNotes, type: 'file', file, body: '', completion: 'none' }
-              : { ...base, title: itemTitle, notes: itemNotes, type: null, completion: 'none' },
-          )
-        }
-        return items
+        const folder = await readFolder(files, folderSettingsOf(m, folderOf.get(m.id), notes), notes)
+        return [{ ...base, type: 'folder', folder, completion: completionOf(m) }]
       }
       case 'publication': {
         const found = publicationOf.get(m.id)
@@ -222,6 +250,37 @@ export async function readRemoteCourse(site: MoodleSite, courseId: number, dir: 
       default:
         return skip('URL・ファイル・フォルダー・学生フォルダ以外の活動は取り込みません')
     }
+  }
+
+  // 中身が空でも取り込むのは、Moodle と同じ場所にフォルダーを用意しておき、あとからファイルを置けるようにするため
+  async function readFolder(
+    contents: NonNullable<MoodleModule['contents']>,
+    settings: FolderSettings,
+    notes: string[],
+  ): Promise<BackupFolder> {
+    const files: BackupFolder['files'] = []
+    let excluded = 0
+    for (const content of contents) {
+      const raw = `${content.filepath ?? '/'}${content.filename}`
+      const path = toTreePath(raw)
+      if (!path) {
+        notes.push(`「${raw}」は、場所が深すぎるか長すぎるため取り込みません`)
+        continue
+      }
+      if (isExcludedPath(path)) {
+        excluded++
+        continue
+      }
+      // 大文字と小文字だけが違う名前を 1 つにするのは、STEP Learn では同じ場所として扱い、zip で展開すると上書きされるため
+      if (files.some((f) => samePath(f.path, path))) {
+        notes.push(`「${raw}」は、大文字と小文字だけが違う名前のファイルがあるため取り込みません`)
+        continue
+      }
+      const file = await download(content, notes)
+      if (file) files.push({ path, file })
+    }
+    if (excluded) notes.push(`.DS_Store や .git など、フォルダーに置かないファイル ${excluded} 個は取り込みません`)
+    return { settings, files }
   }
 
   async function readPublication(p: MoodlePublication, notes: string[]): Promise<BackupPublication> {

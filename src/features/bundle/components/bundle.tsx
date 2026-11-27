@@ -1,72 +1,21 @@
-import { formatBytes } from '../../../lib/bytes'
-import {
-  EXCLUDED_NAMES,
-  MAX_BUNDLE_FILES,
-  MAX_BUNDLE_SIZE,
-  VSCODE_EXTENSION_NAME,
-  VSCODE_MARKETPLACE_URL,
-  bundleSize,
-  bundleTree,
-  type BundleFile,
-  type BundleTreeNode,
-} from '../bundle'
+import { MAX_BUNDLE_FILES, MAX_BUNDLE_SIZE, VSCODE_EXTENSION_NAME, VSCODE_MARKETPLACE_URL, type BundleFile } from '../bundle'
 import { MAX_SYNC_FILE_SIZE, type BundleSyncState } from '../bundle-sync'
-import { MAX_FILE_SIZE } from '../../../lib/storage'
-import { Button, IconButton } from '../../../components/button'
+import { Button } from '../../../components/button'
 import { Card, LinkCard } from '../../../components/card'
 import { cx } from '../../../components/cx'
+import { FileTree, TreeUploadForm } from '../../../components/file-tree'
 import { Icon } from '../../../components/icons'
-import { Popover } from '../../../components/overlay'
 import { useStyle } from '../../../components/style'
 import { Chip, EmptyState } from '../../../components/ui'
+import { formatBytes } from '../../../lib/bytes'
+import { treeSize } from '../../../lib/file-tree'
 
 type Listed = Pick<BundleFile, 'path' | 'size'>
 
 /** アイテムの画面と編集画面に出す、配るファイルと同期の状態 */
 export type BundleView = { files: Listed[]; sync: BundleSyncState }
 
-const countFiles = (node: BundleTreeNode): number => (node.file ? 1 : node.children.reduce((n, c) => n + countFiles(c), 0))
-
-const DeleteButton = ({ action, name, value, label }: { action: string; name: 'path' | 'folder'; value: string; label: string }) => (
-  <form method="post" action={action} data-confirm={`「${value}」を削除しますか？`} data-confirm-ok="削除する">
-    <input type="hidden" name={name} value={value} />
-    <IconButton type="submit" icon="trash" label={label} danger />
-  </form>
-)
-
-const TreeNodes = ({ nodes, deleteAction }: { nodes: BundleTreeNode[]; deleteAction?: string }) => (
-  <ul>
-    {nodes.map((n) => (
-      <li class={n.file ? 'bundle-file' : 'bundle-folder'}>
-        <div class="bundle-row">
-          <Icon name={n.file ? 'file' : 'folder'} size={16} />
-          <span class="bundle-name truncate">{n.name}</span>
-          <span class="bundle-meta muted small">{n.file ? formatBytes(n.file.size) : `${countFiles(n)} 個`}</span>
-          {deleteAction && (
-            <DeleteButton
-              action={deleteAction}
-              name={n.file ? 'path' : 'folder'}
-              value={n.path}
-              label={n.file ? `「${n.name}」を削除` : `フォルダー「${n.name}」を削除`}
-            />
-          )}
-        </div>
-        {n.children.length > 0 && <TreeNodes nodes={n.children} deleteAction={deleteAction} />}
-      </li>
-    ))}
-  </ul>
-)
-
-const BundleTree = ({ files, deleteAction }: { files: Listed[]; deleteAction?: string }) => {
-  useStyle('/src/features/bundle/components/bundle.css', '/src/components/course.css')
-  return (
-    <div class="bundle-tree kind-bundle">
-      <TreeNodes nodes={bundleTree(files)} deleteAction={deleteAction} />
-    </div>
-  )
-}
-
-const summaryOf = (files: Listed[]) => `${files.length} 個・${formatBytes(bundleSize(files))}`
+const summaryOf = (files: Listed[]) => `${files.length} 個・${formatBytes(treeSize(files))}`
 
 /** アイテムの画面の、データの同期の案内と、変更履歴への入口 */
 const BundleSyncNote = ({ sync, canManage }: { sync: BundleSyncState; canManage: boolean }) => (
@@ -151,7 +100,7 @@ export const BundleOpen = ({
           </Button>
         }
       >
-        <BundleTree files={files} />
+        <FileTree files={files} class="kind-bundle" />
       </Card>
     </div>
   )
@@ -232,61 +181,8 @@ const BundleFilesCard = ({ base, files, class: cls }: { base: string; files: Lis
       }
     >
       <div class="stack">
-        <form
-          method="post"
-          action={`${base}/files`}
-          enctype="multipart/form-data"
-          class="bundle-upload"
-          data-bundle-upload
-          data-max-files={MAX_BUNDLE_FILES}
-          data-max-size={MAX_FILE_SIZE}
-        >
-          <input type="file" webkitdirectory multiple hidden data-bundle-input="folder" />
-          <input type="file" multiple hidden data-bundle-input="files" />
-          <div class="bundle-drop" data-bundle-drop>
-            <span class="bundle-drop-icon">
-              <Icon name="upload" size={18} />
-            </span>
-            <span class="bundle-drop-text">
-              <span class="bundle-drop-drag">フォルダーやファイル、zip をここにドラッグ＆ドロップ</span>
-              <span class="muted small">または</span>
-            </span>
-            <span class="row bundle-drop-actions">
-              <Button size="sm" icon="folder" data-bundle-pick="folder">
-                フォルダーを選択
-              </Button>
-              <Button size="sm" icon="file" data-bundle-pick="files">
-                ファイル・zip を選択
-              </Button>
-            </span>
-            <span class="bundle-drop-limit muted small">
-              最大 {MAX_BUNDLE_FILES} 個・合計 {formatBytes(MAX_BUNDLE_SIZE)}
-              <span>（1 回のアップロードは {formatBytes(MAX_FILE_SIZE)}）まで</span>
-            </span>
-            <span class="bundle-drop-busy" role="status">
-              アップロードしています…
-            </span>
-          </div>
-          <Popover
-            class="bundle-excluded"
-            panelClass="bundle-excluded-panel"
-            trigger={
-              <summary class="bundle-excluded-trigger">
-                <Chip icon="info">除外されるファイル</Chip>
-              </summary>
-            }
-          >
-            <p class="small">次の名前のフォルダーとファイルは、アップロードしても自動で外します。</p>
-            <ul class="bundle-excluded-list">
-              {EXCLUDED_NAMES.map((name) => (
-                <li>
-                  <code>{name}</code>
-                </li>
-              ))}
-            </ul>
-          </Popover>
-        </form>
-        {files.length > 0 && <BundleTree files={files} deleteAction={`${base}/files/delete`} />}
+        <TreeUploadForm action={`${base}/files`} maxFiles={MAX_BUNDLE_FILES} maxSize={MAX_BUNDLE_SIZE} />
+        {files.length > 0 && <FileTree files={files} deleteAction={`${base}/files/delete`} class="kind-bundle" />}
       </div>
     </Card>
   )

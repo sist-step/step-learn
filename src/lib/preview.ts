@@ -13,6 +13,27 @@ export function previewKind(type: string, name: string): PreviewKind | null {
   return null
 }
 
+const TYPE_BY_EXTENSION: Record<string, string> = {
+  pdf: 'application/pdf',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  wav: 'audio/wav',
+  flac: 'audio/flac',
+  html: 'text/html',
+  htm: 'text/html',
+}
+
+/** 種類がわからないファイル（zip から取り出したものなど）の、名前から決めた種類 */
+export const typeFromName = (name: string) => TYPE_BY_EXTENSION[name.split('.').pop()?.toLowerCase() ?? ''] ?? 'application/octet-stream'
+
 /** ブラウザでページとして開けるファイル（HTML） */
 export const isHtmlFile = (type: string, name: string) => type === 'text/html' || /\.html?$/i.test(name)
 

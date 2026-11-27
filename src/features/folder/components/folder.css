@@ -1,0 +1,16 @@
+/* ===== フォルダー（components/folder.tsx） */
+.folder-panel { margin: 24px 0; }
+
+/* コースのページに並べる中身 */
+.item-row.has-folder-inline { flex-wrap: wrap; }
+.folder-inline { --indent: 56px; display: flex; flex: 0 0 calc(100% - var(--indent)); flex-direction: column; gap: 8px; min-width: 0; margin: 0 0 8px var(--indent); padding: 8px 10px; border: 1px solid var(--card-border); border-radius: var(--radius-sm); background: var(--surface); }
+.folder-inline-foot { display: flex; justify-content: flex-end; }
+@media (hover: hover) {
+  /* 行全体を塗らないのは、中身の木のファイルを指しているのに、フォルダーのアイテムを開くように見えるため */
+  .item-row.has-folder-inline:hover { background: none; }
+  .item-row.has-folder-inline > .item-link:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+}
+
+@media (max-width: 640px) {
+  .folder-inline { --indent: 8px; }
+}

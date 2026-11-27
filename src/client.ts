@@ -4,9 +4,9 @@
 
 import checkSvg from 'heroicons/24/outline/check.svg?raw'
 import sparklesSvg from 'heroicons/24/outline/sparkles.svg?raw'
-import { bundlePath, isExcludedPath } from './features/bundle/bundle'
 import type { AiTouched } from './features/ai/ai-tool-kit'
 import { formatBytes } from './lib/bytes'
+import { isExcludedPath, treePath } from './lib/file-tree'
 import { getSetting, setSetting, updateSetting, type Theme } from './lib/settings'
 import { applyEditMode, carriesFiles, codeEditor, confirmDialog, confirmNear, dismissLater, initCodeEditors, toast } from './client/core'
 import { initRestrictionEditors } from './client/restriction'
@@ -1044,16 +1044,16 @@ document.addEventListener('click', (e) => {
   input.focus()
 })
 
-// --- ファイル自動配布のアップロード（features/bundle/components/bundle.tsx の BundleFilesCard）
+// --- フォルダーごとのアップロード（components/file-tree.tsx の TreeUploadForm。ファイル自動配布とフォルダーで使う）
 // ファイル選択の部品（FileInput）を使わないのは、フォルダーの中の場所をファイルと一緒に送る必要があり、input の files ではそれを持てないため
 // archive は、選んだりドロップしたりした zip（フォルダーの中の zip は、展開せずにそのまま配る）
-type BundleUpload = { file: File; path: string; archive?: boolean }
+type TreeUpload = { file: File; path: string; archive?: boolean }
 
 const isZip = (file: File) => /\.zip$/i.test(file.name)
 
-function uploadBundle(form: HTMLFormElement, files: BundleUpload[]) {
+function uploadTree(form: HTMLFormElement, files: TreeUpload[]) {
   if (form.hasAttribute('data-uploading')) return
-  const usable = files.filter((f) => f.archive || (!!bundlePath(f.path) && !isExcludedPath(f.path)))
+  const usable = files.filter((f) => f.archive || (!!treePath(f.path) && !isExcludedPath(f.path)))
   const skipped = files.length - usable.length
   if (!usable.length)
     return toast(
@@ -1084,7 +1084,7 @@ function uploadBundle(form: HTMLFormElement, files: BundleUpload[]) {
 const isFileEntry = (entry: FileSystemEntry): entry is FileSystemFileEntry => entry.isFile
 const isDirectoryEntry = (entry: FileSystemEntry): entry is FileSystemDirectoryEntry => entry.isDirectory
 
-async function readDropEntry(entry: FileSystemEntry, prefix: string): Promise<BundleUpload[]> {
+async function readDropEntry(entry: FileSystemEntry, prefix: string): Promise<TreeUpload[]> {
   const path = `${prefix}${entry.name}`
   if (isFileEntry(entry)) return [{ file: await new Promise<File>((ok, ng) => entry.file(ok, ng)), path }]
   // 中を読む前に外すのは、node_modules のように数万のファイルを含むフォルダーを読み終えるまで待たせないため
@@ -1101,29 +1101,29 @@ async function readDropEntry(entry: FileSystemEntry, prefix: string): Promise<Bu
 }
 
 document.addEventListener('click', (e) => {
-  const pick = (e.target as Element).closest<HTMLElement>('[data-bundle-pick]')
-  const form = pick?.closest<HTMLFormElement>('[data-bundle-upload]')
+  const pick = (e.target as Element).closest<HTMLElement>('[data-tree-pick]')
+  const form = pick?.closest<HTMLFormElement>('[data-tree-upload]')
   if (form && !form.hasAttribute('data-uploading'))
-    form.querySelector<HTMLInputElement>(`[data-bundle-input="${pick!.dataset.bundlePick}"]`)?.click()
+    form.querySelector<HTMLInputElement>(`[data-tree-input="${pick!.dataset.treePick}"]`)?.click()
 })
 
 document.addEventListener('change', (e) => {
   const input = e.target as HTMLInputElement
-  const form = input.closest<HTMLFormElement>('[data-bundle-upload]')
-  if (!form || !input.matches('[data-bundle-input]') || !input.files) return
-  // 選んだフォルダーの名前を外すのは、そのフォルダーの中身を配るため（学生の PC ではアイテムの名前のフォルダーに入る）
-  const folder = input.dataset.bundleInput === 'folder'
+  const form = input.closest<HTMLFormElement>('[data-tree-upload]')
+  if (!form || !input.matches('[data-tree-input]') || !input.files) return
+  // 選んだフォルダーの名前を外すのは、そのフォルダーの中身を置くため（ファイル自動配布では、学生の PC でアイテムの名前のフォルダーに入る）
+  const folder = input.dataset.treeInput === 'folder'
   const files = [...input.files].map((file) =>
     folder ? { file, path: file.webkitRelativePath.split('/').slice(1).join('/') } : { file, path: file.name, archive: isZip(file) },
   )
   input.value = ''
-  uploadBundle(form, files)
+  uploadTree(form, files)
 })
 
-const bundleDropOf = (e: DragEvent) => (e.target instanceof Element ? e.target.closest<HTMLElement>('[data-bundle-drop]') : null)
+const treeDropOf = (e: DragEvent) => (e.target instanceof Element ? e.target.closest<HTMLElement>('[data-tree-drop]') : null)
 
 document.addEventListener('dragover', (e) => {
-  const zone = bundleDropOf(e)
+  const zone = treeDropOf(e)
   if (!zone || !carriesFiles(e)) return
   e.preventDefault()
   const busy = !!zone.closest('[data-uploading]')
@@ -1131,13 +1131,13 @@ document.addEventListener('dragover', (e) => {
   zone.toggleAttribute('data-dragging', !busy)
 })
 document.addEventListener('dragleave', (e) => {
-  const zone = bundleDropOf(e)
+  const zone = treeDropOf(e)
   // ボタンなどの子要素に入ったときに外さないのは、強調がちらつくため
   if (zone && !(e.relatedTarget instanceof Node && zone.contains(e.relatedTarget))) zone.removeAttribute('data-dragging')
 })
 document.addEventListener('drop', (e) => {
-  const zone = bundleDropOf(e)
-  const form = zone?.closest<HTMLFormElement>('[data-bundle-upload]')
+  const zone = treeDropOf(e)
+  const form = zone?.closest<HTMLFormElement>('[data-tree-upload]')
   if (!zone || !form || !carriesFiles(e)) return
   e.preventDefault()
   zone.removeAttribute('data-dragging')
@@ -1155,7 +1155,7 @@ document.addEventListener('drop', (e) => {
         : (await Promise.all(dropped.map((d) => (d instanceof File ? Promise.resolve([{ file: d, path: d.name }]) : readDropEntry(d, '')))))
             .flat()
             .map((f) => ({ ...f, archive: !f.path.includes('/') && isZip(f.file) }))
-      uploadBundle(form, files)
+      uploadTree(form, files)
     } catch {
       toast('ファイルを読み込めませんでした。', 'error')
     }

@@ -337,6 +337,13 @@
       "when": 1795694254814,
       "tag": "0047_publication_items",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1795759462555,
+      "tag": "0048_hard_selene",
+      "breakpoints": true
     }
   ]
 }

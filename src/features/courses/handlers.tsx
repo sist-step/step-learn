@@ -20,6 +20,7 @@ import { firstError, validate, type FormValues } from '../../lib/forms'
 import { field, intParam, readForm, redirectWith, type Form } from '../../lib/http'
 import { imageName, putImage, serveImage } from '../../lib/images'
 import { availableCodeLanguages } from '../code/sandbox'
+import { inlineFolderViews } from '../folder/folder-items'
 import { completions, courses, enrollments, items, sections } from '../../lib/schema'
 import { isSharing } from '../screen/screen-share'
 import { deleteCourseFiles, deleteKeys, inBackground } from '../../lib/storage'
@@ -151,6 +152,7 @@ export async function show(c: Context<AppEnv>) {
     .all()
   const done = new Set(doneRows.map((r) => r.itemId))
   const sharing = new Set(itemList.filter((it) => it.type === 'screen' && isSharing(it.id)).map((it) => it.id))
+  const folders = inlineFolderViews(itemList.filter((it) => it.type === 'folder').map((it) => it.id))
 
   return c.render(
     <CoursePage
@@ -162,6 +164,7 @@ export async function show(c: Context<AppEnv>) {
       revision={revision}
       codeLanguages={availableCodeLanguages}
       availability={courseAvailability(user, access)}
+      folders={folders}
     />,
     {
       title: access.course.title,

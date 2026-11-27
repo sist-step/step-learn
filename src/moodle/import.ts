@@ -5,12 +5,14 @@ import { NO_PASSWORD } from '../lib/auth'
 import { formatBytes } from '../lib/bytes'
 import { unixToDateTimeInput } from '../lib/course-period'
 import { db } from '../lib/db'
-import { courses, enrollments, items, publicationFiles, publicationItems, sections, users } from '../lib/schema'
+import { courses, enrollments, folderFiles, folderItems, items, publicationFiles, publicationItems, sections, users } from '../lib/schema'
 import { PUBLICATION_STATE_LABELS, publicationStateOf } from '../features/publication/publication'
 import { type StoredFile, deleteCourseFiles, isExecutable, putCourseFile } from '../lib/storage'
 import { COMPLETION_LABELS, COURSE_ROLE_LABELS, ITEM_TYPE_LABELS, LINK_TARGET_LABELS, type ItemType } from '../lib/types'
 import {
   type Backup,
+  type BackupFolder,
+  type BackupFolderFile,
   type BackupItem,
   type BackupParticipant,
   type BackupPublication,
@@ -45,6 +47,13 @@ export async function planImport(backup: Backup): Promise<Plan> {
       if (kept.length < item.publication.files.length)
         item.notes.push(`実行ファイル（.exe など）${item.publication.files.length - kept.length} 個は保存できないため取り込みません`)
       item.publication.files = kept
+    }
+    if (item.folder) {
+      const kept: BackupFolderFile[] = []
+      for (const f of item.folder.files) if (!(await isExecutable(await openFile(f.file)))) kept.push(f)
+      if (kept.length < item.folder.files.length)
+        item.notes.push(`実行ファイル（.exe など）${item.folder.files.length - kept.length} 個は保存できないため取り込みません`)
+      item.folder.files = kept
     }
   }
 
@@ -137,6 +146,18 @@ const NATIVE_MODULE: Record<ItemType, string> = {
   quiz: '',
   collab: '',
   publication: 'publication',
+  folder: 'folder',
+}
+
+function folderSummary({ settings, files }: BackupFolder) {
+  const parts = [
+    files.length ? `ファイル ${files.length}・${formatBytes(files.reduce((n, f) => n + f.file.size, 0))}` : 'ファイルなし',
+    settings.showInline ? 'コースのページに表示' : '',
+    settings.showExpanded ? '' : 'サブフォルダーを閉じる',
+    settings.showDownload ? '' : 'まとめてダウンロードなし',
+    settings.forceDownload ? '押したらダウンロード' : '',
+  ]
+  return parts.filter(Boolean).join('・')
 }
 
 function publicationSummary({ settings, files }: BackupPublication) {
@@ -160,7 +181,14 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
   const imported = all.filter((i) => i.type)
   const subsections = backup.sections.flatMap((s) => s.items.filter((i) => i.subsection)).length
   const skipped = all.filter((i) => !i.type)
-  const fileBytes = imported.reduce((n, i) => n + (i.file?.size ?? 0) + (i.publication?.files.reduce((m, f) => m + f.file.size, 0) ?? 0), 0)
+  const fileBytes = imported.reduce(
+    (n, i) =>
+      n +
+      (i.file?.size ?? 0) +
+      (i.publication?.files.reduce((m, f) => m + f.file.size, 0) ?? 0) +
+      (i.folder?.files.reduce((m, f) => m + f.file.size, 0) ?? 0),
+    0,
+  )
   const joining = participants.filter((p) => !p.skip)
   const out: string[] = []
 
@@ -193,18 +221,19 @@ export function printPreview(plan: Plan, source: string, { verbose = false } = {
     for (const note of s.notes) out.push(warn(`      ↳ ${note}`))
     const printItem = (item: BackupItem, indent: string) => {
       if (!item.type) {
-        out.push(ng(`${indent}× ${fit(moduleLabel(item.module), 10)}`) + dim(`${fit(item.title, 36)}${item.notes.join('。')}`))
+        out.push(ng(`${indent}× ${fit(moduleLabel(item.module), 14)}`) + dim(`${fit(item.title, 36)}${item.notes.join('。')}`))
         return
       }
       const extra = [
         item.type === 'file' && item.file ? formatBytes(item.file.size) : '',
         item.type === 'link' ? `${line(item.url)}（${LINK_TARGET_LABELS[item.linkTarget]}）` : '',
         item.publication ? publicationSummary(item.publication) : '',
+        item.folder ? folderSummary(item.folder) : '',
         item.completion !== 'none' ? `完了: ${COMPLETION_LABELS[item.completion]}` : '',
         item.hidden ? warn('学生に非表示') : '',
       ].filter(Boolean)
       const from = item.module !== NATIVE_MODULE[item.type] ? dim(`←${moduleLabel(item.module)} `) : ''
-      out.push(`${indent}  ${fit(ITEM_TYPE_LABELS[item.type], 10)}${fit(item.title, 36)}${from}${dim(extra.join('  '))}`)
+      out.push(`${indent}  ${fit(ITEM_TYPE_LABELS[item.type], 14)}${fit(item.title, 36)}${from}${dim(extra.join('  '))}`)
       for (const note of item.notes) out.push(warn(`${indent}    ↳ ${note}`))
     }
     for (const item of s.items) {
@@ -286,13 +315,18 @@ export async function runImport(plan: Plan, progress: (message: string) => void)
     const all = backup.sections.flatMap(backupItems).filter((i) => i.type)
     const fileItems = all.filter((i) => i.type === 'file' && i.file)
     const studentFiles = all.flatMap((i) => i.publication?.files ?? [])
-    const stored = new Map<BackupItem | BackupPublicationFile, StoredFile>()
+    const folderContents = all.flatMap((i) => i.folder?.files ?? [])
+    const stored = new Map<BackupItem | BackupPublicationFile | BackupFolderFile, StoredFile>()
     for (const [n, item] of fileItems.entries()) {
       progress(`ファイルを保存しています（${n + 1}/${fileItems.length}）${item.file!.name}`)
       stored.set(item, await putCourseFile(courseId, await openFile(item.file!)))
     }
     for (const [n, f] of studentFiles.entries()) {
       progress(`学生フォルダのファイルを保存しています（${n + 1}/${studentFiles.length}）${f.file.name}`)
+      stored.set(f, await putCourseFile(courseId, await openFile(f.file)))
+    }
+    for (const [n, f] of folderContents.entries()) {
+      progress(`フォルダーのファイルを保存しています（${n + 1}/${folderContents.length}）${f.path}`)
       stored.set(f, await putCourseFile(courseId, await openFile(f.file)))
     }
 
@@ -333,6 +367,7 @@ export async function runImport(plan: Plan, progress: (message: string) => void)
             .get()
           result.items++
           if (item.publication) result.studentFiles += insertPublication(tx, itemId, item.publication, userIdOf, stored)
+          if (item.folder) insertFolder(tx, itemId, item.folder, stored)
         }
       }
       for (const [sn, s] of backup.sections.entries()) insertSection(s, sn + 1, null)
@@ -378,7 +413,7 @@ function insertPublication(
   itemId: number,
   publication: BackupPublication,
   userIdOf: Map<string, number>,
-  stored: ReadonlyMap<BackupItem | BackupPublicationFile, StoredFile>,
+  stored: ReadonlyMap<BackupItem | BackupPublicationFile | BackupFolderFile, StoredFile>,
 ) {
   tx.insert(publicationItems)
     .values({ itemId, ...publication.settings })
@@ -403,4 +438,21 @@ function insertPublication(
   })
   if (rows.length) tx.insert(publicationFiles).values(rows).run()
   return rows.length
+}
+
+/** フォルダーの設定と置いたファイルを足す */
+function insertFolder(
+  tx: Tx,
+  itemId: number,
+  folder: BackupFolder,
+  stored: ReadonlyMap<BackupItem | BackupPublicationFile | BackupFolderFile, StoredFile>,
+) {
+  tx.insert(folderItems)
+    .values({ itemId, ...folder.settings })
+    .run()
+  const rows = folder.files.flatMap((f) => {
+    const file = stored.get(f)
+    return file ? [{ itemId, path: f.path, fileKey: file.key, fileSize: file.size, fileType: file.type }] : []
+  })
+  if (rows.length) tx.insert(folderFiles).values(rows).run()
 }

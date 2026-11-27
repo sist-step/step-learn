@@ -19,6 +19,7 @@ import {
 import { Button, IconButton } from '../../components/button'
 import { Card, DangerRow } from '../../components/card'
 import { CollabPickFields } from '../collab/components/collab'
+import { FolderInline } from '../folder/components/folder'
 import {
   FileField,
   ImageField,
@@ -48,6 +49,7 @@ import { findLessons, lessonWhen } from '../../lib/section-date'
 import { entryItems, sectionOptions, sectionTree, treeItems, type TreeEntry } from '../../lib/section-tree'
 import { formatBytes } from '../../lib/bytes'
 import { CODE_LANGUAGE_LABELS, type CodeLanguage } from '../code/code'
+import { folderBase, type FolderView } from '../folder/folder'
 import type { Availability } from '../../lib/restriction'
 import { COMPLETION_LABELS, ITEM_TYPES, ITEM_TYPE_LABELS, type Completion, type Item, type ItemType, type Section } from '../../lib/types'
 
@@ -166,6 +168,7 @@ const ItemRow = ({
   manage,
   restriction,
   note,
+  folder,
 }: {
   item: ItemLite
   courseId: number
@@ -178,6 +181,8 @@ const ItemRow = ({
   restriction?: Availability
   /** 教師に見せるアクセス制限の説明 */
   note?: string
+  /** コースのページに中身を並べるフォルダーの中身 */
+  folder?: FolderView
 }) => {
   const base = `/courses/${courseId}/items/${item.id}`
   const locked = restriction?.open === false
@@ -221,9 +226,16 @@ const ItemRow = ({
         ))}
     </>
   )
+  const inline = !locked && folder && folder.files.length > 0
   return (
     <li
-      class={cx('item-row', tracked && done && 'is-done', !!item.hidden && 'is-hidden edit-only', locked && 'is-locked')}
+      class={cx(
+        'item-row',
+        tracked && done && 'is-done',
+        !!item.hidden && 'is-hidden edit-only',
+        locked && 'is-locked',
+        inline && 'has-folder-inline',
+      )}
       data-item={item.id}
     >
       {manage && <ItemInsertButton modal={ADD_ITEM_MODAL} sectionId={item.sectionId} before={item.id} />}
@@ -273,6 +285,7 @@ const ItemRow = ({
           </button>
         </form>
       )}
+      {inline && <FolderInline base={folderBase(courseId, item.id)} view={folder} />}
     </li>
   )
 }
@@ -318,6 +331,7 @@ const ITEM_TYPE_DESCRIPTIONS: Record<ItemType, string> = {
   page: '本文を書いて載せる',
   link: '外部のサイトを紹介する',
   file: 'PDF や画像などを配る',
+  folder: 'いくつものファイルを、フォルダーにまとめて配る',
   presentation: 'PowerPoint で映したところまでを学生に見せる',
   screen: '授業中に画面を配信する',
   code: 'コードを書いて提出する',
@@ -420,6 +434,7 @@ const AddItemModal = ({
           PDF は、追加したあとのアイテムの画面の「PowerPoint と同期」から、VS Code の拡張機能でアップロードします。
         </p>
         <p class="when-publication muted small">公開の方法（教師の承認）と提出の期間は、追加したあとの編集画面で設定します。</p>
+        <p class="when-folder muted small">ファイルは、追加したあとの編集画面で、フォルダーごとアップロードできます。</p>
         <p class="when-agent muted small">
           使える期間と上限は、追加したあとの編集画面で設定します。学生が使えるようになるのは、管理者が API キーを入れてからです。
         </p>
@@ -535,6 +550,7 @@ type ItemRowContext = {
   isStudent: boolean
   manage: boolean
   availability: CourseAvailability
+  folders: Map<number, FolderView>
 }
 
 const ItemRows = ({ list, ctx }: { list: ItemLite[]; ctx: ItemRowContext }) => (
@@ -550,6 +566,7 @@ const ItemRows = ({ list, ctx }: { list: ItemLite[]; ctx: ItemRowContext }) => (
         manage={ctx.manage}
         restriction={ctx.availability.items.get(it.id)}
         note={ctx.availability.notes.get(`item:${it.id}`)}
+        folder={ctx.folders.get(it.id)}
       />
     ))}
   </>
@@ -603,6 +620,7 @@ export const CoursePage = ({
   revision,
   codeLanguages,
   availability,
+  folders,
 }: {
   access: CourseAccess
   sectionList: Section[]
@@ -614,6 +632,8 @@ export const CoursePage = ({
   /** コードのアイテムで選べる言語 */
   codeLanguages: readonly CodeLanguage[]
   availability: CourseAvailability
+  /** コースのページに中身を並べるフォルダー */
+  folders: Map<number, FolderView>
 }) => {
   const id = access.course.id
   const manage = access.canManage
@@ -633,7 +653,7 @@ export const CoursePage = ({
   const visibleItems = treeItems(visibleTree).filter((it) => !it.hidden)
   const trackedItems = visibleItems.filter(isTracked)
   const ordered = visibleItems.filter((it) => availability.items.get(it.id)?.open !== false)
-  const ctx: ItemRowContext = { courseId: id, done, sharing, tracking, isStudent, manage, availability }
+  const ctx: ItemRowContext = { courseId: id, done, sharing, tracking, isStudent, manage, availability, folders }
   // 開けないサブセクションの中身を出さないのは、セクションと同じく、条件を満たすまでは名前と条件だけを見せるため
   const listedEntries = (entries: TreeEntry<Section, ItemLite>[]) =>
     entries.flatMap((e): TreeEntry<Section, ItemLite>[] => {
