@@ -12,7 +12,7 @@ export const RESTRICTION_OP_LABELS: Record<RestrictionOp, string> = {
   '!&': 'すべては満たさない',
 }
 
-export const RESTRICTION_KINDS = ['date', 'completion', 'grade', 'profile'] as const
+export const RESTRICTION_KINDS = ['date', 'completion', 'grade', 'profile', 'group'] as const
 export type RestrictionKind = (typeof RESTRICTION_KINDS)[number]
 
 export const RESTRICTION_KIND_LABELS: Record<RestrictionKind | 'set', string> = {
@@ -20,6 +20,7 @@ export const RESTRICTION_KIND_LABELS: Record<RestrictionKind | 'set', string> = 
   completion: 'アイテムの完了',
   grade: '評点',
   profile: 'ユーザープロフィール',
+  group: 'グループ',
   set: '制限セット',
 }
 
@@ -66,9 +67,11 @@ type CompletionCondition = { type: 'completion'; cm: number; e: CompletionExpect
 type GradeCondition = { type: 'grade'; id: number; min?: number; max?: number; k?: string }
 /** field は標準の項目なら `sf:<名前>`、Moodle の独自の項目なら `cf:<短縮名>` */
 type ProfileCondition = { type: 'profile'; field: string; op: ProfileOp; v: string; k?: string }
-/** STEP Learn では編集しない Moodle の条件（グループなど）。raw は Moodle の JSON のまま */
+/** id がなければ、いずれかのグループに入っていればよい */
+type GroupCondition = { type: 'group'; id?: number; k?: string }
+/** STEP Learn では編集しない Moodle の条件（グルーピングなど）。raw は Moodle の JSON のまま */
 type OtherCondition = { type: 'other'; raw: Record<string, unknown>; k?: string }
-type RestrictionCondition = DateCondition | CompletionCondition | GradeCondition | ProfileCondition | OtherCondition
+type RestrictionCondition = DateCondition | CompletionCondition | GradeCondition | ProfileCondition | GroupCondition | OtherCondition
 /** 制限セット。show・showc は一番上のセットだけが持つ（Moodle と同じく、& と !| は条件ごとの showc、| と !& は全体の show） */
 export type RestrictionSet = { op: RestrictionOp; c: RestrictionNode[]; show?: boolean; showc?: boolean[]; k?: string }
 type RestrictionNode = RestrictionCondition | RestrictionSet
@@ -103,6 +106,9 @@ function readCondition(raw: Record<string, unknown>): RestrictionCondition | nul
       const field = typeof raw.sf === 'string' ? `sf:${raw.sf}` : typeof raw.cf === 'string' ? `cf:${raw.cf}` : null
       return field && isProfileOp(raw.op) ? { type: 'profile', field, op: raw.op, v: typeof raw.v === 'string' ? raw.v : '' } : null
     }
+    case 'group':
+      if ('id' in raw && !Number.isSafeInteger(raw.id)) return null
+      return { type: 'group', ...(Number.isSafeInteger(raw.id) ? { id: raw.id as number } : {}) }
     default:
       return typeof raw.type === 'string' ? { type: 'other', raw } : null
   }
@@ -137,6 +143,8 @@ export function parseRestriction(json: string | null | undefined): RestrictionSe
   }
 }
 
+const groupRaw = (c: GroupCondition): Record<string, unknown> => ({ type: 'group', ...(c.id != null ? { id: c.id } : {}) })
+
 function writeNode(node: RestrictionNode, root: boolean): Record<string, unknown> {
   if (!isSet(node)) {
     switch (node.type) {
@@ -155,6 +163,8 @@ function writeNode(node: RestrictionNode, root: boolean): Record<string, unknown
         const [kind, name] = [node.field.slice(0, 2), node.field.slice(3)]
         return { type: 'profile', [kind === 'cf' ? 'cf' : 'sf']: name, op: node.op, ...(profileOpTakesValue(node.op) ? { v: node.v } : {}) }
       }
+      case 'group':
+        return groupRaw(node)
       case 'other':
         return node.raw
     }
@@ -181,6 +191,7 @@ export type RestrictionFormNode =
   | { k: string; type: 'completion'; cm: string; e: string }
   | { k: string; type: 'grade'; id: string; min: string; max: string }
   | { k: string; type: 'profile'; field: string; op: string; v: string }
+  | { k: string; type: 'group'; id: string }
   | { k: string; type: 'other'; raw: Record<string, unknown> }
   | { k: string; op: string; c: RestrictionFormNode[]; show?: boolean; showc?: boolean[] }
 
@@ -241,6 +252,11 @@ export function readRestrictionForm(json: string): { set: RestrictionSet | null;
           issues.push({ key: `${k}.v`, message: `値は${MAX_PROFILE_VALUE_LENGTH}文字以内で入力してください。` })
         return { type: 'profile', field: str('field'), op, v: profileOpTakesValue(op) ? v : '', k }
       }
+      case 'group': {
+        const id = str('id')
+        if (id && !/^\d+$/.test(id)) return null
+        return { type: 'group', ...(id ? { id: Number(id) } : {}), k }
+      }
       case 'other':
         return isRecord(raw.raw) && typeof raw.raw.type === 'string' ? { type: 'other', raw: raw.raw, k } : null
       default:
@@ -300,9 +316,19 @@ export type RestrictionChoices = {
   grades: RestrictionChoice[]
   /** プロフィールの項目。value は ProfileCondition の field */
   profile: { value: string; label: string }[]
+  /**
+   * コースのグループ。ないときはグループの条件を編集できず、保存されている条件を other と同じく説明だけ出してそのまま残す。
+   * Moodle モードはグループを Moodle の画面で編集するので渡さない
+   */
+  groups?: RestrictionChoice[]
   /** 編集しない条件（OtherCondition）の説明 */
   other?: (raw: Record<string, unknown>, not: boolean) => string
 }
+
+/** 編集せずに、保存されていたものをそのまま残す条件 */
+const keptAsIs = (c: RestrictionCondition, choices: RestrictionChoices) => c.type === 'other' || (c.type === 'group' && !choices.groups)
+
+const rawOf = (c: RestrictionCondition) => (c.type === 'other' ? c.raw : c.type === 'group' ? groupRaw(c) : {})
 
 /** 保存する前に、選んだものが今も選べるかを確かめる。errors の key は入力欄の name */
 export function checkRestrictionChoices(set: RestrictionSet, choices: RestrictionChoices, kept: RestrictionSet | null) {
@@ -311,10 +337,15 @@ export function checkRestrictionChoices(set: RestrictionSet, choices: Restrictio
   const grades = new Set(choices.grades.map((g) => g.id))
   const fields = new Set(choices.profile.map((p) => p.value))
   // 編集しない条件を自由に受け付けないのは、画面で足せないグループなどの条件を、送信を書き換えて足せてしまうため
-  const others = new Set(kept ? conditionsOf(kept).flatMap((c) => (c.type === 'other' ? [JSON.stringify(c.raw)] : [])) : [])
+  const others = new Set(kept ? conditionsOf(kept).flatMap((c) => (keptAsIs(c, choices) ? [JSON.stringify(rawOf(c))] : [])) : [])
   const kinds = new Set<string>(choices.kinds)
+  const groups = new Set(choices.groups?.map((g) => g.id))
   for (const c of conditionsOf(set)) {
     const k = c.k ?? ''
+    if (keptAsIs(c, choices)) {
+      if (!others.has(JSON.stringify(rawOf(c)))) errors.availability ??= FORM_BROKEN
+      continue
+    }
     if (c.type !== 'other' && !kinds.has(c.type)) errors.availability ??= `${RESTRICTION_KIND_LABELS[c.type]}は条件にできません。`
     if (c.type === 'completion') {
       const item = items.get(c.cm)
@@ -323,7 +354,7 @@ export function checkRestrictionChoices(set: RestrictionSet, choices: Restrictio
     }
     if (c.type === 'grade' && !grades.has(c.id)) errors[`${k}.id`] = '選べないアイテムです。選び直してください。'
     if (c.type === 'profile' && !fields.has(c.field)) errors[`${k}.field`] = '選べない項目です。選び直してください。'
-    if (c.type === 'other' && !others.has(JSON.stringify(c.raw))) errors.availability ??= FORM_BROKEN
+    if (c.type === 'group' && c.id != null && !groups.has(c.id)) errors[`${k}.id`] = '選べないグループです。選び直してください。'
   }
   return errors
 }
@@ -342,6 +373,8 @@ type RestrictionEnv = {
   profile: (field: string) => string | null
   /** 「直前のアイテム」の ID。なければ null */
   previous: number | null
+  /** 入っているグループの ID */
+  groups: ReadonlySet<number>
 }
 
 function profileMatches(op: ProfileOp, value: string, expected: string) {
@@ -390,6 +423,10 @@ function conditionMet(c: RestrictionCondition, not: boolean, env: RestrictionEnv
     case 'profile': {
       const value = env.profile(c.field)
       const allow = value != null && profileMatches(c.op, value, c.v)
+      return not ? !allow : allow
+    }
+    case 'group': {
+      const allow = c.id == null ? env.groups.size > 0 : env.groups.has(c.id)
       return not ? !allow : allow
     }
     case 'other':
@@ -488,6 +525,12 @@ function conditionText(c: RestrictionCondition, not: boolean, choices: Restricti
           return `${label}が${not ? '空である' : '空でない'}`
       }
     }
+    case 'group': {
+      if (!choices.groups) return choices.other?.(groupRaw(c), not) ?? 'グループの条件'
+      const belongs = not ? '入っていない' : '入っている'
+      if (c.id == null) return `いずれかのグループに${belongs}`
+      return `グループ${quote(choices.groups.find((g) => g.id === c.id)?.label ?? '（削除されたグループ）')}に${belongs}`
+    }
     case 'other':
       return choices.other?.(c.raw, not) ?? 'そのほかの条件'
   }
@@ -564,6 +607,8 @@ function toFormNode(node: RestrictionNode, key: () => string): RestrictionFormNo
       }
     case 'profile':
       return { k, type: 'profile', field: node.field, op: node.op, v: node.v }
+    case 'group':
+      return { k, type: 'group', id: node.id != null ? String(node.id) : '' }
     case 'other':
       return { k, type: 'other', raw: node.raw }
   }

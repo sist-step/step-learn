@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c90e1eb4-d9fd-45e1-b5f4-8ad2b405cec3",
+  "id": "482b5d44-0d6c-4629-98bd-dc5acbb05193",
   "prevId": "2c0a24f3-9068-468d-baf2-9a96ff9bf6d5",
   "tables": {
     "agent_items": {
@@ -1494,6 +1494,145 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "course_group_members": {
+      "name": "course_group_members",
+      "columns": {
+        "group_id": {
+          "name": "group_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "course_id": {
+          "name": "course_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "course_group_members_course_user": {
+          "name": "course_group_members_course_user",
+          "columns": [
+            "course_id",
+            "user_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "course_group_members_group_id_course_groups_id_fk": {
+          "name": "course_group_members_group_id_course_groups_id_fk",
+          "tableFrom": "course_group_members",
+          "tableTo": "course_groups",
+          "columnsFrom": [
+            "group_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "course_group_members_course_id_user_id_enrollments_course_id_user_id_fk": {
+          "name": "course_group_members_course_id_user_id_enrollments_course_id_user_id_fk",
+          "tableFrom": "course_group_members",
+          "tableTo": "enrollments",
+          "columnsFrom": [
+            "course_id",
+            "user_id"
+          ],
+          "columnsTo": [
+            "course_id",
+            "user_id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "course_group_members_group_id_user_id_pk": {
+          "columns": [
+            "group_id",
+            "user_id"
+          ],
+          "name": "course_group_members_group_id_user_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "course_groups": {
+      "name": "course_groups",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "course_id": {
+          "name": "course_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text COLLATE NOCASE",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(unixepoch())"
+        }
+      },
+      "indexes": {
+        "course_groups_course_name": {
+          "name": "course_groups_course_name",
+          "columns": [
+            "course_id",
+            "name"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "course_groups_course_id_courses_id_fk": {
+          "name": "course_groups_course_id_courses_id_fk",
+          "tableFrom": "course_groups",
+          "tableTo": "courses",
+          "columnsFrom": [
+            "course_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "courses": {
       "name": "courses",
       "columns": {
@@ -2052,11 +2191,11 @@
       "checkConstraints": {
         "items_type": {
           "name": "items_type",
-          "value": "\"items\".\"type\" IN ('page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab', 'presentation', 'publication', 'folder', 'survey')"
+          "value": "\"items\".\"type\" IN ('page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab', 'presentation', 'publication', 'folder')"
         },
         "items_completion": {
           "name": "items_completion",
-          "value": "\"items\".\"completion\" IN ('none', 'manual', 'view', 'play', 'clear', 'pass', 'answer')"
+          "value": "\"items\".\"completion\" IN ('none', 'manual', 'view', 'play', 'clear', 'pass')"
         },
         "items_link_target": {
           "name": "items_link_target",
@@ -3166,180 +3305,6 @@
         "sessions_user_id_users_id_fk": {
           "name": "sessions_user_id_users_id_fk",
           "tableFrom": "sessions",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "survey_items": {
-      "name": "survey_items",
-      "columns": {
-        "item_id": {
-          "name": "item_id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "questions": {
-          "name": "questions",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
-        },
-        "anonymous": {
-          "name": "anonymous",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "show_results": {
-          "name": "show_results",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "allow_edit": {
-          "name": "allow_edit",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "opens_at": {
-          "name": "opens_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "closes_at": {
-          "name": "closes_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "survey_items_item_id_items_id_fk": {
-          "name": "survey_items_item_id_items_id_fk",
-          "tableFrom": "survey_items",
-          "tableTo": "items",
-          "columnsFrom": [
-            "item_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "survey_responses": {
-      "name": "survey_responses",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "item_id": {
-          "name": "item_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "answers": {
-          "name": "answers",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(unixepoch())"
-        }
-      },
-      "indexes": {
-        "survey_responses_item_user": {
-          "name": "survey_responses_item_user",
-          "columns": [
-            "item_id",
-            "user_id"
-          ],
-          "isUnique": true
-        },
-        "survey_responses_user": {
-          "name": "survey_responses_user",
-          "columns": [
-            "user_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "survey_responses_item_id_items_id_fk": {
-          "name": "survey_responses_item_id_items_id_fk",
-          "tableFrom": "survey_responses",
-          "tableTo": "items",
-          "columnsFrom": [
-            "item_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "survey_responses_user_id_users_id_fk": {
-          "name": "survey_responses_user_id_users_id_fk",
-          "tableFrom": "survey_responses",
           "tableTo": "users",
           "columnsFrom": [
             "user_id"

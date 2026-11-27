@@ -3,6 +3,7 @@ import {
   blob,
   check,
   customType,
+  foreignKey,
   index,
   integer,
   primaryKey,
@@ -852,4 +853,35 @@ export const surveyResponses = sqliteTable(
       .$onUpdate(() => now),
   },
   (t) => [uniqueIndex('survey_responses_item_user').on(t.itemId, t.userId), index('survey_responses_user').on(t.userId)],
+)
+
+/** コースの中のグループ。1 人が複数のグループに入れる（Moodle と同じ） */
+export const courseGroups = sqliteTable(
+  'course_groups',
+  {
+    id: integer('id').primaryKey(),
+    courseId: integer('course_id')
+      .notNull()
+      .references(() => courses.id, { onDelete: 'cascade' }),
+    name: textNocase('name').notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [uniqueIndex('course_groups_course_name').on(t.courseId, t.name)],
+)
+
+export const courseGroupMembers = sqliteTable(
+  'course_group_members',
+  {
+    groupId: integer('group_id')
+      .notNull()
+      .references(() => courseGroups.id, { onDelete: 'cascade' }),
+    courseId: integer('course_id').notNull(),
+    userId: integer('user_id').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.groupId, t.userId] }),
+    index('course_group_members_course_user').on(t.courseId, t.userId),
+    // users ではなく参加の登録につなぐのは、コースから外したときに、そのコースのグループからも一緒に外すため
+    foreignKey({ columns: [t.courseId, t.userId], foreignColumns: [enrollments.courseId, enrollments.userId] }).onDelete('cascade'),
+  ],
 )

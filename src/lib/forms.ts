@@ -625,12 +625,19 @@ const bulkUsers = z.object({
   names: z.pipe(z.pipe(text('氏名', 20_000), z.transform(parseNames)), z.array(z.string()).check(rule(checkNames))),
 })
 
+/** 同じ name のチェックボックスで選んだ ID の並び（readForm の all: true で読む） */
+const checkedIds = () =>
+  z.transform((v: unknown) => (Array.isArray(v) ? v : [v]).map(Number).filter((n) => Number.isSafeInteger(n) && n > 0))
+
 const reissuePasswords = z.object({
-  users: z.pipe(
-    z.transform((v: unknown) => (Array.isArray(v) ? v : [v]).map(Number).filter((n) => Number.isSafeInteger(n) && n > 0)),
-    z.array(z.number()).check(z.minLength(1, 'パスワードを再発行する人を選んでください。')),
-  ),
+  users: z.pipe(checkedIds(), z.array(z.number()).check(z.minLength(1, 'パスワードを再発行する人を選んでください。'))),
 })
+
+const groupName = () => text('グループ名', 100, { required: true })
+
+const courseGroup = z.object({ name: groupName() })
+
+const courseGroupEdit = z.object({ name: groupName(), members: checkedIds() })
 
 const theme = z.object({ theme: z.enum(THEMES, 'テーマが正しくありません。') })
 
@@ -758,6 +765,8 @@ const FORMS = {
   newUser,
   bulkUsers,
   reissuePasswords,
+  courseGroup,
+  courseGroupEdit,
   theme,
   codeSuggest,
   codeConstraintsSuggest,

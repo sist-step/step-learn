@@ -36,6 +36,7 @@ const STYLESHEETS = [
   '/src/features/dashboard/dashboard.css',
   '/src/features/courses/courses.css',
   '/src/features/participants/participants.css',
+  '/src/features/groups/groups.css',
   '/src/features/content/content.css',
   '/src/features/account/account.css',
   '/src/features/theme/components/theme.css',

@@ -154,7 +154,7 @@ const nameOf = (list: { id: number; name: string }[], id: unknown) => list.find(
 
 /**
  * アクセス制限の編集で選べるもの。exclude は制限を付ける活動自身（自分の完了や評点は条件にできない）。
- * グループとグルーピングを足せる種類に入れないのは、STEP Learn の通常モードにグループがなく、編集は Moodle の画面に任せるため
+ * グループの一覧（groups）を渡さないのは、Moodle のグループは Moodle の画面で管理し、ここではグループの条件を足させないため
  */
 export function restrictionChoicesOf(
   { course, sections, items }: { course: MoodleCourse; sections: MSection[]; items: MItem[] },

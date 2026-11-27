@@ -201,6 +201,15 @@ document.addEventListener('submit', async (e) => {
   }
 })
 
+// --- すべて選ぶ: data-check-all の値と同じ name のチェックボックスを、data-check-scope（なければフォーム）の中でそろえる
+document.addEventListener('change', (e) => {
+  const all = e.target as HTMLInputElement
+  const name = all.dataset?.checkAll
+  if (!name) return
+  const scope = all.closest('[data-check-scope]') ?? all.form ?? document
+  for (const box of $$<HTMLInputElement>(`input[type="checkbox"][name="${name}"]:not(:disabled)`, scope)) box.checked = all.checked
+})
+
 // --- select 変更で自動送信
 document.addEventListener('change', (e) => {
   const form = (e.target as Element).closest<HTMLFormElement>('form[data-autosubmit]')
