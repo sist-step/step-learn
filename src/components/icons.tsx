@@ -44,6 +44,7 @@ import eye from 'heroicons/24/outline/eye.svg?raw'
 import eyeSlash from 'heroicons/24/outline/eye-slash.svg?raw'
 import folder from 'heroicons/24/outline/folder.svg?raw'
 import folderOpen from 'heroicons/24/outline/folder-open.svg?raw'
+import folderArrowDown from 'heroicons/24/outline/folder-arrow-down.svg?raw'
 import globe from 'heroicons/24/outline/globe-alt.svg?raw'
 import heading from 'heroicons/24/outline/h2.svg?raw'
 import flag from 'heroicons/24/outline/flag.svg?raw'
@@ -181,6 +182,7 @@ const svgs = {
   clock,
   folder,
   folderOpen,
+  folderArrowDown,
   arrowPath,
   heart,
   star,

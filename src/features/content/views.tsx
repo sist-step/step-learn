@@ -48,6 +48,7 @@ import { PresentationBar, PresentationEditNote, PresentationStage, type Presenta
 import { QuizEditor, QuizGradingCard, QuizLookCard, QuizPanel } from '../quiz/components/quiz'
 import { CollabPanel, CollabSettingsCard } from '../collab/components/collab'
 import { PublicationPanel, PublicationSettingsCard } from '../publication/components/publication'
+import { FolderFilesCard, FolderPanel, FolderSettingsCard } from '../folder/components/folder'
 import { Alert, Breadcrumbs, Chip } from '../../components/ui'
 import type { CollabSettings, CollabView } from '../collab/collab'
 import { agentBase, type AgentView } from '../agent/agent'
@@ -59,6 +60,7 @@ import type { CourseAccess } from '../../lib/courses'
 import type { FieldErrors } from '../../lib/forms'
 import { presentationBase } from '../presentation/presentation'
 import { publicationBase, type PublicationSettings, type PublicationView } from '../publication/publication'
+import { DEFAULT_FOLDER_SETTINGS, folderBase, type FolderSettings, type FolderView } from '../folder/folder'
 import { isHtmlFile, previewKind } from '../../lib/preview'
 import { quizFormRows, type QuizFormRow, type QuizLook, type QuizSettings } from '../quiz/quiz'
 import type { QuizView } from '../quiz/quiz-store'
@@ -96,6 +98,8 @@ export type ItemInput = {
   /** 学生フォルダの、承認してから公開するか・上げた人の名前を見せるか */
   approval: number
   showNames: number
+  /** フォルダーの見せ方 */
+  folder: FolderSettings
 }
 
 /** コードのアイテムの言語と、見ている学生のいちばん新しい提出。goals は学生に見せるクリアの条件（制約のラベル） */
@@ -140,6 +144,7 @@ export const ItemEditPage = ({
   quiz,
   collab,
   publication,
+  folder,
   agentModels = null,
   gradingEnabled,
   judge,
@@ -164,6 +169,8 @@ export const ItemEditPage = ({
   collab?: CollabSettings
   /** 学生フォルダのアイテムの設定 */
   publication?: PublicationSettings
+  /** フォルダーのアイテムの設定と、置いたファイル */
+  folder?: FolderView
   /** コーディングエージェントのアイテムで選べる OpenRouter のモデル。一覧を取れなければ null */
   agentModels?: OpenRouterModelInfo[] | null
   /** AI が設定されていて、提出を自動で採点するか */
@@ -201,6 +208,7 @@ export const ItemEditPage = ({
     model: agent?.settings.model.id ?? '',
     approval: publication?.approval ?? 1,
     showNames: publication?.showNames ?? 1,
+    folder: folder?.settings ?? DEFAULT_FOLDER_SETTINGS,
     ...values,
   }
   const finalized = !!code && isFinalized(code.stage)
@@ -210,7 +218,7 @@ export const ItemEditPage = ({
     { href: `/courses/${courseId}`, label: access.course.title },
     ...(section ? [{ href: editUrl(courseId, section.id), label: sectionLabel(sections, section.id) }] : []),
   ]
-  const lost = `${bundle ? '配布するファイルと、' : presentation ? 'PDF と、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : agent ? '利用状況と' : quiz ? '受験の記録と' : collab || publication ? 'ファイルと' : ''}完了記録も消え、元に戻せません。`
+  const lost = `${bundle ? '配布するファイルと、' : presentation ? 'PDF と、' : folder ? '置いたファイルと、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : agent ? '利用状況と' : quiz ? '受験の記録と' : collab || publication ? 'ファイルと' : ''}完了記録も消え、元に戻せません。`
   return (
     <AppShell
       tone={access.course.color}
@@ -317,6 +325,7 @@ export const ItemEditPage = ({
             {quiz && <QuizGradingCard passPercent={v.passPercent} showAnswers={v.showAnswers} errors={errors} />}
             {quiz && <QuizLookCard look={v.look} />}
             {collab && <CollabSettingsCard settings={collab} />}
+            {folder && <FolderSettingsCard settings={v.folder} />}
             {publication && (
               <PublicationSettingsCard
                 settings={{ approval: v.approval, showNames: v.showNames }}
@@ -357,6 +366,7 @@ export const ItemEditPage = ({
         </form>
 
         {bundle && <BundleEditPanel base={bundleBase(courseId, item.id)} {...bundle} class="editor-extra" />}
+        {folder && <FolderFilesCard base={folderBase(courseId, item.id)} view={folder} class="editor-extra" />}
         {agent?.manage && (
           <AgentEditPanel base={agentBase(courseId, item.id)} settings={agent.settings} manage={agent.manage} class="editor-extra" />
         )}
@@ -387,6 +397,7 @@ export const ItemPage = ({
   quiz,
   collab,
   publication,
+  folder,
   revision,
 }: {
   access: CourseAccess
@@ -406,6 +417,7 @@ export const ItemPage = ({
   quiz?: QuizView
   collab?: CollabView
   publication?: PublicationView
+  folder?: FolderView
   revision: string
 }) => {
   const id = access.course.id
@@ -432,6 +444,7 @@ export const ItemPage = ({
     item.type === 'quiz' ||
     item.type === 'collab' ||
     item.type === 'publication' ||
+    item.type === 'folder' ||
     embedded ||
     !!code ||
     (!!preview && (preview !== 'text' || textPreview !== null))
@@ -678,6 +691,10 @@ export const ItemPage = ({
           {collab && <CollabPanel collab={collab} />}
 
           {publication && <PublicationPanel base={publicationBase(id, item.id)} view={publication} />}
+
+          {folder && (
+            <FolderPanel base={folderBase(id, item.id)} view={folder} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />
+          )}
 
           {waitsFor(item, 'view') && opensOnView && <span hidden data-complete-on-view={completeUrl(item)} />}
 

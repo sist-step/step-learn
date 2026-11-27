@@ -43,6 +43,7 @@ import { insertItem, itemFileColumns } from '../../lib/item-kinds'
 import { isHttpUrl } from '../../lib/forms'
 import { getQuizSettings } from '../quiz/quiz-items'
 import { getPublicationSettings } from '../publication/publication-items'
+import { getFolderSettings, listFolderFiles } from '../folder/folder-items'
 import { availableCodeLanguages } from '../code/sandbox'
 import { bundleFiles, codeItems, courses, enrollments, items, sections } from '../../lib/schema'
 import { sectionTree } from '../../lib/section-tree'
@@ -241,6 +242,19 @@ function itemDetail(item: Item) {
         files_truncated: files.length > MAX_LISTED_FILES,
       }
     }
+    case 'folder': {
+      const settings = getFolderSettings(item.id)
+      const files = listFolderFiles(item.id)
+      return {
+        description: item.body.slice(0, MAX_BODY_LENGTH),
+        show_inline: settings.showInline === 1,
+        show_expanded: settings.showExpanded === 1,
+        show_download: settings.showDownload === 1,
+        force_download: settings.forceDownload === 1,
+        files: files.slice(0, MAX_LISTED_FILES).map((f) => ({ path: f.path, size: f.size, type: f.type })),
+        files_truncated: files.length > MAX_LISTED_FILES,
+      }
+    }
     case 'agent':
       return { description: item.body.slice(0, MAX_BODY_LENGTH) }
     // 学生のファイルを返さないのは、承認していないファイルや、名前を伏せたファイルの持ち主まで読めてしまうため
@@ -269,7 +283,7 @@ function itemDetail(item: Item) {
 
 const getItem = defineTool(
   'get_item',
-  'アイテムの中身を返す。ページは本文（Markdown）、リンクは URL、コーディング問題は問題文・最初のコード・制約・補足、ファイル自動配布は配るファイルの一覧、小テストは問題と正解。',
+  'アイテムの中身を返す。ページは本文（Markdown）、リンクは URL、コーディング問題は問題文・最初のコード・制約・補足、ファイル自動配布は配るファイルの一覧、フォルダーは置いたファイルの一覧と見せ方、小テストは問題と正解。',
   z.object({ item_id: id('アイテムの ID') }),
   async (c, { item_id }) => {
     const found = await itemOf(c.var.user!, item_id)
@@ -598,6 +612,7 @@ const BODY_LABELS: Record<Item['type'], string> = {
   code: '問題文',
   link: '説明',
   file: '説明',
+  folder: '説明',
   presentation: '説明',
   screen: '説明',
   bundle: '説明',

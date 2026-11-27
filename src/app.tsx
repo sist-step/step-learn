@@ -24,6 +24,7 @@ import code, { CODE_BODY_LIMIT, isCodeRequest, api as codeApi } from './features
 import content from './features/content'
 import courses from './features/courses'
 import dashboard from './features/dashboard'
+import folder from './features/folder'
 import mcp from './features/mcp'
 import participants from './features/participants'
 import presentation, { isPresentationUpload, api as presentationApi } from './features/presentation'
@@ -98,6 +99,7 @@ app.route('/courses', bundle)
 app.route('/courses', agent)
 app.route('/courses', presentation)
 app.route('/courses', publication)
+app.route('/courses', folder)
 app.route('/api/vscode/agent', agentApi)
 app.route('/api/vscode/code', codeApi)
 app.route('/api/vscode/presentation', presentationApi)

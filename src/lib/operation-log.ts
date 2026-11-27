@@ -42,6 +42,8 @@ const RULES: Rule[] = [
   get('/courses/:id/items/:iid/screen', 'screen.view', '画面共有を開いた', 'item'),
   get('/courses/:id/items/:iid/bundle/zip', 'bundle.zip', 'zip をダウンロードした', 'item'),
   get('/courses/:id/items/:iid/publication/files/:fid', 'publication.file', '学生フォルダのファイルを開いた', 'item'),
+  get('/courses/:id/items/:iid/folder/files/:fid', 'folder.file', 'フォルダーのファイルを開いた', 'item'),
+  get('/courses/:id/items/:iid/folder/zip', 'folder.zip', 'フォルダーを zip でダウンロードした', 'item'),
   get('/courses/:id/items/:iid/code/submissions/:uid', 'code.submission.view', '提出を見た', 'user'),
   get('/courses/:id/items/:iid/bundle/history/:uid', 'bundle.history.view', '変更履歴を見た', 'user'),
   get('/courses/:id/items/:iid/quiz/results/:uid', 'quiz.result.view', '小テストの受験を見た', 'user'),
@@ -115,6 +117,9 @@ const RULES: Rule[] = [
     'change',
     'item',
   ),
+
+  post('/courses/:id/items/:iid/folder/files', 'folder.upload', 'フォルダーにファイルをアップロード', 'change', 'item'),
+  post('/courses/:id/items/:iid/folder/files/delete', 'folder.delete', 'フォルダーのファイルを削除', 'change', 'item'),
 
   post('/courses/:id/items/:iid/agent/launch', 'agent.launch', 'コーディングエージェントを VS Code で開いた', 'change', 'item'),
   post('/courses/:id/items/:iid/agent/key', 'agent.key', 'コーディングエージェントの API キー・全体の上限を保存', 'important', 'item'),

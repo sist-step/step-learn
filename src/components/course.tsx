@@ -301,9 +301,10 @@ export const ITEM_ICONS: Record<ItemType, IconName> = {
   code: 'terminal',
   quiz: 'clipboardCheck',
   collab: 'userGroup',
-  bundle: 'folder',
+  bundle: 'folderArrowDown',
   agent: 'cpuChip',
   publication: 'folderOpen',
+  folder: 'folder',
 }
 
 export const ItemIcon = ({ type }: { type: ItemType }) => {
@@ -520,6 +521,8 @@ const COMPLETION_HINTS: Record<ItemType | 'any', string> = {
   bundle: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
   agent: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
   publication: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
+  folder:
+    '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。コースのページに中身を並べる設定では、ファイルを開いても完了になりません。',
   any: '「開いたら完了」はページ・リンク・ファイルで、「最後まで再生したら完了」は動画・音声のファイルで、「制約をすべてクリアしたら完了」はコードで、「合格したら完了」は小テストで選べます。',
 }
 
@@ -545,6 +548,7 @@ const COMPLETION_WAITING: Record<Exclude<Completion, 'none' | 'manual'>, Partial
     quiz: 'このアイテムを開くと完了になります',
     bundle: 'このアイテムを開くと完了になります',
     publication: 'このアイテムを開くと完了になります',
+    folder: 'このアイテムを開くと完了になります',
   },
   play: { file: '最後まで再生すると完了になります' },
   clear: { code: '制約をすべてクリアすると完了になります' },

@@ -342,6 +342,10 @@ const itemEdit = z
     agent_model: z.optional(text('モデル', 200)),
     approval: flag(),
     show_names: flag(),
+    show_inline: flag(),
+    show_expanded: flag(),
+    show_download: flag(),
+    force_download: flag(),
     url: z.optional(z.pipe(text('URL', 2000), z.string().check(rule((s: string) => (isHttpUrl(s) ? null : URL_INVALID))))),
   })
   .check(
