@@ -198,6 +198,8 @@ export async function deleteKeys(keys: (string | null | undefined)[]) {
 
 export const deleteCourseFiles = (courseId: number) => storage.deletePrefix(`courses/${courseId}/`)
 
+export const deleteAiUploads = (userId: number) => storage.deletePrefix(`ai-uploads/${userId}/`)
+
 /** レスポンスを待たせない後片付け（失敗してもログだけ残す） */
 export function inBackground(task: Promise<unknown>) {
   task.catch((e) => console.error('[background]', e))

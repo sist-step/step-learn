@@ -8,6 +8,7 @@ import {
   listCourses,
   listLogs,
   listUsers,
+  removeUser,
   showAi,
   showNewUser,
   showPassword,
@@ -25,6 +26,7 @@ app.post('/users', addUser)
 app.post('/users/:id/role', changeRole)
 app.get('/users/:id/password', showPassword)
 app.post('/users/:id/password', updatePassword)
+app.post('/users/:id/delete', removeUser)
 app.get('/courses', listCourses)
 app.get('/ai', showAi)
 app.post('/ai', updateAi)

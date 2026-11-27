@@ -106,3 +106,11 @@ export const publicationKeysOf = (itemId: number) =>
     .where(eq(publicationFiles.itemId, itemId))
     .all()
     .map((r) => r.key)
+
+export const publicationKeysOfUser = (userId: number) =>
+  db
+    .select({ key: publicationFiles.fileKey })
+    .from(publicationFiles)
+    .where(eq(publicationFiles.userId, userId))
+    .all()
+    .map((r) => r.key)

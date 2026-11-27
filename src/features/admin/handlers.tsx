@@ -2,6 +2,7 @@ import { and, count, desc, eq, inArray, lt, or } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { listAgentItems } from '../agent/agent-items'
 import { aiLedger, usageByUser } from '../ai/ai-usage'
+import { publicationKeysOfUser } from '../publication/publication-items'
 import { USERNAME_TAKEN, createUser, resetPassword } from '../../lib/auth'
 import { teacherNames } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
@@ -10,6 +11,7 @@ import { field, intParam, readFields, readForm, redirectWith } from '../../lib/h
 import { actionLabel } from '../../lib/operation-log'
 import { checkPassword } from '../../lib/password'
 import { courses, enrollments, items, operationLogs, users } from '../../lib/schema'
+import { deleteAiUploads, deleteKeys, inBackground } from '../../lib/storage'
 import { LOG_KINDS, ROLE_LABELS, isManagedRole, type AppEnv, type LogKind } from '../../lib/types'
 import { createAiAdminHandlers } from './ai'
 import {
@@ -92,7 +94,7 @@ export async function addUser(c: Context<AppEnv>) {
   return redirectWith(c, '/admin', `${ROLE_LABELS[role]}の ${name} さんを作成しました。`)
 }
 
-const passwordTarget = (id: number) => {
+const managedUser = (id: number) => {
   const user = db
     .select({ id: users.id, name: users.name, username: users.username, email: users.email, role: users.role })
     .from(users)
@@ -103,14 +105,14 @@ const passwordTarget = (id: number) => {
 
 export function showPassword(c: Context<AppEnv>) {
   const id = intParam(c, 'id')
-  const user = id && passwordTarget(id)
+  const user = id && managedUser(id)
   if (!user) return c.notFound()
   return c.render(<ResetPasswordPage user={user} />, { title: 'パスワードを再設定 - 管理' })
 }
 
 export async function updatePassword(c: Context<AppEnv>) {
   const id = intParam(c, 'id')
-  const user = id && passwordTarget(id)
+  const user = id && managedUser(id)
   if (!user) return c.notFound()
 
   const result = validate('setPassword', await readForm(c))
@@ -124,6 +126,18 @@ export async function updatePassword(c: Context<AppEnv>) {
 
   await resetPassword(user.id, result.values.password)
   return redirectWith(c, '/admin', `${user.name} さんのパスワードを再設定しました。`)
+}
+
+export function removeUser(c: Context<AppEnv>) {
+  const id = intParam(c, 'id')
+  const user = id && managedUser(id)
+  if (!user) return c.notFound()
+
+  const fileKeys = publicationKeysOfUser(user.id)
+  db.delete(users).where(eq(users.id, user.id)).run()
+  inBackground(deleteKeys(fileKeys))
+  inBackground(deleteAiUploads(user.id))
+  return redirectWith(c, '/admin', `${user.name} さんを削除しました。`, 'info')
 }
 
 // ---------------------------------------------------------------- コース
