@@ -340,6 +340,7 @@ const ITEM_TYPE_DESCRIPTIONS: Record<ItemType, string> = {
   bundle: 'プログラムのファイルを VS Code で開けるように配る',
   agent: 'VS Code で AI にコードを書いてもらう',
   publication: '学生がファイルを上げて、クラスのみんなに見せる',
+  survey: '問いに答えてもらい、意見や感想を集める',
 }
 
 const AddItemButton = ({ sectionId }: { sectionId: number }) => (
@@ -428,6 +429,7 @@ const AddItemModal = ({
         )}
         <p class="when-code muted small">問題文・最初のコード・採点基準は、追加したあとの編集画面で設定します。</p>
         <p class="when-quiz muted small">問題は、追加したあとの編集画面で作ります。</p>
+        <p class="when-survey muted small">問いと、匿名にするかなどの設定は、追加したあとの編集画面で決めます。</p>
         <CollabPickFields fieldClass="when-collab" />
         <p class="when-bundle muted small">配るファイルは、追加したあとの編集画面でアップロードします。</p>
         <p class="when-presentation muted small">

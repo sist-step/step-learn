@@ -25,6 +25,7 @@ const STYLESHEETS = [
   '/src/features/bundle/components/bundle.css',
   '/src/features/agent/components/agent.css',
   '/src/features/quiz/components/quiz.css',
+  '/src/features/survey/components/survey.css',
   '/src/features/quiz/components/quiz-game.css',
   '/src/features/collab/components/collab.css',
   '/src/features/publication/components/publication.css',

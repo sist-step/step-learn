@@ -305,6 +305,7 @@ export const ITEM_ICONS: Record<ItemType, IconName> = {
   agent: 'cpuChip',
   publication: 'folderOpen',
   folder: 'folder',
+  survey: 'chatBubble',
 }
 
 export const ItemIcon = ({ type }: { type: ItemType }) => {
@@ -523,7 +524,8 @@ const COMPLETION_HINTS: Record<ItemType | 'any', string> = {
   publication: '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。',
   folder:
     '「開いたら完了」は、学生がこのアイテムを開いたときに完了になります。コースのページに中身を並べる設定では、ファイルを開いても完了になりません。',
-  any: '「開いたら完了」はページ・リンク・ファイルで、「最後まで再生したら完了」は動画・音声のファイルで、「制約をすべてクリアしたら完了」はコードで、「合格したら完了」は小テストで選べます。',
+  survey: '「開いたら完了」は学生がこのアイテムを開いたとき、「回答したら完了」は学生が回答を送ったときに完了になります。',
+  any: '「開いたら完了」はページ・リンク・ファイルで、「最後まで再生したら完了」は動画・音声のファイルで、「制約をすべてクリアしたら完了」はコードで、「合格したら完了」は小テストで、「回答したら完了」はアンケートで選べます。',
 }
 
 export const CompletionField = ({ type, id, value = 'none', error }: { type?: ItemType; id?: string; value?: string; error?: string }) => (
@@ -549,10 +551,12 @@ const COMPLETION_WAITING: Record<Exclude<Completion, 'none' | 'manual'>, Partial
     bundle: 'このアイテムを開くと完了になります',
     publication: 'このアイテムを開くと完了になります',
     folder: 'このアイテムを開くと完了になります',
+    survey: 'このアイテムを開くと完了になります',
   },
   play: { file: '最後まで再生すると完了になります' },
   clear: { code: '制約をすべてクリアすると完了になります' },
   pass: { quiz: '合格すると完了になります' },
+  answer: { survey: '回答すると完了になります' },
 }
 
 export const CompletionStatus = ({

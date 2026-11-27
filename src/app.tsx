@@ -30,6 +30,7 @@ import participants from './features/participants'
 import presentation, { isPresentationUpload, api as presentationApi } from './features/presentation'
 import publication from './features/publication'
 import quiz from './features/quiz'
+import survey from './features/survey'
 import collab from './features/collab'
 import screen from './features/screen'
 
@@ -94,6 +95,7 @@ app.route('/courses', participants)
 app.route('/courses', screen)
 app.route('/courses', code)
 app.route('/courses', quiz)
+app.route('/courses', survey)
 app.route('/courses', collab)
 app.route('/courses', bundle)
 app.route('/courses', agent)

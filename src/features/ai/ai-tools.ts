@@ -42,6 +42,7 @@ import { contains, db } from '../../lib/db'
 import { insertItem, itemFileColumns } from '../../lib/item-kinds'
 import { isHttpUrl } from '../../lib/forms'
 import { getQuizSettings } from '../quiz/quiz-items'
+import { getSurveySettings } from '../survey/survey-items'
 import { getPublicationSettings } from '../publication/publication-items'
 import { getFolderSettings, listFolderFiles } from '../folder/folder-items'
 import { availableCodeLanguages } from '../code/sandbox'
@@ -278,12 +279,25 @@ function itemDetail(item: Item) {
         look: quiz.look,
       }
     }
+    // 回答を返さないのは、匿名のアンケートの回答や、ほかの学生の回答まで読めてしまうため
+    case 'survey': {
+      const survey = getSurveySettings(item.id)
+      return {
+        description: item.body.slice(0, MAX_BODY_LENGTH),
+        questions: survey.questions,
+        anonymous: survey.anonymous === 1,
+        show_results: survey.showResults === 1,
+        allow_edit: survey.allowEdit === 1,
+        opens_at: survey.opensAt,
+        closes_at: survey.closesAt,
+      }
+    }
   }
 }
 
 const getItem = defineTool(
   'get_item',
-  'アイテムの中身を返す。ページは本文（Markdown）、リンクは URL、コーディング問題は問題文・最初のコード・制約・補足、ファイル自動配布は配るファイルの一覧、フォルダーは置いたファイルの一覧と見せ方、小テストは問題と正解。',
+  'アイテムの中身を返す。ページは本文（Markdown）、リンクは URL、コーディング問題は問題文・最初のコード・制約・補足、ファイル自動配布は配るファイルの一覧、フォルダーは置いたファイルの一覧と見せ方、小テストは問題と正解、アンケートは問いと設定（回答は返さない）。',
   z.object({ item_id: id('アイテムの ID') }),
   async (c, { item_id }) => {
     const found = await itemOf(c.var.user!, item_id)
@@ -620,6 +634,7 @@ const BODY_LABELS: Record<Item['type'], string> = {
   quiz: '説明',
   collab: '説明',
   publication: '説明',
+  survey: '説明',
 }
 
 const codeOf = (itemId: number) => db.select().from(codeItems).where(eq(codeItems.itemId, itemId)).get()

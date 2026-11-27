@@ -27,6 +27,8 @@ import cpuChip from 'heroicons/24/outline/cpu-chip.svg?raw'
 import check from 'heroicons/24/outline/check.svg?raw'
 import checkCircle from 'heroicons/24/outline/check-circle.svg?raw'
 import assistant from 'heroicons/24/outline/chat-bubble-oval-left-ellipsis.svg?raw'
+import chatBubble from 'heroicons/24/outline/chat-bubble-left-right.svg?raw'
+import chartBar from 'heroicons/24/outline/chart-bar.svg?raw'
 import chevronDoubleLeft from 'heroicons/24/outline/chevron-double-left.svg?raw'
 import chevronDoubleRight from 'heroicons/24/outline/chevron-double-right.svg?raw'
 import chevronDown from 'heroicons/24/outline/chevron-down.svg?raw'
@@ -220,6 +222,8 @@ const svgs = {
   volumeMuted,
   minimize,
   pip,
+  chatBubble,
+  chartBar,
 } as const
 
 export type IconName = keyof typeof svgs

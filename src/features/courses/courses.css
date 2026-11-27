@@ -83,7 +83,8 @@
 .item-form:not([data-kind='presentation']) .when-presentation { display: none; }
 .item-form:not([data-kind='publication']) .when-publication { display: none; }
 .item-form:not([data-kind='folder']) .when-folder { display: none; }
-.item-form[data-kind='code'] .unless-code, .item-form:is([data-kind='bundle'], [data-kind='code'], [data-kind='agent'], [data-kind='quiz'], [data-kind='presentation'], [data-kind='folder']) .unless-edit-next { display: none; }
+.item-form:not([data-kind='survey']) .when-survey { display: none; }
+.item-form[data-kind='code'] .unless-code, .item-form:is([data-kind='bundle'], [data-kind='code'], [data-kind='agent'], [data-kind='quiz'], [data-kind='presentation'], [data-kind='folder'], [data-kind='survey']) .unless-edit-next { display: none; }
 
 :root:not([data-edit-mode]) .edit-only,
 :root[data-edit-mode] .view-only { display: none; }
@@ -292,6 +293,7 @@
 .item-form[data-kind='screen'] [data-kind-summary='screen'],
 .item-form[data-kind='code'] [data-kind-summary='code'],
 .item-form[data-kind='quiz'] [data-kind-summary='quiz'],
+.item-form[data-kind='survey'] [data-kind-summary='survey'],
 .item-form[data-kind='collab'] [data-kind-summary='collab'],
 .item-form[data-kind='bundle'] [data-kind-summary='bundle'],
 .item-form[data-kind='agent'] [data-kind-summary='agent'] { display: flex; }

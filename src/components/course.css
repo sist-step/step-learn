@@ -124,6 +124,7 @@ div.course-hero-cover { background: linear-gradient(150deg, var(--c2), var(--c1)
 .kind-screen { --kind: var(--success); }
 .kind-code { --kind: var(--accent); }
 .kind-quiz { --kind: color-mix(in srgb, var(--success) 60%, var(--info)); }
+.kind-survey { --kind: color-mix(in srgb, var(--info) 55%, var(--accent)); }
 .kind-bundle { --kind: color-mix(in srgb, var(--info) 60%, var(--danger)); }
 .kind-agent { --kind: color-mix(in srgb, var(--accent) 55%, var(--success)); }
 .kind-collab { --kind: color-mix(in srgb, var(--warning) 55%, var(--danger)); }

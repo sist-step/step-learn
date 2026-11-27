@@ -15,6 +15,7 @@ import {
 } from '../features/code/code'
 import { COLLAB_KINDS, COLLAB_SCOPES } from '../features/collab/collab'
 import { checkNames, checkPrefix, parseNames } from '../features/admin/user-batch'
+import { readSurveyForm } from '../features/survey/survey'
 import { dateInputToUnix, dateTimeInputToUnix, isDateInput, isDateTimeInput } from './course-period'
 import { checkPassword } from './password'
 import { isMediaFile } from './preview'
@@ -182,7 +183,9 @@ export const completionChoices = (type: ItemType): Completion[] =>
         ? ['none', 'manual', 'view', 'clear']
         : type === 'quiz'
           ? ['none', 'manual', 'view', 'pass']
-          : ['none', 'manual', 'view']
+          : type === 'survey'
+            ? ['none', 'manual', 'view', 'answer']
+            : ['none', 'manual', 'view']
 
 // file に null を受け付けるのは、ブラウザでは保存済みのファイルの種類が分からず、保存するときにサーバーで確かめ直すため
 export function completionError(type: ItemType, completion: Completion | undefined, file: { type: string; name: string } | null) {
@@ -349,6 +352,11 @@ const itemEdit = z
     pass_percent: z.optional(percent('合格にする正解の割合', 1)),
     show_answers: flag(),
     look: choice(QUIZ_LOOKS, 'plain'),
+    // 問いごとの誤りを外側の object で出すのは、questions と同じく、問いの入力欄に出せるようにするため
+    survey_questions: z.transform((v: unknown) => readSurveyForm(typeof v === 'string' ? v : '')),
+    anonymous: flag(),
+    show_results: flag(),
+    allow_edit: flag(),
     agent_model: z.optional(text('モデル', 200)),
     approval: flag(),
     show_names: flag(),
@@ -371,7 +379,12 @@ const itemEdit = z
               ? quizItemIssues(v)
               : v.type === 'publication'
                 ? uploadPeriodIssues(v.opens_at ?? '', v.closes_at ?? '')
-                : []
+                : v.type === 'survey'
+                  ? [
+                      ...v.survey_questions.issues.map((issue) => ({ message: issue.message, path: [issue.key] })),
+                      ...uploadPeriodIssues(v.opens_at ?? '', v.closes_at ?? ''),
+                    ]
+                  : []
       for (const issue of issues) ctx.issues.push({ code: 'custom', input: v, ...issue })
     }),
   )
