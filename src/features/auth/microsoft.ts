@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { isHttps } from '../../lib/auth'
 import { config } from '../../lib/config'
 import { db } from '../../lib/db'
+import { appOrigin } from '../../lib/http'
 import { userIdentities } from '../../lib/schema'
 
 const COOKIE_PATH = '/auth/microsoft'
@@ -24,7 +25,7 @@ const randomToken = () => base64url(crypto.getRandomValues(new Uint8Array(32)))
 
 const authority = () => `https://login.microsoftonline.com/${config.microsoft!.tenant}/oauth2/v2.0`
 // 要求の URL を優先しないのは、リバースプロキシの後ろでは http:// や内部のホスト名になり、Microsoft に登録した戻り先と一致しないため
-const redirectUri = (c: Context) => `${config.appOrigin ?? new URL(c.req.url).origin}${COOKIE_PATH}/callback`
+const redirectUri = (c: Context) => `${appOrigin(c)}${COOKIE_PATH}/callback`
 
 const cookieOptions = (c: Context, maxAge: number) => ({
   httpOnly: true,

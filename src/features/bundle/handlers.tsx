@@ -13,10 +13,9 @@ import {
   type SyncVersion,
 } from './bundle-sync'
 import { launchClaimer, linkExpired, signToken, tooManyRequests, verifyBearer } from '../../lib/vscode-token'
-import { config } from '../../lib/config'
 import type { CourseAccess } from '../../lib/courses'
 import { diffLines } from '../../lib/diff'
-import { intParam, readFields, readJson, redirectWith, wantsJson } from '../../lib/http'
+import { appOrigin, intParam, readFields, readJson, redirectWith, wantsJson } from '../../lib/http'
 import { rateLimiter } from '../../lib/rate-limit'
 import { deleteKeys, inBackground, storage } from '../../lib/storage'
 import { readTreeRemove, readTreeUploads, treeUploadProblem, treeZip } from '../../lib/tree-upload'
@@ -55,8 +54,6 @@ export type BundleBackend = {
 const LIMITS = { maxFiles: MAX_BUNDLE_FILES, maxSize: MAX_BUNDLE_SIZE }
 
 const sha256 = (bytes: Uint8Array) => crypto.createHash('sha256').update(bytes).digest('hex')
-
-const serverOrigin = (c: C) => config.appOrigin ?? new URL(c.req.url).origin
 
 const readStored = (file: BundleFile) => storage.read(file.fileKey, file.size)
 
@@ -121,7 +118,7 @@ export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: B
     const { access, itemId, title, ref } = ctx
     if (!wantsJson(c)) return c.redirect(itemUrl(access.course.id, itemId), 303)
     const token = signToken('launch', { ref, userId: c.var.user!.id, course: access.course.title, title })
-    const query = new URLSearchParams({ server: serverOrigin(c), token })
+    const query = new URLSearchParams({ server: appOrigin(c), token })
     return c.json({ url: `vscode://${VSCODE_EXTENSION_ID}/open?${query}` })
   }
 

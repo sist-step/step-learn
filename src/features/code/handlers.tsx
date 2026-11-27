@@ -27,10 +27,9 @@ import {
 } from './code'
 import { gradingEnabled, submissionsOf, submitWait, type Grader } from './code-grader'
 import type { CodeSettings, CodeStore, StudentRow, Submission, SubmissionSummary } from './code-store'
-import { config } from '../../lib/config'
 import type { CourseAccess } from '../../lib/courses'
 import { firstError, readConstraints, solutionOf, validate, type FormValues } from '../../lib/forms'
-import { field, intParam, readFields, readForm, readJson, redirectWith, wantsJson } from '../../lib/http'
+import { appOrigin, field, intParam, readFields, readForm, readJson, redirectWith, wantsJson } from '../../lib/http'
 import { rateLimiter } from '../../lib/rate-limit'
 import { SandboxError, runCode, sandboxEnabled } from './sandbox'
 import type { AppEnv, Completion } from '../../lib/types'
@@ -165,8 +164,6 @@ const submittedMessage = (accepted: Extract<Accepted, { ok: true }>) =>
     : accepted.graded
       ? '提出しました。採点が終わると、結果が出ます。'
       : '提出しました。'
-
-const serverOrigin = (c: Context) => config.appOrigin ?? new URL(c.req.url).origin
 
 export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl, prepareAgain: startAgain }: CodeBackend) {
   // 上限なしにしないのは、sandbox が同時に 4 つまでしか実行できず、1 人が繰り返し実行するとほかの人が待たされるため
@@ -331,7 +328,7 @@ export function createCodeHandlers({ resolve, grader, pageUrl, itemUrl, prepareA
     if (!ctx) return c.notFound()
     const { ref, userId, courseId, itemId } = ctx
     if (!wantsJson(c)) return c.redirect(itemUrl(courseId, itemId), 303)
-    const query = new URLSearchParams({ server: serverOrigin(c), token: signToken('code-launch', { ref, userId }) })
+    const query = new URLSearchParams({ server: appOrigin(c), token: signToken('code-launch', { ref, userId }) })
     return c.json({ url: `vscode://${VSCODE_EXTENSION_ID}/code?${query}` })
   }
 
@@ -751,7 +748,7 @@ export function codeVscodeApi({ targetOf, stampOf, grader, pageUrl }: Pick<CodeB
     language: settings.language,
     files: fileList(settings, currentCode(settings, store, userId).files),
     canSubmit: isStudent,
-    page: new URL(pageUrl(courseId, itemId), serverOrigin(c)).href,
+    page: new URL(pageUrl(courseId, itemId), appOrigin(c)).href,
   })
 
   app.post('/claim', async (c) => {
