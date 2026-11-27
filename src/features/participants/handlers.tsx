@@ -4,6 +4,7 @@ import { RequestContext } from 'hono/jsx-renderer'
 import { getCourseAccess, manageAccess, trackedDoneCount, trackedItemCount } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
 import { intParam, readFields, redirectWith } from '../../lib/http'
+import { groupsOf, membershipsOf } from '../groups/group-items'
 import { completions, enrollments, users } from '../../lib/schema'
 import { COURSE_ROLE_LABELS, type AppEnv } from '../../lib/types'
 import { CANDIDATE_LIMIT, Candidates, ParticipantsPage, type Candidate, type Participant } from './views'
@@ -17,6 +18,13 @@ async function isLastTeacher(courseId: number, userId: number) {
     .get()
   if (target?.role !== 'teacher') return false
   return (await db.$count(enrollments, and(eq(enrollments.courseId, courseId), eq(enrollments.role, 'teacher')))) <= 1
+}
+
+/** 参加者を絞り込むグループ。'' はすべて、'none' はどのグループにも入っていない人 */
+function groupFilterOf(value: string | undefined, groups: { id: number }[]): number | '' | 'none' {
+  if (value === 'none' && groups.length) return 'none'
+  const id = Number(value)
+  return groups.some((g) => g.id === id) ? id : ''
 }
 
 export async function list(c: Context<AppEnv>) {
@@ -40,10 +48,28 @@ export async function list(c: Context<AppEnv>) {
     .orderBy(users.name)
     .all()
   const totalItems = await trackedItemCount(id)
+  const groups = access.canManage ? groupsOf(id) : []
+  const filter = groupFilterOf(c.req.query('group'), groups)
+  const memberships = groups.length ? membershipsOf(id) : new Map<number, number[]>()
+  const groupNames = new Map(groups.map((g) => [g.id, g.name]))
+  const shown = people
+    .map((p) => ({ ...p, groups: (memberships.get(p.id) ?? []).map((gid) => groupNames.get(gid) ?? '') }))
+    .filter((p) => {
+      const mine = memberships.get(p.id) ?? []
+      return filter === '' || (filter === 'none' ? mine.length === 0 : mine.includes(filter))
+    })
 
-  return c.render(<ParticipantsPage access={access} people={people} meId={c.var.user!.id} totalItems={totalItems} />, {
-    title: `参加者 - ${access.course.title}`,
-  })
+  return c.render(
+    <ParticipantsPage
+      access={access}
+      people={shown}
+      meId={c.var.user!.id}
+      totalItems={totalItems}
+      groups={groups}
+      groupFilter={filter === '' ? '' : String(filter)}
+    />,
+    { title: `参加者 - ${access.course.title}` },
+  )
 }
 
 export async function candidates(c: Context<AppEnv>) {

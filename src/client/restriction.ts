@@ -11,6 +11,7 @@ const RS_FIELDS: Record<string, string[]> = {
   completion: ['cm', 'e'],
   grade: ['id', 'min', 'max'],
   profile: ['field', 'op', 'v'],
+  group: ['id'],
 }
 let rsCount = 0
 

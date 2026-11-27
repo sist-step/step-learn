@@ -17,6 +17,8 @@ export type Participant = {
   role: CourseRole
   createdAt: number
   done: number
+  /** 入っているグループの名前。教師と管理者にだけ渡す */
+  groups?: string[]
 }
 
 export type Candidate = {
@@ -86,7 +88,7 @@ const AddParticipant = ({ courseId }: { courseId: number }) => (
   </>
 )
 
-type TableProps = { courseId: number; meId: number; manage: boolean; totalItems: number; progress: boolean }
+type TableProps = { courseId: number; meId: number; manage: boolean; totalItems: number; progress: boolean; filtered: boolean }
 
 const ParticipantRow = ({ p, courseId, meId, manage, totalItems, progress }: TableProps & { p: Participant }) => (
   <tr>
@@ -101,6 +103,13 @@ const ParticipantRow = ({ p, courseId, meId, manage, totalItems, progress }: Tab
         }
         meta={userMeta(manage ? p : { username: p.username })}
       />
+      {p.groups && p.groups.length > 0 && (
+        <div class="participant-groups">
+          {p.groups.map((name) => (
+            <Chip>{name}</Chip>
+          ))}
+        </div>
+      )}
     </td>
     {progress && (
       <td class="hide-sm col-progress">
@@ -136,7 +145,9 @@ const ParticipantRow = ({ p, courseId, meId, manage, totalItems, progress }: Tab
 
 const ParticipantTable = ({ heading, list, ...props }: TableProps & { heading: string; list: Participant[] }) => (
   <Block heading={heading} count={list.length}>
-    {list.length === 0 ? (
+    {list.length === 0 && props.filtered ? (
+      <p class="muted small">選んだグループに入っている{heading}はいません。</p>
+    ) : list.length === 0 ? (
       <EmptyState
         icon="users"
         title={`${heading}はまだいません`}
@@ -166,23 +177,58 @@ const ParticipantTable = ({ heading, list, ...props }: TableProps & { heading: s
   </Block>
 )
 
+const GroupFilter = ({ groups, value }: { groups: { id: number; name: string }[]; value: string }) => (
+  <form method="get" class="toolbar participant-filter" data-autosubmit>
+    <Select
+      name="group"
+      options={[
+        { value: '', label: 'すべてのグループ' },
+        ...groups.map((g) => ({ value: String(g.id), label: g.name })),
+        { value: 'none', label: 'グループに入っていない人' },
+      ]}
+      value={value}
+      aria-label="グループで絞り込む"
+    />
+  </form>
+)
+
 export const ParticipantsPage = ({
   access,
   people,
   meId,
   totalItems,
+  groups,
+  groupFilter,
 }: {
   access: CourseAccess
   people: Participant[]
   meId: number
   totalItems: number
+  /** コースのグループ。教師と管理者にだけ渡す */
+  groups: { id: number; name: string }[]
+  groupFilter: string
 }) => {
-  const props = { courseId: access.course.id, meId, manage: access.canManage, totalItems }
+  const id = access.course.id
+  const props = { courseId: id, meId, manage: access.canManage, totalItems, filtered: groupFilter !== '' }
   return (
     <AppShell tone={access.course.color}>
       <Styles use={['/src/features/participants/participants.css']} />
-      <CourseHeader access={access} tab="participants" tabActions={access.canManage && <AddParticipant courseId={access.course.id} />} />
+      <CourseHeader
+        access={access}
+        tab="participants"
+        tabActions={
+          access.canManage && (
+            <>
+              <Button href={`/courses/${id}/groups`} variant="ghost" icon="userGroup">
+                グループ
+              </Button>
+              <AddParticipant courseId={id} />
+            </>
+          )
+        }
+      />
       <TabPanel>
+        {groups.length > 0 && <GroupFilter groups={groups} value={groupFilter} />}
         <ParticipantTable heading="教師" list={people.filter((p) => p.role === 'teacher')} {...props} progress={false} />
         <ParticipantTable
           heading="学生"

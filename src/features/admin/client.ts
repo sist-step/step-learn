@@ -85,12 +85,3 @@ export function initBulkPreview() {
   if (forms.length) nextSerials.clear()
   for (const form of forms) void renderBulkPreview(form)
 }
-
-// --- 一括作成の記録: すべて選ぶ（features/admin/views.tsx の BatchPage）
-document.addEventListener('change', (e) => {
-  const all = e.target as HTMLInputElement
-  const name = all.dataset?.checkAll
-  if (!name) return
-  for (const box of $$<HTMLInputElement>(`input[type="checkbox"][name="${name}"]:not(:disabled)`, all.form ?? document))
-    box.checked = all.checked
-})

@@ -76,6 +76,9 @@ const RULES: Rule[] = [
   post('/courses/:id/participants', 'participant.add', '参加者を追加', 'important'),
   post('/courses/:id/participants/:uid/role', 'participant.role', '参加者のロールを変更', 'important', 'user'),
   post('/courses/:id/participants/:uid/remove', 'participant.remove', '参加者を除外', 'important', 'user'),
+  post('/courses/:id/groups', 'group.create', 'グループを作成', 'change'),
+  post('/courses/:id/groups/\\d+', 'group.update', 'グループを編集', 'change'),
+  post('/courses/:id/groups/\\d+/delete', 'group.delete', 'グループを削除', 'important'),
 
   post('/courses/:id/sections', 'section.create', 'セクションを追加', 'change'),
   post('/courses/:id/sections/:sid', 'section.update', 'セクションを編集', 'change', 'section'),

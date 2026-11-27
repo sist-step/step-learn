@@ -1,0 +1,18 @@
+/* ===== グループ ===== */
+.group-create { display: flex; align-items: flex-start; gap: 12px; }
+.group-create-name { flex: 1; }
+.group-create > .btn { margin-top: 26px; }
+
+.group-members { display: flex; flex-direction: column; margin: 0; padding: 4px; list-style: none; }
+.group-member label { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+.group-member-all { border-bottom: 1px solid var(--card-border); margin-bottom: 4px; }
+.group-check { flex-shrink: 0; width: 18px; height: 18px; margin: 0; accent-color: var(--primary); }
+
+@media (hover: hover) {
+  .group-member label:hover { background: var(--surface-2); }
+}
+
+@media (max-width: 640px) {
+  .group-create { flex-direction: column; align-items: stretch; }
+  .group-create > .btn { margin-top: 0; }
+}
