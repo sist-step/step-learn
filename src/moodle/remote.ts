@@ -90,7 +90,7 @@ function participantsOf(rows: MoodleParticipant[]): BackupParticipant[] {
         .filter(Boolean)
         .join(' ')
         .slice(0, LIMITS.name) || u.username
-    const username = normalizeUsername(u.username)
+    const username = normalizeUsername(u.username).split('@')[0]
     const skip = u.deleted
       ? 'Moodle で削除済み'
       : u.suspended
