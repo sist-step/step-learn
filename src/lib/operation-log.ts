@@ -58,6 +58,9 @@ const RULES: Rule[] = [
   post('/account/microsoft/unlink', 'account.microsoft.unlink', 'Microsoft アカウントの連携を解除', 'important'),
 
   post('/admin/users', 'admin.user.create', 'ユーザーを作成', 'important'),
+  post('/admin/users/bulk', 'admin.user.bulk', 'ユーザーを一括作成', 'important'),
+  rule('GET', '/admin/batches/:id/files/(docx|xlsx|csv)', 'admin.batch.file', 'ログインカード・一覧をダウンロード', 'important'),
+  post('/admin/batches/:id/reissue', 'admin.batch.reissue', 'パスワードを一括で再発行', 'important'),
   post('/admin/users/:uid/role', 'admin.role', 'ユーザーのロールを変更', 'important', 'user'),
   post('/admin/users/:uid/password', 'admin.password', 'ユーザーのパスワードを再設定', 'important', 'user'),
   post('/admin/users/:uid/delete', 'admin.user.delete', 'ユーザーを削除', 'important', 'user'),

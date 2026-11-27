@@ -128,6 +128,9 @@ export function intParam(c: Context, key: string) {
 
 export const wantsJson = (c: Context) => (c.req.header('accept') ?? '').includes('application/json')
 
+/** メールや拡張機能に渡す、このサーバーの URL の起点 */
+export const appOrigin = (c: Context) => config.appOrigin ?? new URL(c.req.url).origin
+
 /** 拡張機能が Authorization ヘッダーで送る鍵。なければ空文字 */
 export const bearerToken = (c: Context) => c.req.header('authorization')?.replace(/^Bearer /, '') ?? ''
 

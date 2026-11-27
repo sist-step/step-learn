@@ -1,6 +1,7 @@
 import type { Child } from 'hono/jsx'
 import { useRequestContext } from 'hono/jsx-renderer'
 import { ROLE_LABELS, type AppEnv, type Flash } from '../lib/types'
+import { hasEmail } from '../lib/username'
 import { Icon, type IconName } from './icons'
 import { AiPanelToggle } from '../features/ai/components/ai-panel'
 import { IconButton } from './button'
@@ -78,7 +79,7 @@ const UserMenu = ({ editable }: { editable?: boolean }) => {
         class="user-menu-head"
         avatar={<Avatar name={user.name} size={40} />}
         name={user.name}
-        meta={`${user.email} · ${ROLE_LABELS[user.role]}`}
+        meta={`${hasEmail(user.email) ? user.email : `@${user.username}`} · ${ROLE_LABELS[user.role]}`}
       />
       <div class="user-menu-group">
         <MenuItem href="/account" icon="user">

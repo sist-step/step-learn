@@ -2,14 +2,21 @@ import { Hono } from 'hono'
 import { requireAuth, requireRole } from '../../lib/auth'
 import type { AppEnv } from '../../lib/types'
 import {
+  addBulkUsers,
   addUser,
+  bulkNextSerial,
   changeRole,
+  downloadBatchFile,
   listAgents,
+  listBatchHistory,
   listCourses,
   listLogs,
   listUsers,
+  reissue,
   removeUser,
   showAi,
+  showBatch,
+  showBulkUsers,
   showNewUser,
   showPassword,
   updateAi,
@@ -23,10 +30,17 @@ app.get('/users', (c) => c.redirect('/admin', 301))
 app.get('/', listUsers)
 app.get('/users/new', showNewUser)
 app.post('/users', addUser)
+app.get('/users/bulk', showBulkUsers)
+app.get('/users/bulk/next', bulkNextSerial)
+app.post('/users/bulk', addBulkUsers)
 app.post('/users/:id/role', changeRole)
 app.get('/users/:id/password', showPassword)
 app.post('/users/:id/password', updatePassword)
 app.post('/users/:id/delete', removeUser)
+app.get('/batches', listBatchHistory)
+app.get('/batches/:id', showBatch)
+app.get('/batches/:id/files/:format', downloadBatchFile)
+app.post('/batches/:id/reissue', reissue)
 app.get('/courses', listCourses)
 app.get('/ai', showAi)
 app.post('/ai', updateAi)

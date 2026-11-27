@@ -14,6 +14,7 @@ import {
   type CodeFiles,
 } from '../features/code/code'
 import { COLLAB_KINDS, COLLAB_SCOPES } from '../features/collab/collab'
+import { checkNames, checkPrefix, parseNames } from '../features/admin/user-batch'
 import { dateInputToUnix, dateTimeInputToUnix, isDateInput, isDateTimeInput } from './course-period'
 import { checkPassword } from './password'
 import { isMediaFile } from './preview'
@@ -600,6 +601,24 @@ const courseRole = z.object({ role: z.enum(COURSE_ROLES) })
 
 const siteRole = z.object({ role: z.enum(ROLES) })
 
+const bulkUsers = z.object({
+  prefix: z.pipe(z.pipe(text('接頭辞', 100), z.transform(normalizeUsername)), z.string().check(rule(checkPrefix))),
+  role: z.enum(MANAGED_ROLES, 'ロールが正しくありません。'),
+  // コースがあるかをここで確かめないのは、選べるコースが DB で決まり、ハンドラで確かめるため
+  course: z.pipe(
+    hidden(20),
+    z.transform((s: string) => (/^[1-9]\d*$/.test(s) ? Number(s) : null)),
+  ),
+  names: z.pipe(z.pipe(text('氏名', 20_000), z.transform(parseNames)), z.array(z.string()).check(rule(checkNames))),
+})
+
+const reissuePasswords = z.object({
+  users: z.pipe(
+    z.transform((v: unknown) => (Array.isArray(v) ? v : [v]).map(Number).filter((n) => Number.isSafeInteger(n) && n > 0)),
+    z.array(z.number()).check(z.minLength(1, 'パスワードを再発行する人を選んでください。')),
+  ),
+})
+
 const theme = z.object({ theme: z.enum(THEMES, 'テーマが正しくありません。') })
 
 const codeSuggest = z.object({
@@ -724,6 +743,8 @@ const FORMS = {
   courseRole,
   siteRole,
   newUser,
+  bulkUsers,
+  reissuePasswords,
   theme,
   codeSuggest,
   codeConstraintsSuggest,

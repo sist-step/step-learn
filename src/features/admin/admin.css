@@ -1,6 +1,14 @@
 /* ===== 管理 > ユーザー ===== */
 .admin-form { display: flex; flex-direction: column; gap: 12px; max-width: 640px; }
 
+/* ===== 管理 > ユーザー > 一括作成 ===== */
+.bulk-preview { display: flex; flex-direction: column; gap: 8px; }
+.bulk-preview p { margin: 0; }
+.bulk-preview-table { max-height: 320px; overflow: auto; }
+.bulk-downloads { flex-wrap: wrap; gap: 8px; }
+.bulk-member { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
+.bulk-check { flex-shrink: 0; width: 18px; height: 18px; margin: 0; accent-color: var(--primary); }
+
 /* ===== 管理 > AI ===== */
 .ai-notice { margin-bottom: 16px; }
 .ai-stats .stat-value { text-align: right; }

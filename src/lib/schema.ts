@@ -25,7 +25,8 @@ import { DEFAULT_PASS_PERCENT, QUIZ_LOOKS, type QuizAnswerRecord, type QuizQuest
 import { PUBLICATION_STATUSES } from '../features/publication/publication'
 import { DEFAULT_THEME, THEMES } from '../features/theme/theme'
 import type { RunResult } from '../features/code/sandbox'
-import { LOG_KINDS } from './types'
+import { USER_BATCH_KINDS } from '../features/admin/user-batch'
+import { LOG_KINDS, MANAGED_ROLES } from './types'
 
 const now = sql`(unixepoch())`
 
@@ -766,4 +767,39 @@ export const oauthGrants = sqliteTable(
     uniqueIndex('oauth_grants_refresh_hash').on(t.refreshHash),
     index('oauth_grants_previous_refresh_hash').on(t.previousRefreshHash),
   ],
+)
+
+/** 管理者がまとめて作ったユーザー（create）と、パスワードを再発行したユーザー（reissue）の記録。パスワードは残さない */
+export const userBatches = sqliteTable(
+  'user_batches',
+  {
+    id: integer('id').primaryKey(),
+    kind: text('kind', { enum: USER_BATCH_KINDS }).notNull(),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    role: text('role', { enum: MANAGED_ROLES }).notNull(),
+    prefix: text('prefix').notNull().default(''),
+    courseId: integer('course_id').references(() => courses.id, { onDelete: 'set null' }),
+    // 人数を members から数えないのは、あとでユーザーを削除すると members から消え、作った人数がわからなくなるため
+    count: integer('count').notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+  },
+  (t) => [
+    index('user_batches_created').on(t.createdAt),
+    check('user_batches_kind', sql`${t.kind} IN ('create', 'reissue')`),
+    check('user_batches_role', sql`${t.role} IN ('teacher', 'student')`),
+  ],
+)
+
+export const userBatchMembers = sqliteTable(
+  'user_batch_members',
+  {
+    batchId: integer('batch_id')
+      .notNull()
+      .references(() => userBatches.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.batchId, t.userId] }), index('user_batch_members_user').on(t.userId)],
 )

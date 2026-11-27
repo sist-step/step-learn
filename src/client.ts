@@ -15,6 +15,7 @@ import './client/datetime'
 import { initMascots, initWalkers } from './client/mascot'
 import { aiDocked, aiHooks, initAiPanel, setAiOpen } from './features/ai/client'
 import { initAgentModelPickers } from './features/agent/client'
+import { initBulkPreview } from './features/admin/client'
 import { prepareTheme, startTheme, themePage } from './features/theme/client'
 import { initVideoPlayers } from './client/media'
 import { $$, fetchJson, reducedMotion } from './client/dom'
@@ -2174,6 +2175,7 @@ function initContent() {
   initWalkers()
   initRestrictionEditors()
   initAgentModelPickers()
+  initBulkPreview()
 }
 initPage()
 startTheme()

@@ -6,21 +6,39 @@ import { publicationKeysOfUser } from '../publication/publication-items'
 import { USERNAME_TAKEN, createUser, resetPassword } from '../../lib/auth'
 import { teacherNames } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
-import { validate } from '../../lib/forms'
-import { field, intParam, readFields, readForm, redirectWith } from '../../lib/http'
+import { firstError, validate, type FieldErrors } from '../../lib/forms'
+import { appOrigin, field, intParam, readFields, readForm, redirectWith } from '../../lib/http'
 import { actionLabel } from '../../lib/operation-log'
 import { checkPassword } from '../../lib/password'
 import { courses, enrollments, items, operationLogs, users } from '../../lib/schema'
 import { deleteAiUploads, deleteKeys, inBackground } from '../../lib/storage'
 import { LOG_KINDS, ROLE_LABELS, isManagedRole, type AppEnv, type LogKind } from '../../lib/types'
+import { normalizeUsername } from '../../lib/username'
 import { createAiAdminHandlers } from './ai'
+import { BATCH_FILES } from './batch-files'
+import { USER_BATCH_KIND_LABELS, checkPrefix, isBatchFileFormat, type BatchFileFormat } from './user-batch'
+import {
+  batchExists,
+  batchFiles,
+  courseChoices,
+  courseExists,
+  createBatch,
+  findBatch,
+  listBatches,
+  nextSerial,
+  reissueBatch,
+} from './user-batch-items'
 import {
   AgentsPage,
+  BatchPage,
+  BatchesPage,
+  BulkUsersPage,
   CoursesPage,
   LogsPage,
   NewUserPage,
   ResetPasswordPage,
   UsersPage,
+  type BulkUsersValues,
   type CourseRow,
   type LogRow,
   type NewUserValues,
@@ -138,6 +156,88 @@ export function removeUser(c: Context<AppEnv>) {
   inBackground(deleteKeys(fileKeys))
   inBackground(deleteAiUploads(user.id))
   return redirectWith(c, '/admin', `${user.name} さんを削除しました。`, 'info')
+}
+
+// ---------------------------------------------------------------- 一括作成
+
+const EMPTY_BULK: BulkUsersValues = { prefix: '', role: 'student', course: '', names: '' }
+
+const renderBulk = (c: Context<AppEnv>, values: BulkUsersValues, errors?: FieldErrors) =>
+  c.render(<BulkUsersPage values={values} courses={courseChoices()} errors={errors} />, { title: 'ユーザーを一括作成 - 管理' })
+
+export function showBulkUsers(c: Context<AppEnv>) {
+  return renderBulk(c, EMPTY_BULK)
+}
+
+/** 入力中の接頭辞で次に振る連番。作成の画面がユーザー名の見本を出すのに使う */
+export function bulkNextSerial(c: Context<AppEnv>) {
+  const prefix = normalizeUsername(c.req.query('prefix') ?? '')
+  return c.json({ next: checkPrefix(prefix) ? null : nextSerial(prefix) })
+}
+
+export async function addBulkUsers(c: Context<AppEnv>) {
+  const form = await readForm(c)
+  const result = validate('bulkUsers', form)
+  const values: BulkUsersValues = {
+    prefix: field(form, 'prefix', 100),
+    role: result.ok ? result.values.role : EMPTY_BULK.role,
+    course: field(form, 'course', 20),
+    names: field(form, 'names', 20_000),
+  }
+  const invalid = (errors: FieldErrors) => {
+    c.status(422)
+    return renderBulk(c, values, errors)
+  }
+  if (!result.ok) return invalid(result.errors)
+  const { prefix, role, course, names } = result.values
+  if (course !== null && !courseExists(course)) return invalid({ course: '登録するコースが正しくありません。' })
+
+  const created = await createBatch({ adminId: c.var.user!.id, prefix, role, courseId: course, names, loginUrl: appOrigin(c) })
+  if ('problem' in created) return invalid({ prefix: created.problem })
+  return redirectWith(c, `/admin/batches/${created.id}`, `${ROLE_LABELS[role]}を${names.length}人作成しました。`)
+}
+
+export function listBatchHistory(c: Context<AppEnv>) {
+  return c.render(<BatchesPage list={listBatches()} />, { title: '一括作成の履歴 - 管理' })
+}
+
+export function showBatch(c: Context<AppEnv>) {
+  const id = intParam(c, 'id')
+  const batch = id && findBatch(id)
+  if (!batch) return c.notFound()
+  return c.render(<BatchPage batch={batch} expiresAt={batchFiles(batch.id)?.expiresAt ?? null} />, {
+    title: `${USER_BATCH_KIND_LABELS[batch.kind]} - 管理`,
+  })
+}
+
+const BATCH_FILE_NAMES: Record<BatchFileFormat, string> = { docx: 'ログインカード', xlsx: 'ユーザー一覧', csv: 'ユーザー一覧' }
+
+export function downloadBatchFile(c: Context<AppEnv>) {
+  const id = intParam(c, 'id')
+  const format = c.req.param('format') ?? ''
+  if (!id || !isBatchFileFormat(format)) return c.notFound()
+  const stored = batchFiles(id)
+  if (!stored) return batchExists(id) ? redirectWith(c, `/admin/batches/${id}`, 'ダウンロードの期限が過ぎました。', 'error') : c.notFound()
+
+  const { contentType, build } = BATCH_FILES[format]
+  return new Response(build(stored), {
+    headers: {
+      'Content-Type': contentType,
+      'Content-Disposition': `attachment;filename*=UTF-8''${encodeURIComponent(`${BATCH_FILE_NAMES[format]}-${id}.${format}`)}`,
+      'Cache-Control': 'no-store',
+    },
+  })
+}
+
+export async function reissue(c: Context<AppEnv>) {
+  const id = intParam(c, 'id')
+  if (!id) return c.notFound()
+  const result = validate('reissuePasswords', await readForm(c, { all: true }))
+  if (!result.ok) return redirectWith(c, `/admin/batches/${id}`, firstError(result.errors), 'error')
+
+  const done = await reissueBatch({ adminId: c.var.user!.id, batchId: id, userIds: result.values.users, loginUrl: appOrigin(c) })
+  if (!done) return c.notFound()
+  return redirectWith(c, `/admin/batches/${done.id}`, `${done.count}人のパスワードを再発行しました。`)
 }
 
 // ---------------------------------------------------------------- コース
