@@ -24,10 +24,11 @@ import {
 import { COLLAB_KINDS, COLLAB_SCOPES } from '../features/collab/collab'
 import { DEFAULT_PASS_PERCENT, QUIZ_LOOKS, type QuizAnswerRecord, type QuizQuestion } from '../features/quiz/quiz'
 import { PUBLICATION_STATUSES } from '../features/publication/publication'
+import type { SurveyAnswer, SurveyQuestion } from '../features/survey/survey'
 import { DEFAULT_THEME, THEMES } from '../features/theme/theme'
 import type { RunResult } from '../features/code/sandbox'
 import { USER_BATCH_KINDS } from '../features/admin/user-batch'
-import { LOG_KINDS, MANAGED_ROLES } from './types'
+import { COMPLETIONS, LOG_KINDS, MANAGED_ROLES } from './types'
 
 const now = sql`(unixepoch())`
 
@@ -176,7 +177,21 @@ export const items = sqliteTable(
       .notNull()
       .references(() => sections.id, { onDelete: 'cascade' }),
     type: text('type', {
-      enum: ['page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab', 'presentation', 'publication', 'folder'],
+      enum: [
+        'page',
+        'link',
+        'file',
+        'screen',
+        'code',
+        'bundle',
+        'agent',
+        'quiz',
+        'collab',
+        'presentation',
+        'publication',
+        'folder',
+        'survey',
+      ],
     }).notNull(),
     title: text('title').notNull(),
     body: text('body').notNull().default(''),
@@ -191,9 +206,7 @@ export const items = sqliteTable(
     hidden: integer('hidden').notNull().default(0),
     /** アクセス制限。Moodle の availability と同じ形の JSON（lib/restriction.ts）。NULL は制限なし */
     availability: text('availability'),
-    completion: text('completion', { enum: ['none', 'manual', 'view', 'play', 'clear', 'pass'] })
-      .notNull()
-      .default('none'),
+    completion: text('completion', { enum: COMPLETIONS }).notNull().default('none'),
     position: integer('position').notNull().default(0),
     createdAt: integer('created_at').notNull().default(now),
     updatedAt: integer('updated_at')
@@ -206,9 +219,9 @@ export const items = sqliteTable(
     index('items_course').on(t.courseId),
     check(
       'items_type',
-      sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab', 'presentation', 'publication', 'folder')`,
+      sql`${t.type} IN ('page', 'link', 'file', 'screen', 'code', 'bundle', 'agent', 'quiz', 'collab', 'presentation', 'publication', 'folder', 'survey')`,
     ),
-    check('items_completion', sql`${t.completion} IN ('none', 'manual', 'view', 'play', 'clear', 'pass')`),
+    check('items_completion', sql`${t.completion} IN ('none', 'manual', 'view', 'play', 'clear', 'pass', 'answer')`),
     check('items_link_target', sql`${t.linkTarget} IN ('new', 'same', 'embed')`),
   ],
 )
@@ -803,6 +816,43 @@ export const userBatchMembers = sqliteTable(
     position: integer('position').notNull(),
   },
   (t) => [primaryKey({ columns: [t.batchId, t.userId] }), index('user_batch_members_user').on(t.userId)],
+)
+
+/** アンケートのアイテム（items.type が survey）の設定。行がなければ、問いがまだない */
+export const surveyItems = sqliteTable('survey_items', {
+  itemId: integer('item_id')
+    .primaryKey()
+    .references(() => items.id, { onDelete: 'cascade' }),
+  questions: text('questions', { mode: 'json' }).$type<SurveyQuestion[]>().notNull().default([]),
+  anonymous: integer('anonymous').notNull().default(0),
+  showResults: integer('show_results').notNull().default(0),
+  allowEdit: integer('allow_edit').notNull().default(0),
+  opensAt: integer('opens_at'),
+  closesAt: integer('closes_at'),
+})
+
+/**
+ * アンケートの回答。1 人 1 行。
+ * 匿名のアンケートでも user_id を持つのは、二重に答えさせないためと、回答を直せるようにするため。匿名なら教師の画面には出さない
+ */
+export const surveyResponses = sqliteTable(
+  'survey_responses',
+  {
+    id: integer('id').primaryKey(),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    answers: text('answers', { mode: 'json' }).$type<SurveyAnswer[]>().notNull(),
+    createdAt: integer('created_at').notNull().default(now),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .default(now)
+      .$onUpdate(() => now),
+  },
+  (t) => [uniqueIndex('survey_responses_item_user').on(t.itemId, t.userId), index('survey_responses_user').on(t.userId)],
 )
 
 /** コースの中のグループ。1 人が複数のグループに入れる（Moodle と同じ） */

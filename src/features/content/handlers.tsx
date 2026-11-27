@@ -58,6 +58,8 @@ import { HTML_PAGE_CSP, isHtmlFile, previewKind } from '../../lib/preview'
 import { DEFAULT_PASS_PERCENT, MAX_QUIZ_JSON_LENGTH, isQuizLook, readQuizForm } from '../quiz/quiz'
 import { getQuizSettings, quizStore, saveQuizSettings } from '../quiz/quiz-items'
 import { quizViewOf } from '../quiz/quiz-store'
+import { MAX_SURVEY_JSON_LENGTH, readSurveyForm } from '../survey/survey'
+import { getSurveySettings, responseCount, saveSurveySettings, surveyViewOf } from '../survey/survey-items'
 import { availableCodeLanguages } from '../code/sandbox'
 import { completions, items, sections } from '../../lib/schema'
 import { isSharing } from '../screen/screen-share'
@@ -121,9 +123,9 @@ function collabView(access: CourseAccess, itemId: number): CollabView | undefine
 type KindData<P> = (c: Context<AppEnv>, access: CourseAccess, itemId: number) => Partial<P> | Promise<Partial<P>>
 type EditData = Pick<
   Parameters<typeof ItemEditPage>[0],
-  'bundle' | 'presentation' | 'agent' | 'quiz' | 'collab' | 'publication' | 'folder' | 'agentModels'
+  'bundle' | 'presentation' | 'agent' | 'quiz' | 'collab' | 'publication' | 'folder' | 'agentModels' | 'survey' | 'surveyResponses'
 >
-type ViewData = Pick<Parameters<typeof ItemPage>[0], 'bundle' | 'agent' | 'quiz' | 'collab' | 'publication' | 'folder'>
+type ViewData = Pick<Parameters<typeof ItemPage>[0], 'bundle' | 'agent' | 'quiz' | 'collab' | 'publication' | 'folder' | 'survey'>
 const nothing = () => ({})
 
 // Record にするのは、種類を足したときに、編集画面とアイテムの画面に渡すデータの決め忘れを型エラーにするため
@@ -140,6 +142,7 @@ const EDIT_DATA: Record<ItemType, KindData<EditData>> = {
   agent: async (c, access, itemId) => ({ agent: agentView(c, access, itemId), agentModels: await agentOpenRouterModels() }),
   publication: (_c, _access, itemId) => ({ publication: getPublicationSettings(itemId) }),
   folder: (_c, _access, itemId) => ({ folder: folderViewOf(itemId) }),
+  survey: async (_c, _access, itemId) => ({ survey: getSurveySettings(itemId), surveyResponses: await responseCount(itemId) }),
 }
 
 const VIEW_DATA: Record<ItemType, KindData<ViewData>> = {
@@ -157,6 +160,14 @@ const VIEW_DATA: Record<ItemType, KindData<ViewData>> = {
     publication: publicationViewOf(itemId, { id: c.var.user!.id, manage: access.canManage }, Math.floor(Date.now() / 1000)),
   }),
   folder: (_c, _access, itemId) => ({ folder: folderViewOf(itemId) }),
+  survey: async (c, access, itemId) => ({
+    survey: await surveyViewOf(access.course.id, itemId, {
+      userId: c.var.user!.id,
+      student: access.role === 'student',
+      manage: access.canManage,
+      editing: c.req.query('edit') === '1',
+    }),
+  }),
 }
 
 const getItem = (courseId: number, itemId: number) =>
@@ -336,6 +347,10 @@ function readItemInput(form: Form): ItemInput {
     passPercent: field(form, 'pass_percent', 5),
     showAnswers: field(form, 'show_answers', 1) === '0' ? 0 : 1,
     look: quizLookField(form),
+    surveyQuestions: readSurveyForm(sourceField(form, 'survey_questions', MAX_SURVEY_JSON_LENGTH + 1)).rows,
+    anonymous: field(form, 'anonymous', 1) === '1' ? 1 : 0,
+    showResults: field(form, 'show_results', 1) === '1' ? 1 : 0,
+    allowEdit: field(form, 'allow_edit', 1) === '1' ? 1 : 0,
     approval: field(form, 'approval', 1) === '0' ? 0 : 1,
     showNames: field(form, 'show_names', 1) === '0' ? 0 : 1,
     folder: {
@@ -560,6 +575,19 @@ export async function updateItem(c: Context<AppEnv>) {
       opensAt: dateTimeInputToUnix(input.opens_at ?? '') || null,
       closesAt: dateTimeInputToUnix(input.closes_at ?? '') || null,
     })
+  if (item.type === 'survey') {
+    const saved = getSurveySettings(iid)
+    // 匿名から記名に戻させないのは、匿名と知らせて集めた回答の名前を、あとから見られるようにしないため
+    const keepAnonymous = saved.anonymous === 1 && (await responseCount(iid)) > 0
+    saveSurveySettings(iid, {
+      questions: input.survey_questions.questions,
+      anonymous: keepAnonymous ? 1 : input.anonymous,
+      showResults: input.show_results,
+      allowEdit: input.allow_edit,
+      opensAt: dateTimeInputToUnix(input.opens_at ?? '') || null,
+      closesAt: dateTimeInputToUnix(input.closes_at ?? '') || null,
+    })
+  }
   if (item.type === 'folder')
     saveFolderSettings(iid, {
       showInline: input.show_inline,

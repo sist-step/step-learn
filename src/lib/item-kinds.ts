@@ -97,6 +97,7 @@ export const ITEM_KINDS: Record<ItemType, ItemKind> = {
     storedFiles: (_courseId, itemId) => ({ keys: bundleKeysOf([itemId]), prefixes: [] }),
   },
   agent: { ...NONE, afterCreate: { page: 'edit', message: '使える期間と上限を設定してください。' } },
+  survey: { ...NONE, afterCreate: { page: 'edit', message: '問いを作ってください。' } },
   // 既定の公開の方法（承認してから公開）が授業に合うかを決めてもらうため、編集画面へ進める
   publication: {
     afterCreate: { page: 'edit', message: '公開の方法と提出の期間を確かめてください。' },

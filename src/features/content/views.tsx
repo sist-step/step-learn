@@ -64,6 +64,8 @@ import { DEFAULT_FOLDER_SETTINGS, folderBase, type FolderSettings, type FolderVi
 import { isHtmlFile, previewKind } from '../../lib/preview'
 import { quizFormRows, type QuizFormRow, type QuizLook, type QuizSettings } from '../quiz/quiz'
 import type { QuizView } from '../quiz/quiz-store'
+import { SurveyEditor, SurveyPanel, SurveySettingsCard } from '../survey/components/survey'
+import { surveyFormRows, type SurveyFormRow, type SurveySettings, type SurveyView } from '../survey/survey'
 import { formatBytes } from '../../lib/bytes'
 import { entryItems, sectionLabel, sectionOptions, sectionTree } from '../../lib/section-tree'
 import type { CodeItem, Item, Section } from '../../lib/types'
@@ -93,6 +95,11 @@ export type ItemInput = {
   passPercent: string
   showAnswers: number
   look: QuizLook
+  /** アンケートの問いと、匿名・集計を見せる・回答を直せる（0 / 1） */
+  surveyQuestions: SurveyFormRow[]
+  anonymous: number
+  showResults: number
+  allowEdit: number
   /** コーディングエージェントの、選んだモデルの ID */
   model: string
   /** 学生フォルダの、承認してから公開するか・上げた人の名前を見せるか */
@@ -145,6 +152,8 @@ export const ItemEditPage = ({
   collab,
   publication,
   folder,
+  survey,
+  surveyResponses = 0,
   agentModels = null,
   gradingEnabled,
   judge,
@@ -171,6 +180,9 @@ export const ItemEditPage = ({
   publication?: PublicationSettings
   /** フォルダーのアイテムの設定と、置いたファイル */
   folder?: FolderView
+  /** アンケートのアイテムの設定と、回答の数 */
+  survey?: SurveySettings
+  surveyResponses?: number
   /** コーディングエージェントのアイテムで選べる OpenRouter のモデル。一覧を取れなければ null */
   agentModels?: OpenRouterModelInfo[] | null
   /** AI が設定されていて、提出を自動で採点するか */
@@ -197,14 +209,18 @@ export const ItemEditPage = ({
     constraints: (code?.constraints ?? []).map((c) => ({ label: c.label, text: c.text, optional: !!c.optional })),
     solution: code?.solution ?? {},
     solutionPublic: code?.solutionPublic === 1,
-    opensAt: unixToDateTimeInput(code?.opensAt ?? agent?.settings.opensAt ?? publication?.opensAt ?? undefined),
-    closesAt: unixToDateTimeInput(code?.closesAt ?? agent?.settings.closesAt ?? publication?.closesAt ?? undefined),
+    opensAt: unixToDateTimeInput(code?.opensAt ?? agent?.settings.opensAt ?? publication?.opensAt ?? survey?.opensAt ?? undefined),
+    closesAt: unixToDateTimeInput(code?.closesAt ?? agent?.settings.closesAt ?? publication?.closesAt ?? survey?.closesAt ?? undefined),
     userLimit: agent ? String(agent.settings.userLimit) : '',
     instructions: agent?.settings.instructions ?? '',
     questions: quizFormRows(quiz?.questions ?? []),
     passPercent: quiz ? String(quiz.passPercent) : '',
     showAnswers: quiz?.showAnswers ?? 1,
     look: quiz?.look ?? 'plain',
+    surveyQuestions: surveyFormRows(survey?.questions ?? []),
+    anonymous: survey?.anonymous ?? 0,
+    showResults: survey?.showResults ?? 0,
+    allowEdit: survey?.allowEdit ?? 0,
     model: agent?.settings.model.id ?? '',
     approval: publication?.approval ?? 1,
     showNames: publication?.showNames ?? 1,
@@ -218,7 +234,7 @@ export const ItemEditPage = ({
     { href: `/courses/${courseId}`, label: access.course.title },
     ...(section ? [{ href: editUrl(courseId, section.id), label: sectionLabel(sections, section.id) }] : []),
   ]
-  const lost = `${bundle ? '配布するファイルと、' : presentation ? 'PDF と、' : folder ? '置いたファイルと、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : agent ? '利用状況と' : quiz ? '受験の記録と' : collab || publication ? 'ファイルと' : ''}完了記録も消え、元に戻せません。`
+  const lost = `${bundle ? '配布するファイルと、' : presentation ? 'PDF と、' : folder ? '置いたファイルと、' : ''}学生の${code ? '提出と' : bundle ? '変更履歴と' : agent ? '利用状況と' : quiz ? '受験の記録と' : survey ? '回答と' : collab || publication ? 'ファイルと' : ''}完了記録も消え、元に戻せません。`
   return (
     <AppShell
       tone={access.course.color}
@@ -312,6 +328,7 @@ export const ItemEditPage = ({
             />
           )}
           {quiz && <QuizEditor rows={v.questions} errors={errors} />}
+          {survey && <SurveyEditor rows={v.surveyQuestions} errors={errors} responses={surveyResponses} />}
 
           <aside class="editor-side">
             {code && (
@@ -324,6 +341,15 @@ export const ItemEditPage = ({
             {code && <CodePeriodCard opensAt={v.opensAt} closesAt={v.closesAt} errors={errors} />}
             {quiz && <QuizGradingCard passPercent={v.passPercent} showAnswers={v.showAnswers} errors={errors} />}
             {quiz && <QuizLookCard look={v.look} />}
+            {survey && (
+              <SurveySettingsCard
+                settings={{ anonymous: v.anonymous, showResults: v.showResults, allowEdit: v.allowEdit }}
+                opensAt={v.opensAt}
+                closesAt={v.closesAt}
+                locked={survey.anonymous === 1 && surveyResponses > 0}
+                errors={errors}
+              />
+            )}
             {collab && <CollabSettingsCard settings={collab} />}
             {folder && <FolderSettingsCard settings={v.folder} />}
             {publication && (
@@ -398,6 +424,7 @@ export const ItemPage = ({
   collab,
   publication,
   folder,
+  survey,
   revision,
 }: {
   access: CourseAccess
@@ -418,6 +445,7 @@ export const ItemPage = ({
   collab?: CollabView
   publication?: PublicationView
   folder?: FolderView
+  survey?: SurveyView
   revision: string
 }) => {
   const id = access.course.id
@@ -445,6 +473,7 @@ export const ItemPage = ({
     item.type === 'collab' ||
     item.type === 'publication' ||
     item.type === 'folder' ||
+    item.type === 'survey' ||
     embedded ||
     !!code ||
     (!!preview && (preview !== 'text' || textPreview !== null))
@@ -687,6 +716,8 @@ export const ItemPage = ({
           )}
 
           {quiz && <QuizPanel quiz={quiz} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />}
+
+          {survey && <SurveyPanel survey={survey} editHref={access.canManage ? `${base}/${item.id}/edit` : undefined} />}
 
           {collab && <CollabPanel collab={collab} />}
 

@@ -11,6 +11,7 @@ import { getSetting, setSetting, updateSetting, type Theme } from './lib/setting
 import { applyEditMode, carriesFiles, codeEditor, confirmDialog, confirmNear, dismissLater, initCodeEditors, toast } from './client/core'
 import { initRestrictionEditors } from './client/restriction'
 import './features/quiz/client'
+import './features/survey/client'
 import './client/datetime'
 import { initMascots, initWalkers } from './client/mascot'
 import { aiDocked, aiHooks, initAiPanel, setAiOpen } from './features/ai/client'

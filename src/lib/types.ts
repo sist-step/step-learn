@@ -64,6 +64,7 @@ export const ITEM_TYPES = [
   'bundle',
   'agent',
   'publication',
+  'survey',
 ] as const
 
 export type ItemType = (typeof ITEM_TYPES)[number]
@@ -81,9 +82,10 @@ export const ITEM_TYPE_LABELS: Record<ItemType, string> = {
   bundle: 'ファイル自動配布',
   agent: 'コーディングエージェント',
   publication: '学生フォルダ',
+  survey: 'アンケート',
 }
 
-export const COMPLETIONS = ['none', 'manual', 'view', 'play', 'clear', 'pass'] as const
+export const COMPLETIONS = ['none', 'manual', 'view', 'play', 'clear', 'pass', 'answer'] as const
 
 export type Completion = (typeof COMPLETIONS)[number]
 
@@ -94,6 +96,7 @@ export const COMPLETION_LABELS: Record<Completion, string> = {
   play: '最後まで再生したら完了',
   clear: '制約をすべてクリアしたら完了',
   pass: '合格したら完了',
+  answer: '回答したら完了',
 }
 
 export const LINK_TARGETS = ['new', 'same', 'embed'] as const

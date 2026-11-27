@@ -1,3 +1,4 @@
+import { csvText } from '../../lib/csv'
 import { zipStream } from '../../lib/zip'
 import { ROLE_LABELS, type ManagedRole } from '../../lib/types'
 import type { BatchFileFormat } from './user-batch'
@@ -147,15 +148,7 @@ const xlsx = (input: BatchFileInput) =>
     xmlPart('xl/worksheets/sheet1.xml', sheetXml(tableRows(input))),
   ])
 
-const csvCell = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)
-
-// BOM を付けるのは、付けないと Excel が Shift_JIS として開き、氏名が文字化けするため
-const csv = (input: BatchFileInput) =>
-  new Blob([
-    `﻿${tableRows(input)
-      .map((row) => row.map(csvCell).join(','))
-      .join('\r\n')}\r\n`,
-  ]).stream()
+const csv = (input: BatchFileInput) => new Blob([csvText(tableRows(input))]).stream()
 
 export const BATCH_FILES: Record<BatchFileFormat, { contentType: string; build: (input: BatchFileInput) => ReadableStream<Uint8Array> }> = {
   docx: { contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', build: docx },

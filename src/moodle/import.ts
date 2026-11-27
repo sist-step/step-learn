@@ -147,6 +147,7 @@ const NATIVE_MODULE: Record<ItemType, string> = {
   collab: '',
   publication: 'publication',
   folder: 'folder',
+  survey: '',
 }
 
 function folderSummary({ settings, files }: BackupFolder) {
