@@ -51,14 +51,15 @@ const RULES: Rule[] = [
   post('/login', 'login', 'ログイン', 'change'),
   rule('GET', '/auth/microsoft/callback', 'login.microsoft', 'Microsoft アカウントでログイン', 'change'),
   post('/logout', 'logout', 'ログアウト', 'change'),
-  post('/register/complete', 'register', '新規登録', 'important'),
   post('/auth/microsoft/register', 'register.microsoft', 'Microsoft アカウントで新規登録', 'important'),
   post('/password/reset', 'password.reset', 'パスワードを再設定', 'important'),
   post('/account', 'account.update', 'プロフィールを変更', 'important'),
   post('/account/password', 'account.password', 'パスワードを変更', 'important'),
   post('/account/microsoft/unlink', 'account.microsoft.unlink', 'Microsoft アカウントの連携を解除', 'important'),
 
+  post('/admin/users', 'admin.user.create', 'ユーザーを作成', 'important'),
   post('/admin/users/:uid/role', 'admin.role', 'ユーザーのロールを変更', 'important', 'user'),
+  post('/admin/users/:uid/password', 'admin.password', 'ユーザーのパスワードを再設定', 'important', 'user'),
   post('/admin/ai', 'admin.ai', 'AI の月の上限を変更', 'important'),
 
   post('/courses', 'course.create', 'コースを作成', 'important'),
@@ -164,7 +165,11 @@ const LOGIN_FAILED = { action: 'login.failed', label: 'ログインに失敗' }
 // 一覧にない POST も残すのは、データを変える操作を足したときに一覧へ足し忘れても、記録から漏れないようにするため
 const OTHER: Rule = { method: 'POST', pattern: /^/, action: 'other', label: 'その他の操作', kind: 'change' }
 
+// 消した操作の名前を残すのは、重要な操作のログは消さないので、前に記録したものを一覧に出し続けるため
+const RETIRED_LABELS = { register: '新規登録' }
+
 const ACTION_LABELS: Record<string, string> = Object.fromEntries([
+  ...Object.entries(RETIRED_LABELS),
   ...RULES.filter((r) => r.kind).map((r) => [r.action, r.label]),
   [LOGIN_FAILED.action, LOGIN_FAILED.label],
   ...Object.entries(ALTERNATES).map(([action, { label }]) => [action, label]),

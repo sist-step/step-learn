@@ -1,7 +1,7 @@
 import type { Child } from 'hono/jsx'
 import { CreateCourseButton } from '../../components/course'
 import { Button, IconButton } from '../../components/button'
-import { SearchBox, Select, TextField, validateWith } from '../../components/form'
+import { SearchBox, Select, SelectField, TextField, validateWith } from '../../components/form'
 import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { Block, Card, Stat, Stats, Table } from '../../components/card'
@@ -33,7 +33,19 @@ import {
 import type { AgentItemRow } from '../agent/agent'
 import type { AiOverview, AiUserUsage } from '../ai/ai-ledger'
 import type { FieldErrors } from '../../lib/forms'
-import { LOG_KINDS, LOG_KIND_LABELS, LOG_RETENTION_DAYS, ROLE_LABELS, type LogKind, type Role } from '../../lib/types'
+import { PASSWORD_HINT } from '../../lib/password'
+import {
+  LOG_KINDS,
+  LOG_KIND_LABELS,
+  LOG_RETENTION_DAYS,
+  MANAGED_ROLES,
+  ROLE_LABELS,
+  isManagedRole,
+  type LogKind,
+  type ManagedRole,
+  type Role,
+} from '../../lib/types'
+import { USERNAME_HINT } from '../../lib/username'
 
 type Tab = 'users' | 'courses' | 'ai' | 'agents' | 'logs'
 
@@ -116,9 +128,14 @@ export const UsersPage = ({
       ))}
     </Stats>
 
-    <form method="get" class="toolbar">
-      <SearchBox label="ユーザーを検索" value={q} placeholder="名前・ユーザー名・メールで検索" />
-    </form>
+    <div class="toolbar">
+      <form method="get" class="toolbar-grow">
+        <SearchBox label="ユーザーを検索" value={q} placeholder="名前・ユーザー名・メールで検索" />
+      </form>
+      <Button href="/admin/users/new" variant="primary" icon="plus">
+        ユーザーを作成
+      </Button>
+    </div>
 
     {list.length === 0 ? (
       <EmptyState icon="users" title="ユーザーが見つかりません" text="検索条件を変えてお試しください。" />
@@ -129,6 +146,7 @@ export const UsersPage = ({
           { label: '登録日', class: 'hide-sm' },
           { label: 'コース', class: 'hide-sm num' },
           { label: 'ロール' },
+          { label: '操作', srOnly: true },
         ]}
       >
         {list.map((u) => (
@@ -159,10 +177,123 @@ export const UsersPage = ({
                 />
               </form>
             </td>
+            <td>
+              {isManagedRole(u.role) && (
+                <div class="row-actions">
+                  <IconButton
+                    href={`/admin/users/${u.id}/password`}
+                    icon="lock"
+                    label={`${u.name} のパスワードを再設定`}
+                    title="パスワードを再設定"
+                  />
+                </div>
+              )}
+            </td>
           </tr>
         ))}
       </Table>
     )}
+  </AdminShell>
+)
+
+const MANAGED_ROLE_OPTIONS = MANAGED_ROLES.map((r) => ({ value: r, label: ROLE_LABELS[r] }))
+
+const BackToUsers = () => (
+  <a href="/admin" class="back-link">
+    <Icon name="chevronLeft" size={16} />
+    ユーザー一覧
+  </a>
+)
+
+export type NewUserValues = { name: string; username: string; email: string; role: ManagedRole }
+
+export const NewUserPage = ({ values, errors = {} }: { values: NewUserValues; errors?: FieldErrors }) => (
+  <AdminShell tab="users">
+    <Styles use={['/src/features/admin/admin.css']} />
+    <div class="admin-form">
+      <BackToUsers />
+      <Card heading="ユーザーを作成" description="作成したら、メールアドレスかユーザー名と、ここで決めたパスワードを本人に伝えてください。">
+        <form method="post" action="/admin/users" class="stack" data-loading-form {...validateWith('newUser')}>
+          <div class="grid-2">
+            <TextField label="氏名" name="name" value={values.name} error={errors.name} autocomplete="off" autofocus />
+            <SelectField label="ロール" name="role" options={MANAGED_ROLE_OPTIONS} value={values.role} error={errors.role} />
+          </div>
+          <TextField
+            label="ユーザー名"
+            name="username"
+            value={values.username}
+            error={errors.username}
+            hint={USERNAME_HINT}
+            autocomplete="off"
+            autocapitalize="none"
+            spellcheck={false}
+          />
+          <TextField
+            label="メールアドレス"
+            name="email"
+            type="email"
+            value={values.email}
+            error={errors.email}
+            hint="Microsoft アカウントのメールアドレスと同じなら、本人が Microsoft アカウントでもログインできます。"
+            autocomplete="off"
+          />
+          <TextField
+            label="パスワード"
+            name="password"
+            type="password"
+            error={errors.password}
+            hint={PASSWORD_HINT}
+            autocomplete="new-password"
+          />
+          <div class="form-actions">
+            <Button href="/admin" variant="ghost">
+              キャンセル
+            </Button>
+            <Button type="submit" variant="primary">
+              ユーザーを作成
+            </Button>
+          </div>
+        </form>
+      </Card>
+    </div>
+  </AdminShell>
+)
+
+export type PasswordTarget = { id: number; name: string; username: string | null; email: string; role: ManagedRole }
+
+export const ResetPasswordPage = ({ user, errors = {} }: { user: PasswordTarget; errors?: FieldErrors }) => (
+  <AdminShell tab="users">
+    <Styles use={['/src/features/admin/admin.css']} />
+    <div class="admin-form">
+      <BackToUsers />
+      <Card
+        heading="パスワードを再設定"
+        description="再設定すると、このユーザーはすべての端末でログアウトされます。新しいパスワードは本人に伝えてください。"
+      >
+        <div class="stack">
+          <Person avatar={<Avatar name={user.name} />} name={user.name} meta={[ROLE_LABELS[user.role], ...userMeta(user)]} />
+          <form method="post" action={`/admin/users/${user.id}/password`} class="stack" data-loading-form {...validateWith('setPassword')}>
+            <TextField
+              label="新しいパスワード"
+              name="password"
+              type="password"
+              error={errors.password}
+              hint={PASSWORD_HINT}
+              autocomplete="new-password"
+              autofocus
+            />
+            <div class="form-actions">
+              <Button href="/admin" variant="ghost">
+                キャンセル
+              </Button>
+              <Button type="submit" variant="primary">
+                パスワードを再設定
+              </Button>
+            </div>
+          </form>
+        </div>
+      </Card>
+    </div>
   </AdminShell>
 )
 

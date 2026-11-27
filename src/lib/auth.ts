@@ -8,7 +8,7 @@ import { credentialStamp } from './vscode-token'
 import { config } from './config'
 import { isInPeriod } from './course-period'
 import { db } from './db'
-import { courses, emailVerifications, enrollments, passwordResets, sessions, userIdentities, users } from './schema'
+import { courses, enrollments, passwordResets, sessions, userIdentities, users } from './schema'
 
 const SESSION_COOKIE = 'sid'
 const SESSION_TTL = 60 * 60 * 24 * 30 // 30日
@@ -16,8 +16,6 @@ const SESSION_TTL = 60 * 60 * 24 * 30 // 30日
 const SESSION_REFRESH_BELOW = SESSION_TTL / 2
 
 const PBKDF2_ITERATIONS = 600_000
-
-const EMAIL_VERIFICATION_TTL = 60 * 60 * 24 // 24時間
 
 // 確認メールより短いのは、リンクが漏れるとアカウントを乗っ取られるため
 const PASSWORD_RESET_TTL = 60 * 60 // 1時間
@@ -152,37 +150,10 @@ export async function createUser(user: {
       tx.insert(userIdentities)
         .values({ ...user.identity, userId: inserted.id, email: user.email })
         .run()
-    const emailTaken = !inserted && !!tx.select({ id: users.id }).from(users).where(eq(users.email, user.email)).get()
-    // ユーザー名の重複で確認用トークンを消さないのは、別のユーザー名で登録をやり直せるようにするため
-    if (inserted || emailTaken) tx.delete(emailVerifications).where(eq(emailVerifications.email, user.email)).run()
     if (inserted) return { id: inserted.id }
+    const emailTaken = !!tx.select({ id: users.id }).from(users).where(eq(users.email, user.email)).get()
     return { taken: emailTaken ? 'email' : 'username' }
   })
-}
-
-/** メール確認用のトークンを発行する。DB にはハッシュだけを保存し、平文はメールのリンクにだけ載せる */
-export async function createEmailVerification(email: string, next: string) {
-  const token = randomToken()
-  const t = now()
-  const tokenHash = await hashToken(token)
-  db.transaction((tx) => {
-    tx.delete(emailVerifications).where(lte(emailVerifications.expiresAt, t)).run()
-    tx.insert(emailVerifications)
-      .values({ tokenHash, email, next, expiresAt: t + EMAIL_VERIFICATION_TTL })
-      .run()
-  })
-  return token
-}
-
-export async function findEmailVerification(token: string) {
-  if (!token) return null
-  const tokenHash = await hashToken(token)
-  const row = db
-    .select({ email: emailVerifications.email, next: emailVerifications.next })
-    .from(emailVerifications)
-    .where(and(eq(emailVerifications.tokenHash, tokenHash), gt(emailVerifications.expiresAt, now())))
-    .get()
-  return row ?? null
 }
 
 /** パスワード再設定用のトークンを発行する。DB にはハッシュだけを保存し、平文はメールのリンクにだけ載せる */

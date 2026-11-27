@@ -44,4 +44,4 @@ npm run user:create -- --email admin@example.com --name "管理者" --username a
 - `--role` を省略すると管理者になります
 - `--username` は半角英数字と `.` `_` `-` で 3〜30 文字です
 - パスワードは対話的に入力します。パイプで渡した場合は 1 行目を使います（例 `cat password.txt | npm run user:create -- ...`）
-- Web の新規登録と同じパスワードの基準を満たす必要があります
+- 管理 > ユーザーで作るときと同じパスワードの基準を満たす必要があります。最初の管理者だけを CLI で作り、教師と学生は管理 > ユーザーで作れます

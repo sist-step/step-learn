@@ -4,18 +4,14 @@ import type { AppEnv } from '../../lib/types'
 import {
   logout,
   microsoftCallback,
-  showCompleteRegister,
   showForgotPassword,
   showLogin,
   showMicrosoftRegister,
-  showRegister,
   showResetPassword,
   startMicrosoft,
-  submitCompleteRegister,
   submitForgotPassword,
   submitLogin,
   submitMicrosoftRegister,
-  submitRegister,
   submitResetPassword,
 } from './handlers'
 
@@ -23,10 +19,6 @@ const app = new Hono<AppEnv>()
 
 app.get('/login', showLogin)
 app.post('/login', submitLogin)
-app.get('/register', showRegister)
-app.post('/register', submitRegister)
-app.get('/register/complete', showCompleteRegister)
-app.post('/register/complete', submitCompleteRegister)
 app.get('/password/forgot', showForgotPassword)
 app.post('/password/forgot', submitForgotPassword)
 app.get('/password/reset', showResetPassword)
