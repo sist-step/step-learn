@@ -307,6 +307,22 @@ export const MicrosoftRegisterPage = ({
   </AuthShell>
 )
 
+export const MicrosoftSignupDomainPage = ({ email, domain }: { email: string; domain: string }) => (
+  <AuthShell>
+    <div class="auth-card">
+      <h1>このアカウントでは登録できません</h1>
+      <p class="muted">
+        Microsoft アカウント（{email}）は STEP Learn に登録されていません。Microsoft アカウントで新しく登録できるのは、@{domain}
+        のメールアドレスだけです。登録済みのアカウントがあれば、そちらでログインしてから、アカウント画面で Microsoft
+        アカウントを連携してください。
+      </p>
+      <Button href="/login" variant="primary" size="lg" block>
+        ログインに戻る
+      </Button>
+    </div>
+  </AuthShell>
+)
+
 export const MicrosoftUnverifiedPage = ({ email }: { email: string }) => (
   <AuthShell>
     <div class="auth-card">

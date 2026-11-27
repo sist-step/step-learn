@@ -23,6 +23,7 @@ import { clientIp, field, readFields, readForm, redirectWith, safeNext, type For
 import { mailer } from '../../lib/mail'
 import {
   type MicrosoftIdentity,
+  canSignUpWith,
   clearMicrosoftSignup,
   exchangeMicrosoftCode,
   findMicrosoftUser,
@@ -45,6 +46,7 @@ import {
   InvalidLinkPage,
   LoginPage,
   MicrosoftRegisterPage,
+  MicrosoftSignupDomainPage,
   MicrosoftUnverifiedPage,
   RegisterPage,
   RegisterSentPage,
@@ -395,6 +397,10 @@ export async function microsoftCallback(c: Context<AppEnv>) {
     if (!linkMicrosoft(existing.id, identity))
       return fail('このメールアドレスのアカウントには、別の Microsoft アカウントが連携されています。')
     return signIn(c, existing.id, flow.next)
+  }
+  if (!canSignUpWith(email)) {
+    c.status(403)
+    return c.render(<MicrosoftSignupDomainPage email={email} domain={config.microsoft!.signupDomain} />, { title: 'ログイン' })
   }
 
   await holdMicrosoftSignup(c, { subject: identity.subject, email, name: identity.name, next: flow.next })

@@ -8,4 +8,5 @@
 4. 「トークン構成」で、ID トークンに省略可能な要求 `email` と `xms_edov` を追加する。`xms_edov` がないと、組織のアカウントのメールアドレスを確かめられず、既存のアカウントとの照合と新規登録ができません（アカウント画面からの連携はできます）
 
 - 戻り先の URL は `APP_ORIGIN`（なければ要求の URL）から作ります。リバースプロキシの後ろでは `APP_ORIGIN` を設定してください
+- Microsoft アカウントで新しく登録できるのは、`MICROSOFT_SIGNUP_DOMAIN`（既定 `sist.ac.jp`）のメールアドレスだけです。ほかのドメインでも、同じメールアドレスで登録済みのアカウントにはログインでき、アカウント画面から連携もできます
 - `MICROSOFT_TENANT` は既定で `common`（組織と個人のどちらのアカウントでも可）です。`organizations`（組織のアカウントだけ）・`consumers`（個人のアカウントだけ）・テナント ID（その組織だけ）も選べます。`MICROSOFT_CLIENT_ID` を設定するなら `MICROSOFT_CLIENT_SECRET` も必須で、Moodle モードでは使いません

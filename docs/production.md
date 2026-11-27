@@ -21,6 +21,7 @@ npm start            # = node dist/server/index.js
 | `OPENROUTER_API_KEY` | OpenRouter の API キー（関係ない依頼の判定・STEP Docs の検索・予備のモデル） | 判定を省き、STEP Docs はページの一覧から読む |
 | `AI_EMAIL_DOMAIN` | AI エージェントを使えるメールアドレスのドメイン | `sist.ac.jp` |
 | `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` / `MICROSOFT_TENANT` | Microsoft アカウントでのログイン（[Microsoft アカウントでのログイン](microsoft-login.md)） | Microsoft でログインできない |
+| `MICROSOFT_SIGNUP_DOMAIN` | Microsoft アカウントで新しく登録できるメールアドレスのドメイン | `sist.ac.jp` |
 | `SANDBOX_URL` | Python を実行する sandbox の接続先（[sandbox/README.md](../sandbox/README.md)）。Docker Compose なら自動で設定される | コーディング問題で Python を選べない |
 | `BROWSER_URL` | Web の提出を開く browser の接続先（[browser/README.md](../browser/README.md)）。Docker Compose なら自動で設定される | Web の提出をコードだけで判定する |
 | `MOODLE_URL` ほか | Moodle モード（[moodle/README.md](../moodle/README.md)） | 通常モードで動く |
