@@ -19,6 +19,7 @@ import { checkPassword } from './password'
 import { isMediaFile } from './preview'
 import { PUBLICATION_STATUSES } from '../features/publication/publication'
 import { QUIZ_LOOKS, readQuizForm } from '../features/quiz/quiz'
+import { THEMES } from '../features/theme/theme'
 import { readRestrictionForm } from './restriction'
 import { COMPLETIONS, COURSE_COLORS, COURSE_ROLES, ITEM_TYPES, LINK_TARGETS, ROLES, type Completion, type ItemType } from './types'
 import { checkUsername, normalizeUsername } from './username'
@@ -591,6 +592,8 @@ const courseRole = z.object({ role: z.enum(COURSE_ROLES) })
 
 const siteRole = z.object({ role: z.enum(ROLES) })
 
+const theme = z.object({ theme: z.enum(THEMES, 'テーマが正しくありません。') })
+
 const codeSuggest = z.object({
   title: hidden(200),
   body: z.pipe(hidden(100_000), z.string().check(z.minLength(1, '先に問題文を書いてください。'))),
@@ -714,6 +717,7 @@ const FORMS = {
   participant,
   courseRole,
   siteRole,
+  theme,
   codeSuggest,
   codeConstraintsSuggest,
   codeTrial,

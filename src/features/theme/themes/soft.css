@@ -1,0 +1,200 @@
+/* ==========================================================================
+   テーマ「やわらかい」
+   クリーム色の紙に、大きな丸みとふっくらした影。ガラスとぼかしは使わない
+   ========================================================================== */
+
+/* トークンを :where() で包まないのは、base.css の :root[data-theme='dark'] より詳細度が低くなり、ダークで base の色に負けるため。
+   ダークの組にもライトと同じトークンをすべて書くのは、書き漏らしたものにライトの値が残るため */
+:root[data-ui-theme='soft'] {
+  --bg: #f4efe8;
+  --chrome: #f7f3ee;
+  --surface: #fffdfa;
+  --surface-2: #f8f3ed;
+  --surface-3: #efe8df;
+  --border: #ece4da;
+  --border-strong: #ddd3c6;
+  --card-border: rgb(120 90 60 / 0.07);
+  --field-border: #a3968a;
+  --surface-raised: #fffdfa;
+  --overlay-border: rgb(120 90 60 / 0.1);
+  --glass: #fffdfa;
+  --glass-hover: #fffaf3;
+  --glass-faint: rgb(255 253 250 / 0.5);
+  --glass-read: #fffdfa;
+  --glass-raised: #fffdfa;
+  --glass-modal: #fffdfa;
+  --glass-chrome: rgb(244 239 232 / 0.94);
+  --glass-border: transparent;
+  --glass-blur: saturate(1.2) blur(12px);
+  --scrim: rgb(70 50 35 / 0.28);
+  --aura-2: #f6b9a0;
+  --aura-3: #b9d7c4;
+  --aura-1-mix: 30%;
+  --aura-2-mix: 42%;
+  --aura-3-mix: 50%;
+  --primary-fill: linear-gradient(180deg, #e98468, #d4654a);
+  --primary-fill-hover: linear-gradient(180deg, #ee9178, #dc6f53);
+  --progress-fill: linear-gradient(90deg, #8cc49d, #f0a37f);
+  --control-border: transparent;
+  --control-bg: #f6efe7;
+  --track: rgb(120 90 60 / 0.07);
+  --track-border: transparent;
+  --thumb: #fffdfa;
+  --text: #3d3530;
+  --text-2: #574c45;
+  --muted: #7a6d63;
+  --primary: #d4654a;
+  --primary-soft: #fde6dc;
+  --primary-text: #b14d33;
+  --on-primary: #ffffff;
+  --accent: #f2a07b;
+  --on-accent: #3b1d10;
+  --success: #5fa97a;
+  --success-soft: #e5f2e8;
+  --success-text: #3c7a52;
+  --success-strong: #4b8f64;
+  --success-strong-hover: #427f58;
+  --danger: #df6b6b;
+  --danger-soft: #fbe8e5;
+  --danger-text: #b3423d;
+  --danger-strong: #c75450;
+  --danger-strong-hover: #b54844;
+  --warning: #e7a54a;
+  --warning-soft: #fcf0dc;
+  --warning-text: #875619;
+  --info: #6a9ad0;
+  --info-text: #3e6ca3;
+  --focus: #c4593f;
+  --ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--focus);
+  --ring-field: 0 0 0 4px color-mix(in srgb, var(--focus) 18%, transparent);
+  --shadow-sm: 0 1px 2px rgb(120 80 50 / 0.08);
+  --shadow-rest: 0 2px 8px -3px rgb(120 80 50 / 0.12);
+  --shadow-card: 0 1px 2px rgb(120 80 50 / 0.05), 0 12px 30px -12px rgb(120 80 50 / 0.2);
+  --shadow: 0 2px 4px rgb(120 80 50 / 0.06), 0 20px 40px -14px rgb(120 80 50 / 0.28);
+  --shadow-lg: 0 28px 60px -16px rgb(120 80 50 / 0.32), 0 4px 12px rgb(120 80 50 / 0.08);
+  --radius-sm: 12px;
+  --radius: 18px;
+  --radius-lg: 30px;
+  --radius-field: 16px;
+  --soft-puff: inset 0 1px 0 rgb(255 255 255 / 0.8), inset 0 -2px 0 rgb(120 80 50 / 0.06), 0 4px 10px -4px rgb(120 80 50 / 0.22);
+  --soft-puff-primary: inset 0 1px 0 rgb(255 255 255 / 0.3), inset 0 -3px 0 rgb(90 30 15 / 0.16), 0 10px 20px -8px rgb(212 101 74 / 0.55);
+}
+
+:root[data-ui-theme='soft'][data-theme='dark'] {
+  --bg: #1f1b18;
+  --chrome: #26211d;
+  --surface: #2b2622;
+  --surface-2: #332d28;
+  --surface-3: #3d3630;
+  --border: #3b342e;
+  --border-strong: #4b423b;
+  --card-border: rgb(255 240 225 / 0.06);
+  --field-border: #807369;
+  --surface-raised: #312b26;
+  --overlay-border: rgb(255 240 225 / 0.1);
+  --glass: #2b2622;
+  --glass-hover: #312b27;
+  --glass-faint: rgb(43 38 34 / 0.5);
+  --glass-read: #2b2622;
+  --glass-raised: #312b26;
+  --glass-modal: #312b26;
+  --glass-chrome: rgb(31 27 24 / 0.94);
+  --glass-border: transparent;
+  --glass-blur: saturate(1.2) blur(12px);
+  --scrim: rgb(0 0 0 / 0.5);
+  --aura-2: #d9785a;
+  --aura-3: #6e967d;
+  --aura-1-mix: 18%;
+  --aura-2-mix: 22%;
+  --aura-3-mix: 26%;
+  --primary-fill: linear-gradient(180deg, #f5a48c, #ec8a6f);
+  --primary-fill-hover: linear-gradient(180deg, #f8b29d, #f0977e);
+  --progress-fill: linear-gradient(90deg, #7cb58d, #ec9a78);
+  --control-border: transparent;
+  --control-bg: #3a332d;
+  --track: rgb(255 240 225 / 0.06);
+  --track-border: transparent;
+  --thumb: #4a413a;
+  --text: #f3ebe4;
+  --text-2: #d7ccc3;
+  --muted: #a99c92;
+  --primary: #ec8a6f;
+  --primary-soft: rgb(236 138 111 / 0.16);
+  --primary-text: #f5a48c;
+  --on-primary: #2a130b;
+  --accent: #e38f6d;
+  --on-accent: #2a130b;
+  --success: #74bb8c;
+  --success-soft: rgb(116 187 140 / 0.15);
+  --success-text: #8ccb9f;
+  --success-strong: #3f7d55;
+  --success-strong-hover: #4a8c61;
+  --danger: #e57f7a;
+  --danger-soft: rgb(229 127 122 / 0.15);
+  --danger-text: #f19a95;
+  --danger-strong: #b34c47;
+  --danger-strong-hover: #c25a55;
+  --warning: #e9b05f;
+  --warning-soft: rgb(233 176 95 / 0.14);
+  --warning-text: #f0c27f;
+  --info: #84ade0;
+  --info-text: #9dbfe8;
+  --focus: #f5a48c;
+  --ring: 0 0 0 2px var(--surface), 0 0 0 4px var(--focus);
+  --ring-field: 0 0 0 4px color-mix(in srgb, var(--focus) 24%, transparent);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-rest: 0 2px 8px -3px rgb(0 0 0 / 0.4);
+  --shadow-card: inset 0 1px 0 rgb(255 240 225 / 0.04), 0 14px 30px -14px rgb(0 0 0 / 0.6);
+  --shadow: inset 0 1px 0 rgb(255 240 225 / 0.05), 0 20px 40px -16px rgb(0 0 0 / 0.7);
+  --shadow-lg: inset 0 1px 0 rgb(255 240 225 / 0.05), 0 28px 60px -16px rgb(0 0 0 / 0.7);
+  --radius-sm: 12px;
+  --radius: 18px;
+  --radius-lg: 30px;
+  --radius-field: 16px;
+  --soft-puff: inset 0 1px 0 rgb(255 240 225 / 0.06), inset 0 -2px 0 rgb(0 0 0 / 0.2), 0 4px 10px -4px rgb(0 0 0 / 0.5);
+  --soft-puff-primary: inset 0 1px 0 rgb(255 255 255 / 0.3), inset 0 -3px 0 rgb(90 30 15 / 0.2), 0 10px 20px -8px rgb(236 138 111 / 0.45);
+}
+
+/* 部品の上書きを :where() で包むのは、上書きの詳細度を元の規則と同じにして、元の :hover などの状態の規則が今までどおり勝つようにするため */
+:where(:root[data-ui-theme='soft']) {
+  & h1, & h2, & h3 { font-weight: 600; letter-spacing: 0.02em; }
+
+  /* 色のにじみを大きく、ぼんやりと広げる */
+  & .content::before {
+    background:
+      radial-gradient(70% 60% at 100% 0%, color-mix(in srgb, var(--c1, var(--accent)) var(--aura-1-mix), transparent), transparent 75%),
+      radial-gradient(60% 70% at 0% 100%, color-mix(in srgb, var(--aura-3) var(--aura-3-mix), transparent), transparent 75%),
+      radial-gradient(50% 45% at 30% 0%, color-mix(in srgb, var(--aura-2) var(--aura-2-mix), transparent), transparent 75%);
+  }
+
+  & .btn { border-color: transparent; box-shadow: var(--soft-puff); }
+  & .btn-primary { box-shadow: var(--soft-puff-primary); }
+  & .btn-ghost { box-shadow: none; }
+  & .btn-danger-outline { --btn-border: color-mix(in srgb, var(--danger) 35%, transparent); border-color: var(--btn-border); }
+  & .btn:active { transform: translateY(2px); box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.08); }
+  & .icon-btn { border-radius: 14px; }
+
+  & .input { border-color: transparent; background: var(--surface-2); box-shadow: inset 0 2px 4px -2px rgb(120 80 50 / 0.12); }
+  & .input:focus { border-color: var(--focus); background: var(--surface); }
+  & .file-drop-zone { border-width: 2px; border-color: var(--border-strong); background: var(--surface-2); }
+
+  & .tabs { padding: 6px; background: var(--surface-3); box-shadow: inset 0 2px 5px -2px rgb(120 80 50 / 0.16); }
+  & .tab.active::before { background: var(--surface); box-shadow: var(--soft-puff); }
+  & .segmented { padding: 5px; background: var(--surface-3); box-shadow: inset 0 2px 5px -2px rgb(120 80 50 / 0.16); }
+
+  & .chip { height: 26px; padding: 0 12px; }
+  & .switch-track::after { box-shadow: 0 2px 4px rgb(120 80 50 / 0.3); }
+
+  & .rail-link { border-radius: 20px; }
+  & .rail-link.active { box-shadow: none; }
+
+  & .popover-panel { border-radius: 22px; }
+  & .toast {
+    border-color: transparent;
+    border-radius: 24px;
+    background: linear-gradient(100deg, color-mix(in srgb, var(--toast-c) 14%, var(--surface-raised)), var(--surface-raised) 55%);
+    box-shadow: var(--shadow-lg);
+  }
+
+  & .page-header h1 { font-weight: 600; }
+}

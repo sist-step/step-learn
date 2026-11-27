@@ -23,6 +23,7 @@ import {
 import { COLLAB_KINDS, COLLAB_SCOPES } from '../features/collab/collab'
 import { DEFAULT_PASS_PERCENT, QUIZ_LOOKS, type QuizAnswerRecord, type QuizQuestion } from '../features/quiz/quiz'
 import { PUBLICATION_STATUSES } from '../features/publication/publication'
+import { DEFAULT_THEME, THEMES } from '../features/theme/theme'
 import type { RunResult } from '../features/code/sandbox'
 import { LOG_KINDS } from './types'
 
@@ -43,9 +44,15 @@ export const users = sqliteTable(
     role: text('role', { enum: ['admin', 'teacher', 'student'] })
       .notNull()
       .default('student'),
+    // 端末ごと（localStorage）にしないのは、サーバーが最初の描画からテーマの CSS を <head> に出して、既定の見た目が一瞬見えるのを避けるため
+    theme: text('theme', { enum: THEMES }).notNull().default(DEFAULT_THEME),
     createdAt: integer('created_at').notNull().default(now),
   },
-  (t) => [uniqueIndex('users_username').on(t.username), check('users_role', sql`${t.role} IN ('admin', 'teacher', 'student')`)],
+  (t) => [
+    uniqueIndex('users_username').on(t.username),
+    check('users_role', sql`${t.role} IN ('admin', 'teacher', 'student')`),
+    check('users_theme', sql`${t.theme} IN ('glass', 'soft', 'cute')`),
+  ],
 )
 
 /** 外部のアカウント（Microsoft）とユーザーの結び付き。subject は Microsoft のテナント ID とオブジェクト ID を : でつないだもの */

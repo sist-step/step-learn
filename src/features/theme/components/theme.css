@@ -1,0 +1,200 @@
+/* ==========================================================================
+   テーマの選択（features/theme/components/theme.tsx）
+   ========================================================================== */
+
+.theme-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.theme-option {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 8px 14px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.2s, transform 0.2s var(--ease);
+}
+.theme-option.is-current { border-color: var(--c-ink); box-shadow: 0 0 0 1px var(--c-ink); cursor: default; }
+.theme-option-text { display: flex; flex-direction: column; gap: 4px; padding: 0 6px; }
+.theme-option-name { display: flex; align-items: center; gap: 6px; font-size: var(--fs-md); font-weight: 650; }
+.theme-option-name .icon { color: var(--c-ink); }
+.theme-option-desc { font-size: var(--fs-xs); line-height: 1.6; color: var(--muted); }
+@media (hover: hover) {
+  .theme-option:not(:disabled):hover { border-color: var(--border-strong); box-shadow: var(--shadow); transform: translateY(-2px); }
+}
+.theme-option:not(:disabled):active { transform: scale(0.985); transition-duration: 0.08s; }
+
+/* テーマの CSS を読む前に見せるので、そのテーマの色を書き写してある。大きさを cqw で書くのは、選択肢と読み込みの画面で大きさが違っても同じ形に見せるため */
+.theme-preview {
+  --tp-bg: #e9edf5;
+  --tp-bg-image: radial-gradient(70% 70% at 100% 0%, rgb(0 240 255 / 0.3), transparent 70%), radial-gradient(60% 70% at 0% 100%, rgb(79 107 255 / 0.25), transparent 70%);
+  --tp-chrome: transparent;
+  --tp-surface: rgb(255 255 255 / 0.72);
+  --tp-border: 0.4cqw solid rgb(255 255 255 / 0.9);
+  --tp-radius: 4cqw;
+  --tp-shadow: 0 1.5cqw 4cqw -2cqw rgb(20 30 60 / 0.3);
+  --tp-line: rgb(15 23 42 / 0.12);
+  --tp-active: rgb(0 240 255 / 0.35);
+  --tp-primary: #0a0a0a;
+  container-type: inline-size;
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: calc(var(--radius) - 4px);
+  outline: 1px solid var(--card-border);
+  outline-offset: -1px;
+}
+/* 背景を .theme-preview 自身に塗らないのは、cqw がその要素自身ではなく外側のコンテナーを基準にするため */
+.theme-preview::before { content: ''; position: absolute; inset: 0; background: var(--tp-bg-image), var(--tp-bg); }
+.theme-preview-soft {
+  --tp-bg: #f4efe8;
+  --tp-bg-image: radial-gradient(70% 80% at 100% 0%, rgb(246 185 160 / 0.55), transparent 70%), radial-gradient(70% 80% at 0% 100%, rgb(185 215 196 / 0.6), transparent 70%);
+  --tp-surface: #fffdfa;
+  --tp-border: 0 solid transparent;
+  --tp-radius: 6cqw;
+  --tp-shadow: 0 2cqw 5cqw -2cqw rgb(120 80 50 / 0.3);
+  --tp-line: #ece4da;
+  --tp-active: #fde3d8;
+  --tp-primary: #d9694c;
+}
+.theme-preview-cute {
+  --tp-bg: #ffeef6;
+  --tp-bg-image: radial-gradient(circle, rgb(255 143 192 / 0.35) 0.7cqw, transparent 0.8cqw) 0 0 / 6cqw 6cqw;
+  --tp-chrome: #ffffff;
+  --tp-surface: #ffffff;
+  --tp-border: 0.6cqw solid #4a2f5e;
+  --tp-radius: 5cqw;
+  --tp-shadow: 1.2cqw 1.2cqw 0 #ffb3d4;
+  --tp-line: #fbd5e6;
+  --tp-active: #ffd1e6;
+  --tp-primary: #d63384;
+}
+[data-theme='dark'] .theme-preview {
+  --tp-bg: #0a0b0d;
+  --tp-bg-image: radial-gradient(70% 70% at 100% 0%, rgb(0 240 255 / 0.22), transparent 70%), radial-gradient(60% 70% at 0% 100%, rgb(59 91 255 / 0.25), transparent 70%);
+  --tp-surface: rgb(255 255 255 / 0.08);
+  --tp-border: 0.4cqw solid rgb(255 255 255 / 0.1);
+  --tp-line: rgb(255 255 255 / 0.12);
+  --tp-active: rgb(0 240 255 / 0.25);
+  --tp-primary: #00f0ff;
+}
+[data-theme='dark'] .theme-preview-soft {
+  --tp-bg: #24201d;
+  --tp-bg-image: radial-gradient(70% 80% at 100% 0%, rgb(217 120 90 / 0.3), transparent 70%), radial-gradient(70% 80% at 0% 100%, rgb(110 150 125 / 0.3), transparent 70%);
+  --tp-surface: #302a26;
+  --tp-border: 0 solid transparent;
+  --tp-line: #453d37;
+  --tp-active: #5a3a2f;
+  --tp-primary: #f0937a;
+}
+[data-theme='dark'] .theme-preview-cute {
+  --tp-bg: #1d1427;
+  --tp-bg-image: radial-gradient(circle, rgb(255 140 198 / 0.22) 0.7cqw, transparent 0.8cqw) 0 0 / 6cqw 6cqw;
+  --tp-chrome: #2a1d38;
+  --tp-surface: #2a1d38;
+  --tp-border: 0.6cqw solid #e9a6ff;
+  --tp-shadow: 1.2cqw 1.2cqw 0 #0f0816;
+  --tp-line: #45324f;
+  --tp-active: #5b2f50;
+  --tp-primary: #ff8cc6;
+}
+.tp-bar { position: absolute; inset: 0 0 auto; display: flex; align-items: center; height: 12%; padding-left: 4.5cqw; background: var(--tp-chrome); }
+.tp-bar .tp-dot { width: 4.5cqw; height: 4.5cqw; border-radius: 1.4cqw; background: var(--tp-primary); }
+.tp-rail {
+  position: absolute;
+  top: 17%;
+  bottom: 6%;
+  left: 3cqw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.4cqw;
+  width: 9cqw;
+  padding-top: 2.4cqw;
+  border: var(--tp-border);
+  border-radius: 4.5cqw;
+  background: var(--tp-surface);
+  box-shadow: var(--tp-shadow);
+}
+.tp-rail .tp-dot { width: 5cqw; height: 5cqw; border-radius: 1.6cqw; background: var(--tp-line); }
+.tp-rail .tp-dot:first-child { background: var(--tp-active); }
+.tp-body { position: absolute; top: 17%; right: 4cqw; bottom: 6%; left: 16cqw; display: grid; grid-template-columns: 1.4fr 1fr; gap: 3.5cqw; }
+.tp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2.4cqw;
+  padding: 4cqw;
+  border: var(--tp-border);
+  border-radius: var(--tp-radius);
+  background: var(--tp-surface);
+  box-shadow: var(--tp-shadow);
+}
+.tp-card-sub { align-self: start; }
+.tp-line { height: 2.4cqw; border-radius: 999px; background: var(--tp-line); }
+.tp-line-short { width: 60%; }
+.tp-btn { width: 45%; height: 6.5cqw; margin-top: auto; border-radius: 999px; background: var(--tp-primary); }
+
+/* ===== 切り替えの待ち時間（features/theme/client.ts が <html> の直下に置く） */
+/* 文字の指定を書き直すのは、body の外に置くので body の font と color を受け継がないため */
+.theme-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--scrim);
+  backdrop-filter: blur(10px) saturate(1.2);
+  color: var(--text);
+  font: var(--fs-base)/1.6 var(--font);
+  -webkit-font-smoothing: antialiased;
+  animation: fade 0.25s;
+}
+.theme-loading-panel {
+  width: min(360px, 100%);
+  padding: 16px 16px 20px;
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+  animation: theme-panel-in 0.35s var(--ease);
+}
+.theme-loading-stage { position: relative; overflow: hidden; border-radius: calc(var(--radius-lg) - 8px); }
+.theme-loading-stage .theme-preview { border-radius: inherit; animation: theme-preview-breathe 1.8s ease-in-out infinite; }
+.theme-loading-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgb(255 255 255 / 0.55) 50%, transparent 65%);
+  translate: -100% 0;
+  animation: theme-shine 1.6s var(--ease) infinite;
+}
+.theme-loading-title { margin-top: 16px; font-size: var(--fs-lg); font-weight: 650; }
+.theme-loading-bar { height: 6px; margin: 14px 12px 0; overflow: hidden; border-radius: 999px; background: var(--track); box-shadow: inset 0 0 0 1px var(--track-border); }
+.theme-loading-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--progress-fill);
+  transform: scaleX(var(--progress, 0));
+  transform-origin: left;
+  transition: transform 0.4s var(--ease);
+}
+.theme-loading-step { margin-top: 8px; }
+.theme-loading.is-leaving { pointer-events: none; animation: theme-loading-out 0.45s var(--ease) forwards; }
+.theme-loading.is-leaving .theme-loading-panel { animation: theme-panel-out 0.45s var(--ease) forwards; }
+@keyframes theme-panel-in { from { opacity: 0; scale: 0.94; } }
+@keyframes theme-panel-out { to { opacity: 0; scale: 1.06; } }
+@keyframes theme-loading-out { to { opacity: 0; backdrop-filter: blur(0); } }
+@keyframes theme-preview-breathe { 50% { scale: 1.03; } }
+@keyframes theme-shine { 60%, 100% { translate: 100% 0; } }
+@media (max-width: 640px) {
+  .theme-picker { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .theme-option { flex-direction: row; align-items: center; gap: 12px; padding: 8px; }
+  .theme-option .theme-preview { flex: none; width: 40%; }
+  .theme-option-text { padding: 0; }
+}

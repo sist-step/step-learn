@@ -344,6 +344,20 @@
       "when": 1795759462555,
       "tag": "0048_hard_selene",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1795760523718,
+      "tag": "0049_numerous_rogue",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1795760530217,
+      "tag": "0050_needy_moondragon",
+      "breakpoints": true
     }
   ]
 }
