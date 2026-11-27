@@ -2,14 +2,28 @@ import { and, count, desc, eq, inArray, lt, or } from 'drizzle-orm'
 import type { Context } from 'hono'
 import { listAgentItems } from '../agent/agent-items'
 import { aiLedger, usageByUser } from '../ai/ai-usage'
+import { USERNAME_TAKEN, createUser, resetPassword } from '../../lib/auth'
 import { teacherNames } from '../../lib/courses'
 import { contains, db } from '../../lib/db'
-import { intParam, readFields, redirectWith } from '../../lib/http'
+import { validate } from '../../lib/forms'
+import { field, intParam, readFields, readForm, redirectWith } from '../../lib/http'
 import { actionLabel } from '../../lib/operation-log'
+import { checkPassword } from '../../lib/password'
 import { courses, enrollments, items, operationLogs, users } from '../../lib/schema'
-import { LOG_KINDS, ROLE_LABELS, type AppEnv, type LogKind } from '../../lib/types'
+import { LOG_KINDS, ROLE_LABELS, isManagedRole, type AppEnv, type LogKind } from '../../lib/types'
 import { createAiAdminHandlers } from './ai'
-import { AgentsPage, CoursesPage, LogsPage, UsersPage, type CourseRow, type LogRow, type UserRow } from './views'
+import {
+  AgentsPage,
+  CoursesPage,
+  LogsPage,
+  NewUserPage,
+  ResetPasswordPage,
+  UsersPage,
+  type CourseRow,
+  type LogRow,
+  type NewUserValues,
+  type UserRow,
+} from './views'
 
 // ---------------------------------------------------------------- ユーザー
 
@@ -46,6 +60,70 @@ export async function changeRole(c: Context<AppEnv>) {
   const row = db.update(users).set({ role }).where(eq(users.id, id)).returning({ name: users.name }).get()
   if (!row) return c.notFound()
   return redirectWith(c, '/admin', `${row.name} さんを${ROLE_LABELS[role]}に変更しました。`)
+}
+
+const EMPTY_USER: NewUserValues = { name: '', username: '', email: '', role: 'student' }
+
+export function showNewUser(c: Context<AppEnv>) {
+  return c.render(<NewUserPage values={EMPTY_USER} />, { title: 'ユーザーを作成 - 管理' })
+}
+
+export async function addUser(c: Context<AppEnv>) {
+  const form = await readForm(c)
+  const result = validate('newUser', form)
+  const values: NewUserValues = {
+    name: field(form, 'name', 60),
+    username: field(form, 'username', 100),
+    email: field(form, 'email', 254),
+    role: result.ok ? result.values.role : EMPTY_USER.role,
+  }
+  if (!result.ok) {
+    c.status(422)
+    return c.render(<NewUserPage values={values} errors={result.errors} />, { title: 'ユーザーを作成 - 管理' })
+  }
+  const { name, username, email, role, password } = result.values
+
+  const created = await createUser({ email, name, username, password, role })
+  if ('taken' in created) {
+    const errors = created.taken === 'email' ? { email: 'このメールアドレスはすでに登録されています。' } : { username: USERNAME_TAKEN }
+    c.status(422)
+    return c.render(<NewUserPage values={values} errors={errors} />, { title: 'ユーザーを作成 - 管理' })
+  }
+  return redirectWith(c, '/admin', `${ROLE_LABELS[role]}の ${name} さんを作成しました。`)
+}
+
+const passwordTarget = (id: number) => {
+  const user = db
+    .select({ id: users.id, name: users.name, username: users.username, email: users.email, role: users.role })
+    .from(users)
+    .where(eq(users.id, id))
+    .get()
+  return user && isManagedRole(user.role) ? { ...user, role: user.role } : null
+}
+
+export function showPassword(c: Context<AppEnv>) {
+  const id = intParam(c, 'id')
+  const user = id && passwordTarget(id)
+  if (!user) return c.notFound()
+  return c.render(<ResetPasswordPage user={user} />, { title: 'パスワードを再設定 - 管理' })
+}
+
+export async function updatePassword(c: Context<AppEnv>) {
+  const id = intParam(c, 'id')
+  const user = id && passwordTarget(id)
+  if (!user) return c.notFound()
+
+  const result = validate('setPassword', await readForm(c))
+  // スキーマで確かめないのは、パスワードに含めてはいけない氏名やユーザー名がこのフォームの入力にないため
+  const passwordError = result.ok ? checkPassword(result.values.password, user) : null
+  if (!result.ok || passwordError) {
+    c.status(422)
+    const errors = result.ok ? { password: passwordError ?? '' } : result.errors
+    return c.render(<ResetPasswordPage user={user} errors={errors} />, { title: 'パスワードを再設定 - 管理' })
+  }
+
+  await resetPassword(user.id, result.values.password)
+  return redirectWith(c, '/admin', `${user.name} さんのパスワードを再設定しました。`)
 }
 
 // ---------------------------------------------------------------- コース

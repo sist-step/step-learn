@@ -1,35 +1,21 @@
 import { AuthShell } from '../../components/layout'
 import { Button } from '../../components/button'
 import { TextField, validateWith } from '../../components/form'
-import { Alert, TabPanel, Tabs } from '../../components/ui'
+import { Alert } from '../../components/ui'
 import type { FieldErrors } from '../../lib/forms'
 import { PASSWORD_HINT } from '../../lib/password'
 import { USERNAME_HINT } from '../../lib/username'
 
 const FormError = ({ message }: { message?: string }) => (message ? <Alert>{message}</Alert> : null)
 
-const AuthTabs = ({ current, next }: { current: 'login' | 'register'; next: string }) => {
-  const query = next ? `?next=${encodeURIComponent(next)}` : ''
-  return (
-    <Tabs
-      label="ログインと新規登録"
-      block
-      items={[
-        { href: `/login${query}`, label: 'ログイン', active: current === 'login' },
-        { href: `/register${query}`, label: '新規登録', active: current === 'register' },
-      ]}
-    />
-  )
-}
-
-const MicrosoftSignIn = ({ next, label }: { next: string; label: string }) => (
+const MicrosoftSignIn = ({ next }: { next: string }) => (
   <div class="auth-alt">
     <p class="auth-or">または</p>
     {/* 再読み込みなしの遷移にしないのは、Microsoft のサインイン画面へ移るので、fetch ではリダイレクト先を読めないため */}
     <form method="post" action="/auth/microsoft" data-reload>
       <input type="hidden" name="next" value={next} />
       <Button type="submit" size="lg" block>
-        {label}
+        Microsoft アカウントでログイン
       </Button>
     </form>
   </div>
@@ -49,157 +35,48 @@ export const LoginPage = ({
   <AuthShell>
     <div class="auth-card">
       <h1>おかえりなさい</h1>
-      <AuthTabs current="login" next={next} />
-      <TabPanel>
-        <FormError message={errors.form} />
-        <form method="post" action="/login" class="stack" data-loading-form {...validateWith('login')}>
-          <input type="hidden" name="next" value={next} />
-          <TextField
-            label="メールアドレスまたはユーザー名"
-            name="login"
-            value={login}
-            error={errors.login}
-            autocomplete="username"
-            autocapitalize="none"
-            spellcheck={false}
-            autofocus={!login}
-          />
-          <TextField
-            label="パスワード"
-            name="password"
-            type="password"
-            error={errors.password}
-            autocomplete="current-password"
-            autofocus={!!login}
-          />
-          <Button type="submit" variant="primary" size="lg" block>
-            ログイン
-          </Button>
-        </form>
-        {microsoft && <MicrosoftSignIn next={next} label="Microsoft アカウントでログイン" />}
-        <p class="auth-switch">
-          <a href="/password/forgot">パスワードを忘れた場合</a>
-        </p>
-      </TabPanel>
-    </div>
-  </AuthShell>
-)
-
-export const RegisterPage = ({
-  email = '',
-  next = '',
-  errors = {},
-  microsoft = false,
-}: {
-  email?: string
-  next?: string
-  errors?: FieldErrors
-  microsoft?: boolean
-}) => (
-  <AuthShell>
-    <div class="auth-card">
-      <h1>アカウントを作成</h1>
-      <AuthTabs current="register" next={next} />
-      <TabPanel>
-        <FormError message={errors.form} />
-        <form method="post" action="/register" class="stack" data-loading-form {...validateWith('register')}>
-          <input type="hidden" name="next" value={next} />
-          <TextField
-            label="メールアドレス"
-            name="email"
-            type="email"
-            value={email}
-            error={errors.email}
-            hint="届いたメールのリンクから、氏名とパスワードを設定して登録を完了します。"
-            autocomplete="email"
-            autofocus
-          />
-          <Button type="submit" variant="primary" size="lg" block>
-            確認メールを送る
-          </Button>
-        </form>
-        {microsoft && <MicrosoftSignIn next={next} label="Microsoft アカウントで登録" />}
-      </TabPanel>
-    </div>
-  </AuthShell>
-)
-
-export const RegisterSentPage = ({ email }: { email: string }) => (
-  <AuthShell>
-    <div class="auth-card">
-      <h1>メールを確認してください</h1>
-      <p class="muted">
-        {email} 宛てにメールを送信しました。メールに記載されたリンクから、24時間以内に登録を完了してください。
-        届かない場合は、迷惑メールフォルダを確認するか、しばらくしてから再度お試しください。
-      </p>
-      <p class="auth-switch">
-        <a href="/register">メールアドレスを入力し直す</a>
-      </p>
-    </div>
-  </AuthShell>
-)
-
-export const CompleteRegisterPage = ({
-  token,
-  email,
-  name = '',
-  username = '',
-  errors = {},
-}: {
-  token: string
-  email: string
-  name?: string
-  username?: string
-  errors?: FieldErrors
-}) => (
-  <AuthShell>
-    <div class="auth-card">
-      <h1>登録を完了する</h1>
-      <p class="muted">{email} で登録します。氏名・ユーザー名・パスワードを設定してください。</p>
       <FormError message={errors.form} />
-      <form method="post" action="/register/complete" class="stack" data-loading-form {...validateWith('completeRegister')}>
-        <input type="hidden" name="token" value={token} />
-        {/* パスワードマネージャーがメールアドレスと組にして保存できるようにする */}
-        <input type="hidden" name="email" value={email} autocomplete="username" />
-        <TextField label="氏名" name="name" value={name} error={errors.name} autocomplete="name" autofocus />
+      <form method="post" action="/login" class="stack" data-loading-form {...validateWith('login')}>
+        <input type="hidden" name="next" value={next} />
         <TextField
-          label="ユーザー名"
-          name="username"
-          value={username}
-          error={errors.username}
-          hint={USERNAME_HINT}
-          autocomplete="off"
+          label="メールアドレスまたはユーザー名"
+          name="login"
+          value={login}
+          error={errors.login}
+          autocomplete="username"
           autocapitalize="none"
           spellcheck={false}
+          autofocus={!login}
         />
         <TextField
           label="パスワード"
           name="password"
           type="password"
           error={errors.password}
-          hint={PASSWORD_HINT}
-          autocomplete="new-password"
+          autocomplete="current-password"
+          autofocus={!!login}
         />
         <Button type="submit" variant="primary" size="lg" block>
-          登録してはじめる
+          ログイン
         </Button>
       </form>
+      {microsoft && <MicrosoftSignIn next={next} />}
+      <p class="auth-switch">
+        <a href="/password/forgot">パスワードを忘れた場合</a>
+      </p>
     </div>
   </AuthShell>
 )
 
-const RETRY = {
-  register: { text: 'もう一度登録をやり直してください。', href: '/register', label: '新規登録へ' },
-  reset: { text: 'もう一度パスワードの再設定をやり直してください。', href: '/password/forgot', label: 'パスワードの再設定へ' },
-} as const
-
-export const InvalidLinkPage = ({ retry }: { retry: keyof typeof RETRY }) => (
+export const InvalidLinkPage = () => (
   <AuthShell>
     <div class="auth-card">
       <h1>リンクが無効です</h1>
-      <p class="muted">リンクの有効期限が切れているか、すでに使われています。お手数ですが、{RETRY[retry].text}</p>
-      <Button href={RETRY[retry].href} variant="primary" size="lg" block>
-        {RETRY[retry].label}
+      <p class="muted">
+        リンクの有効期限が切れているか、すでに使われています。お手数ですが、もう一度パスワードの再設定をやり直してください。
+      </p>
+      <Button href="/password/forgot" variant="primary" size="lg" block>
+        パスワードの再設定へ
       </Button>
     </div>
   </AuthShell>
@@ -307,6 +184,22 @@ export const MicrosoftRegisterPage = ({
   </AuthShell>
 )
 
+export const MicrosoftSignupDomainPage = ({ email, domain }: { email: string; domain: string }) => (
+  <AuthShell>
+    <div class="auth-card">
+      <h1>このアカウントでは登録できません</h1>
+      <p class="muted">
+        Microsoft アカウント（{email}）は STEP Learn に登録されていません。Microsoft アカウントで新しく登録できるのは、@{domain}
+        のメールアドレスだけです。ほかのメールアドレスの方は管理者にアカウントを作ってもらい、そのアカウントでログインしてから、アカウント画面で
+        Microsoft アカウントを連携してください。
+      </p>
+      <Button href="/login" variant="primary" size="lg" block>
+        ログインに戻る
+      </Button>
+    </div>
+  </AuthShell>
+)
+
 export const MicrosoftUnverifiedPage = ({ email }: { email: string }) => (
   <AuthShell>
     <div class="auth-card">
@@ -314,15 +207,12 @@ export const MicrosoftUnverifiedPage = ({ email }: { email: string }) => (
       <p class="muted">
         Microsoft アカウント{email ? `（${email}）` : ''}
         のメールアドレスは、Microsoft
-        で持ち主が確認されていないため、ログインに使えません。メールアドレスで新規登録してから、アカウント画面で Microsoft
+        で持ち主が確認されていないため、ログインに使えません。管理者に作ってもらったアカウントでログインしてから、アカウント画面で Microsoft
         アカウントを連携してください。
       </p>
-      <Button href="/register" variant="primary" size="lg" block>
-        新規登録へ
+      <Button href="/login" variant="primary" size="lg" block>
+        ログインに戻る
       </Button>
-      <p class="auth-switch">
-        <a href="/login">ログインに戻る</a>
-      </p>
     </div>
   </AuthShell>
 )

@@ -64,7 +64,9 @@ function loadMicrosoft() {
   if (!env.MICROSOFT_CLIENT_SECRET) throw new Error('MICROSOFT_CLIENT_ID を設定する場合は MICROSOFT_CLIENT_SECRET も設定してください')
   const tenant = env.MICROSOFT_TENANT || 'common'
   if (!/^[\w.-]+$/.test(tenant)) throw new Error('MICROSOFT_TENANT はテナント ID か common / organizations / consumers にしてください')
-  return { clientId: env.MICROSOFT_CLIENT_ID, clientSecret: env.MICROSOFT_CLIENT_SECRET, tenant }
+  const signupDomain = (env.MICROSOFT_SIGNUP_DOMAIN || 'sist.ac.jp').toLowerCase()
+  if (!/^[a-z0-9.-]+$/.test(signupDomain)) throw new Error('MICROSOFT_SIGNUP_DOMAIN は @ を付けないドメイン（例 sist.ac.jp）にしてください')
+  return { clientId: env.MICROSOFT_CLIENT_ID, clientSecret: env.MICROSOFT_CLIENT_SECRET, tenant, signupDomain }
 }
 
 /** コンテナの接続先（unix:/ で始まるソケットのパスか、http://ホスト:ポート）を http.request に渡す形にする */

@@ -4,6 +4,10 @@ import type { codeItems, courses, items, sections, users } from './schema'
 
 export const ROLES = ['admin', 'teacher', 'student'] as const
 export type Role = (typeof ROLES)[number]
+/** 管理者が Web でアカウントを作り、パスワードを再設定できるロール */
+export const MANAGED_ROLES = ['teacher', 'student'] as const
+export type ManagedRole = (typeof MANAGED_ROLES)[number]
+export const isManagedRole = (role: Role): role is ManagedRole => (MANAGED_ROLES as readonly Role[]).includes(role)
 export const COURSE_ROLES = ['teacher', 'student'] as const
 export type CourseRole = (typeof COURSE_ROLES)[number]
 

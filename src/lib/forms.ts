@@ -21,7 +21,17 @@ import { PUBLICATION_STATUSES } from '../features/publication/publication'
 import { QUIZ_LOOKS, readQuizForm } from '../features/quiz/quiz'
 import { THEMES } from '../features/theme/theme'
 import { readRestrictionForm } from './restriction'
-import { COMPLETIONS, COURSE_COLORS, COURSE_ROLES, ITEM_TYPES, LINK_TARGETS, ROLES, type Completion, type ItemType } from './types'
+import {
+  COMPLETIONS,
+  COURSE_COLORS,
+  COURSE_ROLES,
+  ITEM_TYPES,
+  LINK_TARGETS,
+  MANAGED_ROLES,
+  ROLES,
+  type Completion,
+  type ItemType,
+} from './types'
 import { checkUsername, normalizeUsername } from './username'
 
 export const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) && s.length <= 254
@@ -98,18 +108,16 @@ const email = () =>
     z.string().check(rule((s: string) => (isEmail(s) ? null : '有効なメールアドレスを入力してください。'))),
   )
 
-const register = z.object({ email: email(), next: hidden(500) })
-
 const forgotPassword = z.object({ email: email() })
 
 const resetPassword = z.object({ token: hidden(100), password: newPassword() })
 
-const completeRegister = z
+const newUser = z
   .object({
-    token: hidden(100),
-    email: hidden(254),
     name: text('氏名', 60, { required: true }),
     username: username(),
+    email: email(),
+    role: z.enum(MANAGED_ROLES, 'ロールが正しくありません。'),
     password: newPassword(),
   })
   .check(
@@ -679,8 +687,6 @@ const aiVoice = z.object({ audio: file('音声がありません。') })
 
 const FORMS = {
   login,
-  register,
-  completeRegister,
   forgotPassword,
   resetPassword,
   profile,
@@ -717,6 +723,7 @@ const FORMS = {
   participant,
   courseRole,
   siteRole,
+  newUser,
   theme,
   codeSuggest,
   codeConstraintsSuggest,

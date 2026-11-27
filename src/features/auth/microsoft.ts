@@ -146,6 +146,9 @@ export async function exchangeMicrosoftCode(c: Context, flow: MicrosoftFlow, cod
   }
 }
 
+/** Microsoft アカウントで新しく登録できるメールアドレスか（@ より後ろが MICROSOFT_SIGNUP_DOMAIN と完全一致） */
+export const canSignUpWith = (email: string) => email.slice(email.lastIndexOf('@') + 1).toLowerCase() === config.microsoft!.signupDomain
+
 const SIGNUP = z.object({ subject: z.string(), email: z.string(), name: z.string(), next: z.string() })
 
 type MicrosoftSignup = z.output<typeof SIGNUP>

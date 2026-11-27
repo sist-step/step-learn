@@ -29,7 +29,7 @@ beta と本番のそれぞれのサーバーで、次を行います。
 1. Docker（Compose v2.24 以上）を入れ、ラベル `self-hosted` / `linux` と、ラベル `beta` か `production` を付けたランナーを登録する（ランナーのユーザーが `docker` を実行できること）
 2. GitHub の Environment `beta` / `production` に設定値を登録する。`SESSION_SECRET` は beta と本番で別の値にし、`APP_ORIGIN` はそれぞれの URL にします。デプロイのたびに、ここから `.env` をランナーの一時ディレクトリに書き出してコンテナに渡し、終わったら消します
    - Secrets：`SESSION_SECRET` / `SMTP_PASS` / `MOODLE_EXCHANGE_TOKEN` / `MOODLE_BACKCHANNEL_SECRET` / `OPENROUTER_API_KEY` / `CLAUDE_API_KEY` / `MICROSOFT_CLIENT_SECRET`
-   - Variables：`APP_ORIGIN` / `TRUST_PROXY` / `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `MAIL_FROM` / `MOODLE_URL` / `AI_EMAIL_DOMAIN` / `MICROSOFT_CLIENT_ID` / `MICROSOFT_TENANT`
+   - Variables：`APP_ORIGIN` / `TRUST_PROXY` / `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `MAIL_FROM` / `MOODLE_URL` / `AI_EMAIL_DOMAIN` / `MICROSOFT_CLIENT_ID` / `MICROSOFT_TENANT` / `MICROSOFT_SIGNUP_DOMAIN`
    - 使わない項目は登録しなくてかまいません。値に `'` と改行は使えません
    - Moodle モードで動かす場合は `MOODLE_URL` などを登録します
 3. ホスト側のポートを変える場合は変数 `DEPLOY_HOST_PORT` を、公開するアドレスを変える場合は変数 `DEPLOY_HOST_BIND` を、Environment かリポジトリに設定する
