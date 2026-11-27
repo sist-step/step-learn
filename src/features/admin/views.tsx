@@ -1,7 +1,7 @@
 import type { Child } from 'hono/jsx'
 import { CreateCourseButton } from '../../components/course'
 import { Button, IconButton } from '../../components/button'
-import { SearchBox, Select, SelectField, TextField, validateWith } from '../../components/form'
+import { SearchBox, Select, SelectField, TextAreaField, TextField, validateWith } from '../../components/form'
 import { Icon, type IconName } from '../../components/icons'
 import { AppShell } from '../../components/layout'
 import { MenuItem, Popover } from '../../components/overlay'
@@ -33,6 +33,14 @@ import {
 } from '../ai/ai-models'
 import type { AgentItemRow } from '../agent/agent'
 import type { AiOverview, AiUserUsage } from '../ai/ai-ledger'
+import {
+  BATCH_FILE_FORMATS,
+  BATCH_FILE_LABELS,
+  BATCH_FILE_TTL,
+  MAX_BATCH_USERS,
+  USER_BATCH_KIND_LABELS,
+  type UserBatchKind,
+} from './user-batch'
 import type { FieldErrors } from '../../lib/forms'
 import { PASSWORD_HINT } from '../../lib/password'
 import {
@@ -133,6 +141,12 @@ export const UsersPage = ({
       <form method="get" class="toolbar-grow">
         <SearchBox label="ユーザーを検索" value={q} placeholder="名前・ユーザー名・メールで検索" />
       </form>
+      <Button href="/admin/batches" variant="ghost" icon="clock">
+        一括作成の履歴
+      </Button>
+      <Button href="/admin/users/bulk" icon="userGroup">
+        一括作成
+      </Button>
       <Button href="/admin/users/new" variant="primary" icon="plus">
         ユーザーを作成
       </Button>
@@ -311,6 +325,240 @@ export const ResetPasswordPage = ({ user, errors = {} }: { user: PasswordTarget;
     </div>
   </AdminShell>
 )
+
+// ---------------------------------------------------------------- 一括作成
+
+export type BulkUsersValues = { prefix: string; role: ManagedRole; course: string; names: string }
+
+export type CourseChoice = { id: number; title: string }
+
+export const BulkUsersPage = ({
+  values,
+  courses,
+  errors = {},
+}: {
+  values: BulkUsersValues
+  courses: CourseChoice[]
+  errors?: FieldErrors
+}) => (
+  <AdminShell tab="users">
+    <Styles use={['/src/features/admin/admin.css']} />
+    <div class="admin-form">
+      <BackToUsers />
+      <Card
+        heading="ユーザーを一括作成"
+        description={`氏名を 1 行に 1 人ずつ貼り付けると、接頭辞に 2 桁の連番を付けたユーザー名と、パスワードを作ります。作ってから ${BATCH_FILE_TTL / 60} 分の間だけ、ログインカードと一覧をダウンロードできます。`}
+      >
+        <form
+          method="post"
+          action="/admin/users/bulk"
+          class="stack"
+          data-loading-form
+          data-bulk-users="/admin/users/bulk/next"
+          {...validateWith('bulkUsers')}
+        >
+          <div class="grid-2">
+            <TextField
+              label="接頭辞"
+              name="prefix"
+              value={values.prefix}
+              error={errors.prefix}
+              hint="例: 20260 にすると 2026001・2026002…。半角英数字と . _ -"
+              autocomplete="off"
+              autocapitalize="none"
+              spellcheck={false}
+              autofocus
+            />
+            <SelectField label="ロール" name="role" options={MANAGED_ROLE_OPTIONS} value={values.role} error={errors.role} />
+          </div>
+          <SelectField
+            label="登録するコース"
+            name="course"
+            options={[{ value: '', label: '登録しない' }, ...courses.map((c) => ({ value: String(c.id), label: c.title }))]}
+            value={values.course}
+            error={errors.course}
+            hint="選ぶと、作った人を選んだロールでコースに登録します。"
+          />
+          <TextAreaField
+            label="氏名"
+            name="names"
+            rows={10}
+            value={values.names}
+            error={errors.names}
+            hint={`1 行に 1 人。一度に${MAX_BATCH_USERS}人まで。名簿の列をそのまま貼り付けられます。`}
+            autocomplete="off"
+          />
+          <div class="bulk-preview" data-bulk-preview aria-live="polite">
+            <p class="muted small">接頭辞と氏名を入れると、作るユーザー名がここに出ます。</p>
+          </div>
+          <div class="form-actions">
+            <Button href="/admin" variant="ghost">
+              キャンセル
+            </Button>
+            <Button type="submit" variant="primary">
+              作成する
+            </Button>
+          </div>
+        </form>
+      </Card>
+    </div>
+  </AdminShell>
+)
+
+const BackToBatches = () => (
+  <a href="/admin/batches" class="back-link">
+    <Icon name="chevronLeft" size={16} />
+    一括作成の履歴
+  </a>
+)
+
+export type BatchRow = {
+  id: number
+  kind: UserBatchKind
+  role: ManagedRole
+  prefix: string
+  count: number
+  createdAt: number
+  adminName: string | null
+  courseTitle: string | null
+}
+
+export const BatchesPage = ({ list }: { list: BatchRow[] }) => (
+  <AdminShell tab="users">
+    <Styles use={['/src/features/admin/admin.css']} />
+    <div class="stack">
+      <BackToUsers />
+      <p class="muted small">
+        パスワードは残していません。ダウンロードの期限が過ぎたあとにカードを配り直すときは、記録を開いて、選んだ人のパスワードを再発行してください。
+      </p>
+      {list.length === 0 ? (
+        <EmptyState icon="userGroup" title="まだ記録がありません" text="ユーザーを一括作成すると、ここに記録が残ります。" />
+      ) : (
+        <Table
+          columns={[
+            { label: '記録' },
+            { label: '人数', class: 'num' },
+            { label: 'コース', class: 'hide-sm' },
+            { label: '作成者', class: 'hide-sm' },
+          ]}
+        >
+          {list.map((b) => (
+            <tr>
+              <td>
+                <a href={`/admin/batches/${b.id}`} class="strong">
+                  {USER_BATCH_KIND_LABELS[b.kind]}
+                </a>
+                <div class="muted small">
+                  {formatDateTime(b.createdAt)}・{ROLE_LABELS[b.role]}・接頭辞 {b.prefix}
+                </div>
+              </td>
+              <td class="num">{b.count}</td>
+              <td class="hide-sm muted">
+                <span class="wrap">{b.courseTitle ?? 'なし'}</span>
+              </td>
+              <td class="hide-sm muted">{b.adminName ?? '削除されたユーザー'}</td>
+            </tr>
+          ))}
+        </Table>
+      )}
+    </div>
+  </AdminShell>
+)
+
+export type BatchDetail = BatchRow & { members: { id: number; name: string; username: string | null; role: Role }[] }
+
+const BatchDownloads = ({ id, expiresAt }: { id: number; expiresAt: number | null }) =>
+  expiresAt === null ? (
+    <Alert tone="info">
+      ダウンロードの期限（作ってから {BATCH_FILE_TTL / 60}{' '}
+      分）が過ぎたため、パスワードの入ったファイルは消えました。配り直すときは、下で人を選んでパスワードを再発行してください。
+    </Alert>
+  ) : (
+    <div class="stack">
+      <Alert tone="warning">
+        {formatDateTime(expiresAt)} までダウンロードできます。過ぎるとファイルは消え、同じパスワードでは作り直せません。
+      </Alert>
+      <div class="row bulk-downloads">
+        {BATCH_FILE_FORMATS.map((format) => (
+          <Button href={`/admin/batches/${id}/files/${format}`} icon="download" data-reload data-no-prefetch>
+            {BATCH_FILE_LABELS[format]}
+          </Button>
+        ))}
+      </div>
+    </div>
+  )
+
+export const BatchPage = ({ batch, expiresAt }: { batch: BatchDetail; expiresAt: number | null }) => {
+  const removed = batch.count - batch.members.length
+  return (
+    <AdminShell tab="users">
+      <Styles use={['/src/features/admin/admin.css']} />
+      <div class="stack">
+        <BackToBatches />
+        <Card
+          heading={`${USER_BATCH_KIND_LABELS[batch.kind]}（${batch.count}人）`}
+          description={`${formatDateTime(batch.createdAt)}・${batch.adminName ?? '削除されたユーザー'}・${ROLE_LABELS[batch.role]}・接頭辞 ${batch.prefix}${batch.courseTitle ? `・${batch.courseTitle} に登録` : ''}`}
+        >
+          <BatchDownloads id={batch.id} expiresAt={expiresAt} />
+        </Card>
+
+        <form
+          method="post"
+          action={`/admin/batches/${batch.id}/reissue`}
+          class="stack"
+          data-loading-form
+          data-confirm="選んだ人のパスワードを再発行しますか？今のパスワードは使えなくなり、すべての端末でログアウトされます。"
+          data-confirm-ok="再発行する"
+          {...validateWith('reissuePasswords')}
+        >
+          <Block
+            heading="ユーザー"
+            count={batch.members.length}
+            actions={
+              <Button type="submit" icon="arrowPath" disabled={batch.members.length === 0}>
+                パスワードを再発行
+              </Button>
+            }
+          >
+            {removed > 0 && <p class="muted small">削除したユーザー {removed} 人は出していません。</p>}
+            {batch.members.length === 0 ? (
+              <EmptyState icon="users" title="ユーザーがいません" text="この記録のユーザーはすべて削除されています。" />
+            ) : (
+              <Table
+                columns={[
+                  {
+                    label: (
+                      <label class="bulk-member">
+                        <input type="checkbox" class="bulk-check" data-check-all="users" />
+                        氏名（すべて選ぶ）
+                      </label>
+                    ),
+                  },
+                  { label: 'ユーザー名' },
+                ]}
+              >
+                {batch.members.map((m) => (
+                  <tr>
+                    <td>
+                      <label class="bulk-member">
+                        <input type="checkbox" name="users" value={String(m.id)} class="bulk-check" disabled={m.role !== batch.role} />
+                        <span>
+                          {m.name}
+                          {m.role !== batch.role && <span class="muted small">（{ROLE_LABELS[m.role]}に変わったため選べません）</span>}
+                        </span>
+                      </label>
+                    </td>
+                    <td class="muted">{m.username}</td>
+                  </tr>
+                ))}
+              </Table>
+            )}
+          </Block>
+        </form>
+      </div>
+    </AdminShell>
+  )
+}
 
 // ---------------------------------------------------------------- コース
 

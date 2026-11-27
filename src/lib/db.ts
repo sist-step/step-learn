@@ -15,7 +15,11 @@ if (config.moodle) {
 }
 
 // drizzle の like() を使わないのは、入力の % と _ をワイルドカードとして扱わせないための ESCAPE を付けられないため
-export const contains = (column: SQLWrapper, q: string) => sql`${column} LIKE ${`%${q.replace(/[\\%_]/g, '\\$&')}%`} ESCAPE '\\'`
+const escapeLike = (s: string) => s.replace(/[\\%_]/g, '\\$&')
+
+export const contains = (column: SQLWrapper, q: string) => sql`${column} LIKE ${`%${escapeLike(q)}%`} ESCAPE '\\'`
+
+export const startsWith = (column: SQLWrapper, prefix: string) => sql`${column} LIKE ${`${escapeLike(prefix)}%`} ESCAPE '\\'`
 
 // 開発中のホットリロードで接続が増えないよう、globalThis に保持する
 const g = globalThis as unknown as { __drizzle?: DB }

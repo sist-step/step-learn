@@ -2,6 +2,7 @@ import type { Child, JSX } from 'hono/jsx'
 import { cx } from './cx'
 import { Icon, type IconName } from './icons'
 import { useStyle } from './style'
+import { hasEmail } from '../lib/username'
 
 // 和文を 2 文字にしないのは、漢字やかなは 1 文字で欧文 2 文字分の幅があり、円の中で詰まって小さくなるため
 const CJK_START = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u
@@ -79,7 +80,7 @@ export const EmptyState = ({
 
 /** Person の meta に出す「@ユーザー名」と「メールアドレス」。メールアドレスを見せない画面では email を渡さない */
 export const userMeta = (u: { username: string | null; email?: string }) =>
-  [u.username && `@${u.username}`, u.email].filter((m): m is string => !!m)
+  [u.username && `@${u.username}`, u.email && hasEmail(u.email) ? u.email : null].filter((m): m is string => !!m)
 
 export const Person = ({
   avatar,

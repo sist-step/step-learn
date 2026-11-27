@@ -1,5 +1,14 @@
-const USERNAME_MAX_LENGTH = 30
+export const USERNAME_MAX_LENGTH = 30
 export const USERNAME_HINT = `半角英数字と . _ - で3〜${USERNAME_MAX_LENGTH}文字。ログインにも使えます`
+
+// users.email を NULL にできるようにしないのは、ログイン・パスワードの再設定・Microsoft アカウントの照合がメールアドレスのある前提で書かれているため。
+// .invalid は届く先のないドメインと決まっている（RFC 2606）
+const NO_EMAIL_DOMAIN = 'no-email.invalid'
+
+/** メールアドレスを持たないユーザー（管理者がまとめて作った人）に入れる、届かないアドレス */
+export const noEmailAddress = (username: string) => `${username}@${NO_EMAIL_DOMAIN}`
+
+export const hasEmail = (email: string) => !email.toLowerCase().endsWith(`@${NO_EMAIL_DOMAIN}`)
 
 // 入力のまま保存して COLLATE NOCASE に任せないのは、同じユーザー名でも入力した人によって大文字小文字の違う表示になるため
 export const normalizeUsername = (s: string) => s.trim().toLowerCase()

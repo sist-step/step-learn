@@ -17,7 +17,7 @@ import {
 import { config } from '../../lib/config'
 import { db } from '../../lib/db'
 import { type FieldErrors, validate } from '../../lib/forms'
-import { clientIp, field, readFields, readForm, redirectWith, safeNext, type Form } from '../../lib/http'
+import { appOrigin, clientIp, field, readFields, readForm, redirectWith, safeNext, type Form } from '../../lib/http'
 import { mailer } from '../../lib/mail'
 import {
   type MicrosoftIdentity,
@@ -36,7 +36,7 @@ import { checkPassword } from '../../lib/password'
 import { rateLimiter } from '../../lib/rate-limit'
 import { users } from '../../lib/schema'
 import type { AppEnv } from '../../lib/types'
-import { checkUsername, normalizeUsername } from '../../lib/username'
+import { checkUsername, hasEmail, normalizeUsername } from '../../lib/username'
 import {
   ForgotPasswordPage,
   ForgotPasswordSentPage,
@@ -55,8 +55,6 @@ const forgotByIp = rateLimiter({ limit: 100, windowSec: 60 * 60 })
 const forgotByEmail = rateLimiter({ limit: 3, windowSec: 60 * 60 })
 
 const MICROSOFT = !!config.microsoft
-
-const appOrigin = (c: Context) => config.appOrigin ?? new URL(c.req.url).origin
 
 function tooManyRequests(c: Context, retryAfter: number) {
   c.status(429)
@@ -162,7 +160,7 @@ export async function submitForgotPassword(c: Context<AppEnv>) {
 
   // 未登録のアドレスに「登録がない」と知らせるメールを送らないのは、入力さえすれば誰にでもメールを送れてしまうため
   const user = db.select({ id: users.id }).from(users).where(eq(users.email, email)).get()
-  if (user) {
+  if (user && hasEmail(email)) {
     const mail = {
       subject: '【STEP Learn】パスワードの再設定',
       text: [

@@ -183,12 +183,17 @@ export async function findPasswordReset(token: string) {
 }
 
 /** パスワードを置き換え、再設定用のトークンとすべてのセッションを無効化する */
-export async function resetPassword(userId: number, password: string) {
-  const passwordHash = await hashPassword(password)
+export const resetPassword = (userId: number, password: string) => resetPasswords([{ userId, password }])
+
+/** 何人かのパスワードをまとめて変え、それぞれをすべての端末でログアウトさせる。途中で失敗したら誰も変えない */
+export async function resetPasswords(list: { userId: number; password: string }[]) {
+  const hashed = await Promise.all(list.map(async ({ userId, password }) => ({ userId, passwordHash: await hashPassword(password) })))
   db.transaction((tx) => {
-    tx.update(users).set({ passwordHash }).where(eq(users.id, userId)).run()
-    tx.delete(passwordResets).where(eq(passwordResets.userId, userId)).run()
-    tx.delete(sessions).where(eq(sessions.userId, userId)).run()
+    for (const { userId, passwordHash } of hashed) {
+      tx.update(users).set({ passwordHash }).where(eq(users.id, userId)).run()
+      tx.delete(passwordResets).where(eq(passwordResets.userId, userId)).run()
+      tx.delete(sessions).where(eq(sessions.userId, userId)).run()
+    }
   })
 }
 

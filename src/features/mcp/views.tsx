@@ -4,6 +4,7 @@ import { TextField } from '../../components/form'
 import { AppShell, AuthShell } from '../../components/layout'
 import { Styles } from '../../components/style'
 import { EmptyState, PageHeader, formatDateTime } from '../../components/ui'
+import { hasEmail } from '../../lib/username'
 import type { clientKind } from './oauth'
 
 type ClientKind = ReturnType<typeof clientKind>
@@ -39,7 +40,7 @@ export const ConsentPage = ({
   fields,
 }: {
   client: ClientView
-  user: { name: string; email: string }
+  user: { name: string; email: string; username: string | null }
   fields: AuthorizeFields
 }) => (
   <AuthShell>
@@ -47,8 +48,8 @@ export const ConsentPage = ({
     <div class="auth-card">
       <h1>{clientTitle(client)} との接続</h1>
       <p class="muted">
-        {client.host ? `${client.host} の` : 'このパソコンの'}アプリが、{user.name} さん（{user.email}）として STEP Learn
-        を使うことを求めています。
+        {client.host ? `${client.host} の` : 'このパソコンの'}アプリが、{user.name} さん（
+        {hasEmail(user.email) ? user.email : `@${user.username}`}）として STEP Learn を使うことを求めています。
       </p>
       <div class="mcp-permissions">
         <div class="strong small">許可すること</div>
