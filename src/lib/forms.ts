@@ -617,7 +617,7 @@ const codeVerdicts = z.looseObject({ submission: id() })
 // 空のファイルも受け付けるのは、中身のない __init__.py や .gitkeep も配るため
 const files = () => z.transform((v: unknown) => many(v).filter((f): f is File => f instanceof File))
 
-const bundleUpload = z.object({
+const treeUpload = z.object({
   files: files(),
   // 前後の空白を削らないのは、ファイルやフォルダーの名前の一部のため
   paths: z.transform((v: unknown) => many(v).map((p) => (typeof p === 'string' ? p : ''))),
@@ -635,7 +635,7 @@ const publicationUpload = z.object({
 
 const publicationStatus = z.object({ status: z.enum(PUBLICATION_STATUSES) })
 
-const bundleRemove = z.object({ path: hidden(1000), folder: hidden(1000), all: flag() })
+const treeRemove = z.object({ path: hidden(1000), folder: hidden(1000), all: flag() })
 
 const bundleSync = z.object({ sync: flag() })
 
@@ -715,8 +715,8 @@ const FORMS = {
   codeTrial,
   regrade,
   quizGrade,
-  bundleUpload,
-  bundleRemove,
+  treeUpload,
+  treeRemove,
   publicationUpload,
   publicationStatus,
   bundleSync,

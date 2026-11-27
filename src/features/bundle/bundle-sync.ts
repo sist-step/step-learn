@@ -2,7 +2,8 @@
 import crypto from 'node:crypto'
 import zlib from 'node:zlib'
 import * as z from 'zod/mini'
-import { bundlePath, isExcludedPath, samePath, type BundleFile } from './bundle'
+import type { BundleFile } from './bundle'
+import { isExcludedPath, samePath, treePath } from '../../lib/file-tree'
 import type { Student } from '../code/code-store'
 import { diffLines, diffStats, splitLines } from '../../lib/diff'
 
@@ -100,7 +101,7 @@ export const SYNC_REQUEST = z.pipe(
     // 同じファイルが 2 回あれば後のものだけを残すのは、1 回の要求の中の途中の状態を記録しても、同じ時刻の記録が並ぶだけになるため
     const changes = new Map<string, SyncChange>()
     for (const raw of list) {
-      const path = bundlePath(raw.path)
+      const path = treePath(raw.path)
       if (!path || isExcludedPath(path)) continue
       if ('deleted' in raw) {
         changes.set(path, { path, content: null })

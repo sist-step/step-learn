@@ -2,21 +2,7 @@
 // モードごとの DB と権限の確認は BundleBackend として受け取る（通常モードは ./backend.ts、Moodle モードは moodle-mode/bundle.ts）
 import crypto from 'node:crypto'
 import { Hono, type Context } from 'hono'
-import { formatBytes } from '../../lib/bytes'
-import {
-  MAX_BUNDLE_FILES,
-  MAX_BUNDLE_SIZE,
-  VSCODE_EXTENSION_ID,
-  bundlePath,
-  bundleSize,
-  conflictingPath,
-  folderNameOf,
-  isExcludedPath,
-  isInFolder,
-  samePath,
-  type BundleFile,
-  type BundleStore,
-} from './bundle'
+import { MAX_BUNDLE_FILES, MAX_BUNDLE_SIZE, VSCODE_EXTENSION_ID, type BundleFile, type BundleStore } from './bundle'
 import {
   MAX_SYNC_FILE_SIZE,
   SYNC_REQUEST,
@@ -30,12 +16,11 @@ import { launchClaimer, linkExpired, signToken, tooManyRequests, verifyBearer } 
 import { config } from '../../lib/config'
 import type { CourseAccess } from '../../lib/courses'
 import { diffLines } from '../../lib/diff'
-import { firstError, validate } from '../../lib/forms'
-import { intParam, readFields, readForm, readJson, redirectWith, wantsJson } from '../../lib/http'
+import { intParam, readFields, readJson, redirectWith, wantsJson } from '../../lib/http'
 import { rateLimiter } from '../../lib/rate-limit'
-import { deleteKeys, inBackground, isExecutable, storage } from '../../lib/storage'
+import { deleteKeys, inBackground, storage } from '../../lib/storage'
+import { readTreeRemove, readTreeUploads, treeUploadProblem, treeZip } from '../../lib/tree-upload'
 import type { AppEnv } from '../../lib/types'
-import { ZipError, listZip, zipStream, type ZipItem } from '../../lib/zip'
 import { SyncHistoryPage, SyncStudentsPage, type SyncFileRow } from './views'
 
 type C = Context<AppEnv>
@@ -67,13 +52,7 @@ export type BundleBackend = {
   itemUrl: (courseId: number, itemId: number) => string
 }
 
-/** zip の中身がすべて 1 つのフォルダーに入っていれば、そのフォルダーを外した場所 */
-function withoutWrapper(paths: string[]) {
-  const top = paths[0]?.split('/')[0]
-  // そのまま置かないのは、フォルダーを圧縮した zip だと学生の PC でフォルダーが 1 段深くなるため（フォルダーを選んだときも、そのフォルダーの名前は外す）
-  const wrapped = !!top && paths.every((p) => p.startsWith(`${top}/`))
-  return wrapped ? paths.map((p) => p.slice(top.length + 1)) : paths
-}
+const LIMITS = { maxFiles: MAX_BUNDLE_FILES, maxSize: MAX_BUNDLE_SIZE }
 
 const sha256 = (bytes: Uint8Array) => crypto.createHash('sha256').update(bytes).digest('hex')
 
@@ -92,93 +71,16 @@ export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: B
     return ctx?.access.canManage ? ctx : null
   }
 
-  type Upload = { path: string; file: File }
-  type Picked = { name: string; file: File }
-  type Read<T> = ({ ok: true } & T) | { ok: false; error: string }
-
-  // 書かれた大きさで先に確かめるのは、上限を超える zip を展開してメモリを使わないため
-  async function unpack(archive: File, earlier: File[]): Promise<Read<{ picked: Picked[]; skipped: number }>> {
-    let items: ZipItem[]
-    try {
-      items = await listZip(new Uint8Array(await archive.arrayBuffer()))
-    } catch (e) {
-      if (e instanceof ZipError) return { ok: false, error: `「${archive.name}」を展開できませんでした。${e.message}` }
-      throw e
-    }
-    const usable = items.filter((i) => !isExcludedPath(i.path.replace(/\\/g, '/')))
-    if (earlier.length + usable.length > MAX_BUNDLE_FILES) return { ok: false, error: `ファイルは ${MAX_BUNDLE_FILES} 個までです。` }
-    if (bundleSize([...earlier, ...usable]) > MAX_BUNDLE_SIZE)
-      return { ok: false, error: `ファイルの合計は ${formatBytes(MAX_BUNDLE_SIZE)} までです。` }
-    const names = withoutWrapper(usable.map((i) => i.path.replace(/\\/g, '/')))
-    const picked: Picked[] = []
-    for (const [i, item] of usable.entries()) {
-      try {
-        picked.push({ name: names[i], file: new File([await item.read()], names[i].split('/').pop()!) })
-      } catch (e) {
-        if (e instanceof ZipError) return { ok: false, error: `「${archive.name}」の「${item.path}」を展開できませんでした。${e.message}` }
-        throw e
-      }
-    }
-    return { ok: true, picked, skipped: items.length - usable.length }
-  }
-
-  // 1 つずつ確かめるのは、どのファイルで止めたかを教師に伝えるため
-  async function readUploads(c: C): Promise<Read<{ uploads: Upload[]; skipped: number }>> {
-    // readForm を使わないのは、同じ名前の欄が並ぶとき、最後の 1 つしか受け取れないため
-    const result = validate('bundleUpload', await readForm(c, { all: true }))
-    if (!result.ok) return { ok: false, error: firstError(result.errors) }
-    const { files, paths, archives } = result.values
-    if (!files.length && !archives.length) return { ok: false, error: 'アップロードするファイルを選択してください。' }
-    const picked: Picked[] = files.map((file, i) => ({ name: paths[i] || file.name, file }))
-    // すでに置いてあるファイルを足さないのは、このあとのファイルで置き換えられるかがまだわからないため（置いたあとの合計は upload で確かめる）
-    const earlier = picked
-      .filter(({ name }) => {
-        const path = bundlePath(name)
-        return !!path && !isExcludedPath(path)
-      })
-      .map((p) => p.file)
-    // ブラウザが外した数も足すのは、node_modules などを送らずに済ませつつ、外した数をまとめて伝えるため
-    let skipped = result.values.skipped
-    for (const archive of archives) {
-      const read = await unpack(archive, earlier)
-      if (!read.ok) return read
-      picked.push(...read.picked)
-      earlier.push(...read.picked.map((p) => p.file))
-      skipped += read.skipped
-    }
-    const uploads: Upload[] = []
-    for (const { name, file } of picked) {
-      const path = bundlePath(name)
-      if (!path) return { ok: false, error: `「${name}」は、ファイルの名前か場所に使えない文字が含まれています。` }
-      if (isExcludedPath(path)) {
-        skipped++
-        continue
-      }
-      if (await isExecutable(file)) return { ok: false, error: `「${path}」は実行ファイルのため、アップロードできません。` }
-      if (uploads.some((u) => samePath(u.path, path))) return { ok: false, error: `「${path}」が 2 つあります。` }
-      uploads.push({ path, file })
-    }
-    return { ok: true, uploads, skipped }
-  }
-
   async function upload(c: C) {
     const ctx = await manage(c)
     if (!ctx) return c.notFound()
     const { access, itemId, store } = ctx
     const back = editUrl(access.course.id, itemId)
-    const read = await readUploads(c)
+    const read = await readTreeUploads(c, LIMITS)
     if (!read.ok) return redirectWith(c, back, read.error, 'error')
     const { uploads, skipped } = read
-    if (!uploads.length)
-      return redirectWith(c, back, 'アップロードできるファイルがありませんでした（.git や node_modules などは外しています）。', 'error')
-
-    const kept = store.list().filter((f) => !uploads.some((u) => samePath(u.path, f.path)))
-    const paths = [...kept.map((f) => f.path), ...uploads.map((u) => u.path)]
-    if (paths.length > MAX_BUNDLE_FILES) return redirectWith(c, back, `ファイルは ${MAX_BUNDLE_FILES} 個までです。`, 'error')
-    if (bundleSize(kept) + uploads.reduce((sum, u) => sum + u.file.size, 0) > MAX_BUNDLE_SIZE)
-      return redirectWith(c, back, `ファイルの合計は ${formatBytes(MAX_BUNDLE_SIZE)} までです。`, 'error')
-    const conflict = conflictingPath(paths)
-    if (conflict) return redirectWith(c, back, `「${conflict}」は、同じ名前のファイルとフォルダーがぶつかっています。`, 'error')
+    const problem = treeUploadProblem(store.list(), uploads, LIMITS)
+    if (problem) return redirectWith(c, back, problem, 'error')
 
     const prefix = `${keyPrefix(access.course.id)}bundles/`
     const stored: BundleFile[] = []
@@ -197,29 +99,20 @@ export function createBundleHandlers({ resolve, keyPrefix, editUrl, itemUrl }: B
     const ctx = await manage(c)
     if (!ctx) return c.notFound()
     const { access, itemId, store } = ctx
-    const fields = await readFields(c, 'bundleRemove')
-    if (!fields) return c.notFound()
-    const { path, folder } = fields
-    const all = fields.all === 1
-    if (!path && !folder && !all) return c.notFound()
-    const removed = store.remove((p) => all || (!!path && samePath(p, path)) || (!!folder && isInFolder(p, folder)))
-    inBackground(deleteKeys(removed))
-    const message = all ? 'すべてのファイルを削除しました。' : `「${path || folder}」を削除しました。`
-    return redirectWith(c, editUrl(access.course.id, itemId), message, 'info')
+    const target = await readTreeRemove(c)
+    if (!target) return c.notFound()
+    inBackground(deleteKeys(store.remove(target.match)))
+    return redirectWith(c, editUrl(access.course.id, itemId), target.message, 'info')
   }
 
   async function download(c: C) {
     const ctx = await resolve(c)
     if (!ctx) return c.notFound()
-    const folder = folderNameOf(ctx.title)
-    const sources = ctx.store.list().map((f) => ({
-      path: `${folder}/${f.path}`,
+    const files = ctx.store.list().map((f) => ({
+      path: f.path,
       read: async () => (f.size ? ((await storage.read(f.fileKey, f.size)) ?? new Uint8Array()) : new Uint8Array()),
     }))
-    c.header('Content-Type', 'application/zip')
-    c.header('Content-Disposition', `attachment;filename*=UTF-8''${encodeURIComponent(`${folder}.zip`)}`)
-    c.header('Cache-Control', 'private, no-store')
-    return c.body(zipStream(sources))
+    return treeZip(c, ctx.title, files)
   }
 
   async function launch(c: C) {
